@@ -1193,6 +1193,164 @@ class ChatRoomListTestCase(unittest.TestCase):
         self.assertEqual(rooms[0]["chat_room_id"], self.room["id"])
 
 
+class ChatRoomListDirectChatIntegrationTestCase(unittest.TestCase):
+    """list_chat_rooms_by_user()/count_unread_messages_by_user() must fold
+    direct chat rooms (Match 없이 게시글에서 바로 시작한 채팅) into the same
+    "내 채팅" list and unread badge as Match-based rooms."""
+
+    def setUp(self):
+        self._tmp_dir = tempfile.TemporaryDirectory()
+        self._orig_db_path = database.DB_PATH
+        database.DB_PATH = Path(self._tmp_dir.name) / "test_chat_room_list_direct.db"
+        database.init_db()
+
+        self.author = database.create_user("author@mju.ac.kr", "작성자실명")
+        self.viewer = database.create_user("viewer@mju.ac.kr", "열람자실명")
+        self.stranger = database.create_user("stranger@mju.ac.kr", "제3자실명")
+        database.set_initial_nickname(self.author, "작성자")
+        database.set_initial_nickname(self.viewer, "열람자")
+        database.set_initial_nickname(self.stranger, "제3자")
+        self.lost_id = database.create_lost_post(
+            self.author, "검은색 에어팟", "설명", "전자기기", "도서관", "2026-08-25 15:00"
+        )
+
+    def tearDown(self):
+        database.DB_PATH = self._orig_db_path
+        self._tmp_dir.cleanup()
+
+    # A: direct chat room appears in the initiator's list
+    def test_direct_chat_room_appears_in_initiators_list(self):
+        room = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+
+        rooms = database.list_chat_rooms_by_user(self.viewer)
+        self.assertEqual(len(rooms), 1)
+        self.assertEqual(rooms[0]["chat_room_id"], room["id"])
+        self.assertEqual(rooms[0]["room_type"], "direct")
+        self.assertEqual(rooms[0]["other_user_id"], self.author)
+        self.assertEqual(rooms[0]["other_nickname"], "작성자")
+        self.assertEqual(rooms[0]["post_title"], "검은색 에어팟")
+
+    # A (author side): also appears for the post owner, with the initiator as "other"
+    def test_direct_chat_room_appears_in_authors_list_too(self):
+        database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+
+        rooms = database.list_chat_rooms_by_user(self.author)
+        self.assertEqual(len(rooms), 1)
+        self.assertEqual(rooms[0]["room_type"], "direct")
+        self.assertEqual(rooms[0]["other_user_id"], self.viewer)
+        self.assertEqual(rooms[0]["other_nickname"], "열람자")
+
+    # B: sender's own unread stays 0, recipient's unread increases
+    def test_first_message_increases_only_recipients_unread(self):
+        room = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+        database.send_message(room["id"], self.viewer, "안녕하세요, 제 물건 같아요")
+
+        self.assertEqual(database.count_unread_messages_by_user(self.author), 1)
+        self.assertEqual(database.count_unread_messages_by_user(self.viewer), 0)
+
+    # C: reply increases the initiator's unread, and the room stays reachable via listing
+    def test_reply_increases_initiators_unread_and_room_stays_listed(self):
+        room = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+        database.send_message(room["id"], self.viewer, "안녕하세요")
+        database.mark_messages_as_read(room["id"], self.author)
+        database.send_message(room["id"], self.author, "네 맞아요!")
+
+        self.assertEqual(database.count_unread_messages_by_user(self.viewer), 1)
+
+        rooms = database.list_chat_rooms_by_user(self.viewer)
+        self.assertEqual(len(rooms), 1)
+        self.assertEqual(rooms[0]["chat_room_id"], room["id"])
+        self.assertEqual(rooms[0]["last_message_content"], "네 맞아요!")
+
+    # D: a fresh call to list_chat_rooms_by_user() (no session/cache involved)
+    # still finds the room -- the DB layer has no session-scoped state at all.
+    def test_room_discoverable_via_fresh_list_call_without_any_session_state(self):
+        room = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+        database.send_message(room["id"], self.viewer, "안녕하세요")
+
+        # simulate "a new browser session" by calling the DB layer fresh,
+        # exactly as a brand new AppTest/page load would -- nothing here
+        # depends on any prior in-process state.
+        rooms = database.list_chat_rooms_by_user(self.viewer)
+        self.assertEqual(len(rooms), 1)
+        self.assertEqual(rooms[0]["chat_room_id"], room["id"])
+
+    # E: existing Match-based rooms are unaffected
+    def test_match_based_room_listing_unaffected(self):
+        found_id = database.create_found_post(
+            self.stranger, "검은색 무선 이어폰", "설명", "전자기기", "도서관", "2026-08-25 16:00"
+        )
+        match_id = database.create_match(self.lost_id, found_id, 0.9, self.author)
+        match_room = database.get_or_create_chat_room(match_id, self.author)
+
+        rooms = database.list_chat_rooms_by_user(self.author)
+        self.assertEqual(len(rooms), 1)
+        self.assertEqual(rooms[0]["room_type"], "match")
+        self.assertEqual(rooms[0]["chat_room_id"], match_room["id"])
+        self.assertEqual(rooms[0]["lost_post_id"], self.lost_id)
+        self.assertEqual(rooms[0]["found_post_id"], found_id)
+
+    # F: direct and Match rooms coexist and both show up, ordered correctly
+    def test_direct_and_match_rooms_both_listed_together(self):
+        found_id = database.create_found_post(
+            self.stranger, "검은색 무선 이어폰", "설명", "전자기기", "도서관", "2026-08-25 16:00"
+        )
+        match_id = database.create_match(self.lost_id, found_id, 0.9, self.author)
+        match_room = database.get_or_create_chat_room(match_id, self.author)
+        direct_room = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+
+        database.send_message(match_room["id"], self.author, "매칭 채팅 메시지")
+        database.send_message(direct_room["id"], self.viewer, "다이렉트 채팅 메시지")
+
+        rooms = database.list_chat_rooms_by_user(self.author)
+        self.assertEqual({r["chat_room_id"] for r in rooms}, {match_room["id"], direct_room["id"]})
+        room_types = {r["chat_room_id"]: r["room_type"] for r in rooms}
+        self.assertEqual(room_types[match_room["id"]], "match")
+        self.assertEqual(room_types[direct_room["id"]], "direct")
+        # most-recently-messaged room (direct, sent second) sorts first
+        self.assertEqual(rooms[0]["chat_room_id"], direct_room["id"])
+
+    # G: a stranger with no participation in the direct room cannot list or open it
+    def test_stranger_cannot_see_or_open_direct_chat_room(self):
+        room = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+
+        self.assertEqual(database.list_chat_rooms_by_user(self.stranger), [])
+        with self.assertRaises(database.PermissionDeniedError):
+            database.get_chat_room(room["id"], self.stranger)
+
+    # H: a direct room with no messages contributes zero unread
+    def test_direct_room_with_no_messages_has_zero_unread(self):
+        database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+
+        self.assertEqual(database.count_unread_messages_by_user(self.author), 0)
+        self.assertEqual(database.count_unread_messages_by_user(self.viewer), 0)
+
+    # I: unread count is accurate across a mix of direct and Match rooms
+    def test_unread_count_accurate_across_mixed_direct_and_match_rooms(self):
+        found_id = database.create_found_post(
+            self.stranger, "검은색 무선 이어폰", "설명", "전자기기", "도서관", "2026-08-25 16:00"
+        )
+        match_id = database.create_match(self.lost_id, found_id, 0.9, self.author)
+        match_room = database.get_or_create_chat_room(match_id, self.author)
+        direct_room = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+
+        database.send_message(match_room["id"], self.stranger, "매칭방 메시지1")
+        database.send_message(match_room["id"], self.stranger, "매칭방 메시지2")
+        database.send_message(direct_room["id"], self.viewer, "다이렉트방 메시지")
+
+        # author participates in both rooms and didn't send any of these
+        self.assertEqual(database.count_unread_messages_by_user(self.author), 3)
+        # viewer only participates in the direct room, and sent that message themselves
+        self.assertEqual(database.count_unread_messages_by_user(self.viewer), 0)
+        # stranger only participates in the match room (as found post owner), and sent those
+        self.assertEqual(database.count_unread_messages_by_user(self.stranger), 0)
+
+    # J: self-chat is still blocked (regression guard for the existing rule)
+    def test_author_still_cannot_direct_chat_with_own_post(self):
+        with self.assertRaises(database.PermissionDeniedError):
+            database.get_or_create_direct_chat_room("lost", self.lost_id, self.author)
+
+
 class MessageReadAtMigrationTestCase(unittest.TestCase):
     """A DB built against the pre-read_at Message schema, with real message
     data in it, must be migrated in place (no data loss) the first time
@@ -3529,6 +3687,319 @@ class LazyAutoInitTestCase(unittest.TestCase):
         database.init_db()
         user_id = database.create_user("explicit@mju.ac.kr", "명시적초기화")
         self.assertIsNotNone(database.get_user_by_id(user_id))
+
+
+class DirectChatTestCase(unittest.TestCase):
+    """get_or_create_direct_chat_room() -- author-DM chat rooms that aren't
+    mediated by a Match, started straight from a board post's detail view."""
+
+    def setUp(self):
+        self._tmp_dir = tempfile.TemporaryDirectory()
+        self._orig_db_path = database.DB_PATH
+        database.DB_PATH = Path(self._tmp_dir.name) / "test_direct_chat.db"
+        database.init_db()
+
+        self.author = database.create_user("author@mju.ac.kr", "작성자실명")
+        self.viewer = database.create_user("viewer@mju.ac.kr", "조회자실명")
+        self.stranger = database.create_user("stranger@mju.ac.kr", "제3자실명")
+        database.set_initial_nickname(self.author, "작성자닉")
+        database.set_initial_nickname(self.viewer, "조회자닉")
+        database.set_initial_nickname(self.stranger, "제3자닉")
+
+        self.lost_id = database.create_lost_post(
+            self.author, "검은색 에어팟", "설명", "전자기기", "도서관", "2026-08-25 15:00"
+        )
+        self.found_id = database.create_found_post(
+            self.author, "검은색 무선 이어폰", "설명", "전자기기", "도서관", "2026-08-25 16:00"
+        )
+
+    def tearDown(self):
+        database.DB_PATH = self._orig_db_path
+        self._tmp_dir.cleanup()
+
+    # ---------- happy path ----------
+
+    def test_viewer_can_start_direct_chat_with_lost_post_author(self):
+        room = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+        self.assertIsNone(room["match_id"])
+        self.assertEqual(room["direct_lost_post_id"], self.lost_id)
+        self.assertIsNone(room["direct_found_post_id"])
+        self.assertEqual(room["initiator_user_id"], self.viewer)
+
+    def test_viewer_can_start_direct_chat_with_found_post_author(self):
+        room = database.get_or_create_direct_chat_room("found", self.found_id, self.viewer)
+        self.assertEqual(room["direct_found_post_id"], self.found_id)
+        self.assertIsNone(room["direct_lost_post_id"])
+
+    def test_existing_match_based_flow_still_works_unaffected(self):
+        """Regression: the original AI-match -> confirm -> chat flow must
+        be completely untouched by the new direct-chat code path."""
+        match_id = database.create_match(self.lost_id, self.found_id, 0.9, self.author)
+        room = database.get_or_create_chat_room(match_id, self.author)
+        self.assertEqual(room["match_id"], match_id)
+        self.assertIsNone(room["direct_lost_post_id"])
+        self.assertIsNone(room["direct_found_post_id"])
+        self.assertIsNone(room["initiator_user_id"])
+
+    # ---------- duplicate prevention ----------
+
+    def test_second_call_for_same_post_and_viewer_returns_same_room(self):
+        room1 = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+        room2 = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+        self.assertEqual(room1["id"], room2["id"])
+        with database.get_connection() as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) c FROM ChatRoom WHERE direct_lost_post_id = ? AND initiator_user_id = ?",
+                (self.lost_id, self.viewer),
+            ).fetchone()["c"]
+        self.assertEqual(count, 1)
+
+    def test_duplicate_prevented_even_via_raw_connection(self):
+        """Final backstop: the partial UNIQUE index itself, independent of
+        get_or_create_direct_chat_room()'s own pre-check."""
+        database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+        with self.assertRaises(sqlite3.IntegrityError):
+            with database.get_connection() as conn:
+                conn.execute(
+                    "INSERT INTO ChatRoom (direct_lost_post_id, initiator_user_id) VALUES (?, ?)",
+                    (self.lost_id, self.viewer),
+                )
+
+    def test_different_viewers_each_get_their_own_room_for_the_same_post(self):
+        room_viewer = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+        room_stranger = database.get_or_create_direct_chat_room("lost", self.lost_id, self.stranger)
+        self.assertNotEqual(room_viewer["id"], room_stranger["id"])
+
+    def test_same_viewer_different_posts_get_different_rooms(self):
+        room_lost = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+        room_found = database.get_or_create_direct_chat_room("found", self.found_id, self.viewer)
+        self.assertNotEqual(room_lost["id"], room_found["id"])
+
+    # ---------- self-chat block ----------
+
+    def test_author_cannot_start_direct_chat_with_self_on_lost_post(self):
+        with self.assertRaises(database.PermissionDeniedError):
+            database.get_or_create_direct_chat_room("lost", self.lost_id, self.author)
+
+    def test_author_cannot_start_direct_chat_with_self_on_found_post(self):
+        with self.assertRaises(database.PermissionDeniedError):
+            database.get_or_create_direct_chat_room("found", self.found_id, self.author)
+
+    # ---------- unauthorized / malformed input ----------
+
+    def test_nonexistent_user_id_rejected(self):
+        with self.assertRaises(ValueError):
+            database.get_or_create_direct_chat_room("lost", self.lost_id, 99999)
+
+    def test_nonexistent_post_rejected(self):
+        with self.assertRaises(ValueError):
+            database.get_or_create_direct_chat_room("lost", 99999, self.viewer)
+        with self.assertRaises(ValueError):
+            database.get_or_create_direct_chat_room("found", 99999, self.viewer)
+
+    def test_invalid_post_kind_rejected(self):
+        with self.assertRaises(ValueError):
+            database.get_or_create_direct_chat_room("post", self.lost_id, self.viewer)
+
+    def test_suspended_viewer_cannot_start_direct_chat(self):
+        report_id = database.create_report(self.author, "user", self.viewer, "기타")
+        admin = database.create_user("admin@mju.ac.kr", "관리자실명")
+        database.set_initial_nickname(admin, "관리자닉")
+        with database.get_connection() as conn:
+            conn.execute("UPDATE User SET is_admin = 1 WHERE id = ?", (admin,))
+        database.apply_report_action(report_id, admin, "suspend_user")
+
+        with self.assertRaises(database.PermissionDeniedError):
+            database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+
+    # ---------- once created, the room reuses the existing chat pipeline ----------
+
+    def test_stranger_cannot_access_direct_chat_room_of_others(self):
+        room = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+        with self.assertRaises(database.PermissionDeniedError):
+            database.get_chat_room(room["id"], self.stranger)
+        with self.assertRaises(database.PermissionDeniedError):
+            database.list_messages(room["id"], self.stranger)
+        with self.assertRaises(database.PermissionDeniedError):
+            database.send_message(room["id"], self.stranger, "몰래 들어온 메시지")
+
+    def test_both_initiator_and_author_can_message_each_other(self):
+        room = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+        database.send_message(room["id"], self.viewer, "이거 제가 찾는 물건 같아요!")
+        database.send_message(room["id"], self.author, "네 맞아요, 어디서 보셨나요?")
+        messages = database.list_messages(room["id"], self.viewer)
+        self.assertEqual(len(messages), 2)
+        self.assertEqual(messages[0]["sender_user_id"], self.viewer)
+        self.assertEqual(messages[1]["sender_user_id"], self.author)
+
+    def test_message_notification_fires_for_direct_chat_too(self):
+        room = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+        database.send_message(room["id"], self.viewer, "안녕하세요")
+        notifications = [
+            n for n in database.list_notifications_by_user(self.author) if n["type"] == "message"
+        ]
+        self.assertEqual(len(notifications), 1)
+        self.assertIn("조회자닉", notifications[0]["content"])
+
+    def test_mark_messages_as_read_works_for_direct_chat_room(self):
+        room = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+        database.send_message(room["id"], self.viewer, "안녕하세요")
+        updated = database.mark_messages_as_read(room["id"], self.author)
+        self.assertEqual(updated, 1)
+
+    def test_hidden_message_masked_in_direct_chat_room_too(self):
+        room = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+        msg = database.send_message(room["id"], self.viewer, "욕설이 담긴 메시지라고 가정")
+        report_id = database.create_report(self.author, "message", msg["id"], "욕설/비방")
+        admin = database.create_user("admin2@mju.ac.kr", "관리자2실명")
+        database.set_initial_nickname(admin, "관리자2닉")
+        with database.get_connection() as conn:
+            conn.execute("UPDATE User SET is_admin = 1 WHERE id = ?", (admin,))
+        database.apply_report_action(report_id, admin, "hide_message")
+
+        messages = database.list_messages(room["id"], self.author)
+        self.assertEqual(messages[0]["content"], database.HIDDEN_MESSAGE_PLACEHOLDER)
+
+    def test_post_deletion_cascades_direct_chat_room_and_messages(self):
+        room = database.get_or_create_direct_chat_room("lost", self.lost_id, self.viewer)
+        msg = database.send_message(room["id"], self.viewer, "안녕하세요")
+
+        database.delete_lost_post(self.lost_id, self.author)
+
+        with database.get_connection() as conn:
+            self.assertIsNone(
+                conn.execute("SELECT * FROM ChatRoom WHERE id = ?", (room["id"],)).fetchone()
+            )
+            self.assertIsNone(
+                conn.execute("SELECT * FROM Message WHERE id = ?", (msg["id"],)).fetchone()
+            )
+
+
+class ChatRoomDirectChatMigrationTestCase(unittest.TestCase):
+    """A DB built against the pre-direct-chat schema (ChatRoom.match_id
+    NOT NULL, no direct_* columns), with a real Match-based chat room in
+    it, must be migrated in place -- preserving every row -- the first
+    time init_db() runs against it."""
+
+    _LEGACY_SCHEMA = """
+        PRAGMA foreign_keys = ON;
+        CREATE TABLE User (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, nickname TEXT,
+            is_admin INTEGER NOT NULL DEFAULT 0,
+            is_suspended INTEGER NOT NULL DEFAULT 0,
+            suspended_until TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE LostPost (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES User(id),
+            title TEXT NOT NULL, description TEXT NOT NULL, category TEXT NOT NULL,
+            location TEXT NOT NULL, lost_at TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT '찾는 중' CHECK (status IN ('찾는 중', '찾음')),
+            image_url TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE FoundPost (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES User(id),
+            title TEXT NOT NULL, description TEXT NOT NULL, category TEXT NOT NULL,
+            location TEXT NOT NULL, found_at TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT '보관 중' CHECK (status IN ('보관 중', '완료')),
+            image_url TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE Match (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lost_post_id INTEGER NOT NULL REFERENCES LostPost(id) ON DELETE CASCADE,
+            found_post_id INTEGER NOT NULL REFERENCES FoundPost(id) ON DELETE CASCADE,
+            score REAL NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (lost_post_id, found_post_id)
+        );
+        CREATE TABLE ChatRoom (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            match_id INTEGER NOT NULL UNIQUE REFERENCES Match(id) ON DELETE CASCADE,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE TABLE Message (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_room_id INTEGER NOT NULL REFERENCES ChatRoom(id) ON DELETE CASCADE,
+            sender_user_id INTEGER NOT NULL REFERENCES User(id),
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            read_at TEXT,
+            hidden_at TEXT,
+            hidden_by_user_id INTEGER REFERENCES User(id),
+            hidden_reason TEXT
+        );
+    """
+
+    def setUp(self):
+        self._tmp_dir = tempfile.TemporaryDirectory()
+        self._orig_db_path = database.DB_PATH
+        database.DB_PATH = Path(self._tmp_dir.name) / "legacy_chatroom.db"
+
+        conn = sqlite3.connect(database.DB_PATH)
+        conn.executescript(self._LEGACY_SCHEMA)
+        conn.execute("INSERT INTO User (email, name, nickname) VALUES ('a@mju.ac.kr', 'A', 'A닉')")
+        conn.execute("INSERT INTO User (email, name, nickname) VALUES ('b@mju.ac.kr', 'B', 'B닉')")
+        conn.execute(
+            "INSERT INTO LostPost (user_id, title, description, category, location, lost_at) "
+            "VALUES (1, '기존 분실물', '설명', '기타', '장소', '2026-08-20 10:00')"
+        )
+        conn.execute(
+            "INSERT INTO FoundPost (user_id, title, description, category, location, found_at) "
+            "VALUES (2, '기존 습득물', '설명', '기타', '장소', '2026-08-20 11:00')"
+        )
+        conn.execute("INSERT INTO Match (lost_post_id, found_post_id, score) VALUES (1, 1, 0.9)")
+        conn.execute("INSERT INTO ChatRoom (match_id) VALUES (1)")
+        conn.execute(
+            "INSERT INTO Message (chat_room_id, sender_user_id, content) VALUES (1, 1, '기존 메시지')"
+        )
+        conn.commit()
+        conn.close()
+
+    def tearDown(self):
+        database.DB_PATH = self._orig_db_path
+        self._tmp_dir.cleanup()
+
+    def test_migration_preserves_existing_chat_room_and_message(self):
+        database.init_db()
+        room = database.get_chat_room(1, 1)
+        self.assertEqual(room["match_id"], 1)
+        self.assertIsNone(room["direct_lost_post_id"])
+        messages = database.list_messages(1, 1)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0]["content"], "기존 메시지")
+
+    def test_migration_adds_direct_chat_columns(self):
+        database.init_db()
+        with database.get_connection() as conn:
+            columns = [row[1] for row in conn.execute("PRAGMA table_info(ChatRoom)").fetchall()]
+        self.assertIn("direct_lost_post_id", columns)
+        self.assertIn("direct_found_post_id", columns)
+        self.assertIn("initiator_user_id", columns)
+
+    def test_new_direct_chat_works_normally_after_migration(self):
+        database.init_db()
+        room = database.get_or_create_direct_chat_room("lost", 1, 2)
+        self.assertIsNone(room["match_id"])
+        database.send_message(room["id"], 2, "마이그레이션 후 새 direct chat")
+        self.assertEqual(len(database.list_messages(room["id"], 1)), 1)
+
+    def test_migration_is_idempotent(self):
+        database.init_db()
+        database.init_db()  # second run must be a no-op, not an error
+
+        with database.get_connection() as conn:
+            columns = [row[1] for row in conn.execute("PRAGMA table_info(ChatRoom)").fetchall()]
+        self.assertEqual(columns.count("direct_lost_post_id"), 1)
+
+        # data still intact and functional after two migration runs
+        self.assertIsNotNone(database.get_chat_room(1, 1))
+        self.assertEqual(len(database.list_messages(1, 1)), 1)
 
 
 if __name__ == "__main__":

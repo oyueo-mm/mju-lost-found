@@ -50,7 +50,19 @@ CREATE TABLE IF NOT EXISTS Match (
 
 CREATE TABLE IF NOT EXISTS ChatRoom (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    match_id INTEGER NOT NULL UNIQUE REFERENCES Match(id) ON DELETE CASCADE,
+    -- A ChatRoom is either Match-based (match_id set, the existing AI-match
+    -- -> confirm -> chat flow) OR "direct" (match_id NULL, the two
+    -- direct_*_post_id/initiator_user_id columns set instead) -- a viewer
+    -- messaging a post's author straight from the board, with no Match
+    -- required. Exactly one of the two shapes applies per row; enforced by
+    -- application code (get_or_create_chat_room vs
+    -- get_or_create_direct_chat_room), not a CHECK, to match this
+    -- project's existing convention of not CHECK-constraining every
+    -- invariant (e.g. LostPost.category isn't either).
+    match_id INTEGER UNIQUE REFERENCES Match(id) ON DELETE CASCADE,
+    direct_lost_post_id INTEGER REFERENCES LostPost(id) ON DELETE CASCADE,
+    direct_found_post_id INTEGER REFERENCES FoundPost(id) ON DELETE CASCADE,
+    initiator_user_id INTEGER REFERENCES User(id),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -122,10 +134,11 @@ CREATE INDEX IF NOT EXISTS idx_message_chat_room_id ON Message(chat_room_id);
 CREATE INDEX IF NOT EXISTS idx_message_chat_room_created_id ON Message(chat_room_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_report_reporter_user_id ON Report(reporter_user_id);
 CREATE INDEX IF NOT EXISTS idx_notification_user_read_created ON Notification(user_id, is_read, created_at DESC);
--- idx_user_nickname (User.nickname) and idx_report_status (Report.status)
--- are created by _migrate_user_table_add_nickname() /
--- _migrate_report_table_add_processing_fields() in database.py instead of
--- here: on a pre-existing DB, the CREATE TABLE IF NOT EXISTS above is a
--- no-op (the table already exists without that column), so an
--- unconditional CREATE INDEX here would fail until the migration has
--- actually added the column.
+-- idx_user_nickname (User.nickname), idx_report_status (Report.status), and
+-- the two ChatRoom idx_chatroom_direct_*_unique partial indexes are created
+-- by _migrate_user_table_add_nickname() / _migrate_report_table_add_processing_fields() /
+-- _migrate_chatroom_table_add_direct_chat() in database.py instead of here:
+-- on a pre-existing DB, the CREATE TABLE IF NOT EXISTS above is a no-op
+-- (the table already exists without that column), so an unconditional
+-- CREATE INDEX here would fail until the migration has actually added the
+-- column.

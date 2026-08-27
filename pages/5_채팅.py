@@ -43,34 +43,60 @@ try:
 except Exception as e:
     st.error(f"읽음 처리 중 오류가 발생했습니다: {e}")
 
-# list_matches_by_user()가 이미 만들어 둔 조인 결과(제목/카테고리 등)를 그대로 재사용한다.
-try:
-    my_matches = db.list_matches_by_user(user_id)
-except Exception as e:
-    st.error(f"매칭 정보를 불러오는 중 오류가 발생했습니다: {e}")
-    st.stop()
+score_caption = None
 
-match = next((m for m in my_matches if m["match_id"] == room["match_id"]), None)
-if match is None:
-    st.error("연결된 매칭 정보를 찾을 수 없습니다.")
-    st.stop()
+if room["match_id"] is not None:
+    # 기존 AI 매칭 확정 흐름 -- list_matches_by_user()가 이미 만들어 둔 조인
+    # 결과(제목/카테고리 등)를 그대로 재사용한다.
+    try:
+        my_matches = db.list_matches_by_user(user_id)
+    except Exception as e:
+        st.error(f"매칭 정보를 불러오는 중 오류가 발생했습니다: {e}")
+        st.stop()
 
-if match["lost_post_user_id"] == user_id:
-    my_post_label = f"내 분실물: {match['lost_title']}"
-    other_post_label = f"상대 습득물: {match['found_title']}"
-    other_user_id = match["found_post_user_id"]
+    match = next((m for m in my_matches if m["match_id"] == room["match_id"]), None)
+    if match is None:
+        st.error("연결된 매칭 정보를 찾을 수 없습니다.")
+        st.stop()
+
+    if match["lost_post_user_id"] == user_id:
+        my_post_label = f"내 분실물: {match['lost_title']}"
+        other_post_label = f"상대 습득물: {match['found_title']}"
+        other_user_id = match["found_post_user_id"]
+    else:
+        my_post_label = f"내 습득물: {match['found_title']}"
+        other_post_label = f"상대 분실물: {match['lost_title']}"
+        other_user_id = match["lost_post_user_id"]
+    score_caption = f"AI 유사도 점수: {match['score']:.2f}"
 else:
-    my_post_label = f"내 습득물: {match['found_title']}"
-    other_post_label = f"상대 분실물: {match['lost_title']}"
-    other_user_id = match["lost_post_user_id"]
+    # 게시글에서 바로 시작한 direct chat -- Match 없이 만들어진 방이라
+    # direct_lost_post_id/direct_found_post_id + initiator_user_id로 상대방을
+    # 알아낸다. 게시물이 삭제된 경우(방이 아직 CASCADE되지 않은 극히 짧은
+    # 경합 구간)에는 상대 정보 없이 안내만 표시한다.
+    if room["direct_lost_post_id"] is not None:
+        post = db.get_lost_post(room["direct_lost_post_id"])
+        post_label = f"찾아요 게시물: {post['title']}" if post else "삭제된 게시물"
+    else:
+        post = db.get_found_post(room["direct_found_post_id"])
+        post_label = f"찾았어요 게시물: {post['title']}" if post else "삭제된 게시물"
 
-other_user = db.get_user_by_id(other_user_id)
+    if room["initiator_user_id"] == user_id:
+        my_post_label = "직접 문의한 채팅"
+        other_user_id = post["user_id"] if post else None
+    else:
+        my_post_label = "내 게시물에 대한 문의"
+        other_user_id = room["initiator_user_id"]
+    other_post_label = post_label
+
+other_user = db.get_user_by_id(other_user_id) if other_user_id else None
 other_nickname = other_user["nickname"] if other_user else "상대방"
 
 st.subheader(f"{other_nickname}님과의 대화")
 st.caption(f"{my_post_label}  ·  {other_post_label}")
-st.caption(f"AI 유사도 점수: {match['score']:.2f}")
-render_report_control("user", other_user_id, button_label=f"🚩 {other_nickname}님 신고하기")
+if score_caption:
+    st.caption(score_caption)
+if other_user_id:
+    render_report_control("user", other_user_id, button_label=f"🚩 {other_nickname}님 신고하기")
 st.divider()
 
 # 페이지네이션 상태는 채팅방별로 분리 보관한다 -- 세션 안에서 다른 채팅방으로

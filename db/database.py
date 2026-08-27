@@ -94,6 +94,7 @@ def init_db() -> None:
     _migrate_report_table_add_processing_fields()
     _migrate_user_table_add_suspension()
     _migrate_message_table_add_hidden_fields()
+    _migrate_chatroom_table_add_direct_chat()
 
 
 def _migrate_user_table_add_nickname() -> None:
@@ -362,6 +363,91 @@ def _migrate_message_table_add_hidden_fields() -> None:
         conn.execute("ALTER TABLE Message ADD COLUMN hidden_by_user_id INTEGER REFERENCES User(id)")
         conn.execute("ALTER TABLE Message ADD COLUMN hidden_reason TEXT")
         conn.commit()
+    finally:
+        conn.close()
+
+
+def _migrate_chatroom_table_add_direct_chat() -> None:
+    """One-time migration for a DB created before ChatRoom supported
+    "direct" (author-DM, not Match-mediated) chat rooms alongside the
+    existing Match-based ones.
+
+    Two changes are needed together, so this does one rebuild: (1)
+    ChatRoom.match_id must become nullable (a direct room has no Match),
+    which SQLite can't do via ALTER TABLE (no DROP NOT NULL) -- this
+    follows the same rebuild procedure as _migrate_match_table_add_cascade():
+    disable FK enforcement, rebuild in a transaction, verify with
+    foreign_key_check, re-enable enforcement; (2) three new nullable
+    columns (direct_lost_post_id, direct_found_post_id, initiator_user_id)
+    are added in that same rebuild. Every existing (Match-based) ChatRoom
+    row is preserved with all three new columns NULL -- exactly the state
+    an existing Match-based room should be in.
+
+    A no-op if there's no ChatRoom table yet (schema.sql's CREATE TABLE IF
+    NOT EXISTS already creates it correctly) or it was already migrated.
+    """
+    conn = sqlite3.connect(DB_PATH, isolation_level=None)
+    conn.row_factory = sqlite3.Row
+    try:
+        columns = [row[1] for row in conn.execute("PRAGMA table_info(ChatRoom)").fetchall()]
+        if not columns:
+            return  # no ChatRoom table yet -- schema.sql's CREATE TABLE will make one with these columns
+
+        if "direct_lost_post_id" not in columns:
+            conn.execute("PRAGMA foreign_keys = OFF")
+            conn.execute("BEGIN")
+            try:
+                conn.execute(
+                    """
+                    CREATE TABLE ChatRoom_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        match_id INTEGER UNIQUE REFERENCES Match(id) ON DELETE CASCADE,
+                        direct_lost_post_id INTEGER REFERENCES LostPost(id) ON DELETE CASCADE,
+                        direct_found_post_id INTEGER REFERENCES FoundPost(id) ON DELETE CASCADE,
+                        initiator_user_id INTEGER REFERENCES User(id),
+                        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                    )
+                    """
+                )
+                conn.execute(
+                    """
+                    INSERT INTO ChatRoom_new (id, match_id, created_at)
+                    SELECT id, match_id, created_at FROM ChatRoom
+                    """
+                )
+                conn.execute("DROP TABLE ChatRoom")
+                conn.execute("ALTER TABLE ChatRoom_new RENAME TO ChatRoom")
+
+                fk_problems = conn.execute("PRAGMA foreign_key_check(ChatRoom)").fetchall()
+                if fk_problems:
+                    raise sqlite3.IntegrityError(
+                        f"ChatRoom table migration would violate foreign keys: {fk_problems}"
+                    )
+
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
+            finally:
+                conn.execute("PRAGMA foreign_keys = ON")
+
+        # Always ensured, whether the table was just rebuilt or already had
+        # the new columns (fresh DB via schema.sql never hits the branch
+        # above) -- same "outside the if" pattern as
+        # _migrate_user_table_add_nickname()'s idx_user_nickname. Partial
+        # indexes (WHERE ... IS NOT NULL) so uniqueness is only enforced
+        # among direct rooms -- Match-based rows (both direct_* columns
+        # NULL) never participate in either index.
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_chatroom_direct_lost_unique "
+            "ON ChatRoom(direct_lost_post_id, initiator_user_id) "
+            "WHERE direct_lost_post_id IS NOT NULL"
+        )
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_chatroom_direct_found_unique "
+            "ON ChatRoom(direct_found_post_id, initiator_user_id) "
+            "WHERE direct_found_post_id IS NOT NULL"
+        )
     finally:
         conn.close()
 
@@ -952,6 +1038,35 @@ def _match_participant_ids(match_id: int) -> set[int]:
     return {p["user_id"] for p in (lost_post, found_post) if p is not None}
 
 
+def _direct_chat_participant_ids(room: sqlite3.Row) -> set[int]:
+    """User ids allowed to access a *direct* (non-Match) ChatRoom: the
+    initiator (whoever clicked "채팅하기" on the post) plus the post's
+    current author, resolved fresh from the post each call -- same
+    "derive live, never cache" approach _match_participant_ids() uses for
+    Match-based rooms. If the post has since been deleted, only the
+    initiator remains (the room itself would normally have cascaded away
+    via the FK by that point, but this stays defensive either way)."""
+    if room["direct_lost_post_id"] is not None:
+        post = get_lost_post(room["direct_lost_post_id"])
+    else:
+        post = get_found_post(room["direct_found_post_id"])
+    ids = {room["initiator_user_id"]}
+    if post is not None:
+        ids.add(post["user_id"])
+    return ids
+
+
+def _chat_room_participant_ids(room: sqlite3.Row) -> set[int]:
+    """Dispatches to the right participant-resolution for either ChatRoom
+    shape (Match-based or direct/author-DM) -- the one place every chat
+    permission check (get_chat_room, send_message) funnels through, so
+    list_messages()/mark_messages_as_read()/etc. -- which all call
+    get_chat_room() first -- work unchanged for both kinds of room."""
+    if room["match_id"] is not None:
+        return _match_participant_ids(room["match_id"])
+    return _direct_chat_participant_ids(room)
+
+
 def _get_chat_room_by_match(match_id: int) -> sqlite3.Row | None:
     with get_connection() as conn:
         return conn.execute(
@@ -992,9 +1107,87 @@ def get_or_create_chat_room(match_id: int, requesting_user_id: int) -> sqlite3.R
     return room
 
 
+def get_or_create_direct_chat_room(
+    post_kind: str, post_id: int, requesting_user_id: int
+) -> sqlite3.Row:
+    """Get-or-create a *direct* ChatRoom between requesting_user_id (the
+    initiator/viewer) and a LostPost's or FoundPost's current author --
+    NOT mediated by a Match, unlike get_or_create_chat_room(). Lets a
+    board viewer message a post's author straight away (e.g. "이거 제
+    물건 같아요") without first needing a matching post of their own.
+
+    post_kind must be "lost" or "found" (mirrors Report's target_type
+    naming, though unlike Report.target_id this uses a real, unsigned
+    post_id plus a real FK column per kind -- no id-collision ambiguity to
+    work around here, since direct_lost_post_id/direct_found_post_id are
+    separate columns).
+
+    Validation, in order:
+    - requesting_user_id must be a real User (ValueError otherwise --
+      mirrors create_report()'s "reporter must exist" check)
+    - requesting_user_id must not be currently suspended
+      (PermissionDeniedError via _require_not_suspended -- same "new
+      interaction" gate create_match()/send_message() use)
+    - post_kind must be "lost"/"found" and the post must exist (ValueError)
+    - requesting_user_id must not be the post's own author -- no
+      self-chat (PermissionDeniedError)
+
+    Idempotent: a second call for the same (post, initiator) pair returns
+    the existing room instead of creating a duplicate -- backed by a
+    partial UNIQUE index (idx_chatroom_direct_lost_unique /
+    idx_chatroom_direct_found_unique), the same get-or-create-with-
+    IntegrityError-fallback shape get_or_create_chat_room() uses.
+    """
+    if get_user_by_id(requesting_user_id) is None:
+        raise ValueError(f"User {requesting_user_id} not found")
+
+    _require_not_suspended(requesting_user_id)
+
+    if post_kind == "lost":
+        post = get_lost_post(post_id)
+        column = "direct_lost_post_id"
+    elif post_kind == "found":
+        post = get_found_post(post_id)
+        column = "direct_found_post_id"
+    else:
+        raise ValueError(f"invalid post_kind: {post_kind!r}")
+
+    if post is None:
+        raise ValueError(f"{post_kind} post {post_id} not found")
+    if post["user_id"] == requesting_user_id:
+        raise PermissionDeniedError("자기 자신의 게시물에는 채팅을 시작할 수 없습니다.")
+
+    with get_connection() as conn:
+        existing = conn.execute(
+            f"SELECT * FROM ChatRoom WHERE {column} = ? AND initiator_user_id = ?",
+            (post_id, requesting_user_id),
+        ).fetchone()
+    if existing is not None:
+        return existing
+
+    try:
+        with get_connection() as conn:
+            conn.execute(
+                f"INSERT INTO ChatRoom ({column}, initiator_user_id) VALUES (?, ?)",
+                (post_id, requesting_user_id),
+            )
+    except sqlite3.IntegrityError:
+        pass  # lost a race to create it -- the re-fetch below picks it up
+
+    with get_connection() as conn:
+        room = conn.execute(
+            f"SELECT * FROM ChatRoom WHERE {column} = ? AND initiator_user_id = ?",
+            (post_id, requesting_user_id),
+        ).fetchone()
+    if room is None:
+        raise RuntimeError(f"Failed to create direct ChatRoom for {post_kind} post {post_id}")
+    return room
+
+
 def get_chat_room(chat_room_id: int, requesting_user_id: int) -> sqlite3.Row:
     """Fetch a ChatRoom, but only for a requesting_user_id who is a
-    participant of its Match (owner of the LostPost or FoundPost side).
+    participant -- of its Match (owner of the LostPost or FoundPost side)
+    if Match-based, or the initiator/post-author pair if direct.
 
     Raises ValueError if the ChatRoom doesn't exist, PermissionDeniedError
     if the user isn't a participant.
@@ -1006,7 +1199,7 @@ def get_chat_room(chat_room_id: int, requesting_user_id: int) -> sqlite3.Row:
     if room is None:
         raise ValueError(f"ChatRoom {chat_room_id} not found")
 
-    if requesting_user_id not in _match_participant_ids(room["match_id"]):
+    if requesting_user_id not in _chat_room_participant_ids(room):
         raise PermissionDeniedError(
             "You can only access a chat room you're a participant of"
         )
@@ -1140,7 +1333,7 @@ def send_message(chat_room_id: int, requesting_user_id: int, content: str) -> sq
         raise ValueError("message content must not be blank")
 
     other_user_id = next(
-        iter(_match_participant_ids(room["match_id"]) - {requesting_user_id}), None
+        iter(_chat_room_participant_ids(room) - {requesting_user_id}), None
     )
 
     with get_connection() as conn:
@@ -1227,8 +1420,16 @@ def mark_message_notifications_as_read_for_chat_room(chat_room_id: int, requesti
 
 def count_unread_messages_by_user(user_id: int) -> int:
     """Total unread messages across every ChatRoom user_id participates in
-    -- i.e. messages the *other* participant sent that user_id hasn't read.
-    A single JOIN query, scoped to user_id's own chat rooms only.
+    -- both Match-based and direct rooms -- i.e. messages the *other*
+    participant sent that user_id hasn't read. A single JOIN query, scoped
+    to user_id's own chat rooms only.
+
+    Match.lost_post_id/found_post_id and ChatRoom.direct_lost_post_id/
+    direct_found_post_id are coalesced per row: a Match-based room always
+    has ma non-NULL (and the two direct_* columns NULL), a direct room the
+    reverse, so exactly one side of each COALESCE ever contributes. Direct
+    rooms have only one post, so their "other side" may instead be
+    cr.initiator_user_id (never set on Match-based rooms).
     """
     with get_connection() as conn:
         row = conn.execute(
@@ -1236,29 +1437,50 @@ def count_unread_messages_by_user(user_id: int) -> int:
             SELECT COUNT(*) AS unread_count
             FROM Message m
             JOIN ChatRoom cr ON cr.id = m.chat_room_id
-            JOIN Match ma ON ma.id = cr.match_id
-            JOIN LostPost lp ON lp.id = ma.lost_post_id
-            JOIN FoundPost fp ON fp.id = ma.found_post_id
-            WHERE (lp.user_id = ? OR fp.user_id = ?)
+            LEFT JOIN Match ma ON ma.id = cr.match_id
+            LEFT JOIN LostPost lp ON lp.id = COALESCE(ma.lost_post_id, cr.direct_lost_post_id)
+            LEFT JOIN FoundPost fp ON fp.id = COALESCE(ma.found_post_id, cr.direct_found_post_id)
+            WHERE (lp.user_id = ? OR fp.user_id = ? OR cr.initiator_user_id = ?)
               AND m.sender_user_id != ?
               AND m.read_at IS NULL
             """,
-            (user_id, user_id, user_id),
+            (user_id, user_id, user_id, user_id),
         ).fetchone()
         return row["unread_count"]
 
 
+_CHAT_ROOM_LAST_MESSAGE_SUBQUERY = """
+            SELECT
+                id, chat_room_id, content, created_at, hidden_at,
+                ROW_NUMBER() OVER (
+                    PARTITION BY chat_room_id ORDER BY created_at DESC, id DESC
+                ) AS rn
+            FROM Message
+"""
+
+
 def list_chat_rooms_by_user(user_id: int) -> list[dict]:
-    """ChatRooms user_id participates in (owner of the Match's LostPost
-    and/or FoundPost), with the related LostPost/FoundPost/sender-nickname
-    and last-message fields joined in -- one query, no N+1 per room.
+    """ChatRooms user_id participates in -- both Match-based rooms (owner of
+    the Match's LostPost and/or FoundPost) and "direct" rooms (started via
+    the board's "채팅하기" button, no Match involved) -- with the related
+    post/nickname and last-message fields joined in.
+
+    Two queries (Match rooms, direct rooms) rather than one UNION-ed query:
+    the two shapes don't share a column layout (a direct room only has one
+    side's post), so forcing them into one SQL statement would need the same
+    branching this function already needs in Python. Every row gets a
+    "room_type" ("match" or "direct") plus a uniform other_nickname/
+    other_user_id/post_title so callers don't have to branch on room_type
+    just to render a card -- see pages/6_내_채팅.py.
 
     Rooms are ordered by their last message time descending; rooms with no
-    messages yet sort after all of those, most recently created first.
+    messages yet sort after all of those, most recently created first --
+    Match and direct rooms are interleaved by that same rule, not grouped by
+    type.
 
-    Like list_matches_by_user(), returns lost_*/found_* prefixed fields so
-    the caller can determine "the other side" the same way pages/5_채팅.py
-    already does (compare *_post_user_id to the current user_id). Only
+    Like list_matches_by_user(), Match rows keep the lost_*/found_* prefixed
+    fields so existing callers can determine "the other side" by comparing
+    *_post_user_id to the current user_id, unchanged from before. Only
     nicknames are exposed -- never real names or emails.
 
     If the last message in a room has been hidden by an admin
@@ -1270,7 +1492,7 @@ def list_chat_rooms_by_user(user_id: int) -> list[dict]:
     hidden message happens to be the room's most recent one.
     """
     with get_connection() as conn:
-        rows = conn.execute(
+        match_rows = conn.execute(
             """
             SELECT
                 cr.id AS chat_room_id,
@@ -1287,6 +1509,7 @@ def list_chat_rooms_by_user(user_id: int) -> list[dict]:
                 fu.nickname AS found_user_nickname,
                 lm.content AS last_message_content,
                 lm.created_at AS last_message_created_at,
+                lm.id AS last_message_id,
                 lm.hidden_at AS last_message_hidden_at,
                 (
                     SELECT COUNT(*)
@@ -1301,31 +1524,86 @@ def list_chat_rooms_by_user(user_id: int) -> list[dict]:
             JOIN FoundPost fp ON fp.id = m.found_post_id
             JOIN User lu ON lu.id = lp.user_id
             JOIN User fu ON fu.id = fp.user_id
-            LEFT JOIN (
-                SELECT
-                    id, chat_room_id, content, created_at, hidden_at,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY chat_room_id ORDER BY created_at DESC, id DESC
-                    ) AS rn
-                FROM Message
-            ) lm ON lm.chat_room_id = cr.id AND lm.rn = 1
+            LEFT JOIN (""" + _CHAT_ROOM_LAST_MESSAGE_SUBQUERY + """) lm
+                ON lm.chat_room_id = cr.id AND lm.rn = 1
             WHERE lp.user_id = ? OR fp.user_id = ?
-            ORDER BY
-                CASE WHEN lm.created_at IS NULL THEN 1 ELSE 0 END,
-                lm.created_at DESC,
-                lm.id DESC,
-                cr.created_at DESC
             """,
             (user_id, user_id, user_id),
         ).fetchall()
 
+        direct_rows = conn.execute(
+            """
+            SELECT
+                cr.id AS chat_room_id,
+                cr.created_at AS chat_room_created_at,
+                cr.initiator_user_id AS initiator_user_id,
+                iu.nickname AS initiator_nickname,
+                COALESCE(dlp.title, dfp.title) AS direct_post_title,
+                COALESCE(dlp.user_id, dfp.user_id) AS direct_post_owner_id,
+                ou.nickname AS direct_post_owner_nickname,
+                lm.content AS last_message_content,
+                lm.created_at AS last_message_created_at,
+                lm.id AS last_message_id,
+                lm.hidden_at AS last_message_hidden_at,
+                (
+                    SELECT COUNT(*)
+                    FROM Message msg
+                    WHERE msg.chat_room_id = cr.id
+                      AND msg.sender_user_id != ?
+                      AND msg.read_at IS NULL
+                ) AS unread_count
+            FROM ChatRoom cr
+            LEFT JOIN LostPost dlp ON dlp.id = cr.direct_lost_post_id
+            LEFT JOIN FoundPost dfp ON dfp.id = cr.direct_found_post_id
+            JOIN User iu ON iu.id = cr.initiator_user_id
+            LEFT JOIN User ou ON ou.id = COALESCE(dlp.user_id, dfp.user_id)
+            LEFT JOIN (""" + _CHAT_ROOM_LAST_MESSAGE_SUBQUERY + """) lm
+                ON lm.chat_room_id = cr.id AND lm.rn = 1
+            WHERE cr.match_id IS NULL
+              AND (cr.initiator_user_id = ? OR dlp.user_id = ? OR dfp.user_id = ?)
+            """,
+            (user_id, user_id, user_id, user_id),
+        ).fetchall()
+
     results = []
-    for row in rows:
+    for row in match_rows:
         item = dict(row)
+        item["room_type"] = "match"
+        if item["lost_post_user_id"] == user_id:
+            item["other_user_id"] = item["found_post_user_id"]
+            item["other_nickname"] = item["found_user_nickname"]
+        else:
+            item["other_user_id"] = item["lost_post_user_id"]
+            item["other_nickname"] = item["lost_user_nickname"]
+        results.append(item)
+
+    for row in direct_rows:
+        item = dict(row)
+        item["room_type"] = "direct"
+        # 게시물이 삭제됐는데 아직 CASCADE되지 않은 극히 짧은 경합 구간이면
+        # direct_post_owner_id가 None일 수 있다 -- pages/5_채팅.py의 동일한
+        # 처리(post_label = "삭제된 게시물")를 따른다.
+        item["post_title"] = item["direct_post_title"] or "삭제된 게시물"
+        if item["initiator_user_id"] == user_id:
+            item["other_user_id"] = item["direct_post_owner_id"]
+            item["other_nickname"] = item["direct_post_owner_nickname"] or "상대방"
+        else:
+            item["other_user_id"] = item["initiator_user_id"]
+            item["other_nickname"] = item["initiator_nickname"]
+        results.append(item)
+
+    for item in results:
         if item["last_message_hidden_at"]:
             item["last_message_content"] = HIDDEN_MESSAGE_PLACEHOLDER
-        results.append(item)
-    return results
+
+    # Match/direct 두 그룹을 따로 조회했으므로, 기존 SQL의 ORDER BY(마지막
+    # 메시지 최신순, 메시지 없는 방은 방 생성일 최신순)와 동일한 규칙으로
+    # 두 그룹을 병합 정렬한다.
+    with_message = [item for item in results if item["last_message_created_at"] is not None]
+    without_message = [item for item in results if item["last_message_created_at"] is None]
+    with_message.sort(key=lambda item: (item["last_message_created_at"], item["last_message_id"] or 0), reverse=True)
+    without_message.sort(key=lambda item: item["chat_room_created_at"], reverse=True)
+    return with_message + without_message
 
 
 # ---------- Report ----------

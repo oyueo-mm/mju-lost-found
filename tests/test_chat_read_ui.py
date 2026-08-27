@@ -193,6 +193,23 @@ class ChatReadStatusUiTestCase(unittest.TestCase):
         subheaders = [s.value for s in at.subheader]
         self.assertTrue(any(s == "🔗 내 매칭" for s in subheaders))
 
+    def test_app_nav_badge_includes_direct_chat_unread(self):
+        author = db.create_user("author@mju.ac.kr", "작성자실명")
+        db.set_initial_nickname(author, "작성자닉")
+        lost_id2 = db.create_lost_post(
+            author, "빨간 우산", "설명", "기타", "장소", "2026-08-25 09:00"
+        )
+        direct_room = db.get_or_create_direct_chat_room("lost", lost_id2, self.stranger)
+        db.send_message(direct_room["id"], self.stranger, "이거 제가 놓고 간 우산인데요")
+
+        with self._patched_authorized(author, "author@mju.ac.kr", "작성자실명"):
+            at = AppTest.from_file(APP_PAGE)
+            at.run(timeout=30)
+
+        self.assertEqual(list(at.exception), [])
+        subheaders = [s.value for s in at.subheader]
+        self.assertTrue(any("내 채팅 (1)" in s for s in subheaders))
+
     def test_app_does_not_query_unread_count_when_logged_out(self):
         import ui.auth as auth_module
 

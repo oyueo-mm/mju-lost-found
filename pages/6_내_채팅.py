@@ -17,19 +17,23 @@ user_id = user["id"]
 
 
 def _render_chat_room_card(room) -> None:
-    is_lost_owner = room["lost_post_user_id"] == user_id
-
-    if is_lost_owner:
-        other_nickname = room["found_user_nickname"]
-    else:
-        other_nickname = room["lost_user_nickname"]
-
+    # list_chat_rooms_by_user()가 이미 room_type/other_nickname을 현재
+    # user_id 기준으로 계산해서 내려주므로, 여기서는 두 종류를 표시 방식만
+    # 다르게 렌더링한다 -- 권한/소유권 판단은 하지 않는다(DB 레이어가 이미
+    # user_id로 필터링한 목록만 넘겨준다).
     with st.container(border=True):
-        title_line = f"**{room['lost_title']}**  ↔  **{room['found_title']}**"
+        if room["room_type"] == "match":
+            title_line = f"**{room['lost_title']}**  ↔  **{room['found_title']}**"
+        else:
+            title_line = f"💬 {room['post_title']}"
         if room["unread_count"]:
             title_line += f"  🔵 새 메시지 {room['unread_count']}개"
         st.markdown(title_line)
-        st.caption(f"상대방: {other_nickname}  ·  AI 유사도 점수: {room['score']:.2f}")
+
+        if room["room_type"] == "match":
+            st.caption(f"상대방: {room['other_nickname']}  ·  AI 유사도 점수: {room['score']:.2f}")
+        else:
+            st.caption(f"상대방: {room['other_nickname']}  ·  게시글에서 바로 시작한 채팅")
 
         if room["last_message_content"]:
             st.write(room["last_message_content"])

@@ -145,6 +145,23 @@ with tab_list:
             st.write(f"**작성일:** {post['created_at']}")
 
             st.divider()
+            # AI 매칭 확정을 거치지 않고 게시물 작성자에게 바로 채팅을 거는 경로.
+            # 기존 "AI 유사 게시글 찾기 -> 매칭 확정 -> 채팅"과는 별개이며 Match를
+            # 만들지 않는다 -- get_or_create_direct_chat_room() 참고.
+            if st.button("💬 작성자와 채팅하기", key=f"direct_chat_btn_lost_{post['id']}"):
+                try:
+                    room = db.get_or_create_direct_chat_room("lost", post["id"], user_id)
+                except db.PermissionDeniedError as e:
+                    st.error(str(e))
+                except ValueError as e:
+                    st.error(f"채팅을 시작할 수 없습니다: {e}")
+                except Exception as e:
+                    st.error(f"채팅을 시작하는 중 오류가 발생했습니다: {e}")
+                else:
+                    st.session_state["chat_room_id"] = room["id"]
+                    st.switch_page("pages/5_채팅.py")
+
+            st.divider()
             # LostPost ids are used as-is (positive) for target_type="post";
             # pages/2_찾았어요.py negates FoundPost ids -- see db.create_report().
             render_report_control("post", post["id"])
