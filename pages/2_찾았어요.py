@@ -117,6 +117,7 @@ with tab_list:
             st.info("의미가 비슷한 분실물을 찾지 못했습니다.")
         else:
             st.write(f"**AI 검색 결과 ({len(ai_results)}건)**")
+            st.caption("AI 검색 결과는 현재 검색어와 유사한 찾아요 게시판의 분실물 게시글입니다.")
             render_match_candidates("lost", ai_results, "pages/1_찾아요.py", "selected_lost_id")
 
     st.session_state.setdefault("selected_found_id", None)

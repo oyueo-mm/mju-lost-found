@@ -118,6 +118,7 @@ def render_match_candidates(
     """
     date_field = "found_at" if kind == "found" else "lost_at"
     date_label = "습득 시간" if kind == "found" else "분실 시간"
+    board_label = "📦 찾았어요 게시글" if kind == "found" else "🔍 찾아요 게시글"
 
     for candidate in results:
         post = candidate.post
@@ -128,6 +129,7 @@ def render_match_candidates(
                 if image_path:
                     st.image(str(image_path), width=100)
             with cols[1]:
+                st.caption(board_label)
                 st.markdown(f"**{post['title']}**")
                 st.caption(
                     f"{post['category']} · {post['location']} · {date_label}: {post[date_field]}"

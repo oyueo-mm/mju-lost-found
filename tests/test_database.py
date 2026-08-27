@@ -639,6 +639,28 @@ class DatabaseTestCase(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["title"], "검은색 무선 이어폰")
 
+    def test_search_lost_posts_never_returns_found_posts_with_same_keyword(self):
+        """회귀 테스트: LostPost/FoundPost 양쪽에 같은 키워드가 포함된
+        게시글이 있어도, search_lost_posts()는 LostPost만 반환해야 한다."""
+        uid = self._make_user()
+        self._make_lost_post(uid, title="검은색 무선이어폰 분실")
+        self._make_found_post(uid, title="검은색 무선이어폰 습득")
+
+        results = database.search_lost_posts(keyword="무선이어폰")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["title"], "검은색 무선이어폰 분실")
+
+    def test_search_found_posts_never_returns_lost_posts_with_same_keyword(self):
+        """회귀 테스트: search_found_posts()도 마찬가지로 FoundPost만
+        반환해야 한다 (반대 방향)."""
+        uid = self._make_user()
+        self._make_lost_post(uid, title="검은색 무선이어폰 분실")
+        self._make_found_post(uid, title="검은색 무선이어폰 습득")
+
+        results = database.search_found_posts(keyword="무선이어폰")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["title"], "검은색 무선이어폰 습득")
+
 
 class MatchCascadeMigrationTestCase(unittest.TestCase):
     """A DB built against the pre-CASCADE Match schema, with real data in
