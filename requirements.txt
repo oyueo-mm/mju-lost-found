@@ -1,0 +1,9 @@
+streamlit>=1.62
+Authlib>=1.3.2
+httpx
+
+# AI text matching (ai/embedding.py, ai/matching.py)
+# First use of the model downloads it (~440MB) from Hugging Face to
+# ~/.cache/huggingface -- needs network access once, then works offline.
+sentence-transformers
+numpy

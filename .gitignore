@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# SQLite database (generated from db/schema.sql, not source of truth)
+db/*.db
+
+# Uploaded images (user-generated content, not source code)
+uploads/*
+!uploads/.gitkeep
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Contains team members' real names and student IDs -- keep local only
+바이브코딩 경진대회 기획안.pdf

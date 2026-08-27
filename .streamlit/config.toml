@@ -1,0 +1,6 @@
+[server]
+# Lost & found photos don't need Streamlit's 200MB default -- 10MB is
+# generous for a phone photo and limits upload-based resource exhaustion.
+# Everything else (XSRF protection, CORS, static serving, dev mode) is left
+# at Streamlit's own secure defaults -- not touched here.
+maxUploadSize = 10
