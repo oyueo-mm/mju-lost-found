@@ -35,8 +35,42 @@ def _validate_datetime(value: str, field_name: str) -> None:
         )
 
 
+# Guards the lazy auto-init below -- module-level, so it's per-process (a
+# fresh Streamlit Cloud worker starts with this False, a long-running local
+# dev process only ever pays the init_db() cost once).
+_db_ready = False
+
+
+def _ensure_db_ready() -> None:
+    """Lazily creates/migrates the DB on first real use.
+
+    Every previous entry point (app.py, pages/*.py) assumed db/lost_found.db
+    already existed with its tables -- true for local dev only because
+    someone had already run `python db/database.py` once, leaving a
+    gitignored, never-committed .db file sitting on disk. A fresh checkout
+    (e.g. Streamlit Cloud's first deploy) has no such file: sqlite3.connect()
+    silently creates an empty one, and the first real query then fails with
+    "no such table: User". get_connection() is the one choke point every
+    single DB call in this module goes through, so guarding it here fixes
+    every entry point at once without touching app.py or any page.
+
+    The flag is set to True *before* calling init_db(), not after -- init_db()
+    itself uses get_connection() (for the initial CREATE TABLE script), so
+    the flag has to already read "ready" by the time that nested call
+    happens, or this would recurse forever. init_db() is idempotent (CREATE
+    TABLE IF NOT EXISTS + idempotent migrations, exercised extensively by
+    the test suite), so this is safe even in the unlikely event of a race.
+    """
+    global _db_ready
+    if _db_ready:
+        return
+    _db_ready = True
+    init_db()
+
+
 @contextmanager
 def get_connection():
+    _ensure_db_ready()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")

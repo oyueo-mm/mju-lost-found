@@ -3458,5 +3458,78 @@ class MessagePaginationTestCase(unittest.TestCase):
         self.assertEqual(len(messages), 5)
 
 
+class LazyAutoInitTestCase(unittest.TestCase):
+    """Reproduces the real Streamlit Cloud deployment bug: a completely
+    fresh checkout has no db/lost_found.db file at all (it's gitignored,
+    never committed), and nothing in app.py/pages/*.py ever called
+    init_db() -- only tests (in setUp()) and `python db/database.py` (run
+    manually, once, by a developer) did. On a first-ever deploy there's no
+    such manual bootstrap step, so the very first query used to fail with
+    "sqlite3.OperationalError: no such table: User".
+
+    These tests deliberately do NOT call database.init_db() themselves --
+    that's the whole point: they only point DB_PATH at a nonexistent file
+    and immediately call a normal query function, exactly like a fresh
+    Streamlit Cloud worker's first request would.
+    """
+
+    def setUp(self):
+        self._tmp_dir = tempfile.TemporaryDirectory()
+        self._orig_db_path = database.DB_PATH
+        self._orig_db_ready = database._db_ready
+        database.DB_PATH = Path(self._tmp_dir.name) / "never_initialized.db"
+        database._db_ready = False  # simulate a fresh process, not a reused one
+        # deliberately no database.init_db() call here
+
+    def tearDown(self):
+        database.DB_PATH = self._orig_db_path
+        database._db_ready = self._orig_db_ready
+        self._tmp_dir.cleanup()
+
+    def test_query_on_never_initialized_db_no_longer_raises(self):
+        """This is the exact call chain from the crash report:
+        auth.current_user() -> current_user_id() -> resolve_user_id() ->
+        db.get_user_by_email() -- reproduced directly at the DB layer."""
+        self.assertFalse(self._tmp_dir.name and Path(database.DB_PATH).exists())
+        result = database.get_user_by_email("student@mju.ac.kr")  # must not raise
+        self.assertIsNone(result)  # no such user yet, but no OperationalError
+
+    def test_write_on_never_initialized_db_also_works(self):
+        user_id = database.create_user("fresh@mju.ac.kr", "새사용자")
+        self.assertIsNotNone(database.get_user_by_id(user_id))
+
+    def test_db_file_and_tables_are_created_on_first_use(self):
+        self.assertFalse(Path(database.DB_PATH).exists())
+        database.get_user_by_email("anyone@mju.ac.kr")
+        self.assertTrue(Path(database.DB_PATH).exists())
+        with database.get_connection() as conn:
+            tables = {
+                row["name"] for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+        self.assertIn("User", tables)
+        self.assertIn("LostPost", tables)
+        self.assertIn("Notification", tables)  # newest table -- migrations ran too
+
+    def test_lazy_init_only_runs_once_per_process(self):
+        """Second and later get_connection() calls must not re-run
+        init_db() (which would re-read/re-execute schema.sql every query --
+        wasteful, though harmless since it's idempotent)."""
+        database.get_user_by_email("first@mju.ac.kr")  # triggers lazy init
+        self.assertTrue(database._db_ready)
+        with patch.object(database, "init_db") as mock_init:
+            database.get_user_by_email("second@mju.ac.kr")
+            mock_init.assert_not_called()
+
+    def test_explicit_init_db_in_setup_still_works_as_before(self):
+        """The existing test pattern (explicit database.init_db() in
+        setUp(), used by every other test class in this file) must be
+        completely unaffected by the new lazy path."""
+        database.init_db()
+        user_id = database.create_user("explicit@mju.ac.kr", "명시적초기화")
+        self.assertIsNotNone(database.get_user_by_id(user_id))
+
+
 if __name__ == "__main__":
     unittest.main()
