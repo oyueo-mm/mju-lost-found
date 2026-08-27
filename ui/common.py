@@ -47,6 +47,25 @@ def resolve_image_path(image_url: str | None) -> Path | None:
     return path if path.exists() else None
 
 
+def render_post_thumbnail(image_url: str | None, *, width: int = 80) -> None:
+    """게시글 목록 카드에서 상세보기 전에도 보이는 작은 사진 미리보기.
+
+    LostPost/FoundPost는 image_url 컬럼 하나만 가지므로(다중 이미지
+    미지원) 미리보기도 그 한 장만 다룬다. 이미지가 없거나(image_url이
+    비어 있음), 파일을 찾을 수 없거나(resolve_image_path()가 None을
+    반환), 실제 로드 중 오류가 나더라도(손상된 파일 등) 예외를 삼켜서
+    -- 게시글 목록 전체 렌더링이 한 게시글의 이미지 문제 때문에 중단되지
+    않게 한다.
+    """
+    try:
+        image_path = resolve_image_path(image_url)
+        if image_path is None:
+            return
+        st.image(str(image_path), width=width)
+    except Exception:
+        pass
+
+
 def format_datetime_input(date_value: date, time_value: time) -> str:
     return f"{date_value.isoformat()} {time_value.strftime('%H:%M')}"
 

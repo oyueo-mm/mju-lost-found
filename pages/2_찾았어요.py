@@ -10,6 +10,7 @@ from ui.common import (
     format_datetime_input,
     render_ai_match_section,
     render_match_candidates,
+    render_post_thumbnail,
     render_report_control,
     resolve_image_path,
     save_uploaded_image,
@@ -66,7 +67,9 @@ with tab_list:
 
         for post in posts:
             with st.container(border=True):
-                c1, c2 = st.columns([4, 1])
+                img_col, c1, c2 = st.columns([1, 3, 1])
+                with img_col:
+                    render_post_thumbnail(post["image_url"])
                 with c1:
                     st.markdown(f"**{post['title']}**")
                     st.caption(
@@ -76,6 +79,15 @@ with tab_list:
                 with c2:
                     if st.button("상세보기", key=f"found_detail_btn_{post['id']}"):
                         st.session_state["selected_found_id"] = post["id"]
+                    # 새 탭에서 여는 링크 -- 클릭해도 현재 탭의 검색/목록
+                    # 상태는 전혀 건드리지 않는다. 새 탭은 session_state가
+                    # 없는 새 세션으로 열리므로, 상세 정보는 아래 query
+                    # params(found_id)를 통해 복원한다.
+                    st.link_button(
+                        "🔗 새 탭에서 보기",
+                        f"?found_id={post['id']}",
+                        key=f"found_detail_newtab_{post['id']}",
+                    )
 
     else:  # AI 의미 검색: 문장으로 입력한 특징과 의미가 비슷한 "찾아요"(분실물) 게시물을 찾음
         ai_state_key = "found_ai_search_results"
@@ -121,6 +133,15 @@ with tab_list:
             render_match_candidates("lost", ai_results, "pages/1_찾아요.py", "selected_lost_id")
 
     st.session_state.setdefault("selected_found_id", None)
+    if st.session_state.get("selected_found_id") is None:
+        # 새 탭으로 막 열린 경우(session_state 없음) query param으로 복원.
+        # 이미 이 탭에서 선택된 게시물이 있으면 URL을 신뢰하지 않는다.
+        query_found_id = st.query_params.get("found_id")
+        if query_found_id is not None:
+            try:
+                st.session_state["selected_found_id"] = int(query_found_id)
+            except (TypeError, ValueError):
+                pass  # 잘못된 형식의 ID -- 무시하고 목록만 정상 표시
     selected_id = st.session_state.get("selected_found_id")
     if selected_id:
         st.divider()
