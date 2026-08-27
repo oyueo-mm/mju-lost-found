@@ -24,6 +24,7 @@ from db import database as db
 MY_MATCHES_PAGE = str(Path(__file__).resolve().parent.parent / "pages" / "4_내_매칭.py")
 CHAT_PAGE = str(Path(__file__).resolve().parent.parent / "pages" / "5_채팅.py")
 LOST_BOARD_PAGE = str(Path(__file__).resolve().parent.parent / "pages" / "1_찾아요.py")
+FOUND_BOARD_PAGE = str(Path(__file__).resolve().parent.parent / "pages" / "2_찾았어요.py")
 
 
 class ChatUiTestCase(unittest.TestCase):
@@ -474,6 +475,133 @@ class DirectChatUiTestCase(unittest.TestCase):
         errors = [e.value for e in at2.error]
         self.assertTrue(any("접근할 권한이 없습니다" in e for e in errors))
         self.assertEqual(len(at2.chat_message), 0)
+
+
+class FoundDirectChatUiTestCase(unittest.TestCase):
+    """Exercises the new pages/2_찾았어요.py '💬 작성자와 채팅하기' button --
+    the found-post symmetric counterpart of DirectChatUiTestCase above."""
+
+    def setUp(self):
+        self._tmp_db = Path(__file__).resolve().parent / "_tmp_found_direct_chat_ui.db"
+        self._orig_db_path = db.DB_PATH
+        db.DB_PATH = self._tmp_db
+        if self._tmp_db.exists():
+            self._tmp_db.unlink()
+        db.init_db()
+
+        self.author = db.create_user("author@mju.ac.kr", "작성자")
+        self.viewer = db.create_user("viewer@mju.ac.kr", "열람자")
+        db.set_initial_nickname(self.author, "작성자닉")
+        db.set_initial_nickname(self.viewer, "열람자닉")
+        self.found_id = db.create_found_post(
+            self.author, "검은색 무선 이어폰", "케이스에 흰색 스티커 있음", "전자기기", "인문캠퍼스 도서관", "2026-08-25 16:00"
+        )
+
+    def tearDown(self):
+        db.DB_PATH = self._orig_db_path
+        if self._tmp_db.exists():
+            self._tmp_db.unlink()
+
+    def _open_found_post_detail(self, at):
+        at.session_state["selected_found_id"] = self.found_id
+        at.run(timeout=30)
+
+    def test_other_user_can_start_direct_chat_from_found_post(self):
+        with patch("ui.auth.current_user_id", return_value=self.viewer):
+            at = AppTest.from_file(FOUND_BOARD_PAGE)
+            self._open_found_post_detail(at)
+            self.assertTrue(any(b.key == f"direct_chat_btn_found_{self.found_id}" for b in at.button))
+            with patch("streamlit.switch_page") as mock_switch:
+                at.button(key=f"direct_chat_btn_found_{self.found_id}").click()
+                at.run(timeout=30)
+
+        self.assertEqual(list(at.exception), [])
+        mock_switch.assert_called_once_with("pages/5_채팅.py")
+
+        room = db.get_or_create_direct_chat_room("found", self.found_id, self.viewer)
+        self.assertEqual(at.session_state["chat_room_id"], room["id"])
+        self.assertIsNone(room["match_id"])
+        self.assertEqual(room["direct_found_post_id"], self.found_id)
+        self.assertEqual(room["initiator_user_id"], self.viewer)
+
+    def test_clicking_again_reuses_same_room_not_duplicate(self):
+        existing_room = db.get_or_create_direct_chat_room("found", self.found_id, self.viewer)
+
+        with patch("ui.auth.current_user_id", return_value=self.viewer):
+            at = AppTest.from_file(FOUND_BOARD_PAGE)
+            self._open_found_post_detail(at)
+            with patch("streamlit.switch_page"):
+                at.button(key=f"direct_chat_btn_found_{self.found_id}").click()
+                at.run(timeout=30)
+
+        self.assertEqual(list(at.exception), [])
+        self.assertEqual(at.session_state["chat_room_id"], existing_room["id"])
+
+    def test_author_cannot_start_chat_with_self(self):
+        with patch("ui.auth.current_user_id", return_value=self.author):
+            at = AppTest.from_file(FOUND_BOARD_PAGE)
+            self._open_found_post_detail(at)
+            with patch("streamlit.switch_page") as mock_switch:
+                at.button(key=f"direct_chat_btn_found_{self.found_id}").click()
+                at.run(timeout=30)
+
+        self.assertEqual(list(at.exception), [])
+        mock_switch.assert_not_called()
+        errors = [e.value for e in at.error]
+        self.assertTrue(any(errors))  # PermissionDeniedError's message is shown as-is (str(e))
+        self.assertNotIn("chat_room_id", at.session_state)
+
+    def test_anonymous_user_cannot_reach_chat_button(self):
+        with patch("ui.auth.current_user_id", return_value=None):
+            at = AppTest.from_file(FOUND_BOARD_PAGE)
+            at.run(timeout=30)
+
+        self.assertEqual(list(at.exception), [])
+        self.assertFalse(any(b.key == f"direct_chat_btn_found_{self.found_id}" for b in at.button))
+        infos = [i.value for i in at.info]
+        self.assertTrue(any("로그인" in i for i in infos))
+
+    def test_direct_chat_room_renders_correct_context_and_blocks_third_party(self):
+        room = db.get_or_create_direct_chat_room("found", self.found_id, self.viewer)
+        db.send_message(room["id"], self.viewer, "이거 제가 찾던 물건 같아요")
+
+        with patch("ui.auth.current_user_id", return_value=self.author):
+            at = AppTest.from_file(CHAT_PAGE)
+            at.session_state["chat_room_id"] = room["id"]
+            at.run(timeout=30)
+
+        self.assertEqual(list(at.exception), [])
+        captions = [c.value for c in at.caption]
+        self.assertTrue(any("찾았어요 게시물: 검은색 무선 이어폰" in c for c in captions))
+        markdowns = [m.value for m in at.markdown]
+        self.assertTrue(any("이거 제가 찾던 물건 같아요" in m for m in markdowns))
+
+        stranger = db.create_user("stranger2@mju.ac.kr", "제3자2")
+        db.set_initial_nickname(stranger, "제3자2닉")
+        with patch("ui.auth.current_user_id", return_value=stranger):
+            at2 = AppTest.from_file(CHAT_PAGE)
+            at2.session_state["chat_room_id"] = room["id"]
+            at2.run(timeout=30)
+
+        self.assertEqual(list(at2.exception), [])
+        errors = [e.value for e in at2.error]
+        self.assertTrue(any("접근할 권한이 없습니다" in e for e in errors))
+        self.assertEqual(len(at2.chat_message), 0)
+
+    def test_found_direct_chat_room_appears_in_my_chats_list(self):
+        room = db.get_or_create_direct_chat_room("found", self.found_id, self.viewer)
+
+        my_chats_page = str(Path(__file__).resolve().parent.parent / "pages" / "6_내_채팅.py")
+        with patch("ui.auth.current_user_id", return_value=self.viewer):
+            at = AppTest.from_file(my_chats_page)
+            at.run(timeout=30)
+
+        self.assertEqual(list(at.exception), [])
+        markdowns = [m.value for m in at.markdown]
+        self.assertTrue(any("검은색 무선 이어폰" in m for m in markdowns))
+        captions = [c.value for c in at.caption]
+        self.assertTrue(any("작성자닉" in c for c in captions))
+        self.assertTrue(any(b.key == f"my_chats_open_{room['id']}" for b in at.button))
 
 
 if __name__ == "__main__":
