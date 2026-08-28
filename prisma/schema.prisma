@@ -1,8 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../app/generated/prisma"
@@ -10,4 +8,299 @@ generator client {
 
 datasource db {
   provider = "mysql"
+}
+
+// ---------------------------------------------------------------------------
+// Ported from the original Streamlit app's db/schema.sql (SQLite) +
+// db/database.py (application-level rules, migrations, and actual query
+// usage). Every table/column/constraint below has a direct source in those
+// two files -- see the Phase 1 report for the full column-by-column mapping
+// and the reasoning behind each type/constraint decision.
+// ---------------------------------------------------------------------------
+
+// ----- Enums -----
+// Each enum below mirrors a CHECK (... IN (...)) constraint that already
+// existed at the SQLite DB layer in schema.sql (not something invented for
+// Prisma) -- @map preserves the exact original string stored in the column
+// while giving TypeScript a clean identifier.
+
+enum LostPostStatus {
+  SEARCHING @map("찾는 중")
+  FOUND     @map("찾음")
+}
+
+enum FoundPostStatus {
+  KEEPING   @map("보관 중")
+  COMPLETED @map("완료")
+}
+
+// Shared by Report.target_type and ModerationAction.target_type -- schema.sql
+// repeats the identical CHECK (target_type IN ('post','message','user')) on
+// both tables, so one enum type is reused for both.
+enum ReportTargetType {
+  POST    @map("post")
+  MESSAGE @map("message")
+  USER    @map("user")
+}
+
+enum ReportStatus {
+  PENDING   @map("pending")
+  DISMISSED @map("dismissed")
+  ACTIONED  @map("actioned")
+}
+
+enum ModerationActionType {
+  DELETE_POST  @map("delete_post")
+  HIDE_MESSAGE @map("hide_message")
+  SUSPEND_USER @map("suspend_user")
+}
+
+enum NotificationType {
+  MESSAGE          @map("message")
+  MATCH            @map("match")
+  REPORT_PROCESSED @map("report_processed")
+  POST_DELETED     @map("post_deleted")
+  MESSAGE_HIDDEN   @map("message_hidden")
+  USER_SUSPENDED   @map("user_suspended")
+}
+
+// ----- Models -----
+
+model User {
+  id             Int       @id @default(autoincrement())
+  email          String    @unique
+  name           String
+  // Nullable + unique, exactly like the original: NULL means "hasn't set a
+  // nickname yet" (see ui.auth.render_nickname_setup_notice), and
+  // db.set_initial_nickname() enforces "can only be set once" at the
+  // application layer, not here -- that rule is deliberately not
+  // reproduced as a DB constraint (see report).
+  nickname       String?   @unique
+  // SQLite stored these as INTEGER CHECK (... IN (0,1)) -- Boolean is the
+  // faithful MySQL-native equivalent of that same 0/1 domain, not a
+  // reinterpretation of it.
+  isAdmin        Boolean   @default(false) @map("is_admin")
+  isSuspended    Boolean   @default(false) @map("is_suspended")
+  // Set via SQLite's `datetime('now', '+N days')` (apply_report_action) --
+  // a real point in time, so DateTime, not String.
+  suspendedUntil DateTime? @map("suspended_until")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  lostPosts                  LostPost[]
+  foundPosts                 FoundPost[]
+  initiatedChatRooms         ChatRoom[]
+  sentMessages               Message[]          @relation("MessageSender")
+  hiddenMessages             Message[]          @relation("MessageHiddenBy")
+  reportsFiled               Report[]           @relation("ReportReporter")
+  reportsProcessed           Report[]           @relation("ReportProcessedBy")
+  moderationActionsPerformed ModerationAction[]
+  notifications              Notification[]
+
+  @@map("User")
+}
+
+model LostPost {
+  id          Int            @id @default(autoincrement())
+  userId      Int            @map("user_id")
+  title       String
+  description String         @db.Text
+  category    String
+  location    String
+  // Built by ui.common.format_datetime_input() as "YYYY-MM-DD HH:MM" (user
+  // input, not a SQLite datetime() call) -- still a real point in time, so
+  // DateTime rather than String.
+  lostAt      DateTime       @map("lost_at")
+  status      LostPostStatus @default(SEARCHING)
+  imageUrl    String?        @map("image_url")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  // Original sets this explicitly in the UPDATE statement itself
+  // (`updated_at = datetime('now')`) on every update_lost_post() call --
+  // @updatedAt reproduces that automatically for any future Prisma Client
+  // update() call.
+  updatedAt   DateTime       @default(now()) @updatedAt @map("updated_at")
+
+  // No ON DELETE clause on user_id in the original -> SQLite's default
+  // (NO ACTION, i.e. block the delete) -- Restrict is the closest Prisma
+  // equivalent. There is no delete_user() in db/database.py at all, so this
+  // is never actually exercised today.
+  user            User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  matches         Match[]
+  directChatRooms ChatRoom[] @relation("DirectLostPostChatRooms")
+
+  @@index([userId], map: "idx_lostpost_user_id")
+  @@map("LostPost")
+}
+
+model FoundPost {
+  id          Int             @id @default(autoincrement())
+  userId      Int             @map("user_id")
+  title       String
+  description String          @db.Text
+  category    String
+  location    String
+  foundAt     DateTime        @map("found_at")
+  status      FoundPostStatus @default(KEEPING)
+  imageUrl    String?         @map("image_url")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @default(now()) @updatedAt @map("updated_at")
+
+  user            User       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  matches         Match[]
+  directChatRooms ChatRoom[] @relation("DirectFoundPostChatRooms")
+
+  @@index([userId], map: "idx_foundpost_user_id")
+  @@map("FoundPost")
+}
+
+model Match {
+  id          Int      @id @default(autoincrement())
+  lostPostId  Int      @map("lost_post_id")
+  foundPostId Int      @map("found_post_id")
+  // Cosine similarity, roughly [-1, 1] (see ai/matching.py) -- REAL -> Float.
+  score       Float
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  lostPost  LostPost  @relation(fields: [lostPostId], references: [id], onDelete: Cascade)
+  foundPost FoundPost @relation(fields: [foundPostId], references: [id], onDelete: Cascade)
+  chatRoom  ChatRoom?
+
+  @@unique([lostPostId, foundPostId])
+  @@index([lostPostId], map: "idx_match_lost_post_id")
+  @@index([foundPostId], map: "idx_match_found_post_id")
+  @@map("Match")
+}
+
+// A ChatRoom is either Match-based (matchId set) or "direct" (matchId NULL,
+// the two directXxxPostId/initiatorUserId columns set instead) -- exactly
+// one shape per row, enforced by application code
+// (get_or_create_chat_room vs get_or_create_direct_chat_room), never a DB
+// CHECK, matching the original schema.sql comment on this exact table.
+// Kept as one flat model with nullable columns, not split into two tables
+// or discriminated further, to preserve that same application-level
+// handling rather than pushing the distinction into the DB layer.
+model ChatRoom {
+  id                Int      @id @default(autoincrement())
+  matchId           Int?     @unique @map("match_id")
+  directLostPostId  Int?     @map("direct_lost_post_id")
+  directFoundPostId Int?     @map("direct_found_post_id")
+  initiatorUserId   Int?     @map("initiator_user_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  match           Match?     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  directLostPost  LostPost?  @relation("DirectLostPostChatRooms", fields: [directLostPostId], references: [id], onDelete: Cascade)
+  directFoundPost FoundPost? @relation("DirectFoundPostChatRooms", fields: [directFoundPostId], references: [id], onDelete: Cascade)
+  initiator       User?      @relation(fields: [initiatorUserId], references: [id], onDelete: Restrict)
+  messages        Message[]
+
+  // These reproduce db.database._migrate_chatroom_table_add_direct_chat()'s
+  // two PARTIAL unique indexes (SQLite `WHERE direct_lost_post_id IS NOT
+  // NULL` / `WHERE direct_found_post_id IS NOT NULL`). MySQL has no partial/
+  // filtered unique index, but a plain composite UNIQUE has the same
+  // practical effect here: MySQL (like SQLite) treats NULL as distinct from
+  // NULL in a unique index, so every Match-based row (directLostPostId
+  // always NULL there) is exempt from this check entirely, and only rows
+  // where directLostPostId IS NOT NULL are actually checked for uniqueness
+  // against initiatorUserId -- i.e. the exact original semantics, no WHERE
+  // clause needed.
+  @@unique([directLostPostId, initiatorUserId], map: "idx_chatroom_direct_lost_unique")
+  @@unique([directFoundPostId, initiatorUserId], map: "idx_chatroom_direct_found_unique")
+  @@map("ChatRoom")
+}
+
+model Message {
+  id             Int       @id @default(autoincrement())
+  chatRoomId     Int       @map("chat_room_id")
+  senderUserId   Int       @map("sender_user_id")
+  content        String    @db.Text
+  createdAt      DateTime  @default(now()) @map("created_at")
+  readAt         DateTime? @map("read_at")
+  hiddenAt       DateTime? @map("hidden_at")
+  hiddenByUserId Int?      @map("hidden_by_user_id")
+  hiddenReason   String?   @map("hidden_reason") @db.Text
+
+  chatRoom     ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  sender       User     @relation("MessageSender", fields: [senderUserId], references: [id], onDelete: Restrict)
+  hiddenByUser User?    @relation("MessageHiddenBy", fields: [hiddenByUserId], references: [id], onDelete: Restrict)
+
+  @@index([chatRoomId], map: "idx_message_chat_room_id")
+  // Matches list_messages()'s `ORDER BY created_at DESC, id DESC` exactly,
+  // including sort direction, so that query can be served directly from
+  // this index.
+  @@index([chatRoomId, createdAt(sort: Desc), id(sort: Desc)], map: "idx_message_chat_room_created_id")
+  @@map("Message")
+}
+
+model Report {
+  id                Int              @id @default(autoincrement())
+  reporterUserId    Int              @map("reporter_user_id")
+  targetType        ReportTargetType @map("target_type")
+  // Deliberately NOT a foreign key, exactly like the original: db.database's
+  // _validate_report_target() docstring notes target_id has no FK "so the
+  // report itself survives that deletion". It is also a signed encoding
+  // (positive = LostPost id, negative = -(FoundPost id)) that only
+  // application code interprets -- a rule that stays at the application
+  // layer, not something a DB constraint could express without changing
+  // behavior.
+  targetId          Int              @map("target_id")
+  reason            String           @db.Text
+  detail            String?          @db.Text
+  createdAt         DateTime         @default(now()) @map("created_at")
+  status            ReportStatus     @default(PENDING)
+  processedAt       DateTime?        @map("processed_at")
+  processedByUserId Int?             @map("processed_by_user_id")
+  adminNote         String?          @map("admin_note") @db.Text
+
+  reporter         User              @relation("ReportReporter", fields: [reporterUserId], references: [id], onDelete: Restrict)
+  processedByUser  User?             @relation("ReportProcessedBy", fields: [processedByUserId], references: [id], onDelete: Restrict)
+  moderationAction ModerationAction?
+
+  @@unique([reporterUserId, targetType, targetId])
+  @@index([reporterUserId], map: "idx_report_reporter_user_id")
+  @@index([status], map: "idx_report_status")
+  @@map("Report")
+}
+
+model ModerationAction {
+  id          Int                  @id @default(autoincrement())
+  reportId    Int                  @unique @map("report_id")
+  targetType  ReportTargetType     @map("target_type")
+  // Same "no FK, signed encoding" reasoning as Report.targetId above.
+  targetId    Int                  @map("target_id")
+  actionType  ModerationActionType @map("action_type")
+  reason      String?              @db.Text
+  adminUserId Int                  @map("admin_user_id")
+  createdAt   DateTime             @default(now()) @map("created_at")
+  // Set via SQLite's `datetime('now', '+N days')` for a timed suspension, or
+  // left NULL for a permanent one -- see User.suspendedUntil.
+  expiresAt   DateTime?            @map("expires_at")
+
+  report    Report @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  adminUser User   @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
+
+  @@map("ModerationAction")
+}
+
+model Notification {
+  id          Int              @id @default(autoincrement())
+  userId      Int              @map("user_id")
+  type        NotificationType
+  title       String
+  content     String           @db.Text
+  // Free-form ("match" / "message" / "report" in practice) and, unlike
+  // Report/ModerationAction.targetType, was NEVER given a CHECK constraint
+  // in the original schema.sql -- only related_type/related_id's *pairing*
+  // (both set or both NULL) is validated, in db.database._insert_notification().
+  // Left as a plain String (no enum) to match that: this is exactly the
+  // "rule enforced at the application level only" case the enums above are
+  // not.
+  relatedType String?          @map("related_type")
+  relatedId   Int?             @map("related_id")
+  isRead      Boolean          @default(false) @map("is_read")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, type, relatedType, relatedId])
+  @@index([userId, isRead, createdAt(sort: Desc)], map: "idx_notification_user_read_created")
+  @@map("Notification")
 }
