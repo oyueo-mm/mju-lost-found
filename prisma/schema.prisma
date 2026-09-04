@@ -1,7 +1,15 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Source of truth for this schema: the legacy Streamlit project's
+// db/schema.sql + db/database.py (SQLite). Table/column names, defaults,
+// nullability, unique constraints, and cascade behavior are carried over
+// as-is unless a comment below explains why MySQL/Prisma required a
+// different representation. No business meaning was changed intentionally.
+//
+// Not yet done (later phase, on purpose): no real MySQL connection, no
+// migration has been run, so nothing below has been validated against a
+// live database -- only `prisma validate` / `prisma generate`.
 
 generator client {
   provider = "prisma-client"
@@ -10,4 +18,286 @@ generator client {
 
 datasource db {
   provider = "mysql"
+}
+
+// ---------- Enums ----------
+// Korean status/category values from the original CHECK constraints are
+// kept as the actual stored value via @map, while the enum member name
+// itself stays a plain identifier (Prisma enum members can't contain
+// spaces).
+
+enum LostPostStatus {
+  SEARCHING @map("찾는 중")
+  FOUND     @map("찾음")
+}
+
+enum FoundPostStatus {
+  KEEPING   @map("보관 중")
+  COMPLETED @map("완료")
+}
+
+// Shared by Report.targetType and ModerationAction.targetType -- both
+// CHECK constraints in schema.sql list the identical three values, so one
+// enum is reused rather than declaring two identical ones.
+enum ReportTargetType {
+  POST    @map("post")
+  MESSAGE @map("message")
+  USER    @map("user")
+}
+
+enum ReportStatus {
+  PENDING   @map("pending")
+  DISMISSED @map("dismissed")
+  ACTIONED  @map("actioned")
+}
+
+enum ModerationActionType {
+  DELETE_POST  @map("delete_post")
+  HIDE_MESSAGE @map("hide_message")
+  SUSPEND_USER @map("suspend_user")
+}
+
+enum NotificationType {
+  MESSAGE          @map("message")
+  MATCH            @map("match")
+  REPORT_PROCESSED @map("report_processed")
+  POST_DELETED     @map("post_deleted")
+  MESSAGE_HIDDEN   @map("message_hidden")
+  USER_SUSPENDED   @map("user_suspended")
+}
+
+// ---------- User ----------
+
+model User {
+  id              Int       @id @default(autoincrement())
+  email           String    @unique
+  name            String
+  // idx_user_nickname (UNIQUE) is added by a migration in the legacy app
+  // rather than schema.sql itself, but it's part of the table's real,
+  // current shape -- carried over here as a normal @unique.
+  nickname        String?   @unique
+  isAdmin         Boolean   @default(false) @map("is_admin")
+  isSuspended     Boolean   @default(false) @map("is_suspended")
+  suspendedUntil  DateTime? @map("suspended_until")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  lostPosts             LostPost[]
+  foundPosts            FoundPost[]
+  initiatedChatRooms    ChatRoom[]         @relation("ChatRoomInitiator")
+  sentMessages          Message[]          @relation("MessageSender")
+  hiddenMessages        Message[]          @relation("MessageHiddenBy")
+  reportsFiled          Report[]           @relation("ReportReporter")
+  reportsProcessed      Report[]           @relation("ReportProcessedBy")
+  moderationActions     ModerationAction[]
+  notifications         Notification[]
+
+  @@map("User")
+}
+
+// ---------- LostPost ----------
+
+model LostPost {
+  id          Int             @id @default(autoincrement())
+  userId      Int             @map("user_id")
+  user        User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  title       String          @db.Text
+  description String          @db.Text
+  // Kept as free text (matches the original TEXT column, no CHECK/enum on
+  // category in schema.sql) even though /lost and /search will likely want
+  // to filter by category later -- adding an index/enum is a decision for
+  // whichever phase builds that filter, not this one.
+  category    String          @db.Text
+  location    String          @db.Text
+  lostAt      DateTime        @map("lost_at")
+  status      LostPostStatus  @default(SEARCHING)
+  imageUrl    String?         @db.Text @map("image_url")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  matches          Match[]
+  directChatRooms  ChatRoom[] @relation("ChatRoomDirectLostPost")
+
+  @@index([userId], map: "idx_lostpost_user_id")
+  @@map("LostPost")
+}
+
+// ---------- FoundPost ----------
+
+model FoundPost {
+  id          Int              @id @default(autoincrement())
+  userId      Int              @map("user_id")
+  user        User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  title       String           @db.Text
+  description String           @db.Text
+  category    String           @db.Text
+  location    String           @db.Text
+  foundAt     DateTime         @map("found_at")
+  status      FoundPostStatus  @default(KEEPING)
+  imageUrl    String?          @db.Text @map("image_url")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  matches          Match[]
+  directChatRooms  ChatRoom[] @relation("ChatRoomDirectFoundPost")
+
+  @@index([userId], map: "idx_foundpost_user_id")
+  @@map("FoundPost")
+}
+
+// ---------- Match ----------
+
+model Match {
+  id           Int       @id @default(autoincrement())
+  lostPostId   Int       @map("lost_post_id")
+  lostPost     LostPost  @relation(fields: [lostPostId], references: [id], onDelete: Cascade)
+  foundPostId  Int       @map("found_post_id")
+  foundPost    FoundPost @relation(fields: [foundPostId], references: [id], onDelete: Cascade)
+  score        Float
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  chatRoom ChatRoom?
+
+  @@unique([lostPostId, foundPostId])
+  @@index([lostPostId], map: "idx_match_lost_post_id")
+  @@index([foundPostId], map: "idx_match_found_post_id")
+  @@map("Match")
+}
+
+// ---------- ChatRoom ----------
+
+// A ChatRoom is either Match-based (matchId set -- the AI-match -> confirm
+// -> chat flow) OR "direct" (matchId NULL, the two directXxxPostId /
+// initiatorUserId columns set instead -- a viewer messaging a post's
+// author straight from the board, no Match required). Exactly one of the
+// two shapes applies per row, enforced by application code, not a DB
+// constraint -- same convention the legacy schema uses everywhere else
+// (e.g. LostPost.category isn't constrained either).
+//
+// MySQL multiple-cascade-path check: LostPost/FoundPost can each reach
+// ChatRoom by two different routes -- directly via directLostPostId/
+// directFoundPostId, and indirectly via Match.lostPostId/foundPostId ->
+// ChatRoom.matchId. This is a converging ("diamond") cascade, not a cycle
+// back to LostPost/FoundPost itself, so InnoDB accepts it: a delete only
+// ever travels outward (LostPost/FoundPost -> Match/ChatRoom -> Message),
+// never back to its own origin table. Per row only one of the two routes
+// is ever populated, so in practice a given ChatRoom is only ever deleted
+// by one of them. If `prisma db push`/`migrate dev` in a later phase
+// rejects this shape anyway, the fallback is to drop CASCADE on the two
+// direct_* FKs and delete those rooms explicitly in application code
+// instead.
+model ChatRoom {
+  id                   Int        @id @default(autoincrement())
+  matchId              Int?       @unique @map("match_id")
+  match                Match?     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  directLostPostId     Int?       @map("direct_lost_post_id")
+  directLostPost       LostPost?  @relation("ChatRoomDirectLostPost", fields: [directLostPostId], references: [id], onDelete: Cascade)
+  directFoundPostId    Int?       @map("direct_found_post_id")
+  directFoundPost      FoundPost? @relation("ChatRoomDirectFoundPost", fields: [directFoundPostId], references: [id], onDelete: Cascade)
+  initiatorUserId      Int?       @map("initiator_user_id")
+  initiator            User?      @relation("ChatRoomInitiator", fields: [initiatorUserId], references: [id], onDelete: Restrict)
+  createdAt            DateTime   @default(now()) @map("created_at")
+
+  messages Message[]
+
+  // The legacy SQLite indexes use `WHERE direct_lost_post_id IS NOT NULL`
+  // partial indexes, which MySQL doesn't support. A plain composite unique
+  // constraint reproduces the same behavior under standard SQL NULL
+  // semantics (NULL is never equal to NULL, so rows with a NULL
+  // directLostPostId/directFoundPostId -- i.e. every Match-based room --
+  // never collide with each other or with direct rooms).
+  @@unique([directLostPostId, initiatorUserId], map: "idx_chatroom_direct_lost_unique")
+  @@unique([directFoundPostId, initiatorUserId], map: "idx_chatroom_direct_found_unique")
+  @@map("ChatRoom")
+}
+
+// ---------- Message ----------
+
+model Message {
+  id               Int       @id @default(autoincrement())
+  chatRoomId       Int       @map("chat_room_id")
+  chatRoom         ChatRoom  @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  senderUserId     Int       @map("sender_user_id")
+  sender           User      @relation("MessageSender", fields: [senderUserId], references: [id], onDelete: Restrict)
+  content          String    @db.Text
+  createdAt        DateTime  @default(now()) @map("created_at")
+  readAt           DateTime? @map("read_at")
+  hiddenAt         DateTime? @map("hidden_at")
+  hiddenByUserId   Int?      @map("hidden_by_user_id")
+  hiddenBy         User?     @relation("MessageHiddenBy", fields: [hiddenByUserId], references: [id], onDelete: Restrict)
+  hiddenReason     String?   @db.Text @map("hidden_reason")
+
+  @@index([chatRoomId], map: "idx_message_chat_room_id")
+  // Mirrors idx_message_chat_room_created_id, which backs the
+  // cursor-paginated message list query directly from the index.
+  @@index([chatRoomId, createdAt(sort: Desc), id(sort: Desc)], map: "idx_message_chat_room_created_id")
+  @@map("Message")
+}
+
+// ---------- Report ----------
+
+model Report {
+  id                 Int              @id @default(autoincrement())
+  reporterUserId     Int              @map("reporter_user_id")
+  reporter           User             @relation("ReportReporter", fields: [reporterUserId], references: [id], onDelete: Restrict)
+  targetType         ReportTargetType @map("target_type")
+  // Polymorphic reference (post/message/user, per targetType) -- not a
+  // real foreign key in the legacy schema either, so it stays a plain
+  // column here too.
+  targetId           Int              @map("target_id")
+  reason             String           @db.Text
+  detail             String?          @db.Text
+  createdAt          DateTime         @default(now()) @map("created_at")
+  status             ReportStatus     @default(PENDING)
+  processedAt        DateTime?        @map("processed_at")
+  processedByUserId  Int?             @map("processed_by_user_id")
+  processedBy        User?            @relation("ReportProcessedBy", fields: [processedByUserId], references: [id], onDelete: Restrict)
+  adminNote          String?          @db.Text @map("admin_note")
+
+  moderationAction ModerationAction?
+
+  @@unique([reporterUserId, targetType, targetId])
+  @@index([reporterUserId], map: "idx_report_reporter_user_id")
+  @@index([status], map: "idx_report_status")
+  @@map("Report")
+}
+
+// ---------- ModerationAction ----------
+
+model ModerationAction {
+  id           Int                  @id @default(autoincrement())
+  reportId     Int                  @unique @map("report_id")
+  report       Report               @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  targetType   ReportTargetType     @map("target_type")
+  targetId     Int                  @map("target_id")
+  actionType   ModerationActionType @map("action_type")
+  reason       String?              @db.Text
+  adminUserId  Int                  @map("admin_user_id")
+  adminUser    User                 @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
+  createdAt    DateTime             @default(now()) @map("created_at")
+  expiresAt    DateTime?            @map("expires_at")
+
+  @@map("ModerationAction")
+}
+
+// ---------- Notification ----------
+
+model Notification {
+  id           Int              @id @default(autoincrement())
+  userId       Int              @map("user_id")
+  user         User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  type         NotificationType
+  title        String           @db.Text
+  content      String           @db.Text
+  // Not @db.Text: it's part of the composite unique index below, and MySQL
+  // can't put a TEXT/BLOB column in a unique index without a prefix
+  // length. Same free-text, no-FK shape as Report/ModerationAction's
+  // targetId in the legacy schema.
+  relatedType  String?          @map("related_type")
+  relatedId    Int?             @map("related_id")
+  isRead       Boolean          @default(false) @map("is_read")
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  @@unique([userId, type, relatedType, relatedId])
+  @@index([userId, isRead, createdAt(sort: Desc)], map: "idx_notification_user_read_created")
+  @@map("Notification")
 }
