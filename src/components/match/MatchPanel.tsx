@@ -99,6 +99,33 @@ export function MatchPanel({ postType, postId, initialMatches }: MatchPanelProps
     }
   }
 
+  async function handleOpenChat(matchId: number) {
+    if (pendingId !== null) return;
+    setPendingId(matchId);
+    setError(null);
+
+    try {
+      // Idempotent -- calling this again for a match that already has a
+      // room just returns that same room (see getOrCreateChatRoomForMatch),
+      // never creates a second one, including under concurrent clicks.
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matchId }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error ?? "채팅방을 여는 데 실패했습니다.");
+        return;
+      }
+      router.push(`/chat/${json.data.id}`);
+    } catch {
+      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+    } finally {
+      setPendingId(null);
+    }
+  }
+
   async function handleCancel(matchId: number) {
     if (pendingId !== null) return;
     setPendingId(matchId);
@@ -140,14 +167,24 @@ export function MatchPanel({ postType, postId, initialMatches }: MatchPanelProps
               className="flex items-center justify-between rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700"
             >
               <span>{m.counterpart.title}</span>
-              <button
-                type="button"
-                onClick={() => handleCancel(m.id)}
-                disabled={pendingId !== null}
-                className="text-red-600 underline disabled:opacity-60 dark:text-red-400"
-              >
-                {pendingId === m.id ? "취소 중..." : "매칭 해제"}
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleOpenChat(m.id)}
+                  disabled={pendingId !== null}
+                  className="rounded-full border border-zinc-300 px-3 py-1 text-xs hover:border-zinc-400 disabled:opacity-60 dark:border-zinc-700 dark:hover:border-zinc-600"
+                >
+                  {pendingId === m.id ? "여는 중..." : "채팅하기"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCancel(m.id)}
+                  disabled={pendingId !== null}
+                  className="text-red-600 underline disabled:opacity-60 dark:text-red-400"
+                >
+                  {pendingId === m.id ? "취소 중..." : "매칭 해제"}
+                </button>
+              </div>
             </div>
           ))}
         </div>

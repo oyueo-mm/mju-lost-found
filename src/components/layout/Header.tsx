@@ -44,9 +44,14 @@ export async function Header() {
             </Link>
           ))}
           {user && (
-            <Link href="/notifications" className="hover:text-zinc-900 dark:hover:text-zinc-50">
-              알림{unreadCount > 0 ? ` (${unreadCount})` : ""}
-            </Link>
+            <>
+              <Link href="/chat" className="hover:text-zinc-900 dark:hover:text-zinc-50">
+                채팅
+              </Link>
+              <Link href="/notifications" className="hover:text-zinc-900 dark:hover:text-zinc-50">
+                알림{unreadCount > 0 ? ` (${unreadCount})` : ""}
+              </Link>
+            </>
           )}
           {user ? (
             <>
