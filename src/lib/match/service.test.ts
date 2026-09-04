@@ -24,9 +24,8 @@ vi.mock("@/generated/prisma/client", () => ({
   Prisma: { PrismaClientKnownRequestError: FakePrismaClientKnownRequestError },
 }));
 
-const { createMatch, deleteMatch, getMatch, listMatchesForPost, listMatchesForUser } = await import(
-  "./service"
-);
+const { createMatch, deleteMatch, getMatch, getOwnedPostRefForMatch, listMatchesForPost, listMatchesForUser } =
+  await import("./service");
 
 const requester = { id: 1, isSuspended: false, suspendedUntil: null } as unknown as User;
 
@@ -157,6 +156,24 @@ describe("createMatch", () => {
 
     expect(result).toEqual({ kind: "ok", data: expect.objectContaining({ id: 77 }) });
   });
+
+  it("propagates a non-duplicate transaction failure instead of reporting a false success", async () => {
+    // A genuine failure (not the P2002 race handled above) must not be
+    // swallowed -- there is no Match row and no Notification row in this
+    // case, and createMatch() must not claim otherwise. Atomicity itself
+    // (no partial Match-without-Notification state) is Prisma/MySQL's
+    // guarantee for what happens *inside* $transaction's callback; this
+    // only proves the wrapping code doesn't mask a failure of the
+    // transaction as a whole.
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
+    foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 2 });
+    match.findUnique.mockResolvedValueOnce(null);
+    $transaction.mockRejectedValueOnce(new Error("connection lost"));
+
+    await expect(createMatch(requester, { lostPostId: 1, foundPostId: 2 })).rejects.toThrow(
+      "connection lost",
+    );
+  });
 });
 
 describe("getMatch", () => {
@@ -235,5 +252,31 @@ describe("deleteMatch", () => {
     const result = await deleteMatch(10, 2);
 
     expect(result.kind).toBe("ok");
+  });
+});
+
+describe("getOwnedPostRefForMatch", () => {
+  it("returns null for a nonexistent match", async () => {
+    match.findUnique.mockResolvedValueOnce(null);
+
+    expect(await getOwnedPostRefForMatch(999, 1)).toBeNull();
+  });
+
+  it("resolves to the LostPost side when the user owns it", async () => {
+    match.findUnique.mockResolvedValueOnce(matchRow()); // lostPost.userId: 1, foundPost.userId: 2
+
+    expect(await getOwnedPostRefForMatch(10, 1)).toEqual({ id: 1, type: "lost" });
+  });
+
+  it("resolves to the FoundPost side when the user owns it", async () => {
+    match.findUnique.mockResolvedValueOnce(matchRow());
+
+    expect(await getOwnedPostRefForMatch(10, 2)).toEqual({ id: 2, type: "found" });
+  });
+
+  it("returns null when the user owns neither side (stale/foreign notification)", async () => {
+    match.findUnique.mockResolvedValueOnce(matchRow());
+
+    expect(await getOwnedPostRefForMatch(10, 999)).toBeNull();
   });
 });

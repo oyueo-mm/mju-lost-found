@@ -181,3 +181,24 @@ export async function deleteMatch(
   await prisma.match.delete({ where: { id } });
   return { kind: "ok", data: { id } };
 }
+
+// Resolves which of a match's two posts belongs to userId -- used only by
+// the notifications page to build a "관련 게시물로 이동" link for a
+// type=match notification's relatedId (see Phase 9). This is a one-way
+// read from notifications -> match, never the other way around: the
+// notification service itself (src/lib/notification/service.ts) has no
+// dependency on this or any other domain, and this function has no
+// dependency on the notification domain either. Returns null if the
+// match no longer exists or userId isn't actually party to it (e.g. the
+// notification is stale) -- callers should just omit the link, not treat
+// it as an error.
+export async function getOwnedPostRefForMatch(
+  matchId: number,
+  userId: number,
+): Promise<{ id: number; type: PostType } | null> {
+  const match = await findMatchWithOwners(matchId);
+  if (!match) return null;
+  if (match.lostPost.userId === userId) return { id: match.lostPost.id, type: "lost" };
+  if (match.foundPost.userId === userId) return { id: match.foundPost.id, type: "found" };
+  return null;
+}

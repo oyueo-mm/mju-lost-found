@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { signOut } from "@/lib/auth/auth";
+import { getUnreadNotificationCount } from "@/lib/notification/service";
 
 const NAV_LINKS = [
   { href: "/", label: "홈" },
@@ -11,10 +12,24 @@ const NAV_LINKS = [
 ] as const;
 
 // A Server Component, not a client one: the current user is read here and
-// only its nickname/email ever reach the rendered HTML -- no User object
-// is ever serialized into a client bundle for this header.
+// only its nickname/email/unread count ever reach the rendered HTML -- no
+// User object is ever serialized into a client bundle for this header.
+// Fetching the unread count here (rather than switching this header to a
+// Client Component that polls) keeps that boundary exactly as it was
+// before notifications existed -- see Phase 9 spec section 13.
 export async function Header() {
   const user = await getCurrentUser();
+
+  let unreadCount = 0;
+  if (user) {
+    try {
+      unreadCount = await getUnreadNotificationCount(user.id);
+    } catch (error) {
+      // A failed unread-count lookup shouldn't take down every page's
+      // header -- the badge just doesn't show a count this time.
+      console.error("Failed to load unread notification count", error);
+    }
+  }
 
   return (
     <header className="border-b border-zinc-200 dark:border-zinc-800">
@@ -28,6 +43,11 @@ export async function Header() {
               {link.label}
             </Link>
           ))}
+          {user && (
+            <Link href="/notifications" className="hover:text-zinc-900 dark:hover:text-zinc-50">
+              알림{unreadCount > 0 ? ` (${unreadCount})` : ""}
+            </Link>
+          )}
           {user ? (
             <>
               <span className="text-zinc-500 dark:text-zinc-400">
