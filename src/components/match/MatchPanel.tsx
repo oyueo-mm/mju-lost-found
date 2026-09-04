@@ -1,32 +1,70 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import type { PostType } from "@/lib/posts/schema";
 
 type CounterpartSummary = { id: number; title: string; imageUrl: string | null };
 type MatchRow = { id: number; counterpart: CounterpartSummary };
+type AiCandidate = {
+  postId: number;
+  type: PostType;
+  score: number;
+  title: string;
+  category: string;
+  location: string;
+  imageUrl: string | null;
+};
 
 type MatchPanelProps = {
   postType: PostType; // the type of the post being viewed (the owner's own post)
   postId: number;
   initialMatches: MatchRow[];
-  candidates: CounterpartSummary[]; // recent posts of the opposite board
 };
 
 // Only ever rendered for the post's owner (see /post/[id]/page.tsx) --
 // the API still re-checks ownership itself regardless (createMatch/
-// deleteMatch in src/lib/match/service.ts), this is just the UI entry
-// point for it, matching the legacy "내 물건 같아요" button pattern minus
-// the AI-ranked candidate list (candidates here are just recent posts of
-// the opposite board; a later phase can swap this list for an AI one
-// without changing the confirm/cancel flow itself).
-export function MatchPanel({ postType, postId, initialMatches, candidates }: MatchPanelProps) {
+// deleteMatch/findMatchCandidates), this is just the UI entry point,
+// matching the legacy "내 물건 같아요" button pattern with AI-ranked
+// candidates (GET /api/posts/[id]/matches/candidates) standing in for the
+// legacy Streamlit page's AI candidate list.
+export function MatchPanel({ postType, postId, initialMatches }: MatchPanelProps) {
   const router = useRouter();
   const [matches, setMatches] = useState(initialMatches);
   const [error, setError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<number | null>(null);
+
+  const [candidates, setCandidates] = useState<AiCandidate[] | null>(null);
+  const [candidatesError, setCandidatesError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCandidates() {
+      setCandidatesError(null);
+      try {
+        const res = await fetch(`/api/posts/${postId}/matches/candidates?type=${postType}`);
+        const json = await res.json();
+        if (cancelled) return;
+        if (!res.ok) {
+          setCandidatesError(json.error ?? "AI 매칭 후보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+          return;
+        }
+        setCandidates(json.data);
+      } catch {
+        if (!cancelled) {
+          setCandidatesError("AI 매칭 후보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+        }
+      }
+    }
+
+    loadCandidates();
+    return () => {
+      cancelled = true;
+    };
+  }, [postType, postId]);
 
   const matchedIds = new Set(matches.map((m) => m.counterpart.id));
 
@@ -82,7 +120,8 @@ export function MatchPanel({ postType, postId, initialMatches, candidates }: Mat
     }
   }
 
-  const unmatchedCandidates = candidates.filter((c) => !matchedIds.has(c.id));
+  const candidateType: PostType = postType === "lost" ? "found" : "lost";
+  const unmatchedCandidates = (candidates ?? []).filter((c) => !matchedIds.has(c.postId));
 
   return (
     <div className="flex flex-col gap-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
@@ -115,26 +154,42 @@ export function MatchPanel({ postType, postId, initialMatches, candidates }: Mat
       )}
 
       <div className="flex flex-col gap-2">
-        <span className="text-sm text-zinc-500 dark:text-zinc-400">
-          {postType === "lost" ? "최근 습득물" : "최근 분실물"}
-        </span>
-        {unmatchedCandidates.length === 0 ? (
-          <p className="text-sm text-zinc-400 dark:text-zinc-500">표시할 게시물이 없습니다.</p>
+        <span className="text-sm text-zinc-500 dark:text-zinc-400">AI 매칭 후보</span>
+
+        {candidatesError ? (
+          <p className="text-sm text-red-600 dark:text-red-400">{candidatesError}</p>
+        ) : candidates === null ? (
+          <p className="text-sm text-zinc-400 dark:text-zinc-500">후보를 불러오는 중...</p>
+        ) : unmatchedCandidates.length === 0 ? (
+          <p className="text-sm text-zinc-400 dark:text-zinc-500">추천할 후보가 없습니다.</p>
         ) : (
           unmatchedCandidates.map((c) => (
             <div
-              key={c.id}
-              className="flex items-center justify-between rounded-md border border-dashed border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700"
+              key={c.postId}
+              className="flex items-center justify-between gap-3 rounded-md border border-dashed border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700"
             >
-              <span>{c.title}</span>
-              <button
-                type="button"
-                onClick={() => handleConfirm(c.id)}
-                disabled={pendingId !== null}
-                className="rounded-full bg-zinc-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900"
-              >
-                {pendingId === c.id ? "확정 중..." : "매칭하기"}
-              </button>
+              <div className="flex min-w-0 flex-col">
+                <span className="truncate">{c.title}</span>
+                <span className="text-xs text-zinc-400 dark:text-zinc-500">
+                  {c.category} · {c.location} · 유사도 {Math.round(c.score * 100)}%
+                </span>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Link
+                  href={`/post/${c.postId}?type=${candidateType}`}
+                  className="rounded-full border border-zinc-300 px-3 py-1 text-xs hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-600"
+                >
+                  게시물 보기
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => handleConfirm(c.postId)}
+                  disabled={pendingId !== null}
+                  className="rounded-full bg-zinc-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900"
+                >
+                  {pendingId === c.postId ? "확정 중..." : "매칭하기"}
+                </button>
+              </div>
             </div>
           ))
         )}

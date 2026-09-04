@@ -3,13 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth/session";
-import { getFoundPost, getLostPost, listFoundPosts, listLostPosts } from "@/lib/posts/service";
+import { getFoundPost, getLostPost } from "@/lib/posts/service";
 import { postTypeSchema } from "@/lib/posts/schema";
 import { DeletePostButton } from "@/components/post/DeletePostButton";
 import { listMatchesForPost } from "@/lib/match/service";
 import { MatchPanel } from "@/components/match/MatchPanel";
-
-const MATCH_CANDIDATE_LIMIT = 5;
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
@@ -42,24 +40,19 @@ export default async function PostDetailPage({
   const dateValue = post.type === "lost" ? post.lostAt : post.foundAt;
 
   // Match UI only ever needs to appear on a post the viewer owns (see
-  // MatchPanel's comment) -- so match/candidate data is only fetched at
+  // MatchPanel's comment) -- so existing-match data is only fetched at
   // all when isOwner, and a failure here shows a small inline notice
-  // rather than breaking the rest of the (already-successful) page.
+  // rather than breaking the rest of the (already-successful) page. AI
+  // candidates are fetched client-side by MatchPanel itself (GET
+  // /api/posts/[id]/matches/candidates), not here.
   let matchPanelData: {
     matches: { id: number; counterpart: { id: number; title: string; imageUrl: string | null } }[];
-    candidates: { id: number; title: string; imageUrl: string | null }[];
   } | null = null;
   let matchLoadError = false;
 
   if (isOwner) {
     try {
-      const [matchResult, candidatesResult] = await Promise.all([
-        listMatchesForPost(type, post.id, currentUser.id),
-        type === "lost"
-          ? listFoundPosts({ page: 1, limit: MATCH_CANDIDATE_LIMIT })
-          : listLostPosts({ page: 1, limit: MATCH_CANDIDATE_LIMIT }),
-      ]);
-
+      const matchResult = await listMatchesForPost(type, post.id, currentUser.id);
       const matches =
         matchResult.kind === "ok"
           ? matchResult.data.map((m) => ({
@@ -67,7 +60,7 @@ export default async function PostDetailPage({
               counterpart: type === "lost" ? m.foundPost : m.lostPost,
             }))
           : [];
-      matchPanelData = { matches, candidates: candidatesResult.items };
+      matchPanelData = { matches };
     } catch (error) {
       console.error("Failed to load match data", error);
       matchLoadError = true;
@@ -137,12 +130,7 @@ export default async function PostDetailPage({
           </div>
         ) : (
           matchPanelData && (
-            <MatchPanel
-              postType={type}
-              postId={post.id}
-              initialMatches={matchPanelData.matches}
-              candidates={matchPanelData.candidates}
-            />
+            <MatchPanel postType={type} postId={post.id} initialMatches={matchPanelData.matches} />
           )
         ))}
     </div>
