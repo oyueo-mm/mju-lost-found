@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requireReadyUser } from "@/lib/auth/session";
 import { getChatRoomForUser } from "@/lib/chat/service";
 import { ChatThread } from "@/components/chat/ChatThread";
+import { ReportButton } from "@/components/report/ReportButton";
 
 export default async function ChatRoomPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireReadyUser(); // redirects to /login or /onboarding as needed
@@ -38,9 +39,16 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
             {room.lostPost.title} ↔ {room.foundPost.title}
           </span>
         </div>
-        <Link href="/chat" className="text-sm text-zinc-500 underline dark:text-zinc-400">
-          채팅 목록
-        </Link>
+        <div className="flex items-center gap-3">
+          <ReportButton
+            targetType="user"
+            targetId={room.counterpart.id}
+            buttonLabel={`🚩 ${room.counterpart.nickname ?? "상대방"}님 신고하기`}
+          />
+          <Link href="/chat" className="text-sm text-zinc-500 underline dark:text-zinc-400">
+            채팅 목록
+          </Link>
+        </div>
       </div>
 
       <ChatThread chatRoomId={room.id} />

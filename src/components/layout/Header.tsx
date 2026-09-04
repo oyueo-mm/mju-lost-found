@@ -51,6 +51,11 @@ export async function Header() {
               <Link href="/notifications" className="hover:text-zinc-900 dark:hover:text-zinc-50">
                 알림{unreadCount > 0 ? ` (${unreadCount})` : ""}
               </Link>
+              {user.isAdmin && (
+                <Link href="/admin/reports" className="hover:text-zinc-900 dark:hover:text-zinc-50">
+                  관리자
+                </Link>
+              )}
             </>
           )}
           {user ? (

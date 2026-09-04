@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { ReportButton } from "@/components/report/ReportButton";
+
 type MessageItem = {
   id: number;
   senderUserId: number;
@@ -146,6 +148,12 @@ export function ChatThread({ chatRoomId }: { chatRoomId: number }) {
                 {formatTime(m.createdAt)}
                 {m.isMine ? ` · ${m.readAt ? "읽음" : "안 읽음"}` : ""}
               </span>
+              {/* Mirrors legacy pages/5_채팅.py: a report button under every
+                  message. createReport() itself rejects reporting your own
+                  message, so this isn't hidden for m.isMine either -- same
+                  "validate at submit, not in the UI" rule as ReportButton
+                  on the post detail page. */}
+              <ReportButton targetType="message" targetId={m.id} buttonLabel="🚩 신고" />
             </div>
           ))
         )}

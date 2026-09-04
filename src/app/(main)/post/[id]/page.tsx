@@ -8,6 +8,8 @@ import { postTypeSchema } from "@/lib/posts/schema";
 import { DeletePostButton } from "@/components/post/DeletePostButton";
 import { listMatchesForPost } from "@/lib/match/service";
 import { MatchPanel } from "@/components/match/MatchPanel";
+import { encodePostTargetId } from "@/lib/report/targets";
+import { ReportButton } from "@/components/report/ReportButton";
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
@@ -122,6 +124,10 @@ export default async function PostDetailPage({
           </div>
         )}
       </div>
+
+      {currentUser && (
+        <ReportButton targetType="post" targetId={encodePostTargetId(type, post.id)} />
+      )}
 
       {isOwner &&
         (matchLoadError ? (

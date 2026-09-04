@@ -37,3 +37,18 @@ export async function requireReadyUser(): Promise<User> {
   if (user.nickname === null) redirect("/onboarding");
   return user;
 }
+
+// Page-level gate for admin-only pages, matching legacy
+// ui/auth.py::require_admin(): reuses requireReadyUser()'s login/nickname
+// checks, then re-verifies isAdmin against the just-fetched DB row --
+// never trusts anything client-side. Every admin-only service function
+// (see src/lib/moderation/service.ts's isAdmin/requireAdminForApi) also
+// re-checks this itself, so this page gate is a UX convenience and first
+// line of defense, never the only thing enforcing it. Redirects to /login
+// or /onboarding via requireReadyUser, or to / if logged in but not an
+// admin (there's no dedicated "access denied" page in this app).
+export async function requireAdmin(): Promise<User> {
+  const user = await requireReadyUser();
+  if (!user.isAdmin) redirect("/");
+  return user;
+}
