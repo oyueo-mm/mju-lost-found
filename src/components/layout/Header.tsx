@@ -7,6 +7,7 @@ const NAV_LINKS = [
   { href: "/", label: "홈" },
   { href: "/lost", label: "분실물" },
   { href: "/found", label: "습득물" },
+  { href: "/search", label: "검색" },
 ] as const;
 
 // A Server Component, not a client one: the current user is read here and

@@ -9,9 +9,12 @@ import {
 import type {
   CreateFoundPostInput,
   CreateLostPostInput,
+  PostListType,
+  SortOption,
   UpdateFoundPostInput,
   UpdateLostPostInput,
 } from "./schema";
+import { DEFAULT_SORT } from "./schema";
 
 // The Prisma Client's generated enum types use the ASCII identifiers
 // (SEARCHING/FOUND, ...) as their actual TS/JS values -- @map in
@@ -82,7 +85,68 @@ export type PostMutationResult<T> =
   | { kind: "forbidden"; reason: "not_owner" | "suspended" };
 
 type Page = { page: number; limit: number };
-type PagedResult<T> = { items: T[]; page: number; limit: number; total: number };
+type PagedResult<T> = {
+  items: T[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+// Optional search/filter criteria shared by LostPost and FoundPost -- both
+// models have identically-named/typed title/description/category/location/
+// createdAt columns (see schema.prisma), so one filter shape and one
+// where-builder serves both without a generic repository abstraction.
+export type PostFilters = {
+  q?: string;
+  category?: string;
+  location?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+  sort?: SortOption;
+};
+type ListParams = Page & PostFilters;
+
+function totalPagesFor(total: number, limit: number): number {
+  return Math.max(1, Math.ceil(total / limit));
+}
+
+// `q` matches title OR description (contains, case sensitivity follows
+// the DB/column collation -- MySQL's default collations are
+// case-insensitive, so no extra normalization is done here per Phase 6's
+// "don't over-normalize" guidance). `category` is an exact match (matches
+// the legacy search_lost_posts()/search_found_posts()'s `category = ?`);
+// `location` is a partial match, since it's free text with no legacy
+// precedent to match against. `dateFrom`/`dateTo` filter on `createdAt`
+// (post registration date) rather than lostAt/foundAt -- those differ in
+// meaning between the two boards and don't unify for `type=all`, while
+// createdAt is the one date field with identical, unambiguous meaning on
+// both, and is already what `sort` orders by.
+function buildSearchWhere(filters: PostFilters): {
+  OR?: ({ title: { contains: string } } | { description: { contains: string } })[];
+  category?: string;
+  location?: { contains: string };
+  createdAt?: { gte?: Date; lte?: Date };
+} {
+  const where: ReturnType<typeof buildSearchWhere> = {};
+  if (filters.q) {
+    where.OR = [{ title: { contains: filters.q } }, { description: { contains: filters.q } }];
+  }
+  if (filters.category) where.category = filters.category;
+  if (filters.location) where.location = { contains: filters.location };
+  if (filters.dateFrom || filters.dateTo) {
+    where.createdAt = {
+      ...(filters.dateFrom && { gte: filters.dateFrom }),
+      ...(filters.dateTo && { lte: filters.dateTo }),
+    };
+  }
+  return where;
+}
+
+function buildOrderBy(sort: SortOption = DEFAULT_SORT) {
+  const direction = sort === "oldest" ? ("asc" as const) : ("desc" as const);
+  return [{ createdAt: direction }, { id: direction }];
+}
 
 function toLostPostDTO(row: {
   id: number;
@@ -120,18 +184,24 @@ function toFoundPostDTO(row: {
 
 // ---------- LostPost ----------
 
-export async function listLostPosts({ page, limit }: Page): Promise<PagedResult<LostPostDTO>> {
+export async function listLostPosts({
+  page,
+  limit,
+  ...filters
+}: ListParams): Promise<PagedResult<LostPostDTO>> {
   const skip = (page - 1) * limit;
+  const where = buildSearchWhere(filters);
   const [rows, total] = await Promise.all([
     prisma.lostPost.findMany({
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      where,
+      orderBy: buildOrderBy(filters.sort),
       skip,
       take: limit,
       include: { user: { select: AUTHOR_SELECT } },
     }),
-    prisma.lostPost.count(),
+    prisma.lostPost.count({ where }),
   ]);
-  return { items: rows.map(toLostPostDTO), page, limit, total };
+  return { items: rows.map(toLostPostDTO), page, limit, total, totalPages: totalPagesFor(total, limit) };
 }
 
 export async function getLostPost(id: number): Promise<LostPostDTO | null> {
@@ -204,18 +274,24 @@ export async function deleteLostPost(
 
 // ---------- FoundPost ----------
 
-export async function listFoundPosts({ page, limit }: Page): Promise<PagedResult<FoundPostDTO>> {
+export async function listFoundPosts({
+  page,
+  limit,
+  ...filters
+}: ListParams): Promise<PagedResult<FoundPostDTO>> {
   const skip = (page - 1) * limit;
+  const where = buildSearchWhere(filters);
   const [rows, total] = await Promise.all([
     prisma.foundPost.findMany({
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      where,
+      orderBy: buildOrderBy(filters.sort),
       skip,
       take: limit,
       include: { user: { select: AUTHOR_SELECT } },
     }),
-    prisma.foundPost.count(),
+    prisma.foundPost.count({ where }),
   ]);
-  return { items: rows.map(toFoundPostDTO), page, limit, total };
+  return { items: rows.map(toFoundPostDTO), page, limit, total, totalPages: totalPagesFor(total, limit) };
 }
 
 export async function getFoundPost(id: number): Promise<FoundPostDTO | null> {
@@ -277,4 +353,61 @@ export async function deleteFoundPost(
   await prisma.foundPost.delete({ where: { id } });
   if (existing.imageUrl) await deleteBlobSafely(existing.imageUrl);
   return { kind: "ok", data: { id } };
+}
+
+// ---------- Search (type=all) ----------
+
+// Prisma has no cross-model UNION, so a `type=all` search can't be one
+// query: each table is queried independently (same where/orderBy) and the
+// results are merged in memory. To keep this correct without pulling in
+// entire tables, each query fetches only the rows needed to cover pages
+// 1..`page` (capped at 1000 as a hard safety limit on how deep `type=all`
+// pagination can go) -- bounded by page depth, not table size, but still
+// more than a single page's worth per table since the merge/sort has to
+// happen after both result sets are in hand. `total`/`totalPages` come
+// from separate, cheap COUNT queries against each table, so those numbers
+// are always exact even though the fetched rows are capped.
+async function searchAllPosts({
+  page,
+  limit,
+  ...filters
+}: ListParams): Promise<PagedResult<PostDTO>> {
+  const where = buildSearchWhere(filters);
+  const orderBy = buildOrderBy(filters.sort);
+  const depth = Math.min(page * limit, 1000);
+
+  const [lostRows, foundRows, lostTotal, foundTotal] = await Promise.all([
+    prisma.lostPost.findMany({ where, orderBy, take: depth, include: { user: { select: AUTHOR_SELECT } } }),
+    prisma.foundPost.findMany({ where, orderBy, take: depth, include: { user: { select: AUTHOR_SELECT } } }),
+    prisma.lostPost.count({ where }),
+    prisma.foundPost.count({ where }),
+  ]);
+
+  const sortSign = filters.sort === "oldest" ? 1 : -1;
+  const merged = [...lostRows.map(toLostPostDTO), ...foundRows.map(toFoundPostDTO)].sort(
+    (a, b) => (a.createdAt.getTime() - b.createdAt.getTime()) * sortSign,
+  );
+
+  const skip = (page - 1) * limit;
+  const total = lostTotal + foundTotal;
+
+  return {
+    items: merged.slice(skip, skip + limit),
+    page,
+    limit,
+    total,
+    totalPages: totalPagesFor(total, limit),
+  };
+}
+
+// The single entry point /api/posts (and /search) call: dispatches to the
+// per-board listers for type=lost/found, or the merged search above for
+// type=all.
+export async function searchPosts({
+  type,
+  ...params
+}: ListParams & { type: PostListType }): Promise<PagedResult<PostDTO>> {
+  if (type === "lost") return listLostPosts(params);
+  if (type === "found") return listFoundPosts(params);
+  return searchAllPosts(params);
 }

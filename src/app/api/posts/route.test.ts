@@ -4,8 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { jsonError } from "@/lib/posts/response";
 
 const requireUserForApi = vi.fn();
-const listLostPosts = vi.fn();
-const listFoundPosts = vi.fn();
+const searchPosts = vi.fn();
 const createLostPost = vi.fn();
 const createFoundPost = vi.fn();
 
@@ -20,8 +19,7 @@ vi.mock("@/lib/posts/http", async () => {
   return { ...response, requireUserForApi };
 });
 vi.mock("@/lib/posts/service", () => ({
-  listLostPosts,
-  listFoundPosts,
+  searchPosts,
   createLostPost,
   createFoundPost,
 }));
@@ -40,12 +38,76 @@ describe("GET /api/posts", () => {
     expect(res.status).toBe(400);
   });
 
+  it("accepts type=all", async () => {
+    searchPosts.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 0, totalPages: 1 });
+    const res = await GET(new NextRequest("http://localhost/api/posts?type=all"));
+    expect(res.status).toBe(200);
+  });
+
   it("clamps an excessive limit before querying the DB", async () => {
-    listLostPosts.mockResolvedValueOnce({ items: [], page: 1, limit: 50, total: 0 });
+    searchPosts.mockResolvedValueOnce({ items: [], page: 1, limit: 50, total: 0, totalPages: 1 });
 
     await GET(new NextRequest("http://localhost/api/posts?type=lost&limit=100000"));
 
-    expect(listLostPosts).toHaveBeenCalledWith({ page: 1, limit: 50 });
+    expect(searchPosts).toHaveBeenCalledWith(expect.objectContaining({ type: "lost", page: 1, limit: 50 }));
+  });
+
+  it("rejects a search query longer than the max length", async () => {
+    const res = await GET(
+      new NextRequest(`http://localhost/api/posts?type=lost&q=${"a".repeat(101)}`),
+    );
+    expect(res.status).toBe(400);
+    expect(searchPosts).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid sort value", async () => {
+    const res = await GET(new NextRequest("http://localhost/api/posts?type=lost&sort=random"));
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an invalid date", async () => {
+    const res = await GET(
+      new NextRequest("http://localhost/api/posts?type=lost&dateFrom=not-a-date"),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("passes q/category/location/sort through to the service layer", async () => {
+    searchPosts.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 0, totalPages: 1 });
+
+    await GET(
+      new NextRequest(
+        "http://localhost/api/posts?type=lost&q=지갑&category=전자기기&location=학생회관&sort=oldest",
+      ),
+    );
+
+    expect(searchPosts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "lost",
+        q: "지갑",
+        category: "전자기기",
+        location: "학생회관",
+        sort: "oldest",
+      }),
+    );
+  });
+
+  it("requires no authentication -- search/list is public", async () => {
+    searchPosts.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 0, totalPages: 1 });
+
+    const res = await GET(new NextRequest("http://localhost/api/posts?type=all&q=지갑"));
+
+    expect(res.status).toBe(200);
+    expect(requireUserForApi).not.toHaveBeenCalled();
+  });
+
+  it("includes totalPages in the pagination envelope", async () => {
+    searchPosts.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 41, totalPages: 3 });
+
+    const res = await GET(new NextRequest("http://localhost/api/posts?type=lost"));
+    const json = await res.json();
+
+    expect(json.pagination).toEqual({ page: 1, limit: 20, total: 41, totalPages: 3 });
   });
 });
 

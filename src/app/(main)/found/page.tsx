@@ -1,14 +1,26 @@
 import Link from "next/link";
 
 import { SearchFilterBar } from "@/components/search/SearchFilterBar";
+import { Pagination } from "@/components/search/Pagination";
 import { PostCard } from "@/components/post/PostCard";
 import { listFoundPosts } from "@/lib/posts/service";
-import { DEFAULT_LIMIT, DEFAULT_PAGE } from "@/lib/posts/schema";
+import { DEFAULT_LIMIT, DEFAULT_PAGE, listQuerySchema } from "@/lib/posts/schema";
+import { normalizeSearchParams } from "@/lib/posts/searchParams";
 
-export default async function FoundListPage() {
+type SearchParams = Record<string, string | string[] | undefined>;
+
+export default async function FoundListPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const raw = normalizeSearchParams(await searchParams);
+  const parsed = listQuerySchema.safeParse({ ...raw, type: "found" });
+  const query = parsed.success ? parsed.data : { type: "found" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
+
   let posts;
   try {
-    posts = await listFoundPosts({ page: DEFAULT_PAGE, limit: DEFAULT_LIMIT });
+    posts = await listFoundPosts(query);
   } catch (error) {
     console.error("Failed to load found posts", error);
     return (
@@ -32,10 +44,12 @@ export default async function FoundListPage() {
           습득물 등록
         </Link>
       </div>
-      <SearchFilterBar />
+      <SearchFilterBar basePath="/found" />
       {posts.items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-          등록된 습득물 게시글이 없습니다.
+          {query.q || query.category || query.location
+            ? "검색 결과가 없습니다."
+            : "등록된 습득물 게시글이 없습니다."}
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -44,6 +58,7 @@ export default async function FoundListPage() {
           ))}
         </div>
       )}
+      <Pagination basePath="/found" currentSearchParams={raw} page={posts.page} totalPages={posts.totalPages} />
     </div>
   );
 }

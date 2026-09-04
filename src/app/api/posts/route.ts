@@ -12,21 +12,24 @@ import {
   listQuerySchema,
   postTypeSchema,
 } from "@/lib/posts/schema";
-import { createFoundPost, createLostPost, listFoundPosts, listLostPosts } from "@/lib/posts/service";
+import { createFoundPost, createLostPost, searchPosts } from "@/lib/posts/service";
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const query = listQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
   if (!query.success) {
-    return jsonError(400, "type은 'lost' 또는 'found'여야 합니다.");
+    return jsonError(400, query.error.issues[0]?.message ?? "잘못된 검색 조건입니다.");
   }
-  const { type, page, limit } = query.data;
 
-  const result =
-    type === "lost" ? await listLostPosts({ page, limit }) : await listFoundPosts({ page, limit });
+  const result = await searchPosts(query.data);
 
   return NextResponse.json({
     data: result.items,
-    pagination: { page: result.page, limit: result.limit, total: result.total },
+    pagination: {
+      page: result.page,
+      limit: result.limit,
+      total: result.total,
+      totalPages: result.totalPages,
+    },
   });
 });
 

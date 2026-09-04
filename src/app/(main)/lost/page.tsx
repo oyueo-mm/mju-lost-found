@@ -1,14 +1,28 @@
 import Link from "next/link";
 
 import { SearchFilterBar } from "@/components/search/SearchFilterBar";
+import { Pagination } from "@/components/search/Pagination";
 import { PostCard } from "@/components/post/PostCard";
 import { listLostPosts } from "@/lib/posts/service";
-import { DEFAULT_LIMIT, DEFAULT_PAGE } from "@/lib/posts/schema";
+import { DEFAULT_LIMIT, DEFAULT_PAGE, listQuerySchema } from "@/lib/posts/schema";
+import { normalizeSearchParams } from "@/lib/posts/searchParams";
 
-export default async function LostListPage() {
+type SearchParams = Record<string, string | string[] | undefined>;
+
+export default async function LostListPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const raw = normalizeSearchParams(await searchParams);
+  // `type` is always "lost" here regardless of the URL -- this board's
+  // identity isn't user-controlled the way it is on /search.
+  const parsed = listQuerySchema.safeParse({ ...raw, type: "lost" });
+  const query = parsed.success ? parsed.data : { type: "lost" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
+
   let posts;
   try {
-    posts = await listLostPosts({ page: DEFAULT_PAGE, limit: DEFAULT_LIMIT });
+    posts = await listLostPosts(query);
   } catch (error) {
     console.error("Failed to load lost posts", error);
     return (
@@ -32,10 +46,12 @@ export default async function LostListPage() {
           분실물 등록
         </Link>
       </div>
-      <SearchFilterBar />
+      <SearchFilterBar basePath="/lost" />
       {posts.items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-          등록된 분실물 게시글이 없습니다.
+          {query.q || query.category || query.location
+            ? "검색 결과가 없습니다."
+            : "등록된 분실물 게시글이 없습니다."}
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -44,6 +60,7 @@ export default async function LostListPage() {
           ))}
         </div>
       )}
+      <Pagination basePath="/lost" currentSearchParams={raw} page={posts.page} totalPages={posts.totalPages} />
     </div>
   );
 }

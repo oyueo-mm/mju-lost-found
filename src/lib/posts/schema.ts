@@ -12,19 +12,47 @@ export type PostType = (typeof POST_TYPES)[number];
 
 export const postTypeSchema = z.enum(POST_TYPES);
 
+// The list/search endpoint additionally accepts "all" (both boards
+// merged) -- kept as a separate schema from postTypeSchema because
+// create/update/get/delete only ever make sense for one concrete board.
+export const POST_LIST_TYPES = ["lost", "found", "all"] as const;
+export type PostListType = (typeof POST_LIST_TYPES)[number];
+export const postListTypeSchema = z.enum(POST_LIST_TYPES);
+
+export const SORT_OPTIONS = ["latest", "oldest"] as const;
+export type SortOption = (typeof SORT_OPTIONS)[number];
+const sortOptionSchema = z.enum(SORT_OPTIONS);
+
+// A search box, unlike a form field, has no natural upper bound from the
+// legacy schema -- this cap exists purely so an absurdly long query
+// string can't be used to build a pointless/abusive LIKE query.
+export const MAX_SEARCH_QUERY_LENGTH = 100;
+
 // Pagination: `limit` is clamped to MAX_LIMIT regardless of what the
 // client asks for, so a request like ?limit=100000 can't force a large
 // table scan.
 export const DEFAULT_PAGE = 1;
 export const DEFAULT_LIMIT = 20;
 export const MAX_LIMIT = 50;
+export const DEFAULT_SORT: SortOption = "latest";
 
 export const listQuerySchema = z.object({
-  type: postTypeSchema,
+  type: postListTypeSchema,
+  // All search/filter fields are optional -- omitting them means "no
+  // filter", not an error. Unlike page/limit (which silently fall back to
+  // safe defaults, see below), an out-of-range q/date/sort is a genuine
+  // client mistake and is rejected with 400 rather than silently ignored.
+  q: z.string().trim().max(MAX_SEARCH_QUERY_LENGTH, "검색어는 100자를 넘을 수 없습니다.").optional(),
+  category: z.string().trim().max(100).optional(),
+  location: z.string().trim().max(200).optional(),
+  dateFrom: z.coerce.date("dateFrom이 올바르지 않습니다.").optional(),
+  dateTo: z.coerce.date("dateTo가 올바르지 않습니다.").optional(),
+  sort: sortOptionSchema.optional(),
   page: z.coerce.number().int().min(1).catch(DEFAULT_PAGE),
   // Anything unparseable (missing, non-numeric, <1) falls back to
   // DEFAULT_LIMIT; anything parseable but too large (e.g. ?limit=100000)
-  // is clamped down to MAX_LIMIT rather than rejected outright.
+  // is clamped down to MAX_LIMIT rather than rejected outright. This
+  // lenient behavior predates this phase (Phase 3) and is left as-is.
   limit: z.coerce
     .number()
     .int()
@@ -32,6 +60,7 @@ export const listQuerySchema = z.object({
     .catch(DEFAULT_LIMIT)
     .transform((n) => Math.min(n, MAX_LIMIT)),
 });
+export type ListQuery = z.infer<typeof listQuerySchema>;
 
 // Shared fields between LostPost/FoundPost -- title/description/category/
 // location are unbounded TEXT in the DB (see schema.prisma), but a public
