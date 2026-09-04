@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
+import { deleteBlobSafely } from "@/lib/images/blob";
 import {
   FoundPostStatus as PrismaFoundPostStatus,
   LostPostStatus as PrismaLostPostStatus,
@@ -195,6 +196,9 @@ export async function deleteLostPost(
   // exist, the same way delete_lost_post() in the legacy app never
   // manually cleans up related rows either.
   await prisma.lostPost.delete({ where: { id } });
+  // Best-effort: the post is already gone from the DB either way, a Blob
+  // cleanup failure here is only logged, never surfaced as a failed delete.
+  if (existing.imageUrl) await deleteBlobSafely(existing.imageUrl);
   return { kind: "ok", data: { id } };
 }
 
@@ -271,5 +275,6 @@ export async function deleteFoundPost(
   if (existing.userId !== userId) return { kind: "forbidden", reason: "not_owner" };
 
   await prisma.foundPost.delete({ where: { id } });
+  if (existing.imageUrl) await deleteBlobSafely(existing.imageUrl);
   return { kind: "ok", data: { id } };
 }

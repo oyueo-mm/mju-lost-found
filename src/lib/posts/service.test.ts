@@ -18,11 +18,16 @@ const foundPost = {
   delete: vi.fn(),
 };
 
+const del = vi.fn();
+
 vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost } }));
 vi.mock("@/generated/prisma/client", () => ({
   LostPostStatus: { SEARCHING: "SEARCHING", FOUND: "FOUND" },
   FoundPostStatus: { KEEPING: "KEEPING", COMPLETED: "COMPLETED" },
 }));
+// Real deleteBlobSafely (not mocked) so its own try/catch is what's under
+// test below -- only the underlying @vercel/blob SDK call is mocked.
+vi.mock("@vercel/blob", () => ({ del }));
 
 const {
   createFoundPost,
@@ -196,6 +201,26 @@ describe("deleteLostPost / deleteFoundPost", () => {
 
     expect(result).toEqual({ kind: "ok", data: { id: 1 } });
     expect(lostPost.delete).toHaveBeenCalledWith({ where: { id: 1 } });
+  });
+
+  it("cleans up the post's image blob on delete", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x/y.jpg" });
+    lostPost.delete.mockResolvedValueOnce({});
+    del.mockResolvedValueOnce(undefined);
+
+    await deleteLostPost(1, 1);
+
+    expect(del).toHaveBeenCalledWith("https://x/y.jpg");
+  });
+
+  it("still succeeds even if the image blob fails to delete", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x/y.jpg" });
+    lostPost.delete.mockResolvedValueOnce({});
+    del.mockRejectedValueOnce(new Error("blob service unavailable"));
+
+    const result = await deleteLostPost(1, 1);
+
+    expect(result).toEqual({ kind: "ok", data: { id: 1 } });
   });
 
   it("rejects deleting someone else's post", async () => {

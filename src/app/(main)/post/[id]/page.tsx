@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -38,7 +39,22 @@ export default async function PostDetailPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="aspect-video w-full rounded-lg border border-dashed border-zinc-300 dark:border-zinc-700" />
+      {post.imageUrl ? (
+        <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
+          <Image
+            src={post.imageUrl}
+            alt={post.title}
+            fill
+            sizes="(min-width: 768px) 768px, 100vw"
+            className="object-cover"
+            priority
+          />
+        </div>
+      ) : (
+        <div className="flex aspect-video w-full items-center justify-center rounded-lg border border-dashed border-zinc-300 text-sm text-zinc-400 dark:border-zinc-700">
+          등록된 이미지가 없습니다.
+        </div>
+      )}
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">

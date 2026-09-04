@@ -60,6 +60,7 @@ export default async function EditPostPage({
           category: post.category,
           location: post.location,
           dateValue: toDateTimeLocalValue(dateValue),
+          imageUrl: post.imageUrl,
         }}
       />
     </div>

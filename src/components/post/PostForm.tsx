@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { PostType } from "@/lib/posts/schema";
+import { uploadPostImage } from "@/lib/images/client";
+import { ImageUploader } from "./ImageUploader";
 
 type PostFormValues = {
   title: string;
@@ -11,6 +13,7 @@ type PostFormValues = {
   category: string;
   location: string;
   dateValue: string; // <input type="datetime-local"> value
+  imageUrl: string | null;
 };
 
 type PostFormProps = {
@@ -26,6 +29,40 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [removeExisting, setRemoveExisting] = useState(false);
+
+  async function applyImageChange(id: number): Promise<string | null> {
+    if (selectedFile) {
+      try {
+        const uploaded = await uploadPostImage(type, id, selectedFile);
+        const res = await fetch(`/api/posts/${id}/image?type=${type}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(uploaded),
+        });
+        if (!res.ok) {
+          const json = await res.json().catch(() => ({}));
+          return json.error ?? "이미지를 게시물에 연결하지 못했습니다.";
+        }
+      } catch {
+        return "이미지 업로드에 실패했습니다.";
+      }
+      return null;
+    }
+
+    if (removeExisting) {
+      const res = await fetch(`/api/posts/${id}/image?type=${type}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        return json.error ?? "이미지를 삭제하지 못했습니다.";
+      }
+    }
+
+    return null;
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -60,6 +97,17 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
       }
 
       const id = postId ?? json.data.id;
+
+      const imageError = await applyImageChange(id);
+      if (imageError) {
+        // The post itself was already saved successfully -- only the
+        // image step failed, so this isn't treated as a full failure.
+        // The user can retry the image from the edit page.
+        setError(`게시물은 저장되었습니다. 다만 ${imageError} 게시물 페이지에서 다시 시도해주세요.`);
+        setPending(false);
+        return;
+      }
+
       router.push(`/post/${id}?type=${type}`);
       router.refresh();
     } catch {
@@ -84,7 +132,8 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
           required
           maxLength={200}
           defaultValue={initialValues?.title}
-          className="rounded-md border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-transparent"
+          disabled={pending}
+          className="rounded-md border border-zinc-300 px-3 py-2 disabled:opacity-60 dark:border-zinc-700 dark:bg-transparent"
         />
       </label>
 
@@ -96,7 +145,8 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
           rows={5}
           maxLength={5000}
           defaultValue={initialValues?.description}
-          className="rounded-md border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-transparent"
+          disabled={pending}
+          className="rounded-md border border-zinc-300 px-3 py-2 disabled:opacity-60 dark:border-zinc-700 dark:bg-transparent"
         />
       </label>
 
@@ -109,7 +159,8 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
             required
             maxLength={100}
             defaultValue={initialValues?.category}
-            className="rounded-md border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-transparent"
+            disabled={pending}
+            className="rounded-md border border-zinc-300 px-3 py-2 disabled:opacity-60 dark:border-zinc-700 dark:bg-transparent"
           />
         </label>
 
@@ -121,7 +172,8 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
             required
             maxLength={200}
             defaultValue={initialValues?.location}
-            className="rounded-md border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-transparent"
+            disabled={pending}
+            className="rounded-md border border-zinc-300 px-3 py-2 disabled:opacity-60 dark:border-zinc-700 dark:bg-transparent"
           />
         </label>
       </div>
@@ -133,15 +185,17 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
           type="datetime-local"
           required
           defaultValue={initialValues?.dateValue}
-          className="rounded-md border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-transparent"
+          disabled={pending}
+          className="rounded-md border border-zinc-300 px-3 py-2 disabled:opacity-60 dark:border-zinc-700 dark:bg-transparent"
         />
       </label>
 
-      {/* Image upload isn't implemented yet -- a later phase wires this
-          area up to Vercel Blob and sends the resulting URL as imageUrl. */}
-      <div className="rounded-lg border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-400 dark:border-zinc-700">
-        이미지 업로드는 추후 지원 예정입니다.
-      </div>
+      <ImageUploader
+        existingImageUrl={initialValues?.imageUrl ?? null}
+        disabled={pending}
+        onFileSelected={setSelectedFile}
+        onRemoveExisting={setRemoveExisting}
+      />
 
       <button
         type="submit"
