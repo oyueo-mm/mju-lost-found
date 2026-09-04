@@ -18,12 +18,22 @@ export async function getCurrentUser(): Promise<User | null> {
 
 // For Server Components/Server Actions that require a signed-in user --
 // redirects to /login instead of returning null so callers don't each
-// have to remember the redirect themselves. Route Handlers (Phase 3) will
-// need a variant that returns a 401 instead of redirecting; add that
-// alongside this one when that's needed, rather than overloading this
-// function's return type now.
+// have to remember the redirect themselves. Route Handlers need a variant
+// that returns a 401 instead of redirecting -- see src/lib/posts/http.ts's
+// requireUserForApi(), which wraps getCurrentUser() the same way for that
+// case, rather than overloading this function's return type.
 export async function requireUser(): Promise<User> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  return user;
+}
+
+// The full page-level gate used before a write action, matching the
+// legacy ui/auth.py::require_ready_user(): not logged in -> /login;
+// logged in but nickname not set yet -> /onboarding; both satisfied ->
+// the User row. Used by /lost/new, /found/new, and the edit page.
+export async function requireReadyUser(): Promise<User> {
+  const user = await requireUser();
+  if (user.nickname === null) redirect("/onboarding");
   return user;
 }
