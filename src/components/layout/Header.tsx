@@ -1,12 +1,20 @@
 import Link from "next/link";
 
+import { getCurrentUser } from "@/lib/auth/session";
+import { signOut } from "@/lib/auth/auth";
+
 const NAV_LINKS = [
   { href: "/", label: "홈" },
   { href: "/lost", label: "분실물" },
   { href: "/found", label: "습득물" },
 ] as const;
 
-export function Header() {
+// A Server Component, not a client one: the current user is read here and
+// only its nickname/email ever reach the rendered HTML -- no User object
+// is ever serialized into a client bundle for this header.
+export async function Header() {
+  const user = await getCurrentUser();
+
   return (
     <header className="border-b border-zinc-200 dark:border-zinc-800">
       <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
@@ -19,12 +27,33 @@ export function Header() {
               {link.label}
             </Link>
           ))}
-          <Link
-            href="/login"
-            className="rounded-full border border-zinc-300 px-3 py-1 hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-600"
-          >
-            로그인
-          </Link>
+          {user ? (
+            <>
+              <span className="text-zinc-500 dark:text-zinc-400">
+                {user.nickname ?? user.email}
+              </span>
+              <form
+                action={async () => {
+                  "use server";
+                  await signOut();
+                }}
+              >
+                <button
+                  type="submit"
+                  className="rounded-full border border-zinc-300 px-3 py-1 hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-600"
+                >
+                  로그아웃
+                </button>
+              </form>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="rounded-full border border-zinc-300 px-3 py-1 hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-600"
+            >
+              로그인
+            </Link>
+          )}
         </nav>
       </div>
     </header>

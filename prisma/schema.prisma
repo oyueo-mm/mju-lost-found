@@ -79,7 +79,15 @@ model User {
   isAdmin         Boolean   @default(false) @map("is_admin")
   isSuspended     Boolean   @default(false) @map("is_suspended")
   suspendedUntil  DateTime? @map("suspended_until")
+  // Google's stable per-account identifier ("sub"), separate from email
+  // (which Google account holders can in principle change) -- set on
+  // first sign-in. There's only one provider (Google) and no next-auth
+  // Adapter in use (see src/lib/auth/*), so a single nullable column here
+  // is enough; a full Account table only earns its keep once a second
+  // login provider needs linking to the same User.
+  googleId        String?   @unique @map("google_id")
   createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   lostPosts             LostPost[]
   foundPosts            FoundPost[]
