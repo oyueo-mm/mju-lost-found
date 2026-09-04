@@ -10,6 +10,21 @@ import { PrismaClient } from "@/generated/prisma/client";
 // DATABASE_URL set yet (Phase 0-2 never run one).
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 
+// Falling back to "" (rather than crashing at import time) is what lets
+// build-time prerendering and any DATABASE_URL-less dev/test run at all
+// -- the resulting failure still surfaces, just lazily, on the first real
+// query (as a "error parsing connection string" from the mariadb driver),
+// which is what src/app/(main)/lost|found/page.tsx's try/catch and the
+// API routes' withErrorHandling() are there to catch. This warning only
+// makes the *reason* for that failure obvious in server logs (never the
+// value itself) instead of leaving ops to guess from the driver's
+// downstream parse error.
+if (!process.env.DATABASE_URL) {
+  console.warn(
+    "[prisma] DATABASE_URL is not set. Database queries will fail until it is configured (see .env.example).",
+  );
+}
+
 const adapter = new PrismaMariaDb(process.env.DATABASE_URL ?? "");
 
 const globalForPrisma = globalThis as unknown as {
