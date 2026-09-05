@@ -72,13 +72,31 @@ export default async function PostDetailPage({
   return (
     <div className="flex flex-col gap-6">
       {post.imageUrl ? (
-        <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
+        // Not `fill` + a fixed aspect-video box: that forces every image
+        // (portrait phone photos included) into a 16:9 crop via
+        // object-cover, which is what made images look "excessively
+        // zoomed in" -- a tall photo has most of its height cropped away
+        // to fill a wide box. Uploaded photos have no stored/known
+        // dimensions (no schema/upload change was warranted just for
+        // this), so width/height below are only Next.js's placeholder
+        // for srcset generation -- `h-auto w-auto` overrides them at
+        // render time, so the browser sizes the <img> from the actual
+        // loaded file's own intrinsic dimensions (never distorted, never
+        // cropped). `max-w-full` shrinks large images to fit the column;
+        // `max-h-[70vh]` caps a very tall portrait so it can't dominate
+        // the whole page; neither one *enlarges* a small image past its
+        // real resolution. The surrounding box only needs to center
+        // whatever width the image ends up at and fill the leftover
+        // space with a neutral background (same tone as PostCard's
+        // no-image placeholder) instead of showing bare white/black.
+        <div className="flex w-full items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800">
           <Image
             src={post.imageUrl}
             alt={post.title}
-            fill
+            width={1200}
+            height={900}
             sizes="(min-width: 768px) 768px, 100vw"
-            className="object-cover"
+            className="h-auto max-h-[70vh] w-auto max-w-full"
             priority
           />
         </div>
