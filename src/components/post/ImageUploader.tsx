@@ -123,7 +123,15 @@ export function ImageUploader({
           accept="image/jpeg,image/png,image/webp"
           disabled={disabled}
           onChange={handleFileChange}
-          className="text-sm disabled:opacity-60"
+          // Tailwind's Preflight resets ::file-selector-button's border/
+          // padding/margin to 0 (see node_modules/tailwindcss/preflight.css),
+          // which leaves a bare, unstyled "Choose File" text label with no
+          // visible button chrome -- functionally clickable, but easy to
+          // miss entirely against the rest of this form's actual buttons.
+          // The `file:` variant re-styles that pseudo-element to match this
+          // app's other buttons (see the submit button below) instead of
+          // hiding/replacing the native input.
+          className="text-sm text-zinc-500 file:mr-3 file:cursor-pointer file:rounded-full file:border-0 file:bg-zinc-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-zinc-700 disabled:opacity-60 dark:text-zinc-400 dark:file:bg-zinc-50 dark:file:text-zinc-900 dark:hover:file:bg-zinc-300"
         />
         {showExisting && (
           <button
