@@ -93,10 +93,13 @@ export class TransformersEmbeddingProvider implements EmbeddingProvider {
         // Functions have a read-only filesystem outside /tmp, so that
         // write fails ("ENOENT ... mkdir '/var/task/node_modules/
         // @huggingface/transformers/.cache'"). Fix: ship the model files
-        // ourselves (models/jhgan/ko-sroberta-multitask/, copied from that
-        // same cache dir after a one-time local run -- see
-        // docs/AI_MATCHING_ARCHITECTURE.md) as a read-only local model,
-        // and disable remote fetching entirely so it's never attempted.
+        // ourselves under models/jhgan/ko-sroberta-multitask/ -- fetched at
+        // build/dev time (not committed to git; the ONNX file alone is
+        // ~107MB, over GitHub's 100MB push limit) by
+        // scripts/downloadModel.mjs from a pinned, SHA256-verified Hugging
+        // Face Hub revision (see docs/AI_MATCHING_ARCHITECTURE.md) -- and
+        // disable remote fetching here entirely so runtime never attempts
+        // its own network access for this.
         env.allowRemoteModels = false;
         env.localModelPath = path.join(process.cwd(), "models");
         return pipeline("feature-extraction", "jhgan/ko-sroberta-multitask", {

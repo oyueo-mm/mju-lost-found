@@ -42,3 +42,9 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# AI embedding model files (Phase 7-B): fetched at build/dev time by
+# scripts/downloadModel.mjs from Hugging Face Hub (pinned revision, SHA256
+# verified) -- never committed. The ONNX file alone is ~107MB, over
+# GitHub's 100MB per-file push limit. See docs/AI_MATCHING_ARCHITECTURE.md.
+/models

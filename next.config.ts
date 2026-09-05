@@ -49,10 +49,6 @@ const nextConfig: NextConfig = {
       "./node_modules/onnxruntime-node/bin/napi-v6/linux/**",
       "./models/**",
     ],
-    "/api/diag-embed-test": [
-      "./node_modules/onnxruntime-node/bin/napi-v6/linux/**",
-      "./models/**",
-    ],
   },
   images: {
     remotePatterns: [

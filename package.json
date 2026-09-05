@@ -3,11 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/downloadModel.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/downloadModel.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "download-model": "node scripts/downloadModel.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
