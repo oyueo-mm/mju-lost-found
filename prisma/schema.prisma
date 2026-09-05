@@ -4,20 +4,28 @@
 // Source of truth for this schema: the legacy Streamlit project's
 // db/schema.sql + db/database.py (SQLite). Table/column names, defaults,
 // nullability, unique constraints, and cascade behavior are carried over
-// as-is unless a comment below explains why MySQL/Prisma required a
+// as-is unless a comment below explains why PostgreSQL/Prisma required a
 // different representation. No business meaning was changed intentionally.
 //
-// Not yet done (later phase, on purpose): no real MySQL connection, no
-// migration has been run, so nothing below has been validated against a
-// live database -- only `prisma validate` / `prisma generate`.
-
+// Phase 3: switched from MySQL/MariaDB (an earlier phase's placeholder
+// datasource, never actually connected to a live DB) to PostgreSQL, the
+// project's actual target (Supabase). See src/lib/db/prisma.ts for the
+// driver adapter side of this change, and docs/VERCEL_MIGRATION_ANALYSIS.md
+// / the Phase 3 report for the full MySQL-dependency audit.
+//
+// Connection URLs live in prisma7.config.ts, not here: Prisma 7 removed
+// `url`/`directUrl` from the schema file entirely (`prisma validate` raises
+// P1012 if they're present) -- see that file's `datasource` block for
+// DATABASE_URL (used by Migrate) and src/lib/db/prisma.ts for the separate
+// PrismaPg adapter the actual application runtime uses (also DATABASE_URL,
+// but read directly from process.env, independent of this schema).
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
 }
 
 // ---------- Enums ----------
@@ -181,18 +189,24 @@ model Match {
 // constraint -- same convention the legacy schema uses everywhere else
 // (e.g. LostPost.category isn't constrained either).
 //
-// MySQL multiple-cascade-path check: LostPost/FoundPost can each reach
-// ChatRoom by two different routes -- directly via directLostPostId/
+// Multiple-cascade-path check: LostPost/FoundPost can each reach ChatRoom
+// by two different routes -- directly via directLostPostId/
 // directFoundPostId, and indirectly via Match.lostPostId/foundPostId ->
 // ChatRoom.matchId. This is a converging ("diamond") cascade, not a cycle
-// back to LostPost/FoundPost itself, so InnoDB accepts it: a delete only
-// ever travels outward (LostPost/FoundPost -> Match/ChatRoom -> Message),
-// never back to its own origin table. Per row only one of the two routes
-// is ever populated, so in practice a given ChatRoom is only ever deleted
-// by one of them. If `prisma db push`/`migrate dev` in a later phase
-// rejects this shape anyway, the fallback is to drop CASCADE on the two
-// direct_* FKs and delete those rooms explicitly in application code
-// instead.
+// back to LostPost/FoundPost itself: a delete only ever travels outward
+// (LostPost/FoundPost -> Match/ChatRoom -> Message), never back to its own
+// origin table. PostgreSQL has no InnoDB-style restriction against this
+// shape (unlike MySQL, which was the concern this comment originally
+// tracked) -- multiple independent FK paths converging on the same target
+// row are fine as long as they don't form an actual cycle, which this
+// doesn't. Per row only one of the two routes is ever populated, so in
+// practice a given ChatRoom is only ever deleted by one of them. Verified
+// via `prisma migrate diff --from-empty --to-schema-datamodel` (generates
+// the CREATE TABLE/FK SQL without needing a live DB) in Phase 3 -- see the
+// Phase 3 report. If `prisma db push`/`migrate dev` against a real
+// Supabase instance ever rejects this shape anyway, the fallback is to
+// drop CASCADE on the two direct_* FKs and delete those rooms explicitly
+// in application code instead.
 model ChatRoom {
   id                   Int        @id @default(autoincrement())
   matchId              Int?       @unique @map("match_id")
@@ -208,11 +222,16 @@ model ChatRoom {
   messages Message[]
 
   // The legacy SQLite indexes use `WHERE direct_lost_post_id IS NOT NULL`
-  // partial indexes, which MySQL doesn't support. A plain composite unique
-  // constraint reproduces the same behavior under standard SQL NULL
-  // semantics (NULL is never equal to NULL, so rows with a NULL
-  // directLostPostId/directFoundPostId -- i.e. every Match-based room --
-  // never collide with each other or with direct rooms).
+  // partial indexes. Unlike MySQL (which can't express those at all),
+  // PostgreSQL supports real partial unique indexes -- but Phase 3 checked
+  // and this plain composite unique constraint already reproduces the exact
+  // same behavior on any standard-SQL database (Postgres included) via NULL
+  // semantics: a row is only compared for uniqueness when *every* column in
+  // the constraint is non-null, so a row with a NULL directLostPostId/
+  // directFoundPostId -- i.e. every Match-based room, and initiatorUserId
+  // is NULL there too -- never collides with anything. No raw-SQL migration
+  // needed for this; only reach for one if a future change makes this
+  // column pair non-null outside the "direct room" case.
   @@unique([directLostPostId, initiatorUserId], map: "idx_chatroom_direct_lost_unique")
   @@unique([directFoundPostId, initiatorUserId], map: "idx_chatroom_direct_found_unique")
   @@map("ChatRoom")
@@ -296,11 +315,14 @@ model Notification {
   type         NotificationType
   title        String           @db.Text
   content      String           @db.Text
-  // Not @db.Text: it's part of the composite unique index below, and MySQL
-  // can't put a TEXT/BLOB column in a unique index without a prefix
-  // length. Same free-text, no-FK shape as Report/ModerationAction's
-  // targetId in the legacy schema.
-  relatedType  String?          @map("related_type")
+  // @db.Text is safe here even though this column is part of the composite
+  // unique index below: PostgreSQL (unlike MySQL, which needs a prefix
+  // length for TEXT/BLOB columns in an index) has no such restriction, and
+  // Prisma's default `String` native type under the postgresql provider is
+  // already `text` regardless -- this annotation is just made explicit for
+  // consistency with the rest of this schema. Same free-text, no-FK shape
+  // as Report/ModerationAction's targetId in the legacy schema.
+  relatedType  String?          @db.Text @map("related_type")
   relatedId    Int?             @map("related_id")
   isRead       Boolean          @default(false) @map("is_read")
   createdAt    DateTime         @default(now()) @map("created_at")

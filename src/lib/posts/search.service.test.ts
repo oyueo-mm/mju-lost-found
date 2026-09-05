@@ -37,13 +37,16 @@ beforeEach(() => {
 });
 
 describe("search logic -- filtering is always done in the DB query, never in JS", () => {
-  it("builds a title-OR-description contains filter for q", async () => {
+  it("builds a case-insensitive title-OR-description contains filter for q", async () => {
     await listLostPosts({ page: 1, limit: 20, q: "지갑" });
 
     expect(lostPost.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          OR: [{ title: { contains: "지갑" } }, { description: { contains: "지갑" } }],
+          OR: [
+            { title: { contains: "지갑", mode: "insensitive" } },
+            { description: { contains: "지갑", mode: "insensitive" } },
+          ],
         }),
       }),
     );
@@ -62,11 +65,13 @@ describe("search logic -- filtering is always done in the DB query, never in JS"
     );
   });
 
-  it("uses a contains (partial) match for location", async () => {
+  it("uses a case-insensitive contains (partial) match for location", async () => {
     await listFoundPosts({ page: 1, limit: 20, location: "인문캠퍼스" });
 
     expect(foundPost.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ location: { contains: "인문캠퍼스" } }) }),
+      expect.objectContaining({
+        where: expect.objectContaining({ location: { contains: "인문캠퍼스", mode: "insensitive" } }),
+      }),
     );
   });
 
@@ -87,9 +92,12 @@ describe("search logic -- filtering is always done in the DB query, never in JS"
     expect(lostPost.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          OR: [{ title: { contains: "지갑" } }, { description: { contains: "지갑" } }],
+          OR: [
+            { title: { contains: "지갑", mode: "insensitive" } },
+            { description: { contains: "지갑", mode: "insensitive" } },
+          ],
           category: "지갑",
-          location: { contains: "학생회관" },
+          location: { contains: "학생회관", mode: "insensitive" },
         },
       }),
     );

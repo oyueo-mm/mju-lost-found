@@ -111,29 +111,38 @@ function totalPagesFor(total: number, limit: number): number {
   return Math.max(1, Math.ceil(total / limit));
 }
 
-// `q` matches title OR description (contains, case sensitivity follows
-// the DB/column collation -- MySQL's default collations are
-// case-insensitive, so no extra normalization is done here per Phase 6's
-// "don't over-normalize" guidance). `category` is an exact match (matches
-// the legacy search_lost_posts()/search_found_posts()'s `category = ?`);
-// `location` is a partial match, since it's free text with no legacy
-// precedent to match against. `dateFrom`/`dateTo` filter on `createdAt`
-// (post registration date) rather than lostAt/foundAt -- those differ in
-// meaning between the two boards and don't unify for `type=all`, while
-// createdAt is the one date field with identical, unambiguous meaning on
-// both, and is already what `sort` orders by.
+// `q` matches title OR description (contains). `mode: "insensitive"` is
+// required here on PostgreSQL to match the legacy behavior: SQLite's `LIKE`
+// and MySQL's default collation were both case-insensitive, so a bare
+// `contains` (which PostgreSQL treats case-sensitively) would silently
+// regress search for any Latin-alphabet text (e.g. "AirPods" no longer
+// matching "airpods") -- Prisma only supports the `mode` option against
+// PostgreSQL/MongoDB, which is exactly the DB this now runs on (Phase 3).
+// `category` is an exact match (matches the legacy search_lost_posts()/
+// search_found_posts()'s `category = ?`); `location` is a partial match,
+// since it's free text with no legacy precedent to match against.
+// `dateFrom`/`dateTo` filter on `createdAt` (post registration date) rather
+// than lostAt/foundAt -- those differ in meaning between the two boards and
+// don't unify for `type=all`, while createdAt is the one date field with
+// identical, unambiguous meaning on both, and is already what `sort` orders by.
 function buildSearchWhere(filters: PostFilters): {
-  OR?: ({ title: { contains: string } } | { description: { contains: string } })[];
+  OR?: (
+    | { title: { contains: string; mode: "insensitive" } }
+    | { description: { contains: string; mode: "insensitive" } }
+  )[];
   category?: string;
-  location?: { contains: string };
+  location?: { contains: string; mode: "insensitive" };
   createdAt?: { gte?: Date; lte?: Date };
 } {
   const where: ReturnType<typeof buildSearchWhere> = {};
   if (filters.q) {
-    where.OR = [{ title: { contains: filters.q } }, { description: { contains: filters.q } }];
+    where.OR = [
+      { title: { contains: filters.q, mode: "insensitive" } },
+      { description: { contains: filters.q, mode: "insensitive" } },
+    ];
   }
   if (filters.category) where.category = filters.category;
-  if (filters.location) where.location = { contains: filters.location };
+  if (filters.location) where.location = { contains: filters.location, mode: "insensitive" };
   if (filters.dateFrom || filters.dateTo) {
     where.createdAt = {
       ...(filters.dateFrom && { gte: filters.dateFrom }),

@@ -161,10 +161,10 @@ describe("createMatch", () => {
     // A genuine failure (not the P2002 race handled above) must not be
     // swallowed -- there is no Match row and no Notification row in this
     // case, and createMatch() must not claim otherwise. Atomicity itself
-    // (no partial Match-without-Notification state) is Prisma/MySQL's
-    // guarantee for what happens *inside* $transaction's callback; this
-    // only proves the wrapping code doesn't mask a failure of the
-    // transaction as a whole.
+    // (no partial Match-without-Notification state) is Prisma's/the
+    // underlying DB's guarantee for what happens *inside* $transaction's
+    // callback; this only proves the wrapping code doesn't mask a failure
+    // of the transaction as a whole.
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
     foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 2 });
     match.findUnique.mockResolvedValueOnce(null);

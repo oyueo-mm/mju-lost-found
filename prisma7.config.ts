@@ -3,12 +3,24 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
+// This `datasource.url` is what the Prisma CLI (migrate/db push/introspect)
+// connects with -- NOT what the running app uses (that's the separate
+// PrismaPg adapter in src/lib/db/prisma.ts, constructed straight from
+// process.env.DATABASE_URL). Deliberately DIRECT_URL, not DATABASE_URL:
+// Supabase's pooled connection (PgBouncer, transaction mode) doesn't
+// support the session-level features Migrate needs (advisory locks, some
+// multi-statement DDL), so Migrate needs the unpooled, port-5432 connection
+// -- while the app's own runtime pool benefits from staying on the pooled
+// one under serverless/Vercel. Prisma 7 has no schema-level `directUrl`
+// anymore (removed -- see prisma/schema.prisma's datasource comment), so
+// this config file's single `datasource.url` is the only place a "which
+// connection does Migrate use" choice can be made.
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    url: process.env["DIRECT_URL"],
   },
 });

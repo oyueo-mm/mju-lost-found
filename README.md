@@ -6,13 +6,18 @@ Copy `.env.example` to `.env` and fill in real values. Never commit `.env` (it's
 
 | Variable | Used by | Notes |
 |---|---|---|
-| `DATABASE_URL` | `src/lib/db/prisma.ts` (via `@prisma/adapter-mariadb`) | MySQL/MariaDB connection string. Queries fail lazily (not at startup) if unset -- see the console warning in `prisma.ts`. |
+| `DATABASE_URL` | `src/lib/db/prisma.ts` (via `@prisma/adapter-pg`) | **Pooled** PostgreSQL connection string (Supabase: the PgBouncer/"Transaction" pooler URL, typically port `6543`, with `?pgbouncer=true`). This is what the running app queries through. |
+| `DIRECT_URL` | `prisma7.config.ts` (Prisma CLI: `migrate`/`db push`/introspection only) | **Unpooled** PostgreSQL connection string (Supabase: the direct connection, port `5432`). Migrate needs session-level features (advisory locks, some multi-statement DDL) the pooled connection doesn't support. Not read by the running app itself. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | `src/lib/auth/auth.ts` (NextAuth's Google provider) | From a Google Cloud OAuth 2.0 Client ID. Authorized redirect URI must be `<origin>/api/auth/callback/google`. |
 | `AUTH_SECRET` | NextAuth (implicit, read by the `next-auth` package itself) | Signs/encrypts the JWT session cookie. Generate with `npx auth secret` or `openssl rand -base64 32`; must be set in every environment (dev/preview/production each need their own value, or sessions from one won't validate in another). |
 | `OPENROUTER_API_KEY` | `src/lib/ai/openrouter.ts` | AI text matching/embedding provider key. |
 | `BLOB_READ_WRITE_TOKEN` | `src/app/api/upload/route.ts` (`@vercel/blob/client`) | Vercel Blob store token for post image uploads. |
 
 Only `@mju.ac.kr` Google accounts can sign in -- enforced server-side in `src/lib/auth/domain.ts` / the NextAuth `signIn` callback, not just hidden in the UI.
+
+### Database
+
+`Next.js -> Prisma -> Supabase PostgreSQL`. Prisma 7 requires an explicit driver adapter (`@prisma/adapter-pg`, wrapping `pg`/node-postgres) instead of a built-in URL-only connector -- see `src/lib/db/prisma.ts`. Prisma Migrate reads its connection from `prisma7.config.ts`, not from `schema.prisma` (Prisma 7 removed `url`/`directUrl` from the schema file itself).
 
 ## Getting Started
 
