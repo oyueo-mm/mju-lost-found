@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import type { PostType } from "@/lib/posts/schema";
+import { saveImageEmbedding } from "@/lib/ai/vectorSearch";
 import { deleteObjectSafely, publicUrlFor } from "./supabaseAdmin";
 import { parseImagePathname } from "./pathname";
 
@@ -59,6 +60,17 @@ export async function setPostImage(
     await deleteObjectSafely(previousUrl);
   }
 
+  // Phase 15-2: image-embedding computation is deliberately NOT called
+  // from here. This module (and the /api/posts/[id]/image route that
+  // calls it) has no SigLIP/onnxruntime files in its Vercel function
+  // bundle -- adding them here was tried first and confirmed (via a real
+  // deployment) to push the Hobby plan's 12-Serverless-Function cap, the
+  // same class of problem Phase 13-2 hit for text search. Unlike that
+  // case, there's no read-time fetch-delegation available (this *is* the
+  // write path) -- so the caller (the API route) triggers embedding via an
+  // internal request to PUT /api/posts/[id], which already carries the
+  // model files for its own (text) embedding work. See that route's PUT
+  // handler and next.config.ts's comment.
   return { kind: "ok", data: { imageUrl: updated.imageUrl! } };
 }
 
@@ -76,6 +88,10 @@ export async function clearPostImage(
 
   const previousUrl = existing.imageUrl;
   await writeImageUrl(type, id, null);
+  // No image left to embed -- unlike setPostImage's best-effort call
+  // above, this is a plain, always-succeeds column write (no model
+  // involved), so it isn't wrapped in a try/catch of its own.
+  await saveImageEmbedding(type, id, null);
 
   if (previousUrl) {
     await deleteObjectSafely(previousUrl);

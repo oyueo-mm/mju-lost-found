@@ -3,7 +3,7 @@ import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { deleteObjectSafely } from "@/lib/images/supabaseAdmin";
 import { EMBEDDING_INPUT_FIELDS, embedPostBestEffort } from "@/lib/ai/postEmbedding";
 import { getEmbeddingProvider } from "@/lib/ai/embedding";
-import { findPostsBySemanticQuery } from "@/lib/ai/vectorSearch";
+import { findPostsBySemanticQuery, findSimilarPostsByImage } from "@/lib/ai/vectorSearch";
 import {
   FoundPostStatus as PrismaFoundPostStatus,
   LostPostStatus as PrismaLostPostStatus,
@@ -65,11 +65,16 @@ export type LostPostDTO = {
   createdAt: Date;
   updatedAt: Date;
   author: Author;
-  // Phase 12: only ever set on a semantic-search result (normalizeScore()'s
-  // 0-1 scale, same as Match.score) -- absent (never present-but-null) on
-  // every other DTO-producing path (list/get/create/update, keyword
-  // search), so a plain keyword result is never mistaken for having been
-  // similarity-ranked.
+  // Phase 12/15-2: only ever set on a semantic-search or image-similarity
+  // result (normalizeScore()'s 0-1 scale, same as Match.score) -- absent
+  // (never present-but-null) on every other DTO-producing path (list/get/
+  // create/update, keyword search), so a plain keyword result is never
+  // mistaken for having been similarity-ranked. Which of the two it means
+  // is purely which caller populated it (searchPostsSemantic's text
+  // similarity, or findSimilarPostsByImageForDisplay's image similarity) --
+  // the UI is what's responsible for labeling it correctly ("검색 유사도"
+  // vs "이미지 유사도", see PostCard's scoreLabel prop), never this field
+  // itself.
   score?: number;
 };
 
@@ -620,4 +625,62 @@ export async function searchPosts({
   if (type === "lost") return listLostPosts({ q, ...params });
   if (type === "found") return listFoundPosts({ q, ...params });
   return searchAllPosts({ q, ...params });
+}
+
+// ---------- Image similarity search (Phase 15-2) ----------
+
+// Matches SEMANTIC_SEARCH_TOP_K's precedent (Phase 12): the AI-ranking
+// list this feeds is a capped top-K recommendation, not a paginated "all
+// matching results" set -- there is no pagination UI for it at all (see
+// the post detail page), only a fixed small card grid, so a separate,
+// smaller display cap is applied on top of it.
+const IMAGE_SIMILARITY_TOP_K = 10;
+// How many cards actually render on the post detail page -- kept well
+// below IMAGE_SIMILARITY_TOP_K so "이 사진과 비슷한 게시물" stays a compact
+// strip, not a second full results page, regardless of how many candidates
+// exist.
+const IMAGE_SIMILARITY_DISPLAY_LIMIT = 6;
+
+// Post-detail-page counterpart to searchPostsSemantic() above: given a
+// post that already has an image (and, best-effort, an imageEmbedding --
+// see embedPostImageBestEffort()), finds visually similar posts on the
+// *other* board (Lost's image -> Found candidates, Found's image -> Lost
+// candidates; see findSimilarPostsByImage()'s own comment for why never
+// the same board) and returns them as fully-hydrated DTOs with `score` set
+// to the image-similarity value. Returns an empty array -- never throws --
+// when the source post has no imageEmbedding yet or there are no
+// candidates; the caller (post/[id]/page.tsx) treats both the same way:
+// simply don't render the section, matching this phase's explicit "이미지
+// embedding이 아직 생성되지 않은 경우에도 빈 AI 섹션을 표시하지 않는다"
+// requirement.
+export async function findSimilarPostsByImageForDisplay(
+  sourceType: PostType,
+  sourcePostId: number,
+): Promise<PostDTO[]> {
+  const targetType: PostType = sourceType === "lost" ? "found" : "lost";
+  const ranked = await findSimilarPostsByImage(sourceType, sourcePostId, IMAGE_SIMILARITY_TOP_K);
+  if (ranked.length === 0) return [];
+
+  const scoreById = new Map(ranked.map((r) => [r.id, r.score]));
+  const ids = ranked.map((r) => r.id);
+  const rows =
+    targetType === "lost"
+      ? await prisma.lostPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT } } })
+      : await prisma.foundPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT } } });
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+
+  // Re-order to match the similarity ranking (findMany({id:{in}}) doesn't
+  // preserve it) and drop any id whose row vanished between the two
+  // queries -- same reasoning as searchPostsSemantic() above.
+  return ids
+    .map((id) => rowById.get(id))
+    .filter((row): row is NonNullable<typeof row> => row !== undefined)
+    .map((row) => {
+      const dto =
+        targetType === "lost"
+          ? toLostPostDTO(row as Parameters<typeof toLostPostDTO>[0])
+          : toFoundPostDTO(row as Parameters<typeof toFoundPostDTO>[0]);
+      return { ...dto, score: scoreById.get(row.id) };
+    })
+    .slice(0, IMAGE_SIMILARITY_DISPLAY_LIMIT);
 }

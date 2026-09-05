@@ -7,7 +7,18 @@ function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium" }).format(date);
 }
 
-export function PostCard({ post }: { post: PostDTO }) {
+type PostCardProps = {
+  post: PostDTO;
+  // Phase 15-2: the same `post.score` field is reused by two different
+  // similarity contexts (Phase 12's text search, Phase 15-2's image
+  // similarity) that must never read as the same claim -- "검색 유사도"
+  // (this card matched your search terms) vs "이미지 유사도" (this card's
+  // photo looks visually similar). Defaulting to the original Phase 12
+  // wording keeps every existing call site (search results) unchanged.
+  scoreLabel?: string;
+};
+
+export function PostCard({ post, scoreLabel = "검색 유사도" }: PostCardProps) {
   return (
     <Link
       href={`/post/${post.id}?type=${post.type}`}
@@ -42,15 +53,16 @@ export function PostCard({ post }: { post: PostDTO }) {
           <span>{post.location}</span>
           <span>{formatDate(post.createdAt)}</span>
         </div>
-        {/* Phase 12: only present on an AI semantic search result -- a
-            plain keyword-search/list result never carries `score`, so
-            this never shows up outside that one context. Labeled "검색
-            유사도" (search similarity), not "AI 유사도" like MatchPanel's
+        {/* Phase 12/15-2: only present on a similarity-ranked result (text
+            search or image similarity) -- a plain keyword-search/list
+            result never carries `score`, so this never shows up outside
+            those contexts. Never labeled "AI 유사도" like MatchPanel's
             confirmed-match score, so it's never mistaken for a matching
-            confirmation -- this is only ever a search ranking hint. */}
+            confirmation -- this is only ever a search/candidate ranking
+            hint (see scoreLabel's own comment above). */}
         {typeof post.score === "number" && (
           <span className="text-xs text-zinc-400 dark:text-zinc-500">
-            검색 유사도 {Math.round(post.score * 100)}%
+            {scoreLabel} {Math.round(post.score * 100)}%
           </span>
         )}
       </div>

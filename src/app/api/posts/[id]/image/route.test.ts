@@ -6,6 +6,12 @@ import { jsonError } from "@/lib/posts/response";
 const requireUserForApi = vi.fn();
 const setPostImage = vi.fn();
 const clearPostImage = vi.fn();
+// Phase 15-2: this route triggers image-embedding computation via a real
+// internal HTTP request (see its own comment for why -- Vercel
+// function-bundle-size reasons) rather than importing anything
+// embedding-related directly, so the only new thing to mock/assert here
+// is the global fetch call itself, never a model/AI collaborator.
+const fetchMock = vi.fn();
 
 vi.mock("@/lib/posts/http", async () => {
   const response = await import("@/lib/posts/response");
@@ -20,6 +26,8 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  fetchMock.mockResolvedValue({ ok: true });
+  vi.stubGlobal("fetch", fetchMock);
 });
 
 describe("POST /api/posts/[id]/image", () => {
@@ -51,6 +59,7 @@ describe("POST /api/posts/[id]/image", () => {
     );
 
     expect(res.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rejects changing someone else's post image", async () => {
@@ -66,6 +75,7 @@ describe("POST /api/posts/[id]/image", () => {
     );
 
     expect(res.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("attaches the image for the owner", async () => {
@@ -84,6 +94,44 @@ describe("POST /api/posts/[id]/image", () => {
     expect(setPostImage).toHaveBeenCalledWith("lost", 1, sessionUser.id, {
       path: "posts/lost/1/y.jpg",
     });
+  });
+
+  // Phase 15-2: only a successful attach triggers the internal
+  // image-embedding request -- never for a rejected one (already covered
+  // by the `not.toHaveBeenCalled()` assertions above).
+  it("triggers the internal image-embedding request (PUT /api/posts/[id]) after a successful attach", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    setPostImage.mockResolvedValueOnce({ kind: "ok", data: { imageUrl: "https://x/y.jpg" } });
+
+    await POST(
+      new NextRequest("http://localhost/api/posts/1/image?type=lost", {
+        method: "POST",
+        headers: { cookie: "authjs.session-token=abc123" },
+        body: JSON.stringify({ path: "posts/lost/1/y.jpg" }),
+      }),
+      params("1"),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost/api/posts/1?type=lost",
+      expect.objectContaining({ method: "PUT", headers: { cookie: "authjs.session-token=abc123" } }),
+    );
+  });
+
+  it("still returns the successful attach response even if the embedding trigger request fails", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    setPostImage.mockResolvedValueOnce({ kind: "ok", data: { imageUrl: "https://x/y.jpg" } });
+    fetchMock.mockRejectedValueOnce(new Error("network error"));
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/posts/1/image?type=lost", {
+        method: "POST",
+        body: JSON.stringify({ path: "posts/lost/1/y.jpg" }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(200);
   });
 });
 

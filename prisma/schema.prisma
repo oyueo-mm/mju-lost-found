@@ -138,6 +138,14 @@ model LostPost {
   // column) simply doesn't participate in similarity search, rather than
   // being disallowed from existing at all.
   embedding   Unsupported("vector(768)")?
+  // pgvector, 768-dim (Xenova/siglip-base-patch16-224's vision-tower output
+  // size -- see docs/IMAGE_EMBEDDING_POC.md). A deliberately separate
+  // column from `embedding` above, never the same vector space -- text and
+  // image embeddings come from different models and are never compared to
+  // each other. Same Unsupported/nullable/$queryRaw-only treatment as
+  // `embedding`: no image yet, or image-embedding generation failed,
+  // simply means this post doesn't participate in image similarity search.
+  imageEmbedding Unsupported("vector(768)")?
 
   matches          Match[]
   directChatRooms  ChatRoom[] @relation("ChatRoomDirectLostPost")
@@ -163,6 +171,8 @@ model FoundPost {
   updatedAt   DateTime         @updatedAt @map("updated_at")
   // See LostPost.embedding's comment -- identical shape/reasoning.
   embedding   Unsupported("vector(768)")?
+  // See LostPost.imageEmbedding's comment -- identical shape/reasoning.
+  imageEmbedding Unsupported("vector(768)")?
 
   matches          Match[]
   directChatRooms  ChatRoom[] @relation("ChatRoomDirectFoundPost")

@@ -5,8 +5,14 @@ const $executeRaw = vi.fn();
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: { $queryRaw, $executeRaw } }));
 
-const { findSimilarPosts, findPostsBySemanticQuery, saveEmbedding, EmbeddingNotAvailableError } =
-  await import("./vectorSearch");
+const {
+  findSimilarPosts,
+  findPostsBySemanticQuery,
+  saveEmbedding,
+  EmbeddingNotAvailableError,
+  findSimilarPostsByImage,
+  saveImageEmbedding,
+} = await import("./vectorSearch");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -252,6 +258,92 @@ describe("saveEmbedding", () => {
 
   it("clears an embedding (null) instead of writing a vector literal", async () => {
     await saveEmbedding("lost", 1, null);
+
+    const [call] = $executeRaw.mock.calls;
+    expect(boundValues(call)).toEqual([null, 1]);
+  });
+});
+
+// Phase 15-2: image similarity search. Mirrors findSimilarPosts()'s own
+// test suite -- same cross-board CTE shape, `imageEmbedding` column in
+// place of `embedding`, same normalizeScore() conversion.
+describe("findSimilarPostsByImage", () => {
+  it("searches FoundPost.imageEmbedding (parameterized) when the source is a LostPost", async () => {
+    $queryRaw.mockResolvedValueOnce([{ id: 5, similarity: 0.6 }]);
+
+    const results = await findSimilarPostsByImage("lost", 1, 10);
+
+    expect(results).toEqual([{ id: 5, score: expect.closeTo((0.6 + 1) / 2, 5) }]);
+    const [call] = $queryRaw.mock.calls;
+    expect(boundValues(call)).toEqual([1, 10]); // [sourcePostId, topK]
+    const sqlText = (call[0] as TemplateStringsArray).join("?");
+    expect(sqlText).toContain('FROM "FoundPost"');
+    expect(sqlText).toContain('"imageEmbedding"');
+    expect(sqlText).not.toContain(" embedding "); // never the text column
+  });
+
+  it("searches LostPost.imageEmbedding when the source is a FoundPost", async () => {
+    $queryRaw.mockResolvedValueOnce([{ id: 9, similarity: 0.2 }]);
+
+    await findSimilarPostsByImage("found", 3, 10);
+
+    const [call] = $queryRaw.mock.calls;
+    const sqlText = (call[0] as TemplateStringsArray).join("?");
+    expect(sqlText).toContain('FROM "LostPost"');
+  });
+
+  it("excludes rows (both source and candidate) with a NULL imageEmbedding", async () => {
+    $queryRaw.mockResolvedValueOnce([]);
+
+    const results = await findSimilarPostsByImage("lost", 1, 10);
+
+    expect(results).toEqual([]);
+    const [call] = $queryRaw.mock.calls;
+    const sqlText = (call[0] as TemplateStringsArray).join("?");
+    expect(sqlText).toContain('"imageEmbedding" IS NOT NULL');
+  });
+
+  it("returns an empty array (not a thrown error) when the source post has no imageEmbedding yet", async () => {
+    // Unlike findSimilarPosts(), there is no EmbeddingNotAvailableError
+    // disambiguation here -- the caller already knows whether the post has
+    // an image before ever calling this (see post/[id]/page.tsx).
+    $queryRaw.mockResolvedValueOnce([]);
+
+    await expect(findSimilarPostsByImage("lost", 1, 10)).resolves.toEqual([]);
+  });
+
+  it("respects the topK limit", async () => {
+    $queryRaw.mockResolvedValueOnce([]);
+
+    await findSimilarPostsByImage("lost", 1, 4);
+
+    const [call] = $queryRaw.mock.calls;
+    expect(boundValues(call)).toEqual([1, 4]);
+  });
+});
+
+describe("saveImageEmbedding", () => {
+  it("writes a vector to LostPost.imageEmbedding", async () => {
+    await saveImageEmbedding("lost", 1, [0.1, 0.2, 0.3]);
+
+    const [call] = $executeRaw.mock.calls;
+    const sqlText = (call[0] as TemplateStringsArray).join("?");
+    expect(sqlText).toContain('UPDATE "LostPost"');
+    expect(sqlText).toContain('"imageEmbedding"');
+    expect(boundValues(call)).toEqual(["[0.1,0.2,0.3]", 1]);
+  });
+
+  it("writes a vector to FoundPost.imageEmbedding", async () => {
+    await saveImageEmbedding("found", 2, [0.5]);
+
+    const [call] = $executeRaw.mock.calls;
+    const sqlText = (call[0] as TemplateStringsArray).join("?");
+    expect(sqlText).toContain('UPDATE "FoundPost"');
+    expect(sqlText).toContain('"imageEmbedding"');
+  });
+
+  it("clears an image embedding (null) instead of writing a vector literal", async () => {
+    await saveImageEmbedding("lost", 1, null);
 
     const [call] = $executeRaw.mock.calls;
     expect(boundValues(call)).toEqual([null, 1]);

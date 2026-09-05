@@ -173,3 +173,67 @@ export async function saveEmbedding(
     await prisma.$executeRaw`UPDATE "FoundPost" SET embedding = ${literal}::vector WHERE id = ${id}`;
   }
 }
+
+// ---------- Image similarity (Phase 15-2) ----------
+
+// Same shape/reasoning as saveEmbedding() above, writing the separate
+// "imageEmbedding" column instead -- only ever called from
+// src/lib/images/service.ts (setPostImage/clearPostImage), never from
+// posts/service.ts, since attaching/replacing/removing a post's image is
+// exclusively that module's job (see /api/posts/[id]/image).
+export async function saveImageEmbedding(
+  type: PostType,
+  id: number,
+  vector: number[] | null,
+): Promise<void> {
+  const literal = vector ? `[${vector.join(",")}]` : null;
+  if (type === "lost") {
+    await prisma.$executeRaw`UPDATE "LostPost" SET "imageEmbedding" = ${literal}::vector WHERE id = ${id}`;
+  } else {
+    await prisma.$executeRaw`UPDATE "FoundPost" SET "imageEmbedding" = ${literal}::vector WHERE id = ${id}`;
+  }
+}
+
+// Cross-board only: a Lost post's image is compared against FoundPost's
+// imageEmbedding column and vice versa, never against its own board (see
+// docs/IMAGE_EMBEDDING_POC.md section 11 / this phase's spec -- an
+// AirPods lost by one student should surface AirPods someone *found*, not
+// other lost-AirPods posts). Mirrors findSimilarPosts()'s CTE shape
+// exactly, with imageEmbedding in place of embedding -- but unlike that
+// function, a missing *source* imageEmbedding is not disambiguated from
+// "no candidates" with a thrown error: the caller (the post detail page)
+// already knows whether this post has an image at all before ever calling
+// this, and simply doesn't render the "이 사진과 비슷한 게시물" section
+// when the result is empty (see src/app/(main)/post/[id]/page.tsx) --
+// there is no separate "AI 매칭 사용 불가" UI state to feed here the way
+// src/lib/match/candidates.ts needs EmbeddingNotAvailableError for.
+export async function findSimilarPostsByImage(
+  sourceType: PostType,
+  sourcePostId: number,
+  topK: number,
+): Promise<VectorSearchResult[]> {
+  const rows =
+    sourceType === "lost"
+      ? await prisma.$queryRaw<{ id: number; similarity: number }[]>`
+          WITH source AS (
+            SELECT "imageEmbedding" FROM "LostPost" WHERE id = ${sourcePostId}
+          )
+          SELECT fp.id AS id, 1 - (fp."imageEmbedding" <=> source."imageEmbedding") AS similarity
+          FROM "FoundPost" fp, source
+          WHERE fp."imageEmbedding" IS NOT NULL AND source."imageEmbedding" IS NOT NULL
+          ORDER BY fp."imageEmbedding" <=> source."imageEmbedding"
+          LIMIT ${topK}
+        `
+      : await prisma.$queryRaw<{ id: number; similarity: number }[]>`
+          WITH source AS (
+            SELECT "imageEmbedding" FROM "FoundPost" WHERE id = ${sourcePostId}
+          )
+          SELECT lp.id AS id, 1 - (lp."imageEmbedding" <=> source."imageEmbedding") AS similarity
+          FROM "LostPost" lp, source
+          WHERE lp."imageEmbedding" IS NOT NULL AND source."imageEmbedding" IS NOT NULL
+          ORDER BY lp."imageEmbedding" <=> source."imageEmbedding"
+          LIMIT ${topK}
+        `;
+
+  return rows.map((row) => ({ id: row.id, score: normalizeScore(row.similarity) }));
+}

@@ -3,9 +3,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth/session";
-import { getFoundPost, getLostPost } from "@/lib/posts/service";
+import { findSimilarPostsByImageForDisplay, getFoundPost, getLostPost, type PostDTO } from "@/lib/posts/service";
 import { FOUND_STATUSES, LOST_STATUSES, postTypeSchema } from "@/lib/posts/schema";
 import { DeletePostButton } from "@/components/post/DeletePostButton";
+import { PostCard } from "@/components/post/PostCard";
 import { StatusChangeControl } from "@/components/post/StatusChangeControl";
 import { DirectChatButton } from "@/components/chat/DirectChatButton";
 import { listMatchesForPost } from "@/lib/match/service";
@@ -42,6 +43,22 @@ export default async function PostDetailPage({
   const isOwner = currentUser?.id === post.author.id;
   const dateLabel = post.type === "lost" ? "분실 일시" : "습득 일시";
   const dateValue = post.type === "lost" ? post.lostAt : post.foundAt;
+
+  // Phase 15-2: public, best-effort, no auth gate -- same "공개 콘텐츠는
+  // 로그인 여부와 무관하게 그대로" policy as the rest of this page (isOwner
+  // only decides *write*-adjacent UI, never whether this section renders).
+  // A post with no image, or whose image-embedding hasn't been computed
+  // yet (best-effort -- see embedPostImageBestEffort()), simply gets an
+  // empty array here; no distinct "AI 불가" state is shown for it (see
+  // findSimilarPostsByImageForDisplay's own comment).
+  let imageSimilarPosts: PostDTO[] = [];
+  if (post.imageUrl) {
+    try {
+      imageSimilarPosts = await findSimilarPostsByImageForDisplay(type, post.id);
+    } catch (error) {
+      console.error("Failed to load image-similar posts", error);
+    }
+  }
 
   // Match UI only ever needs to appear on a post the viewer owns (see
   // MatchPanel's comment) -- so existing-match data is only fetched at
@@ -193,6 +210,28 @@ export default async function PostDetailPage({
             <MatchPanel postType={type} postId={post.id} initialMatches={matchPanelData.matches} />
           )
         ))}
+
+      {/* Phase 15-2: only when there's an image AND at least one visually
+          similar post on the other board -- never an empty section, never
+          shown for an image-less post. The disclaimer line is required
+          copy, not optional decoration: this is a candidate search, never
+          an "same item" claim (see docs/IMAGE_EMBEDDING_POC.md section 9
+          and this phase's spec). */}
+      {imageSimilarPosts.length > 0 && (
+        <div className="flex flex-col gap-3 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+          <div className="flex flex-col gap-1">
+            <h2 className="font-medium text-zinc-900 dark:text-zinc-50">이 사진과 비슷한 게시물</h2>
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">
+              이미지가 시각적으로 비슷한 게시물을 보여줍니다. 실제 동일 물건 여부를 보장하지 않습니다.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {imageSimilarPosts.map((p) => (
+              <PostCard key={`${p.type}-${p.id}`} post={p} scoreLabel="이미지 유사도" />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

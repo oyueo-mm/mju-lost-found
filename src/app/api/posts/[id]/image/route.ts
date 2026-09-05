@@ -54,6 +54,38 @@ export const POST = withErrorHandling(
     }
 
     const result = await setPostImage(parsedParams.type, parsedParams.id, auth.user.id, parsed.data);
+
+    // Phase 15-2: this route's own Vercel function bundle deliberately
+    // carries no ONNX runtime/model files (see next.config.ts's comment --
+    // adding them here was confirmed via a real deployment to exceed the
+    // Hobby plan's 12-Serverless-Function cap), so image-embedding
+    // computation is triggered via a real internal HTTP request to PUT
+    // /api/posts/[id] instead, which already has those files for its own
+    // (text) embedding work. Forwarding the incoming cookie header
+    // authenticates the internal call as the same user -- requireUserForApi()
+    // there re-checks ownership regardless. Best-effort: a failure here is
+    // logged but never turns an already-successful image attach into a
+    // failed response.
+    if (result.kind === "ok") {
+      try {
+        const embedUrl = `${request.nextUrl.origin}/api/posts/${parsedParams.id}?type=${parsedParams.type}`;
+        const embedRes = await fetch(embedUrl, {
+          method: "PUT",
+          headers: { cookie: request.headers.get("cookie") ?? "" },
+        });
+        if (!embedRes.ok) {
+          console.error(
+            `Image embedding trigger responded with ${embedRes.status} for ${parsedParams.type} post ${parsedParams.id}`,
+          );
+        }
+      } catch (error) {
+        console.error(
+          `Failed to trigger image embedding for ${parsedParams.type} post ${parsedParams.id}:`,
+          error,
+        );
+      }
+    }
+
     return imageResultToResponse(result);
   },
 );

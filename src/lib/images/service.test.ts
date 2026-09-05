@@ -4,9 +4,17 @@ const lostPost = { findUnique: vi.fn(), update: vi.fn() };
 const foundPost = { findUnique: vi.fn(), update: vi.fn() };
 const deleteObjectSafely = vi.fn();
 const publicUrlFor = vi.fn();
+const saveImageEmbedding = vi.fn();
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost } }));
 vi.mock("./supabaseAdmin", () => ({ deleteObjectSafely, publicUrlFor }));
+// Phase 15-2: saveImageEmbedding is a pure SQL column write (no model
+// involved), so it's still called directly from here (clearPostImage) --
+// but embedPostImageBestEffort is deliberately NOT called from this
+// module anymore (see setPostImage's own comment: it's triggered via an
+// internal request to PUT /api/posts/[id] instead, for Vercel
+// function-bundle-size reasons), so it isn't mocked here at all.
+vi.mock("@/lib/ai/vectorSearch", () => ({ saveImageEmbedding }));
 
 const { clearPostImage, setPostImage } = await import("./service");
 
@@ -87,6 +95,7 @@ describe("setPostImage", () => {
 
     expect(deleteObjectSafely).not.toHaveBeenCalled();
   });
+
 });
 
 describe("clearPostImage", () => {
@@ -95,9 +104,10 @@ describe("clearPostImage", () => {
     const result = await clearPostImage("found", 1, 2);
     expect(result).toEqual({ kind: "forbidden" });
     expect(foundPost.update).not.toHaveBeenCalled();
+    expect(saveImageEmbedding).not.toHaveBeenCalled();
   });
 
-  it("nulls the imageUrl and deletes the storage object", async () => {
+  it("nulls the imageUrl, clears the image embedding, and deletes the storage object", async () => {
     foundPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x/y.jpg" });
     foundPost.update.mockResolvedValueOnce({ imageUrl: null });
 
@@ -105,6 +115,7 @@ describe("clearPostImage", () => {
 
     expect(result).toEqual({ kind: "ok", data: { imageUrl: null } });
     expect(foundPost.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { imageUrl: null } });
+    expect(saveImageEmbedding).toHaveBeenCalledWith("found", 1, null);
     expect(deleteObjectSafely).toHaveBeenCalledWith("https://x/y.jpg");
   });
 

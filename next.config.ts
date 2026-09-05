@@ -58,6 +58,17 @@ const nextConfig: NextConfig = {
   // is for those three pages to reach the embedding path via a
   // server-side fetch to /api/posts instead of importing it in-process, so
   // none of their own functions need these files at all.
+  // Phase 15-2 note: /api/posts/[id]/image (image attach/detach) was tried
+  // as a new key here first -- confirmed via a real Vercel deployment to
+  // push the Hobby plan's 12-Serverless-Function cap, the exact same class
+  // of problem Phase 13-2 hit for text search. The fix here: that route
+  // never computes an image embedding itself at all. Instead, it makes a
+  // real internal HTTP request to PUT /api/posts/[id] (see that route's
+  // own comment) -- which is not a new key, and whose function already
+  // carries these same files below (the `./models/**` glob already covers
+  // Xenova/siglip-base-patch16-224 too, since it's fetched into the same
+  // models/ directory -- see scripts/downloadModel.mjs). No new
+  // Serverless Function was needed for image search at all.
   outputFileTracingIncludes: {
     "/api/posts": ["./node_modules/onnxruntime-node/bin/napi-v6/linux/**", "./models/**"],
     "/api/posts/[id]": ["./node_modules/onnxruntime-node/bin/napi-v6/linux/**", "./models/**"],
