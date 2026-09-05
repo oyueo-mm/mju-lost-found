@@ -2,6 +2,8 @@ import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { deleteObjectSafely } from "@/lib/images/supabaseAdmin";
 import { EMBEDDING_INPUT_FIELDS, embedPostBestEffort } from "@/lib/ai/postEmbedding";
+import { getEmbeddingProvider } from "@/lib/ai/embedding";
+import { findPostsBySemanticQuery } from "@/lib/ai/vectorSearch";
 import {
   FoundPostStatus as PrismaFoundPostStatus,
   LostPostStatus as PrismaLostPostStatus,
@@ -11,6 +13,8 @@ import type {
   CreateFoundPostInput,
   CreateLostPostInput,
   PostListType,
+  PostType,
+  SearchMode,
   SortOption,
   UpdateFoundPostInput,
   UpdateLostPostInput,
@@ -61,6 +65,12 @@ export type LostPostDTO = {
   createdAt: Date;
   updatedAt: Date;
   author: Author;
+  // Phase 12: only ever set on a semantic-search result (normalizeScore()'s
+  // 0-1 scale, same as Match.score) -- absent (never present-but-null) on
+  // every other DTO-producing path (list/get/create/update, keyword
+  // search), so a plain keyword result is never mistaken for having been
+  // similarity-ranked.
+  score?: number;
 };
 
 export type FoundPostDTO = {
@@ -76,6 +86,7 @@ export type FoundPostDTO = {
   createdAt: Date;
   updatedAt: Date;
   author: Author;
+  score?: number;
 };
 
 export type PostDTO = LostPostDTO | FoundPostDTO;
@@ -488,14 +499,84 @@ async function searchAllPosts({
   };
 }
 
+// ---------- Semantic search (Phase 12) ----------
+
+// Matches legacy ai/search.py::DEFAULT_TOP_K exactly -- this app's one
+// other free-text-query ranking function (the AI-candidate list per post,
+// src/lib/match/candidates.ts) uses a different constant (TOP_K = 5) for a
+// different purpose (candidate *suggestions* for one specific post, not a
+// general search box), so the two aren't unified into one shared value.
+const SEMANTIC_SEARCH_TOP_K = 10;
+
+// mode=semantic's counterpart to listLostPosts()/listFoundPosts() --
+// type is narrowed to PostType (never "all") by listQuerySchema's
+// superRefine before this is ever called (see searchPosts() below), so
+// there is exactly one board's embedding column to rank against; no
+// cross-table UNION or in-memory re-merge like searchAllPosts() needs.
+//
+// Deliberately top-K only, not a true DB-wide paginated count (§14 of
+// docs/AI_SEMANTIC_SEARCH_DESIGN.md: "top-K 기반으로 동작한다", no
+// threshold): `total`/`totalPages` reflect the top-K result set itself,
+// not every embedded post that resembles the query even faintly. Page 2+
+// of a semantic search simply has no more results past the K best
+// matches, which is the intended behavior, not a bug.
+async function searchPostsSemantic(
+  type: PostType,
+  query: string,
+  { page, limit, ...filters }: ListParams,
+): Promise<PagedResult<PostDTO>> {
+  const vector = await getEmbeddingProvider().embed(query);
+  const ranked = await findPostsBySemanticQuery(type, vector, SEMANTIC_SEARCH_TOP_K, filters);
+
+  if (ranked.length === 0) {
+    return { items: [], page, limit, total: 0, totalPages: 1 };
+  }
+
+  const scoreById = new Map(ranked.map((r) => [r.id, r.score]));
+  const ids = ranked.map((r) => r.id);
+  const rows =
+    type === "lost"
+      ? await prisma.lostPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT } } })
+      : await prisma.foundPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT } } });
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+
+  // Re-order to match the similarity ranking -- `findMany({id:{in}})` does
+  // not preserve the input array's order. A missing row here means the
+  // post was deleted in the gap between the vector search and this fetch;
+  // it's simply dropped, not an error (the same "best-effort, never
+  // surfaced as a failure" spirit as embedPostBestEffort() elsewhere in
+  // this file, applied to a read path instead of a write).
+  const items: PostDTO[] = ids
+    .map((id) => rowById.get(id))
+    .filter((row): row is NonNullable<typeof row> => row !== undefined)
+    .map((row) => {
+      const dto = type === "lost" ? toLostPostDTO(row as Parameters<typeof toLostPostDTO>[0]) : toFoundPostDTO(row as Parameters<typeof toFoundPostDTO>[0]);
+      return { ...dto, score: scoreById.get(row.id) };
+    });
+
+  const total = items.length;
+  const skip = (page - 1) * limit;
+  return { items: items.slice(skip, skip + limit), page, limit, total, totalPages: totalPagesFor(total, limit) };
+}
+
 // The single entry point /api/posts (and /search) call: dispatches to the
-// per-board listers for type=lost/found, or the merged search above for
-// type=all.
+// per-board listers for type=lost/found, the merged search for type=all,
+// or (Phase 12) semantic search when mode=semantic. listQuerySchema's
+// superRefine already guarantees mode=semantic never coexists with
+// type=all and always carries a non-empty q, so no re-validation happens
+// here -- this function trusts its caller the same way every other
+// service function in this file trusts an already-zod-validated input.
 export async function searchPosts({
   type,
+  mode = "keyword",
+  q,
   ...params
-}: ListParams & { type: PostListType }): Promise<PagedResult<PostDTO>> {
-  if (type === "lost") return listLostPosts(params);
-  if (type === "found") return listFoundPosts(params);
-  return searchAllPosts(params);
+}: ListParams & { type: PostListType; mode?: SearchMode }): Promise<PagedResult<PostDTO>> {
+  if (mode === "semantic") {
+    // q is guaranteed non-empty here by listQuerySchema's superRefine.
+    return searchPostsSemantic(type as PostType, q as string, params);
+  }
+  if (type === "lost") return listLostPosts({ q, ...params });
+  if (type === "found") return listFoundPosts({ q, ...params });
+  return searchAllPosts({ q, ...params });
 }

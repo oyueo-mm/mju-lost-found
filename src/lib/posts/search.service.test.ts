@@ -2,12 +2,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const lostPost = { findMany: vi.fn(), count: vi.fn() };
 const foundPost = { findMany: vi.fn(), count: vi.fn() };
+// Phase 12: semantic search's two collaborators, mocked wholesale --
+// never loading the real ~106MB model or issuing a real $queryRaw in this
+// fast unit-test suite, same convention as postEmbedding's own tests.
+const embed = vi.fn();
+const findPostsBySemanticQuery = vi.fn();
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost } }));
 vi.mock("@/generated/prisma/client", () => ({
   LostPostStatus: { SEARCHING: "SEARCHING", FOUND: "FOUND" },
   FoundPostStatus: { KEEPING: "KEEPING", COMPLETED: "COMPLETED" },
 }));
+vi.mock("@/lib/ai/embedding", () => ({ getEmbeddingProvider: () => ({ embed }) }));
+vi.mock("@/lib/ai/vectorSearch", () => ({ findPostsBySemanticQuery }));
 
 const { listLostPosts, listFoundPosts, searchPosts } = await import("./service");
 
@@ -228,5 +235,109 @@ describe("searchPosts (type dispatch, including type=all merge)", () => {
 
     const keys = result.items.map((p) => `${p.type}-${p.id}`);
     expect(new Set(keys).size).toBe(result.items.length); // no collision once type is included
+  });
+});
+
+// Phase 12: semantic search dispatch through the same searchPosts() entry
+// point every caller (the API route, /search) already uses.
+describe("searchPosts -- mode=semantic (Phase 12)", () => {
+  it("defaults to keyword search when mode is omitted (no regression)", async () => {
+    await searchPosts({ type: "lost", page: 1, limit: 20 });
+
+    expect(embed).not.toHaveBeenCalled();
+    expect(findPostsBySemanticQuery).not.toHaveBeenCalled();
+    expect(lostPost.findMany).toHaveBeenCalled();
+  });
+
+  it("computes a query embedding and calls findPostsBySemanticQuery, never the keyword path", async () => {
+    embed.mockResolvedValueOnce([0.1, 0.2, 0.3]);
+    findPostsBySemanticQuery.mockResolvedValueOnce([]);
+
+    await searchPosts({ type: "lost", mode: "semantic", q: "검은색 에어팟", page: 1, limit: 20 });
+
+    expect(embed).toHaveBeenCalledWith("검은색 에어팟");
+    expect(findPostsBySemanticQuery).toHaveBeenCalledWith("lost", [0.1, 0.2, 0.3], 10, expect.any(Object));
+    expect(lostPost.findMany).not.toHaveBeenCalled();
+  });
+
+  it("returns matched posts in similarity-ranked order with their score attached", async () => {
+    embed.mockResolvedValueOnce([0.1]);
+    findPostsBySemanticQuery.mockResolvedValueOnce([
+      { id: 2, score: 0.9 },
+      { id: 1, score: 0.4 },
+    ]);
+    // findMany({id:{in:[2,1]}}) -- deliberately returned out of that order,
+    // to prove the service re-sorts by the similarity ranking rather than
+    // trusting the DB's own row order.
+    lostPost.findMany.mockResolvedValueOnce([
+      row({ id: 1, title: "지갑 분실" }),
+      row({ id: 2, title: "에어팟 분실" }),
+    ]);
+
+    const result = await searchPosts({ type: "lost", mode: "semantic", q: "에어팟", page: 1, limit: 20 });
+
+    expect(result.items.map((p) => p.id)).toEqual([2, 1]);
+    expect(result.items[0].score).toBeCloseTo(0.9);
+    expect(result.items[1].score).toBeCloseTo(0.4);
+    expect(result.total).toBe(2);
+  });
+
+  it("passes category/status/location/dateFrom/dateTo through to findPostsBySemanticQuery", async () => {
+    embed.mockResolvedValueOnce([0.1]);
+    findPostsBySemanticQuery.mockResolvedValueOnce([]);
+    const dateFrom = new Date("2026-01-01");
+    const dateTo = new Date("2026-01-31");
+
+    await searchPosts({
+      type: "found",
+      mode: "semantic",
+      q: "지갑",
+      page: 1,
+      limit: 20,
+      category: "지갑",
+      location: "정문",
+      status: "보관 중",
+      dateFrom,
+      dateTo,
+    });
+
+    expect(findPostsBySemanticQuery).toHaveBeenCalledWith(
+      "found",
+      [0.1],
+      10,
+      expect.objectContaining({ category: "지갑", location: "정문", status: "보관 중", dateFrom, dateTo }),
+    );
+  });
+
+  it("returns an empty page (not an error) when nothing matches", async () => {
+    embed.mockResolvedValueOnce([0.1]);
+    findPostsBySemanticQuery.mockResolvedValueOnce([]);
+
+    const result = await searchPosts({ type: "lost", mode: "semantic", q: "존재하지않는물건", page: 1, limit: 20 });
+
+    expect(result).toEqual({ items: [], page: 1, limit: 20, total: 0, totalPages: 1 });
+    expect(lostPost.findMany).not.toHaveBeenCalled(); // no point fetching rows for zero ids
+  });
+
+  it("propagates an embedding provider failure instead of silently returning an empty result", async () => {
+    embed.mockRejectedValueOnce(new Error("model unavailable"));
+
+    await expect(
+      searchPosts({ type: "lost", mode: "semantic", q: "에어팟", page: 1, limit: 20 }),
+    ).rejects.toThrow("model unavailable");
+  });
+
+  it("drops a result whose post was deleted between the vector search and the row fetch, without erroring", async () => {
+    embed.mockResolvedValueOnce([0.1]);
+    findPostsBySemanticQuery.mockResolvedValueOnce([
+      { id: 1, score: 0.9 },
+      { id: 2, score: 0.5 }, // this one will "not be found" below
+    ]);
+    lostPost.findMany.mockResolvedValueOnce([row({ id: 1 })]); // id 2 missing
+
+    const result = await searchPosts({ type: "lost", mode: "semantic", q: "에어팟", page: 1, limit: 20 });
+
+    expect(result.items.map((p) => p.id)).toEqual([1]);
+    expect(result.total).toBe(1);
   });
 });

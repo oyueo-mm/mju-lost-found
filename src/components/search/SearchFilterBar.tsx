@@ -1,9 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { CATEGORIES } from "@/lib/posts/schema";
-import type { PostListType, SortOption } from "@/lib/posts/schema";
+import { CATEGORIES, SEARCH_MODES } from "@/lib/posts/schema";
+import type { PostListType, SearchMode, SortOption } from "@/lib/posts/schema";
 
 type StatusOption = { value: string; label: string };
 
@@ -28,20 +29,47 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "oldest", label: "오래된순" },
 ];
 
+// Legacy pages/1,2's exact two modes (st.radio(["키워드 검색", "AI 의미
+// 검색"])) -- see docs/AI_SEMANTIC_SEARCH_DESIGN.md section 5. Reuses
+// SEARCH_MODES (posts/schema.ts) rather than redeclaring the two values.
+const MODE_LABELS: Record<SearchMode, string> = {
+  keyword: "키워드 검색",
+  semantic: "AI 의미 검색",
+};
+
 export function SearchFilterBar({ basePath, showTypeFilter = false, statusOptions }: SearchFilterBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const hasActiveFilters = ["q", "category", "location", "status", "sort"].some((key) =>
+  const hasActiveFilters = ["q", "category", "location", "status", "sort", "mode"].some((key) =>
     searchParams.get(key),
   );
 
+  // mode/type need to be tracked as component state (not left as plain
+  // uncontrolled defaultValue selects like the rest of this form) only
+  // because these two specific fields interact: mode=semantic is
+  // rejected by listQuerySchema whenever type=all (see its superRefine --
+  // there's no single pgvector column spanning both LostPost and
+  // FoundPost, so a "search everything" semantic query has nothing valid
+  // to rank against). Catching that combination here, before it ever
+  // reaches the server, avoids a submit that silently comes back with the
+  // wrong results instead of an explanation.
+  const [mode, setMode] = useState<SearchMode>((searchParams.get("mode") as SearchMode | null) ?? "keyword");
+  const [type, setType] = useState<PostListType>((searchParams.get("type") as PostListType | null) ?? "all");
+  // Only meaningful when showTypeFilter is true (/search) -- everywhere
+  // else (/lost, /found) `type` is fixed server-side to one board and
+  // never rendered as a selector at all, so this can never actually be
+  // true there regardless of this component's own `type` state.
+  const semanticBlockedByType = showTypeFilter && mode === "semantic" && type === "all";
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (semanticBlockedByType) return;
+
     const formData = new FormData(event.currentTarget);
     const params = new URLSearchParams();
 
-    for (const key of ["q", "type", "category", "location", "status", "sort"]) {
+    for (const key of ["q", "type", "category", "location", "status", "sort", "mode"]) {
       const value = formData.get(key);
       if (typeof value === "string" && value.trim() !== "") {
         params.set(key, value.trim());
@@ -63,20 +91,42 @@ export function SearchFilterBar({ basePath, showTypeFilter = false, statusOption
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+      <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-600 dark:text-zinc-400">
+        {SEARCH_MODES.map((m) => (
+          <label key={m} className="flex items-center gap-1.5">
+            <input
+              type="radio"
+              name="mode"
+              value={m}
+              checked={mode === m}
+              onChange={() => setMode(m)}
+            />
+            {MODE_LABELS[m]}
+          </label>
+        ))}
+      </div>
+
       <input
         name="q"
         type="text"
-        placeholder="검색어를 입력하세요"
+        placeholder={mode === "semantic" ? "예: 검은색 에어팟을 도서관에서 잃어버렸어요" : "검색어를 입력하세요"}
         defaultValue={searchParams.get("q") ?? ""}
         maxLength={100}
         className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-transparent"
       />
 
+      {semanticBlockedByType && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          AI 의미 검색은 분실물 또는 습득물 게시판을 선택한 경우에만 사용할 수 있습니다.
+        </p>
+      )}
+
       <div className="flex flex-wrap gap-3">
         {showTypeFilter && (
           <select
             name="type"
-            defaultValue={searchParams.get("type") ?? "all"}
+            value={type}
+            onChange={(e) => setType(e.target.value as PostListType)}
             className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-transparent"
           >
             {TYPE_OPTIONS.map((option) => (
@@ -141,7 +191,8 @@ export function SearchFilterBar({ basePath, showTypeFilter = false, statusOption
 
         <button
           type="submit"
-          className="ml-auto rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white dark:bg-zinc-50 dark:text-zinc-900"
+          disabled={semanticBlockedByType}
+          className="ml-auto rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900"
         >
           검색
         </button>

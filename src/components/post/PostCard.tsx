@@ -42,6 +42,17 @@ export function PostCard({ post }: { post: PostDTO }) {
           <span>{post.location}</span>
           <span>{formatDate(post.createdAt)}</span>
         </div>
+        {/* Phase 12: only present on an AI semantic search result -- a
+            plain keyword-search/list result never carries `score`, so
+            this never shows up outside that one context. Labeled "검색
+            유사도" (search similarity), not "AI 유사도" like MatchPanel's
+            confirmed-match score, so it's never mistaken for a matching
+            confirmation -- this is only ever a search ranking hint. */}
+        {typeof post.score === "number" && (
+          <span className="text-xs text-zinc-400 dark:text-zinc-500">
+            검색 유사도 {Math.round(post.score * 100)}%
+          </span>
+        )}
       </div>
     </Link>
   );

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { normalizeScore } from "./matching";
 import type { PostType } from "@/lib/posts/schema";
 
@@ -85,6 +86,73 @@ async function hasEmbedding(type: PostType, id: number): Promise<boolean> {
           SELECT (embedding IS NOT NULL) AS present FROM "FoundPost" WHERE id = ${id}
         `;
   return rows[0]?.present ?? false;
+}
+
+export type SemanticSearchFilters = {
+  category?: string;
+  location?: string;
+  // Korean status string (e.g. "찾는 중") -- already validated against the
+  // right board's enum by listQuerySchema's superRefine before it ever
+  // reaches here (see posts/schema.ts), same contract as
+  // posts/service.ts's buildSearchWhere() uses for the keyword-search path.
+  status?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+};
+
+// Phase 12: free-text semantic search. Unlike findSimilarPosts() above,
+// there is no source *post* here -- a search query is never saved to the
+// DB -- so the caller (posts/service.ts) computes the query embedding
+// itself via getEmbeddingProvider().embed(query) and passes the resulting
+// vector straight in. This function's only job is turning that vector
+// (+ optional DB filters) into one parameterized pgvector query against a
+// single literal table; it never computes an embedding itself, keeping
+// the embedding-provider and vector-search responsibilities separate (see
+// docs/AI_SEMANTIC_SEARCH_DESIGN.md section 3).
+//
+// Filters are applied in the SQL WHERE clause itself -- not as a
+// post-hoc JS filter over the top-K similarity results -- so a filtered
+// search still returns the K *best-matching-and-filter-satisfying* posts,
+// rather than "the K best matches overall, some of which then get
+// dropped" (which could silently return fewer than K, or none, even when
+// better filtered candidates exist further down the similarity ranking).
+export async function findPostsBySemanticQuery(
+  targetType: PostType,
+  queryVector: number[],
+  topK: number,
+  filters: SemanticSearchFilters = {},
+): Promise<VectorSearchResult[]> {
+  const vectorLiteral = `[${queryVector.join(",")}]`;
+  // table/statusType are the only Prisma.raw() uses here, and both are
+  // always one of two fully-literal strings chosen by targetType (the
+  // internal "lost" | "found" union, never raw client input) -- the same
+  // literal-table-name convention findSimilarPosts() above already uses.
+  // Postgres's actual enum type stores the Korean labels themselves as
+  // its values (see the init migration's `CREATE TYPE "LostPostStatus" AS
+  // ENUM ('찾는 중', '찾음')`), so filters.status casts directly with no
+  // separate ASCII-identifier mapping needed.
+  const table = targetType === "lost" ? Prisma.raw(`"LostPost"`) : Prisma.raw(`"FoundPost"`);
+  const statusType = targetType === "lost" ? Prisma.raw(`"LostPostStatus"`) : Prisma.raw(`"FoundPostStatus"`);
+
+  // Every condition is a parameterized Prisma.sql fragment -- never
+  // string-concatenated filter input -- joined with " AND " while each
+  // fragment keeps its own bound parameter.
+  const conditions: InstanceType<typeof Prisma.Sql>[] = [Prisma.sql`embedding IS NOT NULL`];
+  if (filters.category) conditions.push(Prisma.sql`category = ${filters.category}`);
+  if (filters.location) conditions.push(Prisma.sql`location ILIKE ${`%${filters.location}%`}`);
+  if (filters.status) conditions.push(Prisma.sql`status = ${filters.status}::${statusType}`);
+  if (filters.dateFrom) conditions.push(Prisma.sql`created_at >= ${filters.dateFrom}`);
+  if (filters.dateTo) conditions.push(Prisma.sql`created_at <= ${filters.dateTo}`);
+
+  const rows = await prisma.$queryRaw<{ id: number; similarity: number }[]>(Prisma.sql`
+    SELECT id, 1 - (embedding <=> ${vectorLiteral}::vector) AS similarity
+    FROM ${table}
+    WHERE ${Prisma.join(conditions, " AND ")}
+    ORDER BY embedding <=> ${vectorLiteral}::vector, id
+    LIMIT ${topK}
+  `);
+
+  return rows.map((row) => ({ id: row.id, score: normalizeScore(row.similarity) }));
 }
 
 // Writes/clears a post's embedding. Only ever called from

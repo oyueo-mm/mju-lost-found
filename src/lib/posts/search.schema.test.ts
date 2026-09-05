@@ -124,3 +124,41 @@ describe("listQuerySchema -- status filter (Phase 9)", () => {
     expect(listQuerySchema.safeParse({ type: "all" }).success).toBe(true);
   });
 });
+
+// Phase 12: AI semantic search mode.
+describe("listQuerySchema -- mode (Phase 12)", () => {
+  it("defaults mode to 'keyword' when omitted", () => {
+    const result = listQuerySchema.parse({ type: "lost" });
+    expect(result.mode).toBe("keyword");
+  });
+
+  it("accepts mode=keyword explicitly, with or without q", () => {
+    expect(listQuerySchema.safeParse({ type: "lost", mode: "keyword" }).success).toBe(true);
+    expect(listQuerySchema.safeParse({ type: "lost", mode: "keyword", q: "지갑" }).success).toBe(true);
+  });
+
+  it("accepts mode=semantic when type is a specific board and q is given", () => {
+    expect(listQuerySchema.safeParse({ type: "lost", mode: "semantic", q: "검은색 지갑" }).success).toBe(true);
+    expect(listQuerySchema.safeParse({ type: "found", mode: "semantic", q: "검은색 지갑" }).success).toBe(true);
+  });
+
+  it("rejects an unrecognized mode value instead of silently falling back to keyword", () => {
+    const result = listQuerySchema.safeParse({ type: "lost", mode: "fuzzy" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects mode=semantic combined with type=all", () => {
+    const result = listQuerySchema.safeParse({ type: "all", mode: "semantic", q: "지갑" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects mode=semantic with no q", () => {
+    const result = listQuerySchema.safeParse({ type: "lost", mode: "semantic" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects mode=semantic with a blank/whitespace-only q", () => {
+    const result = listQuerySchema.safeParse({ type: "lost", mode: "semantic", q: "   " });
+    expect(result.success).toBe(false);
+  });
+});

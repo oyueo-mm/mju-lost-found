@@ -51,7 +51,7 @@ export default async function LostListPage({
       <SearchFilterBar basePath="/lost" statusOptions={STATUS_OPTIONS} />
       {posts.items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-          {query.q || query.category || query.location || query.status
+          {raw.q || raw.category || raw.location || raw.status
             ? "검색 결과가 없습니다."
             : "등록된 분실물 게시글이 없습니다."}
         </div>

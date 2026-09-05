@@ -111,6 +111,79 @@ describe("GET /api/posts", () => {
   });
 });
 
+// Phase 12: AI semantic search mode.
+describe("GET /api/posts -- mode=semantic (Phase 12)", () => {
+  it("defaults to mode=keyword when omitted (no regression)", async () => {
+    searchPosts.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 0, totalPages: 1 });
+
+    await GET(new NextRequest("http://localhost/api/posts?type=lost"));
+
+    expect(searchPosts).toHaveBeenCalledWith(expect.objectContaining({ mode: "keyword" }));
+  });
+
+  it("rejects an unrecognized mode value", async () => {
+    const res = await GET(new NextRequest("http://localhost/api/posts?type=lost&mode=fuzzy"));
+    expect(res.status).toBe(400);
+    expect(searchPosts).not.toHaveBeenCalled();
+  });
+
+  it("dispatches mode=semantic with q through to the service layer", async () => {
+    searchPosts.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 0, totalPages: 1 });
+
+    await GET(
+      new NextRequest(
+        `http://localhost/api/posts?type=lost&mode=semantic&q=${encodeURIComponent("검은색 에어팟을 도서관에서 잃어버렸어요")}`,
+      ),
+    );
+
+    expect(searchPosts).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "lost", mode: "semantic", q: "검은색 에어팟을 도서관에서 잃어버렸어요" }),
+    );
+  });
+
+  it("rejects mode=semantic combined with type=all", async () => {
+    const res = await GET(
+      new NextRequest("http://localhost/api/posts?type=all&mode=semantic&q=지갑"),
+    );
+    expect(res.status).toBe(400);
+    expect(searchPosts).not.toHaveBeenCalled();
+  });
+
+  it("rejects mode=semantic with no q", async () => {
+    const res = await GET(new NextRequest("http://localhost/api/posts?type=lost&mode=semantic"));
+    expect(res.status).toBe(400);
+    expect(searchPosts).not.toHaveBeenCalled();
+  });
+
+  it("requires no authentication for semantic search either -- same public policy as keyword search", async () => {
+    searchPosts.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 0, totalPages: 1 });
+
+    const res = await GET(
+      new NextRequest("http://localhost/api/posts?type=lost&mode=semantic&q=지갑"),
+    );
+
+    expect(res.status).toBe(200);
+    expect(requireUserForApi).not.toHaveBeenCalled();
+  });
+
+  it("returns similarity scores in the response when the service provides them", async () => {
+    searchPosts.mockResolvedValueOnce({
+      items: [{ id: 1, type: "lost", title: "에어팟 분실", score: 0.87 }],
+      page: 1,
+      limit: 20,
+      total: 1,
+      totalPages: 1,
+    });
+
+    const res = await GET(
+      new NextRequest("http://localhost/api/posts?type=lost&mode=semantic&q=에어팟"),
+    );
+    const json = await res.json();
+
+    expect(json.data[0].score).toBeCloseTo(0.87);
+  });
+});
+
 describe("POST /api/posts", () => {
   it("rejects an unauthenticated request", async () => {
     requireUserForApi.mockResolvedValueOnce({ response: jsonError(401, "로그인이 필요합니다.") });

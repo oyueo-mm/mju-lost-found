@@ -45,6 +45,17 @@ export const SORT_OPTIONS = ["latest", "oldest"] as const;
 export type SortOption = (typeof SORT_OPTIONS)[number];
 const sortOptionSchema = z.enum(SORT_OPTIONS);
 
+// Phase 12: search mode. "keyword" (default) is the existing title/
+// description `contains` search, unchanged. "semantic" runs the query
+// through the same embedding pipeline post matching already uses
+// (docs/AI_SEMANTIC_SEARCH_DESIGN.md) and ranks by pgvector cosine
+// similarity instead. An unrecognized mode value is a validation error,
+// not a silent fallback to keyword -- same "genuine client mistake ->
+// 400" policy the rest of this schema already applies to q/sort/status.
+export const SEARCH_MODES = ["keyword", "semantic"] as const;
+export type SearchMode = (typeof SEARCH_MODES)[number];
+const searchModeSchema = z.enum(SEARCH_MODES);
+
 // A search box, unlike a form field, has no natural upper bound from the
 // legacy schema -- this cap exists purely so an absurdly long query
 // string can't be used to build a pointless/abusive LIKE query.
@@ -77,6 +88,7 @@ export const listQuerySchema = z
     // distinction can produce one clear error message instead of zod's
     // generic "invalid enum value".
     status: z.string().trim().max(20).optional(),
+    mode: searchModeSchema.optional().default("keyword"),
     sort: sortOptionSchema.optional(),
     page: z.coerce.number().int().min(1).catch(DEFAULT_PAGE),
     // Anything unparseable (missing, non-numeric, <1) falls back to
@@ -91,23 +103,44 @@ export const listQuerySchema = z
       .transform((n) => Math.min(n, MAX_LIMIT)),
   })
   .superRefine((data, ctx) => {
-    if (data.status === undefined) return;
-    // type=all merges LostPost and FoundPost, which don't share a status
-    // vocabulary -- rather than guess which board a bare status string was
-    // meant for (and risk silently filtering out the wrong board's rows,
-    // which would look like "results are missing" rather than an error),
-    // a status filter is only accepted once a specific board is chosen.
-    if (data.type === "all") {
-      ctx.addIssue({
-        code: "custom",
-        path: ["status"],
-        message: "status 필터는 게시판(분실물/습득물)을 선택한 경우에만 사용할 수 있습니다.",
-      });
-      return;
+    if (data.status !== undefined) {
+      // type=all merges LostPost and FoundPost, which don't share a status
+      // vocabulary -- rather than guess which board a bare status string was
+      // meant for (and risk silently filtering out the wrong board's rows,
+      // which would look like "results are missing" rather than an error),
+      // a status filter is only accepted once a specific board is chosen.
+      if (data.type === "all") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["status"],
+          message: "status 필터는 게시판(분실물/습득물)을 선택한 경우에만 사용할 수 있습니다.",
+        });
+      } else {
+        const validStatuses: readonly string[] = data.type === "lost" ? LOST_STATUSES : FOUND_STATUSES;
+        if (!validStatuses.includes(data.status)) {
+          ctx.addIssue({ code: "custom", path: ["status"], message: "status 값이 올바르지 않습니다." });
+        }
+      }
     }
-    const validStatuses: readonly string[] = data.type === "lost" ? LOST_STATUSES : FOUND_STATUSES;
-    if (!validStatuses.includes(data.status)) {
-      ctx.addIssue({ code: "custom", path: ["status"], message: "status 값이 올바르지 않습니다." });
+
+    // Phase 12: semantic search always ranks within one board's embedding
+    // column (LostPost.embedding or FoundPost.embedding) -- there is no
+    // cross-table pgvector UNION, and merging two independently-ranked
+    // similarity lists (as type=all's keyword path does for createdAt)
+    // would require re-scoring against a shared scale that doesn't exist
+    // here. Same "reject the ambiguous combination outright" policy as
+    // status+type=all just above, not a new pattern.
+    if (data.mode === "semantic") {
+      if (data.type === "all") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["mode"],
+          message: "AI 의미 검색은 게시판(분실물/습득물)을 선택한 경우에만 사용할 수 있습니다.",
+        });
+      }
+      if (!data.q || data.q.trim() === "") {
+        ctx.addIssue({ code: "custom", path: ["q"], message: "AI 의미 검색은 검색어가 필요합니다." });
+      }
     }
   });
 export type ListQuery = z.infer<typeof listQuerySchema>;
