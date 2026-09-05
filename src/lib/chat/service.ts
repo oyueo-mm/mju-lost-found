@@ -516,3 +516,19 @@ export async function sendMessage(
     },
   };
 }
+
+// Phase 11: resolves a "message"-type Notification's relatedId (a Message
+// id -- see sendMessage()'s `relatedId: created.id` above, never a
+// ChatRoom id) to the room it belongs to. Mirrors legacy get_message(),
+// used the same way there (pages/8_알림.py's _handle_confirm reads the
+// message to find its chat_room_id, then re-verifies room access the
+// normal way). Deliberately returns only chatRoomId, not the message
+// content/sender -- callers here only ever need it to build a link, and
+// re-derive real access via getChatRoomForUser() themselves; this
+// function performs no authorization of its own.
+export async function getMessage(messageId: number): Promise<{ id: number; chatRoomId: number } | null> {
+  return prisma.message.findUnique({
+    where: { id: messageId },
+    select: { id: true, chatRoomId: true },
+  });
+}

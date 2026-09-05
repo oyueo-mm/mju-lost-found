@@ -11,7 +11,7 @@ class FakePrismaClientKnownRequestError extends Error {
 
 const match = { findUnique: vi.fn() };
 const chatRoom = { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() };
-const message = { findMany: vi.fn(), updateMany: vi.fn() };
+const message = { findMany: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() };
 const userTable = { findUnique: vi.fn() };
 const notification = { updateMany: vi.fn() };
 const lostPostTable = { findUnique: vi.fn() };
@@ -44,6 +44,7 @@ vi.mock("@/lib/auth/suspension", () => ({
 
 const {
   getChatRoomForUser,
+  getMessage,
   getOrCreateChatRoomForMatch,
   getOrCreateDirectChatRoom,
   listChatRoomsForUser,
@@ -702,5 +703,28 @@ describe("sendMessage", () => {
       expect(result).toEqual({ kind: "forbidden" });
       expect($transaction).not.toHaveBeenCalled();
     });
+  });
+});
+
+// Phase 11: notification deep-linking reads a message's chatRoomId
+// through this -- deliberately returns nothing but id/chatRoomId (no
+// content, no sender) since it performs no authorization of its own;
+// callers re-derive real access via getChatRoomForUser().
+describe("getMessage", () => {
+  it("returns the message's id and chatRoomId", async () => {
+    message.findUnique.mockResolvedValueOnce({ id: 42, chatRoomId: 100 });
+
+    const result = await getMessage(42);
+
+    expect(result).toEqual({ id: 42, chatRoomId: 100 });
+    expect(message.findUnique).toHaveBeenCalledWith({
+      where: { id: 42 },
+      select: { id: true, chatRoomId: true },
+    });
+  });
+
+  it("returns null for a nonexistent message", async () => {
+    message.findUnique.mockResolvedValueOnce(null);
+    expect(await getMessage(999)).toBeNull();
   });
 });

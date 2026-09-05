@@ -48,6 +48,9 @@ export async function Header() {
               <Link href="/posts/mine" className="hover:text-zinc-900 dark:hover:text-zinc-50">
                 내 게시물
               </Link>
+              <Link href="/matches" className="hover:text-zinc-900 dark:hover:text-zinc-50">
+                내 매칭
+              </Link>
               <Link href="/chat" className="hover:text-zinc-900 dark:hover:text-zinc-50">
                 채팅
               </Link>

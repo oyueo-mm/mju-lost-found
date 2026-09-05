@@ -12,20 +12,28 @@ class FakePrismaClientKnownRequestError extends Error {
 const lostPost = { findUnique: vi.fn() };
 const foundPost = { findUnique: vi.fn() };
 const match = { findUnique: vi.fn(), findMany: vi.fn(), delete: vi.fn() };
+const userTable = { findMany: vi.fn() };
 const txMatchCreate = vi.fn();
 const txNotificationCreate = vi.fn();
 const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
   fn({ match: { create: txMatchCreate }, notification: { create: txNotificationCreate } }),
 );
 
-vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost, match, $transaction } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost, match, user: userTable, $transaction } }));
 vi.mock("@/generated/prisma/client", () => ({
   NotificationType: { MATCH: "MATCH" },
   Prisma: { PrismaClientKnownRequestError: FakePrismaClientKnownRequestError },
 }));
 
-const { createMatch, deleteMatch, getMatch, getOwnedPostRefForMatch, listMatchesForPost, listMatchesForUser } =
-  await import("./service");
+const {
+  createMatch,
+  deleteMatch,
+  getMatch,
+  getOwnedPostRefForMatch,
+  listMatchesForPost,
+  listMatchesForUser,
+  listMyMatchesSummary,
+} = await import("./service");
 
 const requester = { id: 1, isSuspended: false, suspendedUntil: null } as unknown as User;
 
@@ -278,5 +286,99 @@ describe("getOwnedPostRefForMatch", () => {
     match.findUnique.mockResolvedValueOnce(matchRow());
 
     expect(await getOwnedPostRefForMatch(10, 999)).toBeNull();
+  });
+});
+
+// Phase 11: "내 매칭" (/matches) summary data source.
+describe("listMyMatchesSummary", () => {
+  const summaryRow = (overrides: Partial<Record<string, unknown>> = {}) => ({
+    id: 10,
+    score: 0.9,
+    createdAt: new Date("2026-01-01"),
+    lostPost: { id: 1, userId: 1, title: "지갑 분실", imageUrl: null, status: "SEARCHING" },
+    foundPost: { id: 2, userId: 2, title: "지갑 습득", imageUrl: "https://x/y.jpg", status: "KEEPING" },
+    ...overrides,
+  });
+
+  it("scopes the query to matches the user is party to, same as listMatchesForUser", async () => {
+    match.findMany.mockResolvedValueOnce([]);
+
+    await listMyMatchesSummary(1);
+
+    expect(match.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { OR: [{ lostPost: { userId: 1 } }, { foundPost: { userId: 1 } }] },
+      }),
+    );
+  });
+
+  it("returns [] immediately without querying users when there are no matches", async () => {
+    match.findMany.mockResolvedValueOnce([]);
+
+    const result = await listMyMatchesSummary(1);
+
+    expect(result).toEqual([]);
+    expect(userTable.findMany).not.toHaveBeenCalled();
+  });
+
+  it("orients myPost/counterpartPost correctly for the LostPost-side owner", async () => {
+    match.findMany.mockResolvedValueOnce([summaryRow()]);
+    userTable.findMany.mockResolvedValueOnce([{ id: 2, nickname: "습득자" }]);
+
+    const [result] = await listMyMatchesSummary(1);
+
+    expect(result.myPost).toEqual({ id: 1, type: "lost", title: "지갑 분실", status: "찾는 중" });
+    expect(result.counterpartPost).toEqual({
+      id: 2,
+      type: "found",
+      title: "지갑 습득",
+      status: "보관 중",
+      imageUrl: "https://x/y.jpg",
+    });
+    expect(result.counterpart).toEqual({ id: 2, nickname: "습득자" });
+  });
+
+  it("orients myPost/counterpartPost correctly for the FoundPost-side owner (mirrored)", async () => {
+    match.findMany.mockResolvedValueOnce([summaryRow()]);
+    userTable.findMany.mockResolvedValueOnce([{ id: 1, nickname: "분실자" }]);
+
+    const [result] = await listMyMatchesSummary(2);
+
+    expect(result.myPost).toEqual({ id: 2, type: "found", title: "지갑 습득", status: "보관 중" });
+    expect(result.counterpartPost.type).toBe("lost");
+    expect(result.counterpart).toEqual({ id: 1, nickname: "분실자" });
+  });
+
+  it("falls back to a null nickname when the counterpart user row is somehow missing", async () => {
+    match.findMany.mockResolvedValueOnce([summaryRow()]);
+    userTable.findMany.mockResolvedValueOnce([]); // counterpart lookup came back empty
+
+    const [result] = await listMyMatchesSummary(1);
+
+    expect(result.counterpart).toEqual({ id: 2, nickname: null });
+  });
+
+  it("batches the counterpart lookup into a single query for multiple matches", async () => {
+    match.findMany.mockResolvedValueOnce([
+      summaryRow({ id: 10 }),
+      summaryRow({ id: 11, lostPost: { id: 3, userId: 1, title: "우산 분실", imageUrl: null, status: "SEARCHING" } }),
+    ]);
+    userTable.findMany.mockResolvedValueOnce([{ id: 2, nickname: "습득자" }]);
+
+    await listMyMatchesSummary(1);
+
+    expect(userTable.findMany).toHaveBeenCalledTimes(1);
+    expect(userTable.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: [2] } } }),
+    );
+  });
+
+  it("does not expose the counterpart's email or any field beyond id/nickname", async () => {
+    match.findMany.mockResolvedValueOnce([summaryRow()]);
+    userTable.findMany.mockResolvedValueOnce([{ id: 2, nickname: "습득자" }]);
+
+    const [result] = await listMyMatchesSummary(1);
+
+    expect(Object.keys(result.counterpart).sort()).toEqual(["id", "nickname"]);
   });
 });

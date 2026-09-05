@@ -4,7 +4,7 @@ import {
   listNotifications,
   NOTIFICATION_TYPE_LABELS,
 } from "@/lib/notification/service";
-import { getOwnedPostRefForMatch } from "@/lib/match/service";
+import { resolveHref } from "./resolveHref";
 import { NotificationItem } from "@/components/notification/NotificationItem";
 import { MarkAllReadButton } from "@/components/notification/MarkAllReadButton";
 import { Pagination } from "@/components/search/Pagination";
@@ -12,24 +12,6 @@ import { DEFAULT_LIMIT, DEFAULT_PAGE } from "@/lib/notification/schema";
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
-}
-
-// Resolves a notification's relatedType/relatedId into a link to
-// navigate to, when there's something to link to. Composed here at the
-// page level (not inside the notification service, see Phase 9 spec
-// section 16) so that service stays free of any dependency on the match
-// domain. A missing/deleted related resource (or a type this app doesn't
-// yet build a page for, e.g. "message" -- chat isn't implemented) simply
-// yields no link; the notification itself still renders normally either
-// way.
-async function resolveHref(
-  userId: number,
-  relatedType: string | null,
-  relatedId: number | null,
-): Promise<string | null> {
-  if (relatedType !== "match" || relatedId === null) return null;
-  const ref = await getOwnedPostRefForMatch(relatedId, userId);
-  return ref ? `/post/${ref.id}?type=${ref.type}` : null;
 }
 
 type SearchParams = Record<string, string | string[] | undefined>;

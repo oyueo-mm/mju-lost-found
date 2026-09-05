@@ -1,8 +1,29 @@
 import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
-import { NotificationType, Prisma, type User } from "@/generated/prisma/client";
+import {
+  NotificationType,
+  Prisma,
+  type FoundPostStatus as PrismaFoundPostStatus,
+  type LostPostStatus as PrismaLostPostStatus,
+  type User,
+} from "@/generated/prisma/client";
 import type { PostType } from "@/lib/posts/schema";
 import type { CreateMatchInput } from "./schema";
+
+// Same duplication tradeoff as moderation/service.ts's own
+// LOST_STATUS_FROM_DB/FOUND_STATUS_FROM_DB (which cites this exact
+// reasoning): posts/service.ts already has this mapping but doesn't
+// export it, and this module only needs it for a read-only summary
+// display -- not worth widening posts/service.ts's public surface for a
+// two-entry lookup table.
+const LOST_STATUS_FROM_DB: Record<PrismaLostPostStatus, string> = {
+  SEARCHING: "찾는 중",
+  FOUND: "찾음",
+};
+const FOUND_STATUS_FROM_DB: Record<PrismaFoundPostStatus, string> = {
+  KEEPING: "보관 중",
+  COMPLETED: "완료",
+};
 
 // Deliberately minimal -- just enough to identify and display the
 // counterpart post, never the full LostPost/FoundPostDTO (author email
@@ -201,4 +222,93 @@ export async function getOwnedPostRefForMatch(
   if (match.lostPost.userId === userId) return { id: match.lostPost.id, type: "lost" };
   if (match.foundPost.userId === userId) return { id: match.foundPost.id, type: "found" };
   return null;
+}
+
+// Phase 11: "내 매칭" (/matches) summary -- every Match this user is party
+// to, pre-oriented relative to them (myPost vs counterpartPost) so the
+// page never has to compute that itself. Reuses exactly the same
+// ownership WHERE clause as listMatchesForUser() above; this is *not* a
+// replacement for that function (MatchPanel and other existing callers
+// keep using the fixed lostPost/foundPost shape unchanged) -- a separate,
+// additive function for this one new page.
+//
+// Note on "Match 상태": the Match model itself has no status enum (see
+// schema.prisma) -- a Match row's mere existence already means confirmed
+// (there is no "pending" match state anywhere in this app; AI candidates
+// are never persisted, only a user-confirmed pairing becomes a row, and
+// "취소" deletes the row rather than changing a status). So there is no
+// real per-Match status to display, and this deliberately does not invent
+// one. What *does* vary, and is real schema data, is each side's own post
+// status (LostPostStatus/FoundPostStatus) -- included here for that
+// reason, translated through the same private maps posts/service.ts uses
+// internally.
+export type MyMatchSummaryDTO = {
+  id: number;
+  score: number;
+  createdAt: Date;
+  myPost: { id: number; type: PostType; title: string; status: string };
+  counterpartPost: { id: number; type: PostType; title: string; status: string; imageUrl: string | null };
+  // Same minimal shape as ChatRoomDetailDTO's counterpart (id + nickname
+  // only, never email) -- this project's established safe shape for
+  // showing who's on the other side of an interaction.
+  counterpart: { id: number; nickname: string | null };
+};
+
+const MATCH_SUMMARY_POST_SELECT = { id: true, userId: true, title: true, imageUrl: true, status: true } as const;
+
+export async function listMyMatchesSummary(userId: number): Promise<MyMatchSummaryDTO[]> {
+  const rows = await prisma.match.findMany({
+    where: { OR: [{ lostPost: { userId } }, { foundPost: { userId } }] },
+    orderBy: { createdAt: "desc" },
+    include: {
+      lostPost: { select: MATCH_SUMMARY_POST_SELECT },
+      foundPost: { select: MATCH_SUMMARY_POST_SELECT },
+    },
+  });
+  if (rows.length === 0) return [];
+
+  // One batched lookup for every counterpart's nickname, instead of one
+  // query per row.
+  const counterpartIds = new Set(
+    rows.map((row) => (row.lostPost.userId === userId ? row.foundPost.userId : row.lostPost.userId)),
+  );
+  const counterpartUsers = await prisma.user.findMany({
+    where: { id: { in: [...counterpartIds] } },
+    select: { id: true, nickname: true },
+  });
+  const counterpartById = new Map(counterpartUsers.map((u) => [u.id, u]));
+
+  return rows.map((row) => {
+    const isLostMine = row.lostPost.userId === userId;
+    const mine = isLostMine ? row.lostPost : row.foundPost;
+    const counterpartPost = isLostMine ? row.foundPost : row.lostPost;
+    const counterpartUser = counterpartById.get(counterpartPost.userId) ?? {
+      id: counterpartPost.userId,
+      nickname: null,
+    };
+
+    return {
+      id: row.id,
+      score: row.score,
+      createdAt: row.createdAt,
+      myPost: {
+        id: mine.id,
+        type: isLostMine ? "lost" : "found",
+        title: mine.title,
+        status: isLostMine
+          ? LOST_STATUS_FROM_DB[mine.status as PrismaLostPostStatus]
+          : FOUND_STATUS_FROM_DB[mine.status as PrismaFoundPostStatus],
+      },
+      counterpartPost: {
+        id: counterpartPost.id,
+        type: isLostMine ? "found" : "lost",
+        title: counterpartPost.title,
+        status: isLostMine
+          ? FOUND_STATUS_FROM_DB[counterpartPost.status as PrismaFoundPostStatus]
+          : LOST_STATUS_FROM_DB[counterpartPost.status as PrismaLostPostStatus],
+        imageUrl: counterpartPost.imageUrl,
+      },
+      counterpart: counterpartUser,
+    };
+  });
 }
