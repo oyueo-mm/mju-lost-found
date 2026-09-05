@@ -29,14 +29,37 @@ export function isAuthConfigured() {
 }
 
 /**
+ * 지금 이 프로세스가 "인터넷에 공개된 배포본"인지.
+ *
+ * NODE_ENV 만 보지 않는 이유: 그건 사람이 손으로 넣는 값이라 깜빡 빠뜨리기 쉽고,
+ * 실제로 한 번 빠뜨린 적이 있다. Railway 는 RAILWAY_* 변수를 자동으로 주입하므로
+ * 그걸 함께 보면, 환경변수를 잘못 넣어도 공개 서버에서는 확실히 잠긴다.
+ * (안전한 쪽을 기본값으로 두는 게 목적이다.)
+ */
+function isPublicDeployment() {
+  return Boolean(
+    process.env.NODE_ENV === 'production'
+    || process.env.RAILWAY_ENVIRONMENT
+    || process.env.RAILWAY_PUBLIC_DOMAIN
+    || process.env.RAILWAY_PROJECT_ID
+  );
+}
+
+/**
  * 개발용 로그인 허용 여부.
  * Google 설정 없이도 로컬에서 바로 화면을 보고 테스트할 수 있게 하는 우회로다.
- * 배포(NODE_ENV=production)에서는 ALLOW_DEV_LOGIN=true 를 명시적으로 켜지 않는 한
- * 절대 열리지 않는다 -- 실서비스에서 아무 이메일로 로그인되는 사고를 막기 위해서.
+ * 이게 열려 있으면 아무 이메일이나 넣어서 그 사람으로 로그인할 수 있으므로,
+ * 공개 배포본에서는 절대 열리면 안 된다.
+ *
+ * 판단 순서:
+ *   1. ALLOW_DEV_LOGIN=true 를 사람이 직접 넣었으면 허용 (의도적 탈출구)
+ *   2. 공개 배포본이면 무조건 차단
+ *   3. 로컬이고 Google 설정이 없으면 허용
  */
 export function isDevLoginEnabled() {
   if (process.env.ALLOW_DEV_LOGIN === 'true') return true;
-  return process.env.NODE_ENV !== 'production' && !isAuthConfigured();
+  if (isPublicDeployment()) return false;
+  return !isAuthConfigured();
 }
 
 export function isAllowedDomain(email) {
