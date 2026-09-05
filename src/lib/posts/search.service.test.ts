@@ -274,7 +274,11 @@ describe("searchPosts -- mode=semantic (Phase 12)", () => {
       row({ id: 2, title: "에어팟 분실" }),
     ]);
 
-    const result = await searchPosts({ type: "lost", mode: "semantic", q: "에어팟", page: 1, limit: 20 });
+    // Query text deliberately shares no token with either title -- this
+    // test is about row-order independence, not the Phase 13-2 lexical
+    // tie-breaker (see the "hard-negative tie-breaker" describe block
+    // below for that), so it must not incidentally trigger the bonus.
+    const result = await searchPosts({ type: "lost", mode: "semantic", q: "분실물찾아요", page: 1, limit: 20 });
 
     expect(result.items.map((p) => p.id)).toEqual([2, 1]);
     expect(result.items[0].score).toBeCloseTo(0.9);
@@ -339,5 +343,83 @@ describe("searchPosts -- mode=semantic (Phase 12)", () => {
 
     expect(result.items.map((p) => p.id)).toEqual([1]);
     expect(result.total).toBe(1);
+  });
+});
+
+// Phase 13-2: a real, reproduced hard-negative failure from Phase 13-1's
+// real-DB evaluation (real ONNX model + real Supabase pgvector, not
+// hypothetical) -- "카드지갑 분실" (a wallet post whose *description*
+// happens to mention "학생증") outscored the actual "학생증 분실1" post for
+// the query "학생증 잃어버렸어요", 0.912 vs 0.893. These tests use the same
+// scores/titles, but via a mocked findPostsBySemanticQuery/findMany (no
+// real model load), matching this file's existing convention.
+describe("searchPosts -- semantic hard-negative tie-breaker (Phase 13-2)", () => {
+  it("promotes a title-matching near-tie candidate above a higher-raw-score decoy that only matches in its description", async () => {
+    embed.mockResolvedValueOnce([0.1]);
+    findPostsBySemanticQuery.mockResolvedValueOnce([
+      { id: 2, score: 0.912 }, // "카드지갑 분실" -- raw semantic winner
+      { id: 1, score: 0.893 }, // "학생증 분실1" -- the actual correct answer
+    ]);
+    lostPost.findMany.mockResolvedValueOnce([
+      row({ id: 1, title: "학생증 분실1", description: "학생증을 정문에서 잃어버렸어요" }),
+      row({ id: 2, title: "카드지갑 분실", description: "카드지갑을 잃어버렸습니다. 학생증이 들어있어요" }),
+    ]);
+
+    const result = await searchPosts({
+      type: "lost",
+      mode: "semantic",
+      q: "학생증 잃어버렸어요",
+      page: 1,
+      limit: 20,
+    });
+
+    // Title "학생증 분실1" contains the query token "학생증"; title "카드지갑
+    // 분실" does not (only its description does) -- so only id=1 gets the
+    // bonus, closing the 0.019 gap and taking rank 1.
+    expect(result.items.map((p) => p.id)).toEqual([1, 2]);
+    expect(result.items[0].score).toBeCloseTo(0.893 + 0.03);
+    expect(result.items[1].score).toBeCloseTo(0.912); // decoy's score is untouched
+  });
+
+  it("does not override a real semantic gap just because a lower-ranked title happens to match", async () => {
+    embed.mockResolvedValueOnce([0.1]);
+    findPostsBySemanticQuery.mockResolvedValueOnce([
+      { id: 1, score: 0.95 }, // clearly the best semantic match, title doesn't match query tokens
+      { id: 2, score: 0.6 }, // far behind, but its title literally contains a query token
+    ]);
+    lostPost.findMany.mockResolvedValueOnce([
+      row({ id: 1, title: "무선 이어폰 분실", description: "회색 무선 이어폰을 잃어버렸습니다" }),
+      row({ id: 2, title: "학생증 지갑", description: "지갑을 주웠는데 안에 아무것도 없어요" }),
+    ]);
+
+    const result = await searchPosts({
+      type: "lost",
+      mode: "semantic",
+      q: "학생증 잃어버렸어요",
+      page: 1,
+      limit: 20,
+    });
+
+    // 0.6 + 0.03 bonus (0.63) is still nowhere close to 0.95 -- the bonus
+    // is a tie-breaker, not a general keyword override.
+    expect(result.items.map((p) => p.id)).toEqual([1, 2]);
+  });
+
+  it("leaves ranking unchanged when neither title matches a query token", async () => {
+    embed.mockResolvedValueOnce([0.1]);
+    findPostsBySemanticQuery.mockResolvedValueOnce([
+      { id: 2, score: 0.7 },
+      { id: 1, score: 0.6 },
+    ]);
+    lostPost.findMany.mockResolvedValueOnce([
+      row({ id: 1, title: "지갑 분실", description: "갈색 지갑을 잃어버렸어요" }),
+      row({ id: 2, title: "가방 분실", description: "백팩을 잃어버렸어요" }),
+    ]);
+
+    const result = await searchPosts({ type: "lost", mode: "semantic", q: "학생증", page: 1, limit: 20 });
+
+    expect(result.items.map((p) => p.id)).toEqual([2, 1]);
+    expect(result.items[0].score).toBeCloseTo(0.7);
+    expect(result.items[1].score).toBeCloseTo(0.6);
   });
 });

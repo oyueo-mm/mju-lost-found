@@ -2,8 +2,10 @@ import Link from "next/link";
 
 import { SearchFilterBar } from "@/components/search/SearchFilterBar";
 import { Pagination } from "@/components/search/Pagination";
+import { SemanticSearchNotice } from "@/components/search/SemanticSearchNotice";
 import { PostCard } from "@/components/post/PostCard";
-import { listLostPosts } from "@/lib/posts/service";
+import { searchPosts } from "@/lib/posts/service";
+import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, LOST_STATUSES, listQuerySchema } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
 
@@ -21,10 +23,21 @@ export default async function LostListPage({
   // identity isn't user-controlled the way it is on /search.
   const parsed = listQuerySchema.safeParse({ ...raw, type: "lost" });
   const query = parsed.success ? parsed.data : { type: "lost" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
+  // Phase 13-2: previously called listLostPosts() directly, which silently
+  // ignored `mode=semantic` (the SearchFilterBar toggle had no effect on
+  // this page -- see Phase 13-1's finding). Keyword mode reuses the same
+  // searchPosts() every other caller goes through; semantic mode fetches
+  // /api/posts instead of calling searchPosts() in-process -- see
+  // searchApiClient.ts's comment for why (Vercel Hobby-plan function-count
+  // limit).
+  const mode = parsed.success ? parsed.data.mode : "keyword";
 
   let posts;
   try {
-    posts = await listLostPosts(query);
+    posts =
+      mode === "semantic"
+        ? await fetchPostsFromApi({ ...raw, type: "lost" })
+        : await searchPosts(query);
   } catch (error) {
     console.error("Failed to load lost posts", error);
     return (
@@ -49,6 +62,7 @@ export default async function LostListPage({
         </Link>
       </div>
       <SearchFilterBar basePath="/lost" statusOptions={STATUS_OPTIONS} />
+      <SemanticSearchNotice mode={mode} />
       {posts.items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
           {raw.q || raw.category || raw.location || raw.status

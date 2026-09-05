@@ -42,6 +42,22 @@ const nextConfig: NextConfig = {
   //
   // Scoped to only the routes that actually import that module, so every
   // other function's bundle stays small.
+  //
+  // Phase 13-2 note: /lost, /found, and /search now also reach this same
+  // import path (searchPosts() -> searchPostsSemantic() ->
+  // getEmbeddingProvider()) whenever mode=semantic. Adding any one of them
+  // here was tried first (matching the pattern below) and confirmed
+  // *working* locally, but a real Vercel deployment (this phase) hit a
+  // separate, harder limit: the Hobby plan's 12-Serverless-Function cap
+  // was already fully used by the three routes below -- adding even one
+  // more route with its own outputFileTracingIncludes entry forces Vercel
+  // to build it as an additional dedicated function (it can't merge with
+  // the shared bundle once its included-files config differs), which
+  // exceeds the cap regardless of which single route is added. The actual
+  // fix (see src/app/(main)/lost/page.tsx, found/page.tsx, search/page.tsx)
+  // is for those three pages to reach the embedding path via a
+  // server-side fetch to /api/posts instead of importing it in-process, so
+  // none of their own functions need these files at all.
   outputFileTracingIncludes: {
     "/api/posts": ["./node_modules/onnxruntime-node/bin/napi-v6/linux/**", "./models/**"],
     "/api/posts/[id]": ["./node_modules/onnxruntime-node/bin/napi-v6/linux/**", "./models/**"],

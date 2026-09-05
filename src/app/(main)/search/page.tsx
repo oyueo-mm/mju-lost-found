@@ -1,7 +1,9 @@
 import { SearchFilterBar } from "@/components/search/SearchFilterBar";
 import { Pagination } from "@/components/search/Pagination";
+import { SemanticSearchNotice } from "@/components/search/SemanticSearchNotice";
 import { PostCard } from "@/components/post/PostCard";
 import { searchPosts } from "@/lib/posts/service";
+import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, listQuerySchema } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
 
@@ -19,10 +21,17 @@ export default async function SearchPage({
   const query = parsed.success
     ? parsed.data
     : { type: "all" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
+  const mode = parsed.success ? parsed.data.mode : "keyword";
 
+  // See searchApiClient.ts's comment (also linked from lost/found's pages)
+  // -- semantic mode fetches /api/posts instead of calling searchPosts()
+  // in-process, since only /api/posts's function bundle carries the
+  // embedding model on Vercel. `raw.type` is guaranteed to be "lost" or
+  // "found" (never absent/"all") whenever mode="semantic" successfully
+  // parsed -- listQuerySchema's superRefine already rejects semantic+all.
   let results;
   try {
-    results = await searchPosts(query);
+    results = mode === "semantic" ? await fetchPostsFromApi(raw) : await searchPosts(query);
   } catch (error) {
     console.error("Failed to search posts", error);
     return (
@@ -39,6 +48,7 @@ export default async function SearchPage({
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">통합 검색</h1>
       <SearchFilterBar basePath="/search" showTypeFilter />
+      <SemanticSearchNotice mode={mode} />
       {results.items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
           검색 결과가 없습니다.

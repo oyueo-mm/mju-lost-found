@@ -508,6 +508,35 @@ async function searchAllPosts({
 // general search box), so the two aren't unified into one shared value.
 const SEMANTIC_SEARCH_TOP_K = 10;
 
+// Phase 13-2: Phase 13-1's real-DB evaluation surfaced a systematic "hard
+// negative" failure -- pure cosine similarity sometimes ranks a post whose
+// *description* merely mentions the query's subject word above the post
+// that word is actually about. Example (reproduced on both boards):
+// query "학생증 잃어버렸어요" scored "카드지갑 분실" (description: "...
+// 학생증이 들어있어요") at 0.912, just above the correct "학생증 분실1" at
+// 0.893 -- a 0.019 gap. A literal title match is a much stronger relevance
+// signal than an incidental description mention, so a small bonus is added
+// when a query token appears in the post's *title* specifically (never
+// description) -- large enough to flip that kind of near-tie, but far
+// smaller than the gap between any semantically-correct top result and the
+// next candidate observed across Phase 13-1's full query set (every
+// clearly-correct case had a >0.05 gap). This is deliberately not a
+// general keyword/semantic hybrid score -- see this phase's report for the
+// alternatives considered (weighted hybrid score, embedding-input changes)
+// and why a narrow, title-only tie-breaker was chosen instead.
+const LEXICAL_TITLE_MATCH_BONUS = 0.03;
+
+// Whitespace-split, length>=2 filters out single-character particles
+// (은/는/이/가/을/를 standing alone) that would otherwise match almost any
+// title. Intentionally not real Korean morphological analysis (no new
+// library) -- just enough to catch a literal shared noun like "학생증".
+function queryTokens(query: string): string[] {
+  return query
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2);
+}
+
 // mode=semantic's counterpart to listLostPosts()/listFoundPosts() --
 // type is narrowed to PostType (never "all") by listQuerySchema's
 // superRefine before this is ever called (see searchPosts() below), so
@@ -546,13 +575,25 @@ async function searchPostsSemantic(
   // it's simply dropped, not an error (the same "best-effort, never
   // surfaced as a failure" spirit as embedPostBestEffort() elsewhere in
   // this file, applied to a read path instead of a write).
+  //
+  // The lexical title-match bonus (see LEXICAL_TITLE_MATCH_BONUS above) is
+  // applied here, not in findPostsBySemanticQuery(), because it needs the
+  // post's title text -- vectorSearch.ts only ever sees id+similarity, and
+  // stays a pure pgvector-query function. Applying the bonus to `score`
+  // itself (rather than only to an internal sort key) keeps the displayed
+  // "검색 유사도" percentage consistent with the actual result order.
+  const tokens = queryTokens(query);
   const items: PostDTO[] = ids
     .map((id) => rowById.get(id))
     .filter((row): row is NonNullable<typeof row> => row !== undefined)
     .map((row) => {
       const dto = type === "lost" ? toLostPostDTO(row as Parameters<typeof toLostPostDTO>[0]) : toFoundPostDTO(row as Parameters<typeof toFoundPostDTO>[0]);
-      return { ...dto, score: scoreById.get(row.id) };
-    });
+      const baseScore = scoreById.get(row.id) ?? 0;
+      const titleMatchesQuery = tokens.some((token) => row.title.includes(token));
+      const score = titleMatchesQuery ? Math.min(1, baseScore + LEXICAL_TITLE_MATCH_BONUS) : baseScore;
+      return { ...dto, score };
+    })
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.id - b.id);
 
   const total = items.length;
   const skip = (page - 1) * limit;

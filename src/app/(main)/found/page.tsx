@@ -2,8 +2,10 @@ import Link from "next/link";
 
 import { SearchFilterBar } from "@/components/search/SearchFilterBar";
 import { Pagination } from "@/components/search/Pagination";
+import { SemanticSearchNotice } from "@/components/search/SemanticSearchNotice";
 import { PostCard } from "@/components/post/PostCard";
-import { listFoundPosts } from "@/lib/posts/service";
+import { searchPosts } from "@/lib/posts/service";
+import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, FOUND_STATUSES, listQuerySchema } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
 
@@ -19,10 +21,16 @@ export default async function FoundListPage({
   const raw = normalizeSearchParams(await searchParams);
   const parsed = listQuerySchema.safeParse({ ...raw, type: "found" });
   const query = parsed.success ? parsed.data : { type: "found" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
+  // Phase 13-2: see the matching comment in lost/page.tsx -- previously
+  // listFoundPosts() ignored `mode=semantic` entirely.
+  const mode = parsed.success ? parsed.data.mode : "keyword";
 
   let posts;
   try {
-    posts = await listFoundPosts(query);
+    posts =
+      mode === "semantic"
+        ? await fetchPostsFromApi({ ...raw, type: "found" })
+        : await searchPosts(query);
   } catch (error) {
     console.error("Failed to load found posts", error);
     return (
@@ -47,6 +55,7 @@ export default async function FoundListPage({
         </Link>
       </div>
       <SearchFilterBar basePath="/found" statusOptions={STATUS_OPTIONS} />
+      <SemanticSearchNotice mode={mode} />
       {posts.items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
           {raw.q || raw.category || raw.location || raw.status
