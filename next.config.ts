@@ -28,6 +28,32 @@ function supabaseStorageRemotePattern() {
 const supabasePattern = supabaseStorageRemotePattern();
 
 const nextConfig: NextConfig = {
+  // Two things Vercel/Next's static file tracer won't discover on its own
+  // for src/lib/ai/embedding.ts's TransformersEmbeddingProvider -- both
+  // confirmed missing by a real Vercel deployment (Phase 6), not guessed:
+  //
+  // 1. onnxruntime-node's native addon (.node) dlopen()s a sibling
+  //    libonnxruntime.so.1 at runtime rather than require()-ing it, so
+  //    tracing never follows that edge. Without it: "libonnxruntime.so.1:
+  //    cannot open shared object file".
+  // 2. models/ (the local model files -- see embedding.ts's local_files_only)
+  //    lives outside node_modules and isn't imported by path anywhere the
+  //    tracer's static analysis can see, so it's dropped by default too.
+  //
+  // Scoped to only the routes that actually import that module, so every
+  // other function's bundle stays small.
+  outputFileTracingIncludes: {
+    "/api/posts": ["./node_modules/onnxruntime-node/bin/napi-v6/linux/**", "./models/**"],
+    "/api/posts/[id]": ["./node_modules/onnxruntime-node/bin/napi-v6/linux/**", "./models/**"],
+    "/api/posts/[id]/matches/candidates": [
+      "./node_modules/onnxruntime-node/bin/napi-v6/linux/**",
+      "./models/**",
+    ],
+    "/api/diag-embed-test": [
+      "./node_modules/onnxruntime-node/bin/napi-v6/linux/**",
+      "./models/**",
+    ],
+  },
   images: {
     remotePatterns: [
       // Scoped to Vercel Blob's own domain suffix only -- not a blanket

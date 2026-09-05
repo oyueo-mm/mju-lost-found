@@ -17,6 +17,12 @@ import {
   updateLostPost,
 } from "@/lib/posts/service";
 
+// PATCH conditionally triggers embedPostBestEffort() -- real ONNX Runtime
+// inference (@huggingface/transformers, a native addon) that cannot run on
+// the Edge runtime. Pinned for the whole file for simplicity even though
+// GET/DELETE don't need it.
+export const runtime = "nodejs";
+
 // LostPost and FoundPost each have their own autoincrement id sequence
 // (separate tables, see schema.prisma) -- the same id can legitimately
 // exist in both, so `type` is a required query param on every operation

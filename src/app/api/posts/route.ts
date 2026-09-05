@@ -14,6 +14,12 @@ import {
 } from "@/lib/posts/schema";
 import { createFoundPost, createLostPost, searchPosts } from "@/lib/posts/service";
 
+// POST creates a post, which triggers embedPostBestEffort() -- real
+// ONNX Runtime inference (@huggingface/transformers, a native addon) that
+// cannot run on the Edge runtime. Pinned for the whole file for simplicity
+// even though GET itself doesn't need it.
+export const runtime = "nodejs";
+
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const query = listQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
   if (!query.success) {

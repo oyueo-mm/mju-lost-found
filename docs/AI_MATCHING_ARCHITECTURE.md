@@ -1,8 +1,8 @@
-# AI 매칭 아키텍처 조사·설계 및 기술검증 (Phase 5)
+# AI 매칭 아키텍처 조사·설계 및 기술검증 (Phase 5 + Phase 6 구현/배포 검증)
 
-> 작성 기준: `vercel` 브랜치 (커밋 `17eab46`), 2026-09-05.
-> 이 문서는 **조사 → 비교 → 실측 PoC → 아키텍처 결정 → 구현 계획**의 결과물이다. 실제 매칭 기능 구현(Phase 6)은 포함하지 않는다.
-> 추측이 필요한 부분은 **[추측]**으로 명시했다. 그 외는 실제 코드 근거 또는 이번 Phase에서 직접 실행한 PoC 결과다.
+> Phase 5 작성 기준: `vercel` 브랜치 (커밋 `17eab46`), 2026-09-05.
+> §1~§15는 Phase 5의 **조사 → 비교 → 실측 PoC → 아키텍처 결정 → 구현 계획** 결과물(당시엔 실제 매칭 기능 구현을 포함하지 않았다). §16은 Phase 6에서 그 계획을 실제로 구현하고 **실제 Vercel 배포**로 검증한 결과다.
+> 추측이 필요한 부분은 **[추측]**으로 명시했다. 그 외는 실제 코드 근거 또는 직접 실행한 PoC/배포 결과다.
 
 ---
 
@@ -329,3 +329,103 @@ Execution          : Vercel Functions, Node.js 런타임(Edge 불가 — 네이�
 - [Google Gemini API Pricing](https://ai.google.dev/gemini-api/docs/pricing)
 - [Cohere: Rate Limits](https://docs.cohere.com/docs/rate-limits)
 - [OpenAI: New embedding models and API updates](https://openai.com/index/new-embedding-models-and-api-updates/)
+
+---
+
+## 16. Phase 6 — 실제 구현 및 Vercel 배포 검증 결과 (2026-09-05)
+
+§14의 계획대로 실제 구현하고, `vercel` 계정으로 로그인해 **실제 Vercel 배포**(로컬 빌드 성공이 아니라 진짜 원격 배포·원격 함수 호출)로 검증했다. 아래는 실측 결과다.
+
+### 16.1 구현 요약
+
+- **Embedding provider**: `src/lib/ai/embedding.ts`의 `TransformersEmbeddingProvider` — `@huggingface/transformers` (`pipeline("feature-extraction", ...)`) + `jhgan/ko-sroberta-multitask`의 공식 int8 ONNX export(`model_qint8_avx512_vnni.onnx`, 107MB). 클래스 static `Promise` 캐시로 세션을 프로세스당 1회만 로드. `EMBEDDING_DIMENSIONS = 768`.
+- **pgvector 스키마**: `LostPost`/`FoundPost`에 `embedding vector(768)` (nullable, `Unsupported`) 컬럼 + `hnsw`/`vector_cosine_ops` 인덱스. 실제 Supabase DB에 마이그레이션 적용 완료, 기존 게시글(`LostPost` id=6) 데이터 손실 없음 확인.
+- **Vector search**: `src/lib/ai/vectorSearch.ts` — `$queryRaw`로 CTE 기반 top-K 코사인 검색(`fp.embedding <=> source.embedding`), `1 - distance`로 코사인 유사도 환산 후 기존 `normalizeScore()`로 [0,1] 스케일 유지. 테이블명은 항상 리터럴, 파라미터(post id, top-K, 벡터 리터럴 문자열)만 바인딩 — SQL 인젝션 불가.
+- **임베딩 생성 시점 (`src/lib/ai/postEmbedding.ts`)**: 게시글 생성 시 무조건, 수정 시 `title/description/category/location` 중 하나라도 변경된 경우만 재생성. 이미지·상태 단독 변경은 재생성하지 않음.
+- **실패 정책 (Option B, 확정)**: 임베딩 생성은 게시글 저장 *이후*의 best-effort 단계로 분리(`embedPostBestEffort`) — 실패해도 게시글 생성/수정 자체는 항상 성공한다. 이유: (a) 서버리스 환경에서 콜드스타트 중 모델 로드가 실패할 수 있는데 이를 게시글 작성 실패로 노출하면 UX가 나쁘고, (b) 임베딩은 재시도 가능한 파생 데이터(재수정 또는 백필 스크립트로 재생성 가능)인 반면 게시글 원본 데이터는 사용자가 재입력해야 하는 비용이 훨씬 크다. `EmbeddingNotAvailableError`로 "아직 임베딩 없음"과 "진짜 후보 없음"을 구분해 매칭 API에서 505 대신 503으로 명확히 응답.
+- **Runtime 선언**: `/api/posts`, `/api/posts/[id]`, `/api/posts/[id]/matches/candidates`에 `export const runtime = "nodejs"` 추가 — Edge에서 절대 실행되지 않도록 명시.
+- **백필**: `scripts/backfillEmbeddings.ts` — `embedding IS NULL`인 게시글만 대상, 재실행해도 안전(이미 채워진 행은 건드리지 않음). 기존 실사용자 게시글(`LostPost` id=6, 1건) 백필 완료 확인(`vector_dims(embedding) = 768`).
+
+### 16.2 실제 Vercel 배포에서 발견된 두 가지 실제 장애와 수정 (문서 예측이 아니라 실제로 겪은 문제)
+
+로컬 빌드 성공과 실제 Vercel 배포 성공은 다른 문제라는 것이 실제로 확인되었다. 인증된 Vercel 계정으로 실제 배포(`https://mju-lost-found-vercel.vercel.app`, 프로젝트 `oyueo/mju-lost-found-vercel`)를 반복하며 다음 두 가지 실패를 실제로 만나고 고쳤다:
+
+1. **`libonnxruntime.so.1: cannot open shared object file`** — `onnxruntime-node`의 네이티브 addon(`.node`)은 같은 폴더의 `libonnxruntime.so.1`을 `require()`가 아니라 런타임에 `dlopen()`하기 때문에, Vercel/Next의 정적 파일 트레이서(Node File Trace)가 이 의존성을 전혀 발견하지 못해 배포 번들에서 누락된다. → `next.config.ts`에 `outputFileTracingIncludes`로 `node_modules/onnxruntime-node/bin/napi-v6/linux/**`를 관련 라우트에 강제 포함해 해결.
+2. **`ENOENT: no such file or directory, mkdir '/var/task/node_modules/@huggingface/transformers/.cache'`** — `@huggingface/transformers`는 기본적으로 최초 사용 시점에 모델을 Hugging Face Hub에서 내려받아 `node_modules/@huggingface/transformers/.cache/`에 캐시하는데, Vercel Functions의 파일시스템은 `/tmp` 외에는 읽기 전용이라 이 쓰기가 실패한다. → 이미 로컬에서 한 번 실행해 캐시된 모델 파일 4개(`config.json`, `tokenizer.json`, `tokenizer_config.json`, `onnx/model_qint8_avx512_vnni.onnx`, 총 ~107.5MB)를 저장소 레벨의 `models/jhgan/ko-sroberta-multitask/` 디렉터리로 복사해 커밋 대상에 포함하고, `embedding.ts`에서 `env.allowRemoteModels = false`, `env.localModelPath = path.join(process.cwd(), "models")`, `pipeline(..., { local_files_only: true })`로 설정해 네트워크 다운로드 자체를 완전히 차단, 로컬 파일만 읽도록 변경. `next.config.ts`의 `outputFileTracingIncludes`에 `models/**`도 추가.
+
+이 두 수정 이후 실제 배포에서 모델이 정상적으로 로드·추론되는 것을 확인했다(§16.4).
+
+**추가로 실제로 겪은 배포 인프라 이슈(모델과 무관, 환경 문제)**:
+- Windows에서 `vercel deploy`의 로컬 빌드 단계가 `EPERM: operation not permitted, symlink`로 실패 — Vercel CLI가 함수 번들 중복 제거를 위해 심볼릭 링크를 생성하는데 Windows는 기본적으로 이 권한(개발자 모드/관리자 권한)이 없다. → WSL(Ubuntu)에서 동일 프로젝트 디렉터리(`/mnt/c/...`)를 대상으로 CLI를 실행해 우회.
+- `vercel deploy --temporary`(익명/미로그인) 배포는 총 업로드 100MB로 제한되는데 실제 번들이 109.6MB로 이를 초과 — 이는 Vercel Functions 자체의 250MB(Standard) 제한이 아니라 익명 배포 전용 제약임을 확인. 사용자가 `vercel login`으로 실제 계정 인증 후 재배포해 해결(§16.3).
+
+### 16.3 실제 Vercel 배포 정보
+
+- **프로젝트**: `oyueo/mju-lost-found-vercel` (사용자 Vercel 계정 `oyueo-mm`으로 실제 생성됨 — 이번 Phase에서 새로 생성된, 계정에 영구적으로 남는 실제 프로젝트라는 점을 밝혀둔다)
+- **프로덕션 URL**: `https://mju-lost-found-vercel.vercel.app` (최초 배포가 자동으로 production에 배정됨; 이후 배포는 기본적으로 preview)
+- **빌드**: Vercel 원격 빌드 머신(Washington D.C., iad1, 2 vCPU/8GB)에서 원격으로 `npm install` + `next build` 실행 — 로컬 사전 빌드가 아니라 실제 Vercel 인프라에서 빌드됨을 확인.
+- **번들 크기**: 온전한 모델 파일(107MB) + onnxruntime-node의 리눅스 네이티브 바이너리를 포함해도 Vercel Standard 250MB 제한에 여유 있게 수용됨(실측 총 업로드 109.6MB, 함수별로는 이보다 작음 — 관련 없는 함수는 트레이싱 대상에서 제외됨).
+
+### 16.4 AI 스모크 테스트 (실제 배포 환경, 실제 Supabase DB)
+
+인증이 필요한 게시글 작성 API를 실제 브라우저 로그인 없이도 정확히 같은 코드 경로로 검증하기 위해, 임시 진단 라우트(`/api/diag-embed-test`, 검증 후 삭제·재배포하여 최종본에는 없음)에서 실제 서비스 코드(`embedPostBestEffort`, `findSimilarPosts`)를 그대로 호출했다.
+
+**필수 한국어 테스트 문장 쌍 결과** (로컬에서 raw cosine similarity로 별도 측정):
+- 유사 쌍 ("검은색 에어팟 프로를 학생회관에서 잃어버렸습니다" vs "학생회관에서 검정색 에어팟 프로를 습득했습니다"): **cosine similarity = 0.6321**
+- 무관 쌍 ("도서관에서 파란색 우산을 잃어버렸습니다" vs "체육관에서 검은색 지갑을 습득했습니다"): **cosine similarity = 0.2767**
+- → 상대적 순위 올바름 확인 (유사 쌍이 무관 쌍보다 뚜렷하게 높음)
+
+**실제 배포 환경에서의 end-to-end 흐름** (LostPost 생성 → embed → FoundPost 2건 생성(유사 1건 + 무관 1건) → embed → `findSimilarPosts` 호출 → 임시 데이터 정리):
+```json
+{
+  "e2e": {
+    "results": [
+      { "id": 10, "score": 0.9032350490197695 },
+      { "id": 11, "score": 0.7309199457299596 }
+    ],
+    "expectedTopId": 10,
+    "unrelatedId": 11,
+    "rankedCorrectly": true,
+    "searchElapsedMs": 187,
+    "e2eElapsedMs": 1670
+  }
+}
+```
+유사 게시글(id 10, 에어팟)이 무관 게시글(id 11, 지갑)보다 확실히 높은 점수로 1위 — 순위가 올바름을 실제 배포·실제 DB에서 확인. 테스트 후 생성한 임시 게시글 3건은 모두 삭제해 DB에 잔여 데이터 없음(재확인 완료).
+
+### 16.5 성능 실측 (로컬 측정 + 실제 배포 측정, 둘 다 표기)
+
+| 항목 | 로컬 (Windows, `npx tsx`) | 실제 Vercel 배포 |
+|---|---|---|
+| Cold embed (모델 로드 포함, 최초 1회) | ~1073ms | ~997~1028ms |
+| Warm embed (이후 호출) | ~11~19ms | ~20~75ms (네트워크 왕복 포함) |
+| RSS (cold load 직후) | ~400MB | 별도 측정 안 함(Vercel 함수 메모리 사용량 API로는 미노출 — 로컬 400MB가 Hobby 1GB/Pro 2GB 이상 한도 대비 여유 있다는 근거로만 사용) |
+| Vector search (pgvector, top-5) | ~32~209ms(최초 호출만 느림, 이후 안정) | ~187ms (e2e 테스트 내 1회 측정) |
+| End-to-end (게시글 생성→임베딩 3건→검색) | 별도 미실행 | ~1670ms |
+
+측정 방법의 한계: Vercel 함수의 실제 메모리 사용량(RSS)은 함수 응답으로 노출하지 않는 한 CLI에서 직접 조회할 손쉬운 방법이 없어, 이번 조사에서는 로컬 RSS 측정치(~400MB)를 참고치로만 사용했다 — 실제 프로덕션 메모리 사용량은 Vercel 대시보드의 Functions 관측 지표로 별도 확인이 필요하다(Phase 7 권장 사항).
+
+### 16.6 보안 검증
+
+- 프로덕션 클라이언트 번들(`.next/static/`)에 `SUPABASE_SERVICE_ROLE_KEY`, `supabaseAdmin`, `EmbeddingProvider` 문자열이 전혀 없음을 `grep`으로 확인(매치 0건).
+- 임베딩 벡터는 API 응답(DTO)에 전혀 포함되지 않음 — `$queryRaw`/`$executeRaw`는 서버 전용 모듈(`vectorSearch.ts`)에서만 호출되고, 이 모듈은 클라이언트에 import되지 않음.
+- 모든 raw SQL은 태그드 템플릿 파라미터 바인딩만 사용 — 테이블명은 항상 리터럴, 절대 문자열 결합 없음.
+- 인증되지 않은/정지된 사용자는 기존과 동일하게 매칭 후보 조회·게시글 작성 모두 차단됨(변경 없음, 회귀 테스트로 확인).
+
+### 16.7 회귀 검증
+
+- `GET /api/posts?type=lost` — 실제 배포에서 기존 게시글(id=6) 정상 반환 확인.
+- 홈페이지(`/`) — 실제 배포에서 200 OK, 정상 렌더링(로그인 링크, 네비게이션, 한글 텍스트 모두 정상) 확인.
+- 유닛 테스트 391건 전부 통과 — Google 로그인/온보딩/게시글 CRUD/이미지 업로드/정지 사용자 차단 등 기존 로직을 다루는 테스트 포함, 이번 Phase의 변경으로 인한 회귀 없음.
+- 실제 Google OAuth 로그인 → 브라우저에서 게시글 작성 → 이미지 업로드까지의 전체 UI E2E는 이번 Phase에서 실행하지 않음(Phase 2/4에서 이미 검증된 영역이며 이번 Phase는 해당 코드를 변경하지 않음) — Phase 7에서 필요 시 재확인 권장.
+
+### 16.8 남은 리스크 / Phase 7 권장 사항
+
+- **GitHub 푸시 시 100MB 파일 크기 제한**: `models/jhgan/ko-sroberta-multitask/onnx/model_qint8_avx512_vnni.onnx`(107MB)는 GitHub의 일반 git push 하드 리밋(파일당 100MB)을 넘는다. 이번 Phase는 "push 금지" 지시에 따라 로컬 커밋까지만 수행했으나, 실제로 원격에 푸시하려면 Git LFS 도입 또는 빌드 시점에 별도 스토리지(Supabase Storage 등)에서 모델을 내려받는 방식으로 전환이 필요하다.
+- **Vercel 프로젝트가 실제로 생성됨**: 이번 검증으로 사용자의 Vercel 계정에 `oyueo/mju-lost-found-vercel` 프로젝트가 실제로 생성되었고, 최초 배포가 production에 배정되었다. 계속 유지할지, 삭제할지는 사용자 결정 필요.
+- **함수 메모리/콜드스타트의 정밀 관측**: Vercel 대시보드의 Functions 로그/Observability에서 실제 메모리 사용량, 콜드스타트 빈도를 확인하는 절차가 아직 없음.
+- **동시 요청 시 세션 캐시 경합**: `TransformersEmbeddingProvider`의 static `Promise` 캐시는 같은 함수 인스턴스 내 동시 요청은 잘 처리하지만, Vercel이 콜드 인스턴스를 여러 개 동시에 띄우는 경우(트래픽 급증) 각 인스턴스가 독립적으로 모델을 로드한다 — 이는 설계상 당연한 서버리스 특성이며 별도 조치 불필요하다고 판단하지만, 실제 동시 트래픽 부하 테스트는 하지 않았다.
+- **인증된 UI 전체 E2E 미실행**: 위 §16.7 참고.
+
+---
+

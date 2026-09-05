@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { deleteObjectSafely } from "@/lib/images/supabaseAdmin";
+import { EMBEDDING_INPUT_FIELDS, embedPostBestEffort } from "@/lib/ai/postEmbedding";
 import {
   FoundPostStatus as PrismaFoundPostStatus,
   LostPostStatus as PrismaLostPostStatus,
@@ -237,6 +238,11 @@ export async function createLostPost(
     },
     include: { user: { select: AUTHOR_SELECT } },
   });
+  // Post-commit, best-effort -- see embedPostBestEffort()'s doc comment.
+  // A brand-new post always has all four embeddable fields, so this
+  // always attempts an embedding (never conditional the way the update
+  // path below is).
+  await embedPostBestEffort("lost", row.id, row);
   return { kind: "ok", data: toLostPostDTO(row) };
 }
 
@@ -258,6 +264,13 @@ export async function updateLostPost(
     },
     include: { user: { select: AUTHOR_SELECT } },
   });
+  // Only re-embed when a field that actually feeds buildEmbeddingText()
+  // changed -- e.g. a status-only update (marking a post found/complete)
+  // or an image-only change shouldn't burn an inference call for text
+  // that's already correctly embedded.
+  if (EMBEDDING_INPUT_FIELDS.some((field) => field in rest)) {
+    await embedPostBestEffort("lost", row.id, row);
+  }
   return { kind: "ok", data: toLostPostDTO(row) };
 }
 
@@ -327,6 +340,7 @@ export async function createFoundPost(
     },
     include: { user: { select: AUTHOR_SELECT } },
   });
+  await embedPostBestEffort("found", row.id, row);
   return { kind: "ok", data: toFoundPostDTO(row) };
 }
 
@@ -348,6 +362,9 @@ export async function updateFoundPost(
     },
     include: { user: { select: AUTHOR_SELECT } },
   });
+  if (EMBEDDING_INPUT_FIELDS.some((field) => field in rest)) {
+    await embedPostBestEffort("found", row.id, row);
+  }
   return { kind: "ok", data: toFoundPostDTO(row) };
 }
 

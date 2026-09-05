@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "@supabase/supabase-js": "^2.115.0",
@@ -34,6 +35,10 @@
   "allowScripts": {
     "prisma@7.10.0": true,
     "@prisma/engines@7.10.0": true,
-    "unrs-resolver@1.12.2": true
+    "unrs-resolver@1.12.2": true,
+    "onnxruntime-node@1.24.3": true,
+    "sharp@0.34.5": true,
+    "sharp@0.35.4": true,
+    "protobufjs@7.6.6": true
   }
 }

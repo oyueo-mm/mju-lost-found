@@ -129,6 +129,15 @@ model LostPost {
   imageUrl    String?         @db.Text @map("image_url")
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
+  // pgvector, 768-dim (jhgan/ko-sroberta-multitask's output size -- see
+  // docs/AI_MATCHING_ARCHITECTURE.md). Prisma has no native vector type,
+  // so this is Unsupported -- it never appears in Prisma Client's
+  // select/include/create/update, and is only ever touched via
+  // $queryRaw/$executeRaw (src/lib/ai/vectorSearch.ts). Nullable: a post
+  // with no embedding yet (creation failed to embed, or predates this
+  // column) simply doesn't participate in similarity search, rather than
+  // being disallowed from existing at all.
+  embedding   Unsupported("vector(768)")?
 
   matches          Match[]
   directChatRooms  ChatRoom[] @relation("ChatRoomDirectLostPost")
@@ -152,6 +161,8 @@ model FoundPost {
   imageUrl    String?          @db.Text @map("image_url")
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
+  // See LostPost.embedding's comment -- identical shape/reasoning.
+  embedding   Unsupported("vector(768)")?
 
   matches          Match[]
   directChatRooms  ChatRoom[] @relation("ChatRoomDirectFoundPost")

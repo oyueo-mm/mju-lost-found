@@ -1,15 +1,12 @@
 import { prisma } from "@/lib/db/prisma";
-import { buildEmbeddingText } from "@/lib/ai/embedding";
-import { rankCandidates, type ScoredCandidate } from "@/lib/ai/matching";
+import { EmbeddingNotAvailableError, findSimilarPosts } from "@/lib/ai/vectorSearch";
 import type { PostType } from "@/lib/posts/schema";
 
-// Bounds how many rows of the *opposite* board are ever fetched/embedded
-// for one candidate request -- proportional to this constant, never to
-// total table size. This is a candidate-pool heuristic (most recent N),
-// not a semantic filter: it never excludes a post based on category/
-// location, only on recency, so a real match that happens to use
-// different wording still gets embedded and scored.
-const CANDIDATE_POOL_SIZE = 50;
+// How many ranked candidates a single "find matches for this post" request
+// returns -- matches the legacy ai/matching.py's DEFAULT_TOP_K (3 there;
+// this app's earlier phase already chose 5 for this UI and that choice is
+// kept, not revisited by this phase).
+const TOP_K = 5;
 
 export type EnrichedCandidate = {
   postId: number;
@@ -43,48 +40,46 @@ export async function findMatchCandidates(
   if (source.userId !== requesterId) return { kind: "forbidden" };
 
   const candidateType: PostType = sourceType === "lost" ? "found" : "lost";
-  const pool =
-    candidateType === "found"
-      ? await prisma.foundPost.findMany({
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-          take: CANDIDATE_POOL_SIZE,
-        })
-      : await prisma.lostPost.findMany({
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-          take: CANDIDATE_POOL_SIZE,
-        });
 
-  if (pool.length === 0) return { kind: "ok", data: [] };
-
-  let ranked: ScoredCandidate[];
+  let ranked;
   try {
-    ranked = await rankCandidates(
-      buildEmbeddingText(source),
-      pool.map((post) => ({
-        id: post.id,
-        type: candidateType,
-        text: buildEmbeddingText(post),
-        createdAt: post.createdAt,
-      })),
-    );
+    // A real pgvector similarity search over *every* post on the opposite
+    // board that has a stored embedding -- not a "most recent N" pool.
+    // See src/lib/ai/vectorSearch.ts and docs/AI_MATCHING_ARCHITECTURE.md
+    // section 7 for why the old brute-force approach's hardcoded pool size
+    // was silently dropping real matches, not just being slow.
+    ranked = await findSimilarPosts(sourceType, sourceId, TOP_K);
   } catch (error) {
-    // The current lexical provider (see src/lib/ai/embedding.ts) is a
-    // pure in-process computation with no real failure mode, but a future
-    // hosted-API provider could throw for any number of reasons (network,
-    // rate limit, timeout) -- this is the seam that turns any of those
-    // into a graceful "AI unavailable" result instead of a raw 500.
-    console.error("AI candidate ranking failed:", error);
+    if (error instanceof EmbeddingNotAvailableError) {
+      // Expected, not exceptional: a post can legitimately have no
+      // embedding yet (generation is best-effort and never blocks post
+      // creation -- see src/lib/posts/service.ts's Option B policy,
+      // documented in docs/AI_MATCHING_ARCHITECTURE.md). Same
+      // "ai_unavailable" result as a real failure below, but not logged
+      // as one -- an admin backfill (or the next edit) resolves this on
+      // its own.
+    } else {
+      console.error("AI candidate ranking failed:", error);
+    }
     return { kind: "ai_unavailable" };
   }
 
+  if (ranked.length === 0) return { kind: "ok", data: [] };
+
+  const ids = ranked.map((r) => r.id);
+  const pool =
+    candidateType === "found"
+      ? await prisma.foundPost.findMany({ where: { id: { in: ids } } })
+      : await prisma.lostPost.findMany({ where: { id: { in: ids } } });
   const postsById = new Map(pool.map((post) => [post.id, post]));
+
   const data = ranked.flatMap((r): EnrichedCandidate[] => {
     const post = postsById.get(r.id);
     if (!post) return [];
     return [
       {
         postId: r.id,
-        type: r.type,
+        type: candidateType,
         score: r.score,
         title: post.title,
         category: post.category,

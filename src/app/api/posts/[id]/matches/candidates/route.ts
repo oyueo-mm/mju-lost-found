@@ -4,6 +4,12 @@ import { jsonError, jsonOk, requireUserForApi, withErrorHandling } from "@/lib/p
 import { postTypeSchema } from "@/lib/posts/schema";
 import { findMatchCandidates } from "@/lib/match/candidates";
 
+// findMatchCandidates() -> findSimilarPosts() runs $queryRaw against
+// Postgres/pgvector; nothing here needs Node.js APIs directly, but it's
+// pinned to the same runtime as the posts routes for consistency and to
+// avoid ever accidentally running this module graph on the Edge runtime.
+export const runtime = "nodejs";
+
 // GET /api/posts/[id]/matches/candidates?type=lost|found
 //
 // `type` here means the *source* post's board (the one at [id]) -- the

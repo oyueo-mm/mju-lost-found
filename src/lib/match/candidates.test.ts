@@ -2,14 +2,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const lostPost = { findUnique: vi.fn(), findMany: vi.fn() };
 const foundPost = { findUnique: vi.fn(), findMany: vi.fn() };
-const rankCandidates = vi.fn();
+const findSimilarPosts = vi.fn();
+
+class FakeEmbeddingNotAvailableError extends Error {}
 
 // No `match` key at all on the mocked prisma object -- if
 // findMatchCandidates ever touched prisma.match (e.g. to auto-create one),
 // this would throw "Cannot read properties of undefined", proving AI
 // candidate generation never writes a Match on its own.
 vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost } }));
-vi.mock("@/lib/ai/matching", () => ({ rankCandidates }));
+vi.mock("@/lib/ai/vectorSearch", () => ({
+  findSimilarPosts,
+  EmbeddingNotAvailableError: FakeEmbeddingNotAvailableError,
+}));
 
 const { findMatchCandidates } = await import("./candidates");
 
@@ -36,7 +41,7 @@ describe("findMatchCandidates", () => {
     const result = await findMatchCandidates("lost", 999, 1);
 
     expect(result).toEqual({ kind: "not_found" });
-    expect(rankCandidates).not.toHaveBeenCalled();
+    expect(findSimilarPosts).not.toHaveBeenCalled();
   });
 
   it("rejects a requester who doesn't own the source post", async () => {
@@ -45,38 +50,38 @@ describe("findMatchCandidates", () => {
     const result = await findMatchCandidates("lost", 1, 1);
 
     expect(result).toEqual({ kind: "forbidden" });
-    expect(rankCandidates).not.toHaveBeenCalled();
+    expect(findSimilarPosts).not.toHaveBeenCalled();
   });
 
-  it("queries the opposite board for candidates", async () => {
+  it("searches the opposite board via pgvector (lost source -> found candidates)", async () => {
     lostPost.findUnique.mockResolvedValueOnce(post());
-    foundPost.findMany.mockResolvedValueOnce([]);
+    findSimilarPosts.mockResolvedValueOnce([]);
 
     await findMatchCandidates("lost", 1, 1);
 
-    expect(foundPost.findMany).toHaveBeenCalled();
-    expect(lostPost.findMany).not.toHaveBeenCalled();
+    expect(findSimilarPosts).toHaveBeenCalledWith("lost", 1, expect.any(Number));
+    expect(foundPost.findMany).not.toHaveBeenCalled(); // no candidates -> no enrichment query needed
   });
 
-  it("returns an empty result when the candidate pool is empty, without calling the AI ranker", async () => {
+  it("returns an empty result when the vector search finds no candidates", async () => {
     lostPost.findUnique.mockResolvedValueOnce(post());
-    foundPost.findMany.mockResolvedValueOnce([]);
+    findSimilarPosts.mockResolvedValueOnce([]);
 
     const result = await findMatchCandidates("lost", 1, 1);
 
     expect(result).toEqual({ kind: "ok", data: [] });
-    expect(rankCandidates).not.toHaveBeenCalled();
   });
 
-  it("enriches ranked candidates with post details", async () => {
+  it("enriches ranked candidates with post details fetched by id", async () => {
     lostPost.findUnique.mockResolvedValueOnce(post());
+    findSimilarPosts.mockResolvedValueOnce([{ id: 5, score: 0.87 }]);
     foundPost.findMany.mockResolvedValueOnce([
       post({ id: 5, title: "습득한 지갑", category: "지갑", location: "학생회관" }),
     ]);
-    rankCandidates.mockResolvedValueOnce([{ id: 5, type: "found", score: 0.87 }]);
 
     const result = await findMatchCandidates("lost", 1, 1);
 
+    expect(foundPost.findMany).toHaveBeenCalledWith({ where: { id: { in: [5] } } });
     expect(result).toEqual({
       kind: "ok",
       data: [
@@ -93,23 +98,37 @@ describe("findMatchCandidates", () => {
     });
   });
 
-  it("returns ai_unavailable when the ranker throws, instead of propagating the error", async () => {
+  it("returns ai_unavailable when the source post has no embedding yet, without logging it as an error", async () => {
     lostPost.findUnique.mockResolvedValueOnce(post());
-    foundPost.findMany.mockResolvedValueOnce([post({ id: 5 })]);
-    rankCandidates.mockRejectedValueOnce(new Error("provider down"));
+    findSimilarPosts.mockRejectedValueOnce(new FakeEmbeddingNotAvailableError("no embedding"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const result = await findMatchCandidates("lost", 1, 1);
 
     expect(result).toEqual({ kind: "ai_unavailable" });
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("returns ai_unavailable and logs it when the vector search fails for a real reason", async () => {
+    lostPost.findUnique.mockResolvedValueOnce(post());
+    findSimilarPosts.mockRejectedValueOnce(new Error("connection reset"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await findMatchCandidates("lost", 1, 1);
+
+    expect(result).toEqual({ kind: "ai_unavailable" });
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   it("works symmetrically for a FoundPost source (candidates come from LostPost)", async () => {
     foundPost.findUnique.mockResolvedValueOnce(post({ userId: 1 }));
-    lostPost.findMany.mockResolvedValueOnce([]);
+    findSimilarPosts.mockResolvedValueOnce([]);
 
     const result = await findMatchCandidates("found", 1, 1);
 
     expect(result).toEqual({ kind: "ok", data: [] });
-    expect(lostPost.findMany).toHaveBeenCalled();
+    expect(findSimilarPosts).toHaveBeenCalledWith("found", 1, expect.any(Number));
   });
 });
