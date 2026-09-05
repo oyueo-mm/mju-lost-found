@@ -21,7 +21,7 @@ function formatDate(date: Date): string {
 // rows where the user owns one side of the Match, so there's no path for
 // another user's matches to appear here.
 export default async function MyMatchesPage() {
-  const user = await requireReadyUser();
+  const user = await requireReadyUser("match", "/matches");
 
   let matches;
   try {

@@ -8,7 +8,7 @@ function formatDate(date: Date): string {
 }
 
 export default async function ChatListPage() {
-  const user = await requireReadyUser(); // redirects to /login or /onboarding as needed
+  const user = await requireReadyUser("chat", "/chat"); // redirects to /login or /onboarding as needed
 
   let rooms;
   try {

@@ -157,15 +157,27 @@ export default async function PostDetailPage({
         />
       )}
 
-      {/* Phase 10: direct-chat entry point -- only a logged-in non-owner
-          can message the author this way (no Match required). The owner
-          never sees this (mirrors legacy pages/1,2, which only render the
-          button on someone else's post), and an anonymous visitor is
-          simply not offered it here rather than being redirected into a
-          login flow from a passive page load -- they can still sign in
-          via the header and come back. The API re-checks ownership/
-          suspension/post-existence regardless (getOrCreateDirectChatRoom). */}
-      {currentUser && !isOwner && <DirectChatButton postType={type} postId={post.id} />}
+      {/* Phase 10: direct-chat entry point -- only a non-owner can message
+          the author this way (no Match required); the owner never sees
+          this (mirrors legacy pages/1,2, which only render the button on
+          someone else's post). Phase 14: a logged-out visitor now sees the
+          same entry point too, styled identically, but as a plain link
+          into /login (reason=chat, callbackUrl back to this post) instead
+          of the real chat-starting button -- rather than the button being
+          silently absent with no explanation. The API re-checks
+          ownership/suspension/post-existence regardless
+          (getOrCreateDirectChatRoom); this is UI guidance only. */}
+      {!isOwner &&
+        (currentUser ? (
+          <DirectChatButton postType={type} postId={post.id} />
+        ) : (
+          <Link
+            href={`/login?reason=chat&callbackUrl=${encodeURIComponent(`/post/${post.id}?type=${type}`)}`}
+            className="w-fit rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-600"
+          >
+            💬 작성자에게 문의하기
+          </Link>
+        ))}
 
       {currentUser && (
         <ReportButton targetType="post" targetId={encodePostTargetId(type, post.id)} />

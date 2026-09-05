@@ -17,15 +17,59 @@ export async function getCurrentUser(): Promise<User | null> {
   return prisma.user.findUnique({ where: { id: Number(userId) } });
 }
 
+// Phase 14: which one-line explanation /login shows above the Google
+// button when a protected page bounces a logged-out visitor there --
+// purely a UX label, never itself a permission (every actual check still
+// happens below and, redundantly, in the API layer -- see
+// requireUserForApi()). Kept as a closed set rather than a free-form
+// string so a typo'd reason at a call site is a compile error, not a
+// silently-blank message on /login.
+export type LoginReason = "write" | "chat" | "match" | "mypost" | "notification";
+
+// Only ever built from this module's own string literals (the `reason`
+// union above) and each call site's own hardcoded path -- never from
+// unsanitized user input -- so no sanitization is needed on the way out.
+// sanitizeCallbackUrl() below is what guards the *return* trip (reading
+// this same param back out of the URL on /login), which is the side that
+// actually matters for open-redirect safety.
+function loginRedirectUrl(reason?: LoginReason, callbackUrl?: string): string {
+  const params = new URLSearchParams();
+  if (reason) params.set("reason", reason);
+  if (callbackUrl) params.set("callbackUrl", callbackUrl);
+  const query = params.toString();
+  return query ? `/login?${query}` : "/login";
+}
+
+// /login reads a caller-supplied `callbackUrl` back out of its own query
+// string (see loginRedirectUrl above, and DirectChatButton's login-prompt
+// link on /post/[id]) to send the user back where they came from after
+// signing in. That value crosses a client-visible URL, so it's untrusted
+// regardless of who normally sets it -- only a same-origin relative path
+// is accepted (must start with exactly one "/", never "//..." which a
+// browser resolves as protocol-relative to an *external* host, and never
+// contain "://"), so this can never become an open redirect to another
+// site. Returns undefined for anything else, which callers treat as "no
+// callback url" rather than an error.
+export function sanitizeCallbackUrl(url: string | undefined | null): string | undefined {
+  if (!url) return undefined;
+  if (!url.startsWith("/") || url.startsWith("//") || url.includes("://")) return undefined;
+  return url;
+}
+
 // For Server Components/Server Actions that require a signed-in user --
 // redirects to /login instead of returning null so callers don't each
 // have to remember the redirect themselves. Route Handlers need a variant
 // that returns a 401 instead of redirecting -- see src/lib/posts/http.ts's
 // requireUserForApi(), which wraps getCurrentUser() the same way for that
 // case, rather than overloading this function's return type.
-export async function requireUser(): Promise<User> {
+//
+// `reason`/`callbackUrl` (Phase 14) are UX-only: they decide what /login
+// says and where it sends the user back to after signing in. Omitting
+// them still redirects to a plain /login exactly as before -- every
+// existing call site that doesn't pass them keeps working unchanged.
+export async function requireUser(reason?: LoginReason, callbackUrl?: string): Promise<User> {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(loginRedirectUrl(reason, callbackUrl));
   return user;
 }
 
@@ -33,8 +77,8 @@ export async function requireUser(): Promise<User> {
 // legacy ui/auth.py::require_ready_user(): not logged in -> /login;
 // logged in but nickname not set yet -> /onboarding; both satisfied ->
 // the User row. Used by /lost/new, /found/new, and the edit page.
-export async function requireReadyUser(): Promise<User> {
-  const user = await requireUser();
+export async function requireReadyUser(reason?: LoginReason, callbackUrl?: string): Promise<User> {
+  const user = await requireUser(reason, callbackUrl);
   if (user.nickname === null) redirect("/onboarding");
   return user;
 }

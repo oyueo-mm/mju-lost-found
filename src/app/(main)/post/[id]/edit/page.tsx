@@ -18,10 +18,10 @@ export default async function EditPostPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ type?: string }>;
 }) {
-  const user = await requireReadyUser(); // redirects to /login or /onboarding as needed
-
   const { id: idParam } = await params;
   const { type: typeParam } = await searchParams;
+  const callbackUrl = typeParam ? `/post/${idParam}/edit?type=${typeParam}` : `/post/${idParam}/edit`;
+  const user = await requireReadyUser("write", callbackUrl); // redirects to /login or /onboarding as needed
 
   const id = Number(idParam);
   const typeResult = postTypeSchema.safeParse(typeParam);

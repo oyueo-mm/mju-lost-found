@@ -7,9 +7,9 @@ import { ChatThread } from "@/components/chat/ChatThread";
 import { ReportButton } from "@/components/report/ReportButton";
 
 export default async function ChatRoomPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requireReadyUser(); // redirects to /login or /onboarding as needed
-
   const { id: idParam } = await params;
+  const user = await requireReadyUser("chat", `/chat/${idParam}`); // redirects to /login or /onboarding as needed
+
   const id = Number(idParam);
   if (!Number.isInteger(id)) notFound();
 

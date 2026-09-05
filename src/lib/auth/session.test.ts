@@ -10,7 +10,7 @@ vi.mock("@/lib/auth/auth", () => ({ auth }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: { user: { findUnique } } }));
 vi.mock("next/navigation", () => ({ redirect }));
 
-const { getCurrentUser, requireUser, requireReadyUser, requireActiveUser, requireAdmin } =
+const { getCurrentUser, requireUser, requireReadyUser, requireActiveUser, requireAdmin, sanitizeCallbackUrl } =
   await import("./session");
 
 beforeEach(() => {
@@ -53,6 +53,23 @@ describe("requireUser", () => {
 
     await expect(requireUser()).rejects.toThrow("REDIRECT:/login");
   });
+
+  // Phase 14: reason/callbackUrl are UX-only additions to the same
+  // redirect -- omitting them (every test above) must keep working
+  // exactly as before.
+  it("includes reason and callbackUrl in the /login redirect when given", async () => {
+    auth.mockResolvedValueOnce(null);
+
+    await expect(requireUser("chat", "/chat")).rejects.toThrow(
+      "REDIRECT:/login?reason=chat&callbackUrl=%2Fchat",
+    );
+  });
+
+  it("includes only reason when callbackUrl is omitted", async () => {
+    auth.mockResolvedValueOnce(null);
+
+    await expect(requireUser("write")).rejects.toThrow("REDIRECT:/login?reason=write");
+  });
 });
 
 describe("requireReadyUser", () => {
@@ -74,6 +91,49 @@ describe("requireReadyUser", () => {
     auth.mockResolvedValueOnce(null);
 
     await expect(requireReadyUser()).rejects.toThrow("REDIRECT:/login");
+  });
+
+  it("forwards reason/callbackUrl to /login when not signed in", async () => {
+    auth.mockResolvedValueOnce(null);
+
+    await expect(requireReadyUser("mypost", "/posts/mine")).rejects.toThrow(
+      "REDIRECT:/login?reason=mypost&callbackUrl=%2Fposts%2Fmine",
+    );
+  });
+});
+
+describe("sanitizeCallbackUrl", () => {
+  it("accepts a plain relative path", () => {
+    expect(sanitizeCallbackUrl("/chat/5")).toBe("/chat/5");
+  });
+
+  it("accepts a relative path with a query string", () => {
+    expect(sanitizeCallbackUrl("/post/6/edit?type=lost")).toBe("/post/6/edit?type=lost");
+  });
+
+  it("returns undefined for undefined/null/empty input", () => {
+    expect(sanitizeCallbackUrl(undefined)).toBeUndefined();
+    expect(sanitizeCallbackUrl(null)).toBeUndefined();
+    expect(sanitizeCallbackUrl("")).toBeUndefined();
+  });
+
+  // Open-redirect guards: a `callbackUrl` crosses a client-visible URL
+  // (see /post/[id]'s login-prompt link, or a hand-crafted request to
+  // /login), so it's untrusted regardless of who normally sets it.
+  it("rejects a protocol-relative URL (resolves to an external host)", () => {
+    expect(sanitizeCallbackUrl("//evil.com")).toBeUndefined();
+  });
+
+  it("rejects an absolute external URL", () => {
+    expect(sanitizeCallbackUrl("https://evil.com/phish")).toBeUndefined();
+  });
+
+  it("rejects a value that embeds a scheme anywhere in the string", () => {
+    expect(sanitizeCallbackUrl("/redirect?to=https://evil.com")).toBeUndefined();
+  });
+
+  it("rejects a path that doesn't start with a slash", () => {
+    expect(sanitizeCallbackUrl("chat/5")).toBeUndefined();
   });
 });
 

@@ -2,7 +2,7 @@ import { requireReadyUser } from "@/lib/auth/session";
 import { PostForm } from "@/components/post/PostForm";
 
 export default async function NewLostPostPage() {
-  await requireReadyUser(); // redirects to /login or /onboarding as needed
+  await requireReadyUser("write", "/lost/new"); // redirects to /login or /onboarding as needed
 
   return (
     <div className="flex flex-col gap-6">

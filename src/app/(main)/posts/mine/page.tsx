@@ -12,7 +12,7 @@ import { PostCard } from "@/components/post/PostCard";
 // param or any client-supplied value, so there's no way to list another
 // user's posts by tweaking the URL.
 export default async function MyPostsPage() {
-  const user = await requireReadyUser();
+  const user = await requireReadyUser("mypost", "/posts/mine");
 
   let lostPosts, foundPosts;
   let loadError = false;

@@ -21,7 +21,7 @@ export default async function NotificationsPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const user = await requireReadyUser(); // redirects to /login or /onboarding as needed
+  const user = await requireReadyUser("notification", "/notifications"); // redirects to /login or /onboarding as needed
 
   const raw = await searchParams;
   const pageParam = Number(Array.isArray(raw.page) ? raw.page[0] : raw.page);
