@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth/auth";
+import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { prisma } from "@/lib/db/prisma";
 import type { User } from "@/generated/prisma/client";
 
@@ -35,6 +36,24 @@ export async function requireUser(): Promise<User> {
 export async function requireReadyUser(): Promise<User> {
   const user = await requireUser();
   if (user.nickname === null) redirect("/onboarding");
+  return user;
+}
+
+// Central gate for a future Server Action/page that wants "logged in,
+// nickname set, AND not currently suspended" in one call, instead of
+// repeating requireReadyUser() + isCurrentlySuspended() at every call site.
+// This does NOT replace the existing per-mutation checks in
+// posts/match/chat's service functions (createLostPost, createMatch,
+// sendMessage, ...) -- those intentionally return a typed "forbidden"
+// result so their callers (API routes) can respond with a 403 JSON error
+// the same way the legacy app's PermissionDeniedError does, which a
+// redirect-based gate can't express for a fetch() caller. Use this only
+// for a Server Component/Server Action that should never even render for a
+// suspended user; redirects to /suspended (which itself re-checks and
+// bounces home if the suspension has since expired).
+export async function requireActiveUser(): Promise<User> {
+  const user = await requireReadyUser();
+  if (isCurrentlySuspended(user)) redirect("/suspended");
   return user;
 }
 

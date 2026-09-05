@@ -10,7 +10,8 @@ vi.mock("@/lib/auth/auth", () => ({ auth }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: { user: { findUnique } } }));
 vi.mock("next/navigation", () => ({ redirect }));
 
-const { getCurrentUser, requireUser } = await import("./session");
+const { getCurrentUser, requireUser, requireReadyUser, requireActiveUser, requireAdmin } =
+  await import("./session");
 
 beforeEach(() => {
   auth.mockReset();
@@ -51,5 +52,112 @@ describe("requireUser", () => {
     auth.mockResolvedValueOnce(null);
 
     await expect(requireUser()).rejects.toThrow("REDIRECT:/login");
+  });
+});
+
+describe("requireReadyUser", () => {
+  it("returns the user when nickname is already set", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({ id: 1, nickname: "닉네임" });
+
+    await expect(requireReadyUser()).resolves.toEqual({ id: 1, nickname: "닉네임" });
+  });
+
+  it("redirects to /onboarding when signed in but nickname is not set yet", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({ id: 1, nickname: null });
+
+    await expect(requireReadyUser()).rejects.toThrow("REDIRECT:/onboarding");
+  });
+
+  it("redirects to /login when not signed in (delegates to requireUser)", async () => {
+    auth.mockResolvedValueOnce(null);
+
+    await expect(requireReadyUser()).rejects.toThrow("REDIRECT:/login");
+  });
+});
+
+describe("requireActiveUser", () => {
+  it("returns the user when ready and not suspended", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({
+      id: 1,
+      nickname: "닉네임",
+      isSuspended: false,
+      suspendedUntil: null,
+    });
+
+    await expect(requireActiveUser()).resolves.toMatchObject({ id: 1 });
+  });
+
+  it("redirects to /suspended for a permanently suspended user", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({
+      id: 1,
+      nickname: "닉네임",
+      isSuspended: true,
+      suspendedUntil: null,
+    });
+
+    await expect(requireActiveUser()).rejects.toThrow("REDIRECT:/suspended");
+  });
+
+  it("redirects to /suspended for a timed suspension that hasn't expired yet", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({
+      id: 1,
+      nickname: "닉네임",
+      isSuspended: true,
+      suspendedUntil: new Date(Date.now() + 60_000),
+    });
+
+    await expect(requireActiveUser()).rejects.toThrow("REDIRECT:/suspended");
+  });
+
+  it("allows a user through once their timed suspension has expired", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({
+      id: 1,
+      nickname: "닉네임",
+      isSuspended: true,
+      suspendedUntil: new Date(Date.now() - 60_000),
+    });
+
+    await expect(requireActiveUser()).resolves.toMatchObject({ id: 1 });
+  });
+
+  it("redirects to /onboarding before checking suspension when nickname isn't set", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({
+      id: 1,
+      nickname: null,
+      isSuspended: true,
+      suspendedUntil: null,
+    });
+
+    await expect(requireActiveUser()).rejects.toThrow("REDIRECT:/onboarding");
+  });
+});
+
+describe("requireAdmin", () => {
+  it("returns the user when ready and an admin", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({ id: 1, nickname: "닉네임", isAdmin: true });
+
+    await expect(requireAdmin()).resolves.toMatchObject({ id: 1, isAdmin: true });
+  });
+
+  it("redirects to / when ready but not an admin -- never trusts a client claim", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({ id: 1, nickname: "닉네임", isAdmin: false });
+
+    await expect(requireAdmin()).rejects.toThrow("REDIRECT:/");
+  });
+
+  it("redirects to /onboarding before checking admin status when nickname isn't set", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({ id: 1, nickname: null, isAdmin: true });
+
+    await expect(requireAdmin()).rejects.toThrow("REDIRECT:/onboarding");
   });
 });

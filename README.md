@@ -1,5 +1,19 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Environment variables
+
+Copy `.env.example` to `.env` and fill in real values. Never commit `.env` (it's already gitignored).
+
+| Variable | Used by | Notes |
+|---|---|---|
+| `DATABASE_URL` | `src/lib/db/prisma.ts` (via `@prisma/adapter-mariadb`) | MySQL/MariaDB connection string. Queries fail lazily (not at startup) if unset -- see the console warning in `prisma.ts`. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | `src/lib/auth/auth.ts` (NextAuth's Google provider) | From a Google Cloud OAuth 2.0 Client ID. Authorized redirect URI must be `<origin>/api/auth/callback/google`. |
+| `AUTH_SECRET` | NextAuth (implicit, read by the `next-auth` package itself) | Signs/encrypts the JWT session cookie. Generate with `npx auth secret` or `openssl rand -base64 32`; must be set in every environment (dev/preview/production each need their own value, or sessions from one won't validate in another). |
+| `OPENROUTER_API_KEY` | `src/lib/ai/openrouter.ts` | AI text matching/embedding provider key. |
+| `BLOB_READ_WRITE_TOKEN` | `src/app/api/upload/route.ts` (`@vercel/blob/client`) | Vercel Blob store token for post image uploads. |
+
+Only `@mju.ac.kr` Google accounts can sign in -- enforced server-side in `src/lib/auth/domain.ts` / the NextAuth `signIn` callback, not just hidden in the UI.
+
 ## Getting Started
 
 First, run the development server:
