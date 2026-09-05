@@ -1,7 +1,7 @@
-# AI 매칭 아키텍처 조사·설계 및 기술검증 (Phase 5 + Phase 6 구현/배포 검증)
+# AI 매칭 아키텍처 조사·설계 및 기술검증 (Phase 5 + Phase 6/7 구현/배포 검증)
 
 > Phase 5 작성 기준: `vercel` 브랜치 (커밋 `17eab46`), 2026-09-05.
-> §1~§15는 Phase 5의 **조사 → 비교 → 실측 PoC → 아키텍처 결정 → 구현 계획** 결과물(당시엔 실제 매칭 기능 구현을 포함하지 않았다). §16은 Phase 6에서 그 계획을 실제로 구현하고 **실제 Vercel 배포**로 검증한 결과다.
+> §1~§15는 Phase 5의 **조사 → 비교 → 실측 PoC → 아키텍처 결정 → 구현 계획** 결과물(당시엔 실제 매칭 기능 구현을 포함하지 않았다). §16은 Phase 6에서 그 계획을 실제로 구현하고 **실제 Vercel 배포**로 검증한 결과다. §17은 Phase 7에서 Phase 6이 남긴 "107MB 모델 파일의 GitHub 100MB 제한 초과" 문제를 조사(7-A)하고 실제로 해결(7-B)한 결과다.
 > 추측이 필요한 부분은 **[추측]**으로 명시했다. 그 외는 실제 코드 근거 또는 직접 실행한 PoC/배포 결과다.
 
 ---
@@ -428,4 +428,92 @@ Execution          : Vercel Functions, Node.js 런타임(Edge 불가 — 네이�
 - **인증된 UI 전체 E2E 미실행**: 위 §16.7 참고.
 
 ---
+
+## 17. Phase 7 — 모델 배포 전략 조사(7-A) 및 build-time download 구현(7-B) (2026-09-05)
+
+### 17.1 문제
+
+§16.8에서 이미 식별한 대로, `models/jhgan/ko-sroberta-multitask/onnx/model_qint8_avx512_vnni.onnx`(111,326,851 bytes)가 GitHub의 일반 git push 파일당 100MB 하드 리밋을 초과해, Phase 6 커밋을 그대로는 `origin/vercel`에 push할 수 없었다.
+
+### 17.2 조사한 전략과 최종 선택 (Phase 7-A)
+
+Git LFS, Hugging Face Hub build-time 다운로드, Supabase Storage build-time 다운로드, Vercel Blob 네 가지를 공식 문서 기준으로 비교했다. 핵심 근거:
+
+- **Supabase Storage**: Free 플랜 파일당 업로드 상한이 **50MB로 하드 캡핑**되어 있어([Supabase Docs](https://supabase.com/docs/guides/storage/uploads/file-limits)) 107MB 파일을 분할 없이 올릴 수 없음 — 조기 탈락.
+- **Git LFS**: Vercel이 공식적으로 지원한다고 명시하지만([Vercel changelog](https://vercel.com/changelog/git-lfs-support)), 정확히 우리가 필요한 시나리오(서버리스 함수가 LFS로 받은 바이너리를 런타임에 읽는 것)에서 `ENOENT`로 실패하는 미해결 커뮤니티 이슈가 실제 존재([vercel/next.js Discussion #58352](https://github.com/vercel/next.js/discussions/58352)). 또한 CLI 단독 배포(`vercel deploy`, 이 프로젝트가 실제로 쓰는 방식)에서의 동작이 문서에 명시되어 있지 않음.
+- **Hugging Face Hub build-time 다운로드**: 모델이 완전 공개(`gated: false`, 인증 불필요 — API로 직접 재확인)이고, 문제를 "관리"가 아니라 "제거"한다(애초에 git에 커밋하지 않으므로 100MB 문제 자체가 사라짐). Phase 6에서 이미 실증된 "로컬 파일을 `local_files_only: true`로 읽는" 구조를 그대로 재사용.
+- **Vercel Blob**: 기술적으로 가능하나, HF Hub가 이미 이 파일을 무료로 영구 호스팅 중인 상황에서 별도 업로드·관리 대상을 하나 더 늘릴 이유가 없어 채택하지 않음.
+
+**최종 선택: Hugging Face Hub build-time 다운로드.** (조사 상세는 Phase 7-A 자체 보고서 참고 — 이 문서에는 결정과 근거만 요약)
+
+### 17.3 실제 구현 (Phase 7-B)
+
+- **`scripts/downloadModel.mjs`** (신규, Node 내장 모듈만 사용, 외부 의존성 없음): `npm run build`/`npm run dev` 실행 시 npm의 `prebuild`/`predev` lifecycle hook으로 자동 실행됨(`package.json` 수정, Vercel 쪽 별도 설정 불필요 — Vercel은 이미 `npm run build`를 그대로 호출하므로 `prebuild`가 자동으로 먼저 실행됨).
+  - 이미 올바른 파일이 있으면(크기+SHA256 일치) 재다운로드하지 않음(멱등성 확인 완료).
+  - 파일이 없거나 검증에 실패하면 Hugging Face Hub에서 다시 받고, 임시 파일(`*.download`)에 먼저 쓴 뒤 검증 통과 시에만 최종 경로로 rename — 손상된 파일이 최종 경로에 남는 경우가 구조적으로 없음.
+  - 검증 실패 시 `process.exit(1)`로 빌드 자체를 실패시킴 — 어떤 런타임 fallback도 없음(의도적으로 구현하지 않음).
+- **Revision 고정**: `jhgan/ko-sroberta-multitask`의 `main` 브랜치가 가리키는 **불변 커밋 SHA** `8fca7c9c98c26599be0e14b9916b11a756a26f19`를 코드에 하드코딩(2026-09-05 기준 `main`의 타깃, `https://huggingface.co/api/models/jhgan/ko-sroberta-multitask/refs`로 확인). 앞으로 업스트림이 `main`을 바꿔도 이 값은 바뀌지 않는 한 절대 흔들리지 않음 — 모델을 바꾸려면 이 상수를 의도적으로 수정하는 리뷰 가능한 코드 변경이 필요.
+- **SHA256 무결성 검증**: 4개 파일 모두 크기+SHA256을 코드에 고정. ONNX 파일의 해시(`ddd6107a...`)는 Hugging Face의 tree API가 보고하는 `lfs.oid`(sha256)와 완전히 일치함을 별도로 대조 확인 — 우리가 고정한 값이 Hub가 실제로 서빙하는 바이트와 동일함을 독립적으로 재확인.
+- **런타임 구조는 완전히 보존**: `src/lib/ai/embedding.ts`의 `env.allowRemoteModels = false`, `env.localModelPath`, `local_files_only: true`는 Phase 6과 100% 동일 — 변경한 것은 "그 경로에 파일이 어떻게 도착하는가"뿐이고, 런타임이 그 파일을 읽는 방식은 전혀 바뀌지 않았다.
+- **`.gitignore`**: `/models` 추가 — 모델 디렉터리는 이제 영구적으로 git 추적 대상이 아님.
+- **`next.config.ts`**: 존재하지 않는 `/api/diag-embed-test` 경로에 대한 죽은 tracing 설정 제거(Phase 6에서 진단용으로 추가됐다가 라우트 자체는 이미 삭제됐는데 설정만 남아있던 것 — 이번에 정리). 나머지 `outputFileTracingIncludes`(onnxruntime `.so`, `models/**`)는 그대로 유지.
+
+### 17.4 Git history 정리
+
+Phase 6 커밋(`e511068`)에 111MB 모델 파일이 그대로 들어가 있었다. 이 커밋은 **한 번도 push된 적이 없는, 로컬에만 존재하던 최신(tip) 커밋**이었고, 저장소 전체를 통틀어 `models/`를 건드리는 유일한 커밋이었다(`git log --oneline --all -- 'models/*'` 및 `git rev-list --objects --all | git cat-file --batch-check` 로 사전 확인). 이 조건에서는 `git filter-repo` 같은 전체 히스토리 재작성 도구가 오히려 불필요하고 위험하다고 판단했다 — 관련 없는 다른 모든 커밋의 해시까지 바꿔버리기 때문이다. 대신:
+
+1. 안전을 위해 로컬 전용 백업 브랜치(`backup-before-history-cleanup-e511068`)를 먼저 만들어 두고,
+2. `git rm -r --cached models/` 로 인덱스에서 제거한 뒤,
+3. `git commit --amend --no-edit` 로 `e511068`을 **모델 파일이 없는 상태로 다시 작성**(새 해시 `fa81de2`) — 커밋 메시지·의미는 그대로 유지, 트리만 수정.
+4. `git rev-list --objects vercel | git cat-file --batch-check`로 `vercel` 브랜치에서 도달 가능한 모든 객체 중 50MB 초과가 없음을 확인.
+5. 검증 완료 후 백업 브랜치 삭제 + `git gc --prune=now`로 로컬에서도 완전히 제거 — 이후 재확인 시 `--all` 기준으로도 대용량 블롭이 전혀 남지 않음을 재확인(`git count-objects -v`: 로컬 `.git` 전체 634KB).
+
+이 방식으로 다른 커밋(`e5d5f06`, `17eab46` 등)의 해시나 의미는 전혀 훼손하지 않았고, `main` 브랜치는 이 작업 내내 한 번도 checkout/수정되지 않았다.
+
+### 17.5 로컬 검증 (실제로 `models/`를 지운 뒤 재실행)
+
+기존 `models/`가 남아있어 다운로드를 건너뛰는 상황을 성공으로 치지 않기 위해, **실제로 `models/`를 작업 디렉터리 밖으로 이동시킨 뒤** 처음부터 다시 실행했다:
+
+1. `models/` 이동(삭제와 동일 효과) → `npm run build` → `prebuild`가 HF Hub에서 4개 파일을 실제로 다운로드하는 로그 확인 → 4개 파일 모두 SHA256 일치 확인 → `next build` 정상 완료.
+2. 재실행 시 4개 파일 모두 "OK (cached)"로 스킵됨을 확인(멱등성).
+3. 파일 하나를 의도적으로 손상시킨 뒤 재실행 → 손상된 파일만 정확히 재다운로드되어 복구됨을 확인.
+4. 기대 해시를 의도적으로 틀리게 바꾼 뒤 실행 → `[download-model] BUILD FAILED`로 exit code 1, 임시 파일(`*.download`) 없이 정리됨, 기존에 이미 유효했던 파일은 건드리지 않음을 확인.
+5. 실제 임베딩 생성 + pgvector 유사도 검색 스모크 테스트(에어팟 유사 쌍 vs 지갑 무관 쌍) 실행 → 순위 정상(`rankedCorrectly: true`), Phase 6 때와 사실상 동일한 점수(0.904 vs 0.735) — 재다운로드된 모델이 이전과 완전히 동일한 모델임을 실측으로 재확인.
+
+### 17.6 실제 Vercel 배포 검증 (CLI, 가장 중요)
+
+로컬 `models/`를 다시 지운 상태에서(디스크에 아무것도 없는, 진짜 "빈 상태"에서) 인증된 Vercel CLI로 실제 배포했다. Vercel의 **원격 빌드 로그**에서 직접 확인:
+
+```
+2026-09-05T12:02:23.331Z  [download-model] ensuring jhgan/ko-sroberta-multitask@8fca...f19 is present under models/...
+2026-09-05T12:02:23.332Z  [download-model] fetching config.json from Hugging Face Hub...
+...
+2026-09-05T12:02:23.459Z  [download-model] fetching onnx/model_qint8_avx512_vnni.onnx from Hugging Face Hub...
+2026-09-05T12:02:25.973Z  [download-model] verified and saved: onnx/model_qint8_avx512_vnni.onnx
+2026-09-05T12:02:25.974Z  [download-model] all model files present and verified.
+```
+107MB ONNX 파일 포함 4개 파일 전체를 받는 데 **약 2.6초** — Vercel 빌드 머신(45분 제한)에 비해 무시할 수준.
+
+이후 임시 진단 라우트로 런타임을 직접 검증(결과 확인 후 라우트는 삭제):
+```json
+{"ok":true,"embedResult":{"dims":768,"elapsedMs":1142},
+ "e2e":{"results":[{"id":14,"score":0.9046},{"id":15,"score":0.7357}],"rankedCorrectly":true,"searchElapsedMs":186,"e2eElapsedMs":1674}}
+```
+- Phase 6에서 실제로 겪었던 두 장애(`libonnxruntime.so.1` 누락, `/var/task/.../.cache` 쓰기 실패) **회귀 없음** — 둘 다 재발했다면 이 응답이 `ok:false`로 명확한 에러 메시지와 함께 나왔을 것이다.
+- 런타임에서 Hugging Face Hub로의 추가 네트워크 호출은 발생하지 않음(`local_files_only: true`가 구조적으로 이를 차단 — 애초에 네트워크를 시도하는 코드 경로 자체가 없음).
+- 테스트 후 생성한 임시 게시글 3건 모두 정리 확인(DB 잔여 데이터 없음).
+
+### 17.7 GitHub push 결과
+
+`git push origin vercel` — **성공** (`633894f..1035332 vercel -> vercel`), 100MB 제한 관련 에러 없음. push 전 `vercel` 브랜치에서 도달 가능한 객체 중 50MB 초과 블롭이 전혀 없음을 재확인한 뒤 진행했다.
+
+### 17.8 Vercel Git 자동배포 확인 — 미실행 (사용자 결정)
+
+이 Vercel 프로젝트(`oyueo/mju-lost-found-vercel`)는 GitHub 저장소와 Git 연동이 되어 있지 않다. `vercel git connect`를 시도했으나 "Failed to connect oyueo-mm/mju-lost-found to project"로 실패했다 — Vercel의 GitHub App이 이 저장소에 설치/승인되어 있지 않기 때문으로, 이는 브라우저에서 사용자가 직접 1회성으로 승인해야 하는 작업이라 CLI로 대신할 수 없다. 사용자에게 진행 여부를 확인한 결과, **"CLI 배포 검증으로 충분, 이 항목은 생략"**으로 결정했다. CLI 배포(`vercel deploy`)와 Git 연동 배포는 동일한 Vercel 빌드 인프라·빌드 커맨드를 사용하므로 build-time 다운로드 메커니즘 자체의 신뢰성에 대한 결론은 달라지지 않는다고 판단하지만, "GitHub push가 실제로 Vercel 자동배포를 트리거하는지"는 이번 Phase에서 검증되지 않은 채로 남아 있다.
+
+### 17.9 남은 리스크
+
+- **Hugging Face Hub 가용성 의존**: 향후 매 빌드마다 HF Hub가 살아있어야 함. HF Hub 장애 시 그 시점의 빌드만 실패하고(런타임에는 영향 없음 — 이미 배포된 함수는 계속 정상 동작), 재시도로 해결 가능한 문제이지만, 이전 대비 새로 생긴 빌드 타임 외부 의존성인 것은 사실이다.
+- **Vercel Git 자동배포 경로 미검증** (§17.8).
+- **revision 고정 갱신 프로세스 부재**: 지금은 수동으로 `MODEL_REVISION` 상수를 바꿔야 한다. 모델을 의도적으로 업데이트할 필요가 생기면(예: 더 나은 quantization) 이 상수를 바꾸고 이 문서의 해시도 함께 갱신해야 한다는 점을 다음 담당자가 놓치기 쉽다.
 
