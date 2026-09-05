@@ -7,6 +7,7 @@ import { getFoundPost, getLostPost } from "@/lib/posts/service";
 import { FOUND_STATUSES, LOST_STATUSES, postTypeSchema } from "@/lib/posts/schema";
 import { DeletePostButton } from "@/components/post/DeletePostButton";
 import { StatusChangeControl } from "@/components/post/StatusChangeControl";
+import { DirectChatButton } from "@/components/chat/DirectChatButton";
 import { listMatchesForPost } from "@/lib/match/service";
 import { MatchPanel } from "@/components/match/MatchPanel";
 import { encodePostTargetId } from "@/lib/report/targets";
@@ -155,6 +156,16 @@ export default async function PostDetailPage({
           statuses={type === "lost" ? LOST_STATUSES : FOUND_STATUSES}
         />
       )}
+
+      {/* Phase 10: direct-chat entry point -- only a logged-in non-owner
+          can message the author this way (no Match required). The owner
+          never sees this (mirrors legacy pages/1,2, which only render the
+          button on someone else's post), and an anonymous visitor is
+          simply not offered it here rather than being redirected into a
+          login flow from a passive page load -- they can still sign in
+          via the header and come back. The API re-checks ownership/
+          suspension/post-existence regardless (getOrCreateDirectChatRoom). */}
+      {currentUser && !isOwner && <DirectChatButton postType={type} postId={post.id} />}
 
       {currentUser && (
         <ReportButton targetType="post" targetId={encodePostTargetId(type, post.id)} />

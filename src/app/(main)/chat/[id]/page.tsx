@@ -36,7 +36,9 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
             {room.counterpart.nickname ?? "알 수 없음"}
           </span>
           <span className="text-xs text-zinc-400 dark:text-zinc-500">
-            {room.lostPost.title} ↔ {room.foundPost.title}
+            {room.roomType === "match"
+              ? `${room.lostPost.title} ↔ ${room.foundPost.title}`
+              : `💬 ${room.post.title}`}
           </span>
         </div>
         <div className="flex items-center gap-3">

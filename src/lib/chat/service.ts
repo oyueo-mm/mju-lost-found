@@ -1,45 +1,64 @@
 import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { NotificationType, Prisma, type User } from "@/generated/prisma/client";
+import type { PostType } from "@/lib/posts/schema";
 import { MESSAGE_PAGE_SIZE } from "./schema";
 
 // Same placeholder text as the legacy HIDDEN_MESSAGE_PLACEHOLDER --
 // Message.hiddenAt/hiddenByUserId/hiddenReason exist in schema.prisma for
-// the Report/ModerationAction "hide_message" action, which isn't
-// implemented in this port (no Report/Moderation UI exists yet). Real
-// content is never altered, only masked here for display, exactly as
-// legacy does -- so if a future phase does implement moderation and sets
-// hiddenAt directly, chat already honors it correctly.
+// the Report/ModerationAction "hide_message" action. Real content is
+// never altered, only masked here for display, exactly as legacy does.
 const HIDDEN_MESSAGE_PLACEHOLDER = "[관리자에 의해 숨겨진 메시지입니다.]";
 
 type PostRef = { id: number; userId: number; title: string };
 
-type ChatRoomWithMatch = {
+// A ChatRoom row is exactly one of two shapes (see schema.prisma's own
+// comment on the model): Match-based (match set, direct* all null) or
+// direct (match null, exactly one of directLostPost/directFoundPost set
+// plus initiatorUserId) -- never both, never neither, for any row this
+// app itself creates. Both shapes are fetched by the same query so every
+// permission/read function below can dispatch through one place
+// (participantIdsOf/toDetailDTO), mirroring legacy's single
+// _chat_room_participant_ids() funnel for both room kinds.
+type ChatRoomRow = {
   id: number;
   matchId: number | null;
+  initiatorUserId: number | null;
   createdAt: Date;
-  match: {
-    id: number;
-    lostPost: PostRef;
-    foundPost: PostRef;
-  } | null;
+  match: { id: number; lostPost: PostRef; foundPost: PostRef } | null;
+  directLostPost: PostRef | null;
+  directFoundPost: PostRef | null;
 };
 
 export type ChatMutationResult<T> =
   | { kind: "ok"; data: T }
   | { kind: "not_found" }
-  | { kind: "forbidden" }
+  | { kind: "forbidden"; reason?: "suspended" | "self" }
   | { kind: "match_not_found" }
   | { kind: "invalid_content" };
 
-export type ChatRoomDetailDTO = {
-  id: number;
-  matchId: number;
-  createdAt: Date;
-  counterpart: { id: number; nickname: string | null };
-  lostPost: { id: number; title: string };
-  foundPost: { id: number; title: string };
-};
+// Discriminated on roomType so a caller (UI included) can never confuse
+// the two shapes -- e.g. a "match" room always has both lostPost and
+// foundPost, a "direct" room always has exactly one `post` (plus which
+// board it's on). Mirrors legacy list_chat_rooms_by_user()'s own
+// room_type field/branch.
+export type ChatRoomDetailDTO =
+  | {
+      roomType: "match";
+      id: number;
+      matchId: number;
+      createdAt: Date;
+      counterpart: { id: number; nickname: string | null };
+      lostPost: { id: number; title: string };
+      foundPost: { id: number; title: string };
+    }
+  | {
+      roomType: "direct";
+      id: number;
+      createdAt: Date;
+      counterpart: { id: number; nickname: string | null };
+      post: { id: number; title: string; type: PostType };
+    };
 
 export type ChatRoomListItemDTO = ChatRoomDetailDTO & {
   lastMessage: { content: string; createdAt: Date } | null;
@@ -57,12 +76,13 @@ export type MessageDTO = {
 
 const POST_REF_SELECT = { id: true, userId: true, title: true } as const;
 
-async function findChatRoomWithMatch(chatRoomId: number): Promise<ChatRoomWithMatch | null> {
+async function findChatRoomRow(chatRoomId: number): Promise<ChatRoomRow | null> {
   return prisma.chatRoom.findUnique({
     where: { id: chatRoomId },
     select: {
       id: true,
       matchId: true,
+      initiatorUserId: true,
       createdAt: true,
       match: {
         select: {
@@ -71,39 +91,61 @@ async function findChatRoomWithMatch(chatRoomId: number): Promise<ChatRoomWithMa
           foundPost: { select: POST_REF_SELECT },
         },
       },
+      directLostPost: { select: POST_REF_SELECT },
+      directFoundPost: { select: POST_REF_SELECT },
     },
   });
 }
 
 // Dispatches on room shape, same single funnel point every legacy
-// permission check (_chat_room_participant_ids) goes through -- this
-// phase only ever creates Match-based rooms (matchId set), but a room
-// with no match relation (shouldn't exist yet) is treated as not_found
-// rather than crashing.
-function participantIdsOf(room: ChatRoomWithMatch): Set<number> | null {
-  if (!room.match) return null;
-  return new Set([room.match.lostPost.userId, room.match.foundPost.userId]);
+// permission check (_chat_room_participant_ids) goes through, for both
+// room kinds. A row with neither match nor a direct post set (shouldn't
+// exist -- every row this app creates is one or the other) is treated as
+// not_found rather than crashing.
+function participantIdsOf(room: ChatRoomRow): Set<number> | null {
+  if (room.match) return new Set([room.match.lostPost.userId, room.match.foundPost.userId]);
+  const directPost = room.directLostPost ?? room.directFoundPost;
+  if (directPost && room.initiatorUserId !== null) {
+    return new Set([directPost.userId, room.initiatorUserId]);
+  }
+  return null;
 }
 
 async function resolveDetailDTO(
-  room: ChatRoomWithMatch,
+  room: ChatRoomRow,
   requesterId: number,
 ): Promise<ChatRoomDetailDTO | null> {
-  if (!room.match) return null;
-  const counterpartUserId =
-    room.match.lostPost.userId === requesterId ? room.match.foundPost.userId : room.match.lostPost.userId;
-  const counterpart = await prisma.user.findUnique({
-    where: { id: counterpartUserId },
-    select: { id: true, nickname: true },
-  });
+  if (room.match) {
+    const counterpartUserId =
+      room.match.lostPost.userId === requesterId ? room.match.foundPost.userId : room.match.lostPost.userId;
+    const counterpart = await resolveCounterpart(counterpartUserId);
+    return {
+      roomType: "match",
+      id: room.id,
+      matchId: room.match.id,
+      createdAt: room.createdAt,
+      counterpart,
+      lostPost: { id: room.match.lostPost.id, title: room.match.lostPost.title },
+      foundPost: { id: room.match.foundPost.id, title: room.match.foundPost.title },
+    };
+  }
+
+  const directPost = room.directLostPost ?? room.directFoundPost;
+  if (!directPost || room.initiatorUserId === null) return null;
+  const counterpartUserId = directPost.userId === requesterId ? room.initiatorUserId : directPost.userId;
+  const counterpart = await resolveCounterpart(counterpartUserId);
   return {
+    roomType: "direct",
     id: room.id,
-    matchId: room.match.id,
     createdAt: room.createdAt,
-    counterpart: counterpart ?? { id: counterpartUserId, nickname: null },
-    lostPost: { id: room.match.lostPost.id, title: room.match.lostPost.title },
-    foundPost: { id: room.match.foundPost.id, title: room.match.foundPost.title },
+    counterpart,
+    post: { id: directPost.id, title: directPost.title, type: room.directLostPost ? "lost" : "found" },
   };
+}
+
+async function resolveCounterpart(userId: number): Promise<{ id: number; nickname: string | null }> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, nickname: true } });
+  return user ?? { id: userId, nickname: null };
 }
 
 // Get-or-create the single ChatRoom for a Match -- mirrors legacy
@@ -127,7 +169,7 @@ export async function getOrCreateChatRoomForMatch(
 
   const existing = await prisma.chatRoom.findUnique({ where: { matchId } });
   if (existing) {
-    const room = await findChatRoomWithMatch(existing.id);
+    const room = await findChatRoomRow(existing.id);
     const dto = room && (await resolveDetailDTO(room, requesterId));
     if (dto) return { kind: "ok", data: dto };
   }
@@ -146,20 +188,92 @@ export async function getOrCreateChatRoomForMatch(
     }
   }
 
-  const room = await findChatRoomWithMatch(createdId);
+  const room = await findChatRoomRow(createdId);
   const dto = room && (await resolveDetailDTO(room, requesterId));
   if (!dto) throw new Error(`Failed to load ChatRoom ${createdId} for Match ${matchId}`);
   return { kind: "ok", data: dto };
 }
 
+// Phase 10: get-or-create a *direct* ChatRoom between requester (the
+// initiator/viewer) and a LostPost's or FoundPost's current author -- NOT
+// mediated by a Match, unlike getOrCreateChatRoomForMatch() above. Lets a
+// board viewer message a post's author straight away. Mirrors legacy
+// get_or_create_direct_chat_room() exactly, including validation order:
+// 1) requester not suspended, 2) post exists, 3) requester isn't the
+// post's own author (no self-chat). Idempotent via the DB's own
+// idx_chatroom_direct_{lost,found}_unique constraint (already present in
+// schema.prisma/the applied migration -- see the Phase 10 report; no
+// schema change needed for this): a second call for the same (post,
+// initiator) pair returns the existing room, and a concurrent create race
+// is resolved by re-fetching the winner, the same P2002-recovery shape
+// getOrCreateChatRoomForMatch() uses.
+export async function getOrCreateDirectChatRoom(
+  postType: PostType,
+  postId: number,
+  requester: User,
+): Promise<ChatMutationResult<ChatRoomDetailDTO>> {
+  if (isCurrentlySuspended(requester)) {
+    return { kind: "forbidden", reason: "suspended" };
+  }
+
+  const post =
+    postType === "lost"
+      ? await prisma.lostPost.findUnique({ where: { id: postId }, select: { id: true, userId: true } })
+      : await prisma.foundPost.findUnique({ where: { id: postId }, select: { id: true, userId: true } });
+  // A missing post covers both "never existed" and "deleted" -- the row
+  // simply isn't found either way, no separate check needed.
+  if (!post) return { kind: "not_found" };
+  if (post.userId === requester.id) return { kind: "forbidden", reason: "self" };
+
+  // The compound-unique field name Prisma generates is derived from the
+  // column list itself (directLostPostId_initiatorUserId), NOT from the
+  // @@unique's `map` name in schema.prisma (that only names the actual
+  // SQL index/constraint) -- verified against the generated client types.
+  const directColumn = postType === "lost" ? ({ directLostPostId: postId } as const) : ({ directFoundPostId: postId } as const);
+  const uniqueWhere =
+    postType === "lost"
+      ? { directLostPostId_initiatorUserId: { directLostPostId: postId, initiatorUserId: requester.id } }
+      : { directFoundPostId_initiatorUserId: { directFoundPostId: postId, initiatorUserId: requester.id } };
+
+  const existing = await prisma.chatRoom.findUnique({ where: uniqueWhere });
+  if (existing) {
+    const room = await findChatRoomRow(existing.id);
+    const dto = room && (await resolveDetailDTO(room, requester.id));
+    if (dto) return { kind: "ok", data: dto };
+  }
+
+  let createdId: number;
+  try {
+    const created = await prisma.chatRoom.create({
+      data: { ...directColumn, initiatorUserId: requester.id },
+      select: { id: true },
+    });
+    createdId = created.id;
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const winner = await prisma.chatRoom.findUnique({ where: uniqueWhere });
+      if (!winner) throw error;
+      createdId = winner.id;
+    } else {
+      throw error;
+    }
+  }
+
+  const room = await findChatRoomRow(createdId);
+  const dto = room && (await resolveDetailDTO(room, requester.id));
+  if (!dto) throw new Error(`Failed to load direct ChatRoom ${createdId} for ${postType} post ${postId}`);
+  return { kind: "ok", data: dto };
+}
+
 // Fetch a ChatRoom, but only for a requester who is actually a
-// participant -- mirrors legacy get_chat_room(). Never trusts a
-// client-supplied chatRoomId beyond using it to look the row up.
+// participant -- mirrors legacy get_chat_room(), for either room shape.
+// Never trusts a client-supplied chatRoomId beyond using it to look the
+// row up.
 export async function getChatRoomForUser(
   chatRoomId: number,
   requesterId: number,
 ): Promise<ChatMutationResult<ChatRoomDetailDTO>> {
-  const room = await findChatRoomWithMatch(chatRoomId);
+  const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
   const participantIds = participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
@@ -170,35 +284,53 @@ export async function getChatRoomForUser(
   return { kind: "ok", data: dto };
 }
 
-// Every Match-based ChatRoom the user participates in (owner of the
-// Match's LostPost and/or FoundPost side), most-recently-active first --
-// mirrors the ordering intent of legacy list_chat_rooms_by_user() for the
-// Match-room half of that function (this phase doesn't implement direct
-// rooms, see schema.ts's scope note).
+// Every ChatRoom (Match-based or direct) the user participates in, most-
+// recently-active first -- mirrors legacy list_chat_rooms_by_user(), now
+// covering both room kinds it does (Phase 10). Match rooms: owner of
+// either post side. Direct rooms: the initiator, or the post's current
+// author.
 export async function listChatRoomsForUser(requesterId: number): Promise<ChatRoomListItemDTO[]> {
-  const rooms = await prisma.chatRoom.findMany({
-    where: { match: { OR: [{ lostPost: { userId: requesterId } }, { foundPost: { userId: requesterId } }] } },
-    select: {
-      id: true,
-      matchId: true,
-      createdAt: true,
-      match: {
-        select: {
-          id: true,
-          lostPost: { select: POST_REF_SELECT },
-          foundPost: { select: POST_REF_SELECT },
-        },
-      },
-      messages: {
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 1,
-        select: { content: true, createdAt: true, hiddenAt: true },
+  const CHAT_ROOM_SELECT = {
+    id: true,
+    matchId: true,
+    initiatorUserId: true,
+    createdAt: true,
+    match: {
+      select: {
+        id: true,
+        lostPost: { select: POST_REF_SELECT },
+        foundPost: { select: POST_REF_SELECT },
       },
     },
-  });
+    directLostPost: { select: POST_REF_SELECT },
+    directFoundPost: { select: POST_REF_SELECT },
+    messages: {
+      orderBy: [{ createdAt: "desc" as const }, { id: "desc" as const }],
+      take: 1,
+      select: { content: true, createdAt: true, hiddenAt: true },
+    },
+  };
+
+  const [matchRooms, directRooms] = await Promise.all([
+    prisma.chatRoom.findMany({
+      where: { match: { OR: [{ lostPost: { userId: requesterId } }, { foundPost: { userId: requesterId } }] } },
+      select: CHAT_ROOM_SELECT,
+    }),
+    prisma.chatRoom.findMany({
+      where: {
+        matchId: null,
+        OR: [
+          { initiatorUserId: requesterId },
+          { directLostPost: { userId: requesterId } },
+          { directFoundPost: { userId: requesterId } },
+        ],
+      },
+      select: CHAT_ROOM_SELECT,
+    }),
+  ]);
 
   const items = await Promise.all(
-    rooms.map(async (room) => {
+    [...matchRooms, ...directRooms].map(async (room) => {
       const dto = await resolveDetailDTO(room, requesterId);
       if (!dto) return null;
       const last = room.messages[0];
@@ -232,7 +364,7 @@ export async function listMessages(
   requesterId: number,
   before?: number,
 ): Promise<ChatMutationResult<{ items: MessageDTO[]; hasMore: boolean }>> {
-  const room = await findChatRoomWithMatch(chatRoomId);
+  const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
   const participantIds = participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
@@ -268,7 +400,7 @@ export async function markMessagesAsRead(
   chatRoomId: number,
   requesterId: number,
 ): Promise<ChatMutationResult<{ count: number }>> {
-  const room = await findChatRoomWithMatch(chatRoomId);
+  const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
   const participantIds = participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
@@ -290,7 +422,7 @@ export async function markMessageNotificationsReadForChatRoom(
   chatRoomId: number,
   requesterId: number,
 ): Promise<ChatMutationResult<{ count: number }>> {
-  const room = await findChatRoomWithMatch(chatRoomId);
+  const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
   const participantIds = participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
@@ -329,18 +461,22 @@ export async function sendMessage(
   sender: User,
   content: string,
 ): Promise<ChatMutationResult<MessageDTO>> {
-  const room = await findChatRoomWithMatch(chatRoomId);
+  const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
   const participantIds = participantIdsOf(room);
-  if (!participantIds || !room.match) return { kind: "not_found" };
+  if (!participantIds) return { kind: "not_found" };
   if (!participantIds.has(sender.id)) return { kind: "forbidden" };
   if (isCurrentlySuspended(sender)) return { kind: "forbidden" };
 
   const trimmed = content.trim();
   if (!trimmed) return { kind: "invalid_content" }; // defense-in-depth; the API's zod schema already rejects this
 
-  const otherUserId =
-    room.match.lostPost.userId === sender.id ? room.match.foundPost.userId : room.match.lostPost.userId;
+  // Works for either room shape: participantIds is always exactly the
+  // sender + the one other participant (a direct room's initiator/post-
+  // author pair are guaranteed distinct at creation time -- see
+  // getOrCreateDirectChatRoom()'s self-chat check -- so this only ever
+  // falls back to sender.id itself for a Match room's self-match case).
+  const otherUserId = [...participantIds].find((id) => id !== sender.id) ?? sender.id;
 
   const message = await prisma.$transaction(async (tx) => {
     const created = await tx.message.create({

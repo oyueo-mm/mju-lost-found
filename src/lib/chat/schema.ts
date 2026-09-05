@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { postTypeSchema } from "@/lib/posts/schema";
+
 // Matches the legacy MESSAGE_PAGE_SIZE constant exactly.
 export const MESSAGE_PAGE_SIZE = 50;
 
@@ -10,13 +12,22 @@ export const MESSAGE_PAGE_SIZE = 50;
 // sane upper limit regardless of what the column allows.
 export const MAX_MESSAGE_LENGTH = 2000;
 
-// Scope note: this phase only implements Match-based chat rooms (see the
-// Phase 10 report) -- the legacy app's "direct" (non-Match, DM-a-post-
-// author) ChatRoom shape that schema.prisma also supports is not wired up
-// to any UI this phase, so there's no create-schema for it here.
-export const createChatRoomSchema = z.object({
+// POST /api/chat accepts either shape: a Match-based room (mirrors legacy
+// get_or_create_chat_room) or a Phase 10 "direct" room -- a viewer
+// messaging a post's author straight from the board, no Match required
+// (mirrors legacy get_or_create_direct_chat_room). postType/postId reuse
+// posts/schema.ts's own postTypeSchema rather than redeclaring "lost"/
+// "found" here.
+export const createMatchChatRoomSchema = z.object({
   matchId: z.coerce.number().int().positive("matchId가 올바르지 않습니다."),
 });
+
+export const createDirectChatRoomSchema = z.object({
+  postType: postTypeSchema,
+  postId: z.coerce.number().int().positive("postId가 올바르지 않습니다."),
+});
+
+export const createChatRoomSchema = z.union([createMatchChatRoomSchema, createDirectChatRoomSchema]);
 
 export const sendMessageSchema = z.object({
   content: z

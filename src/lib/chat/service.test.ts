@@ -14,6 +14,8 @@ const chatRoom = { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() };
 const message = { findMany: vi.fn(), updateMany: vi.fn() };
 const userTable = { findUnique: vi.fn() };
 const notification = { updateMany: vi.fn() };
+const lostPostTable = { findUnique: vi.fn() };
+const foundPostTable = { findUnique: vi.fn() };
 const txMessageCreate = vi.fn();
 const txNotificationCreate = vi.fn();
 const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
@@ -21,16 +23,29 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
 );
 
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { match, chatRoom, message, user: userTable, notification, $transaction },
+  prisma: {
+    match,
+    chatRoom,
+    message,
+    user: userTable,
+    notification,
+    lostPost: lostPostTable,
+    foundPost: foundPostTable,
+    $transaction,
+  },
 }));
 vi.mock("@/generated/prisma/client", () => ({
   NotificationType: { MESSAGE: "MESSAGE" },
   Prisma: { PrismaClientKnownRequestError: FakePrismaClientKnownRequestError },
 }));
+vi.mock("@/lib/auth/suspension", () => ({
+  isCurrentlySuspended: (user: { isSuspended?: boolean }) => Boolean(user?.isSuspended),
+}));
 
 const {
   getChatRoomForUser,
   getOrCreateChatRoomForMatch,
+  getOrCreateDirectChatRoom,
   listChatRoomsForUser,
   listMessages,
   markMessageNotificationsReadForChatRoom,
@@ -50,12 +65,30 @@ function roomWithMatch(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 100,
     matchId: 10,
+    initiatorUserId: null,
     createdAt: new Date("2026-01-01"),
     match: {
       id: 10,
       lostPost: postRef({ id: 1, userId: lostOwner, title: "지갑 분실" }),
       foundPost: postRef({ id: 2, userId: foundOwner, title: "지갑 습득" }),
     },
+    directLostPost: null,
+    directFoundPost: null,
+    ...overrides,
+  };
+}
+
+// Phase 10: a direct (non-Match) room -- `stranger` (the viewer) messaged
+// LostPost id=1's owner (lostOwner) directly.
+function roomDirect(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 200,
+    matchId: null,
+    initiatorUserId: stranger,
+    createdAt: new Date("2026-01-01"),
+    match: null,
+    directLostPost: postRef({ id: 1, userId: lostOwner, title: "지갑 분실" }),
+    directFoundPost: null,
     ...overrides,
   };
 }
@@ -140,6 +173,133 @@ describe("getOrCreateChatRoomForMatch", () => {
   });
 });
 
+// Phase 10: mirrors legacy get_or_create_direct_chat_room()'s exact
+// validation order (not suspended -> post exists -> not the post's own
+// author), and its idempotent get-or-create shape (backed by ChatRoom's
+// real DB unique constraint -- see the Phase 10 report for why no
+// migration was needed for this).
+describe("getOrCreateDirectChatRoom", () => {
+  const viewer = { id: stranger, nickname: "방문자", isSuspended: false, suspendedUntil: null } as unknown as User;
+
+  it("lets a non-owner viewer create a direct room with a LostPost's author", async () => {
+    lostPostTable.findUnique.mockResolvedValueOnce({ id: 1, userId: lostOwner });
+    chatRoom.findUnique.mockResolvedValueOnce(null); // no existing room
+    chatRoom.create.mockResolvedValueOnce({ id: 200 });
+    chatRoom.findUnique.mockResolvedValueOnce(roomDirect()); // findChatRoomRow(200)
+    userTable.findUnique.mockResolvedValueOnce({ id: lostOwner, nickname: "분실자" });
+
+    const result = await getOrCreateDirectChatRoom("lost", 1, viewer);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.roomType).toBe("direct");
+      expect(result.data.id).toBe(200);
+    }
+    expect(chatRoom.create).toHaveBeenCalledWith({
+      data: { directLostPostId: 1, initiatorUserId: stranger },
+      select: { id: true },
+    });
+  });
+
+  it("lets a non-owner viewer create a direct room with a FoundPost's author", async () => {
+    foundPostTable.findUnique.mockResolvedValueOnce({ id: 5, userId: foundOwner });
+    chatRoom.findUnique.mockResolvedValueOnce(null);
+    chatRoom.create.mockResolvedValueOnce({ id: 201 });
+    chatRoom.findUnique.mockResolvedValueOnce(
+      roomDirect({ id: 201, directLostPost: null, directFoundPost: postRef({ id: 5, userId: foundOwner, title: "지갑 습득" }) }),
+    );
+
+    const result = await getOrCreateDirectChatRoom("found", 5, viewer);
+
+    expect(result.kind).toBe("ok");
+    expect(chatRoom.create).toHaveBeenCalledWith({
+      data: { directFoundPostId: 5, initiatorUserId: stranger },
+      select: { id: true },
+    });
+  });
+
+  it("rejects the post's own author -- no self-chat", async () => {
+    const owner = { id: lostOwner, nickname: "분실자", isSuspended: false, suspendedUntil: null } as unknown as User;
+    lostPostTable.findUnique.mockResolvedValueOnce({ id: 1, userId: lostOwner });
+
+    const result = await getOrCreateDirectChatRoom("lost", 1, owner);
+
+    expect(result).toEqual({ kind: "forbidden", reason: "self" });
+    expect(chatRoom.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a suspended requester before ever looking at the post", async () => {
+    const suspended = { id: stranger, nickname: "정지됨", isSuspended: true, suspendedUntil: null } as unknown as User;
+
+    const result = await getOrCreateDirectChatRoom("lost", 1, suspended);
+
+    expect(result).toEqual({ kind: "forbidden", reason: "suspended" });
+    expect(lostPostTable.findUnique).not.toHaveBeenCalled();
+    expect(chatRoom.create).not.toHaveBeenCalled();
+  });
+
+  it("returns not_found for a nonexistent post (also covers a deleted post -- same DB row absence)", async () => {
+    lostPostTable.findUnique.mockResolvedValueOnce(null);
+
+    const result = await getOrCreateDirectChatRoom("lost", 999, viewer);
+
+    expect(result).toEqual({ kind: "not_found" });
+    expect(chatRoom.create).not.toHaveBeenCalled();
+  });
+
+  it("returns the existing room instead of creating a duplicate (idempotent)", async () => {
+    lostPostTable.findUnique.mockResolvedValueOnce({ id: 1, userId: lostOwner });
+    chatRoom.findUnique.mockResolvedValueOnce({ id: 200 }); // existing room found by the unique constraint
+    chatRoom.findUnique.mockResolvedValueOnce(roomDirect()); // findChatRoomRow(200)
+
+    const result = await getOrCreateDirectChatRoom("lost", 1, viewer);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.data.id).toBe(200);
+    expect(chatRoom.create).not.toHaveBeenCalled();
+    expect(chatRoom.findUnique).toHaveBeenNthCalledWith(1, {
+      where: { directLostPostId_initiatorUserId: { directLostPostId: 1, initiatorUserId: stranger } },
+    });
+  });
+
+  it("resolves a concurrent duplicate-creation race by returning the winning room", async () => {
+    lostPostTable.findUnique.mockResolvedValueOnce({ id: 1, userId: lostOwner });
+    chatRoom.findUnique.mockResolvedValueOnce(null); // no existing room seen at first
+    chatRoom.create.mockRejectedValueOnce(new FakePrismaClientKnownRequestError("P2002"));
+    chatRoom.findUnique.mockResolvedValueOnce({ id: 200 }); // the other request's winner
+    chatRoom.findUnique.mockResolvedValueOnce(roomDirect()); // findChatRoomRow(200)
+
+    const result = await getOrCreateDirectChatRoom("lost", 1, viewer);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.data.id).toBe(200);
+  });
+
+  // Requirement: "여러 번 호출해도 ChatRoom 하나만 존재" -- calling twice
+  // in sequence must only ever INSERT once; the second call must take the
+  // idempotent get-existing path.
+  it("only ever creates one room across repeated calls for the same (post, viewer) pair", async () => {
+    lostPostTable.findUnique.mockResolvedValue({ id: 1, userId: lostOwner });
+    chatRoom.findUnique.mockResolvedValueOnce(null);
+    chatRoom.create.mockResolvedValueOnce({ id: 200 });
+    chatRoom.findUnique.mockResolvedValueOnce(roomDirect());
+
+    const first = await getOrCreateDirectChatRoom("lost", 1, viewer);
+
+    chatRoom.findUnique.mockResolvedValueOnce({ id: 200 }); // now exists
+    chatRoom.findUnique.mockResolvedValueOnce(roomDirect());
+
+    const second = await getOrCreateDirectChatRoom("lost", 1, viewer);
+
+    expect(first.kind).toBe("ok");
+    expect(second.kind).toBe("ok");
+    if (first.kind === "ok" && second.kind === "ok") {
+      expect(first.data.id).toBe(second.data.id);
+    }
+    expect(chatRoom.create).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("getChatRoomForUser", () => {
   it("returns not_found for a nonexistent room", async () => {
     chatRoom.findUnique.mockResolvedValueOnce(null);
@@ -162,19 +322,87 @@ describe("getChatRoomForUser", () => {
     expect(result.kind).toBe("ok");
     if (result.kind === "ok") expect(result.data.counterpart.id).toBe(foundOwner);
   });
+
+  // Phase 10: direct rooms go through the same access-control path.
+  it("returns a direct room for the initiator", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomDirect());
+    userTable.findUnique.mockResolvedValueOnce({ id: lostOwner, nickname: "분실자" });
+
+    const result = await getChatRoomForUser(200, stranger);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok" && result.data.roomType === "direct") {
+      expect(result.data.counterpart.id).toBe(lostOwner);
+      expect(result.data.post.id).toBe(1);
+    }
+  });
+
+  it("returns a direct room for the post's author (the other participant)", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomDirect());
+    userTable.findUnique.mockResolvedValueOnce({ id: stranger, nickname: "방문자" });
+
+    const result = await getChatRoomForUser(200, lostOwner);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok" && result.data.roomType === "direct") {
+      expect(result.data.counterpart.id).toBe(stranger);
+    }
+  });
+
+  it("rejects a third party for a direct room", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomDirect());
+
+    const result = await getChatRoomForUser(200, 12345);
+
+    expect(result).toEqual({ kind: "forbidden" });
+  });
 });
 
 describe("listChatRoomsForUser", () => {
-  it("scopes the query to rooms the user participates in", async () => {
-    chatRoom.findMany.mockResolvedValueOnce([]);
+  // Phase 10: the user's match rooms and direct rooms are two separate
+  // queries (merged afterward), so both calls need their own mock return.
+  it("scopes the match-room query to rooms the user participates in via a Match", async () => {
+    chatRoom.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
     await listChatRoomsForUser(lostOwner);
 
-    expect(chatRoom.findMany).toHaveBeenCalledWith(
+    expect(chatRoom.findMany).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
         where: { match: { OR: [{ lostPost: { userId: lostOwner } }, { foundPost: { userId: lostOwner } }] } },
       }),
     );
+  });
+
+  it("scopes the direct-room query to rooms where the user is the initiator or the post's owner", async () => {
+    chatRoom.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+    await listChatRoomsForUser(lostOwner);
+
+    expect(chatRoom.findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: {
+          matchId: null,
+          OR: [
+            { initiatorUserId: lostOwner },
+            { directLostPost: { userId: lostOwner } },
+            { directFoundPost: { userId: lostOwner } },
+          ],
+        },
+      }),
+    );
+  });
+
+  it("includes both match and direct rooms in the returned list", async () => {
+    chatRoom.findMany
+      .mockResolvedValueOnce([{ ...roomWithMatch(), messages: [] }])
+      .mockResolvedValueOnce([{ ...roomDirect(), messages: [] }]);
+
+    const results = await listChatRoomsForUser(lostOwner);
+
+    expect(results).toHaveLength(2);
+    expect(results.map((r) => r.roomType).sort()).toEqual(["direct", "match"]);
   });
 });
 
@@ -420,5 +648,59 @@ describe("sendMessage", () => {
     $transaction.mockRejectedValueOnce(new Error("connection lost"));
 
     await expect(sendMessage(100, sender, "안녕하세요")).rejects.toThrow("connection lost");
+  });
+
+  // Phase 10: direct-room participants send/receive exactly like a
+  // Match room's participants -- same funnel (participantIdsOf), so a
+  // third party is rejected the same way too.
+  describe("direct rooms", () => {
+    const initiator = { id: stranger, nickname: "방문자", isSuspended: false, suspendedUntil: null } as unknown as User;
+
+    it("lets the initiator send a message and notifies the post's author", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomDirect());
+      txMessageCreate.mockResolvedValueOnce({
+        id: 1,
+        senderUserId: stranger,
+        content: "안녕하세요",
+        createdAt: new Date(),
+        readAt: null,
+        sender: { nickname: "방문자" },
+      });
+
+      const result = await sendMessage(200, initiator, "안녕하세요");
+
+      expect(result.kind).toBe("ok");
+      expect(txNotificationCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ userId: lostOwner, relatedId: 1 }) }),
+      );
+    });
+
+    it("lets the post's author send a message and notifies the initiator", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomDirect());
+      txMessageCreate.mockResolvedValueOnce({
+        id: 2,
+        senderUserId: lostOwner,
+        content: "네 안녕하세요",
+        createdAt: new Date(),
+        readAt: null,
+        sender: { nickname: "닉네임" },
+      });
+
+      await sendMessage(200, sender, "네 안녕하세요");
+
+      expect(txNotificationCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ userId: stranger, relatedId: 2 }) }),
+      );
+    });
+
+    it("rejects a third party -- not the initiator, not the post's author", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomDirect());
+      const thirdParty = { id: 12345, nickname: "제3자", isSuspended: false, suspendedUntil: null } as unknown as User;
+
+      const result = await sendMessage(200, thirdParty, "안녕하세요");
+
+      expect(result).toEqual({ kind: "forbidden" });
+      expect($transaction).not.toHaveBeenCalled();
+    });
   });
 });
