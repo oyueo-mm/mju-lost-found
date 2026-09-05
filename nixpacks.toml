@@ -1,0 +1,16 @@
+# Railway가 이 프로젝트를 확실히 Node 앱으로 빌드하도록 명시한다.
+# (legacy-python/ 안의 파이썬 코드를 보고 Python 앱으로 오인하는 걸 막는다.)
+providers = ["node"]
+
+[phases.setup]
+# better-sqlite3가 미리 빌드된 바이너리를 못 받아 직접 컴파일해야 할 때를 대비한 도구들.
+nixPkgs = ["nodejs_22", "python311", "gcc", "gnumake"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm start"

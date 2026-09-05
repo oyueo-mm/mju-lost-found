@@ -1,0 +1,31 @@
+{
+  "name": "mju-lost-found",
+  "version": "1.0.0",
+  "private": true,
+  "description": "명지 스마트 분실물 센터 - React(Vite) + Express 단일 서버 구조",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n SERVER,CLIENT -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "node --watch BE/server.js",
+    "dev:client": "vite",
+    "build": "vite build",
+    "start": "node BE/server.js",
+    "db:reset": "node -e \"import('./BE/db.js').then(m=>{m.resetDatabase();console.log('DB reset 완료');})\""
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "better-sqlite3": "^12.4.1",
+    "cookie-session": "^2.1.0",
+    "express": "^5.2.1",
+    "multer": "^2.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^6.0.11"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

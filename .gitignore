@@ -1,18 +1,31 @@
-# Python
+# Node
+node_modules/
+npm-debug.log*
+
+# 빌드 결과물 (Railway가 배포할 때 직접 빌드하므로 커밋하지 않는다)
+dist/
+
+# 환경변수 (절대 커밋 금지)
+.env
+.env.local
+
+# DB + 업로드 이미지 (사용자 데이터, 소스가 아님)
+data/
+
+# 에디터/OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# --- 마이그레이션 이전 파이썬 프로젝트(legacy-python/) 관련 ---
 __pycache__/
 *.pyc
 .venv/
 venv/
+legacy-python/db/*.db
+legacy-python/uploads/*
+!legacy-python/uploads/.gitkeep
+legacy-python/.streamlit/secrets.toml
 
-# SQLite database (generated from db/schema.sql, not source of truth)
-db/*.db
-
-# Uploaded images (user-generated content, not source code)
-uploads/*
-!uploads/.gitkeep
-
-# Streamlit
-.streamlit/secrets.toml
-
-# Contains team members' real names and student IDs -- keep local only
+# 팀원 실명/학번이 들어있어 로컬에만 둔다
 바이브코딩 경진대회 기획안.pdf
