@@ -5,7 +5,7 @@ const getCurrentUser = vi.fn();
 const isCurrentlySuspended = vi.fn();
 const getLostPost = vi.fn();
 const getFoundPost = vi.fn();
-const handleUpload = vi.fn();
+const createSignedUploadUrl = vi.fn();
 
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser }));
 vi.mock("@/lib/auth/suspension", () => ({ isCurrentlySuspended }));
@@ -18,7 +18,7 @@ vi.mock("@/lib/posts/http", async () => {
   const response = await import("@/lib/posts/response");
   return { ...response };
 });
-vi.mock("@vercel/blob/client", () => ({ handleUpload }));
+vi.mock("@/lib/images/supabaseAdmin", () => ({ createSignedUploadUrl }));
 
 const { POST } = await import("./route");
 
@@ -31,14 +31,9 @@ function requestWith(body: unknown) {
   });
 }
 
-async function callOnBeforeGenerateToken(pathname: string) {
-  let captured: ((p: string, c: string | null, m: boolean) => Promise<unknown>) | undefined;
-  handleUpload.mockImplementationOnce(async (opts) => {
-    captured = opts.onBeforeGenerateToken;
-    return { type: "blob.generate-client-token", clientToken: "token" };
-  });
-  await POST(requestWith({ type: "blob.generate-client-token", payload: { pathname } }));
-  return captured!(pathname, null, false);
+async function callAndGetJson(body: unknown) {
+  const res = await POST(requestWith(body));
+  return { status: res.status, json: await res.json() };
 }
 
 beforeEach(() => {
@@ -47,38 +42,115 @@ beforeEach(() => {
 });
 
 describe("POST /api/upload", () => {
-  it("rejects an unauthenticated upload request", async () => {
+  it("rejects an unauthenticated request", async () => {
     getCurrentUser.mockResolvedValueOnce(null);
 
-    await expect(callOnBeforeGenerateToken("posts/lost/1/11111111-1111-1111-1111-111111111111.jpg")).rejects.toThrow(
-      "로그인이 필요합니다.",
-    );
+    const { status, json } = await callAndGetJson({
+      postType: "lost",
+      postId: 1,
+      contentType: "image/jpeg",
+    });
+
+    expect(status).toBe(401);
+    expect(json.error).toMatch(/로그인/);
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it("rejects a user who hasn't set a nickname yet", async () => {
+    getCurrentUser.mockResolvedValueOnce({ ...readyUser, nickname: null });
+
+    const { status } = await callAndGetJson({ postType: "lost", postId: 1, contentType: "image/jpeg" });
+
+    expect(status).toBe(403);
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
+  it("rejects a suspended user", async () => {
+    getCurrentUser.mockResolvedValueOnce(readyUser);
+    isCurrentlySuspended.mockReturnValueOnce(true);
+
+    const { status, json } = await callAndGetJson({
+      postType: "lost",
+      postId: 1,
+      contentType: "image/jpeg",
+    });
+
+    expect(status).toBe(403);
+    expect(json.error).toMatch(/정지된 계정/);
+  });
+
+  it("rejects an unsupported content type", async () => {
+    getCurrentUser.mockResolvedValueOnce(readyUser);
+
+    const { status } = await callAndGetJson({ postType: "lost", postId: 1, contentType: "image/gif" });
+
+    expect(status).toBe(400);
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
   });
 
   it("rejects an upload for a post the user doesn't own", async () => {
     getCurrentUser.mockResolvedValueOnce(readyUser);
     getLostPost.mockResolvedValueOnce({ author: { id: 999 } });
 
-    await expect(
-      callOnBeforeGenerateToken("posts/lost/1/11111111-1111-1111-1111-111111111111.jpg"),
-    ).rejects.toThrow("본인 게시물에만");
+    const { status, json } = await callAndGetJson({
+      postType: "lost",
+      postId: 1,
+      contentType: "image/jpeg",
+    });
+
+    expect(status).toBe(403);
+    expect(json.error).toMatch(/본인 게시물/);
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
   });
 
-  it("rejects a malformed pathname", async () => {
+  it("rejects a request for a post that doesn't exist", async () => {
     getCurrentUser.mockResolvedValueOnce(readyUser);
+    getLostPost.mockResolvedValueOnce(null);
 
-    await expect(callOnBeforeGenerateToken("../../etc/passwd")).rejects.toThrow("잘못된 업로드 경로");
+    const { status } = await callAndGetJson({ postType: "lost", postId: 999, contentType: "image/jpeg" });
+
+    expect(status).toBe(403);
   });
 
-  it("grants a token for the owner's own post", async () => {
+  it("mints a signed upload URL for the owner's own post", async () => {
     getCurrentUser.mockResolvedValueOnce(readyUser);
     getLostPost.mockResolvedValueOnce({ author: { id: 1 } });
+    createSignedUploadUrl.mockResolvedValueOnce({ path: "posts/lost/1/uuid.jpg", token: "tok" });
 
-    const result = (await callOnBeforeGenerateToken(
-      "posts/lost/1/11111111-1111-1111-1111-111111111111.jpg",
-    )) as { allowedContentTypes: string[]; maximumSizeInBytes: number };
+    const { status, json } = await callAndGetJson({
+      postType: "lost",
+      postId: 1,
+      contentType: "image/jpeg",
+    });
 
-    expect(result.allowedContentTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
-    expect(result.maximumSizeInBytes).toBe(10 * 1024 * 1024);
+    expect(status).toBe(200);
+    expect(json.data).toEqual({ path: "posts/lost/1/uuid.jpg", token: "tok" });
+    expect(createSignedUploadUrl).toHaveBeenCalledWith(expect.stringMatching(/^posts\/lost\/1\//));
+  });
+
+  it("dispatches to found-post ownership checks for postType=found", async () => {
+    getCurrentUser.mockResolvedValueOnce(readyUser);
+    getFoundPost.mockResolvedValueOnce({ author: { id: 1 } });
+    createSignedUploadUrl.mockResolvedValueOnce({ path: "posts/found/1/uuid.jpg", token: "tok" });
+
+    const { status } = await callAndGetJson({ postType: "found", postId: 1, contentType: "image/png" });
+
+    expect(status).toBe(200);
+    expect(getLostPost).not.toHaveBeenCalled();
+  });
+
+  it("returns a 502 when Supabase fails to mint the URL", async () => {
+    getCurrentUser.mockResolvedValueOnce(readyUser);
+    getLostPost.mockResolvedValueOnce({ author: { id: 1 } });
+    createSignedUploadUrl.mockRejectedValueOnce(new Error("network error"));
+
+    const { status, json } = await callAndGetJson({
+      postType: "lost",
+      postId: 1,
+      contentType: "image/jpeg",
+    });
+
+    expect(status).toBe(502);
+    expect(json.error).toBeTruthy();
   });
 });

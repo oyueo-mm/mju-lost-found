@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
-import { deleteBlobSafely } from "@/lib/images/blob";
+import { deleteObjectSafely } from "@/lib/images/supabaseAdmin";
 import {
   FoundPostStatus as PrismaFoundPostStatus,
   LostPostStatus as PrismaLostPostStatus,
@@ -269,15 +269,15 @@ export async function deleteLostPost(
   if (!existing) return { kind: "not_found" };
   if (existing.userId !== userId) return { kind: "forbidden", reason: "not_owner" };
 
-  // A plain delete -- Match/ChatRoom/Message aren't implemented yet, but
-  // the ON DELETE CASCADE already declared on those relations (see
-  // schema.prisma) is what's meant to keep them consistent once they
-  // exist, the same way delete_lost_post() in the legacy app never
-  // manually cleans up related rows either.
+  // A plain delete -- the ON DELETE CASCADE already declared on
+  // Match/ChatRoom/Message's relations (see schema.prisma) is what keeps
+  // them consistent, the same way delete_lost_post() in the legacy app
+  // never manually cleans up related rows either.
   await prisma.lostPost.delete({ where: { id } });
-  // Best-effort: the post is already gone from the DB either way, a Blob
-  // cleanup failure here is only logged, never surfaced as a failed delete.
-  if (existing.imageUrl) await deleteBlobSafely(existing.imageUrl);
+  // Best-effort: the post is already gone from the DB either way, a
+  // Storage cleanup failure here is only logged, never surfaced as a
+  // failed delete.
+  if (existing.imageUrl) await deleteObjectSafely(existing.imageUrl);
   return { kind: "ok", data: { id } };
 }
 
@@ -360,7 +360,7 @@ export async function deleteFoundPost(
   if (existing.userId !== userId) return { kind: "forbidden", reason: "not_owner" };
 
   await prisma.foundPost.delete({ where: { id } });
-  if (existing.imageUrl) await deleteBlobSafely(existing.imageUrl);
+  if (existing.imageUrl) await deleteObjectSafely(existing.imageUrl);
   return { kind: "ok", data: { id } };
 }
 

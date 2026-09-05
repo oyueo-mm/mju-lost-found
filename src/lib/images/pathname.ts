@@ -4,10 +4,11 @@ import type { PostType } from "@/lib/posts/schema";
 // posts/{postType}/{postId}/{uuid}.{ext} -- the post must already exist
 // (see src/lib/images/service.ts) so postId is always the post's real,
 // numeric id, never a user-supplied filename or a client-invented value.
-// isValidImagePathname() is what actually enforces this shape server-side
-// (in /api/upload's onBeforeGenerateToken) since @vercel/blob/client lets
-// the browser propose the pathname -- this function just builds a
-// pathname that will pass that check.
+// The server (src/app/api/upload/route.ts) is the only thing that ever
+// calls buildImagePathname() -- the browser just receives the result and
+// later reports it back when attaching the image to a post (POST
+// /api/posts/[id]/image), at which point parseImagePathname() re-validates
+// it actually names the same (postType, postId) rather than trusting it.
 const PATHNAME_PATTERN =
   /^posts\/(lost|found)\/(\d+)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/;
 

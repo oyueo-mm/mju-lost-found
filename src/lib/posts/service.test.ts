@@ -18,16 +18,18 @@ const foundPost = {
   delete: vi.fn(),
 };
 
-const del = vi.fn();
+const deleteObjectSafely = vi.fn();
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost } }));
 vi.mock("@/generated/prisma/client", () => ({
   LostPostStatus: { SEARCHING: "SEARCHING", FOUND: "FOUND" },
   FoundPostStatus: { KEEPING: "KEEPING", COMPLETED: "COMPLETED" },
 }));
-// Real deleteBlobSafely (not mocked) so its own try/catch is what's under
-// test below -- only the underlying @vercel/blob SDK call is mocked.
-vi.mock("@vercel/blob", () => ({ del }));
+// deleteObjectSafely's own error-swallowing is tested in
+// src/lib/images/supabaseAdmin.test.ts -- here it's mocked wholesale so
+// these tests only assert that posts/service.ts calls it (and in what
+// order relative to the DB delete), not how it behaves internally.
+vi.mock("@/lib/images/supabaseAdmin", () => ({ deleteObjectSafely }));
 
 const {
   createFoundPost,
@@ -203,25 +205,21 @@ describe("deleteLostPost / deleteFoundPost", () => {
     expect(lostPost.delete).toHaveBeenCalledWith({ where: { id: 1 } });
   });
 
-  it("cleans up the post's image blob on delete", async () => {
+  it("cleans up the post's image in Storage on delete", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x/y.jpg" });
     lostPost.delete.mockResolvedValueOnce({});
-    del.mockResolvedValueOnce(undefined);
+    deleteObjectSafely.mockResolvedValueOnce(undefined);
 
     await deleteLostPost(1, 1);
 
-    expect(del).toHaveBeenCalledWith("https://x/y.jpg");
+    expect(deleteObjectSafely).toHaveBeenCalledWith("https://x/y.jpg");
   });
 
-  it("still succeeds even if the image blob fails to delete", async () => {
-    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x/y.jpg" });
-    lostPost.delete.mockResolvedValueOnce({});
-    del.mockRejectedValueOnce(new Error("blob service unavailable"));
-
-    const result = await deleteLostPost(1, 1);
-
-    expect(result).toEqual({ kind: "ok", data: { id: 1 } });
-  });
+  // deleteObjectSafely() never rejects by contract (its own try/catch
+  // swallows every failure -- see src/lib/images/supabaseAdmin.test.ts),
+  // which is exactly why deleteLostPost()/deleteFoundPost() don't wrap
+  // their call to it in a try/catch of their own: there is deliberately
+  // only one place that failure-handling logic lives.
 
   it("rejects deleting someone else's post", async () => {
     foundPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });

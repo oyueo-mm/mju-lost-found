@@ -1,11 +1,13 @@
 import { z } from "zod";
 
-// What the client sends after its own direct-to-Blob upload (via
-// @vercel/blob/client's upload()) finishes -- just enough to look the
-// blob up and re-validate it server-side (see isOurBlobUrl in blob.ts).
-// The actual bytes never pass through this server.
+// What the client sends after its own direct-to-Storage upload (via
+// uploadToSignedUrl(), see src/lib/images/supabaseBrowser.ts) finishes --
+// just the path, which the server re-validates and re-derives the public
+// URL from itself (see src/lib/images/service.ts::setPostImage). Unlike
+// the earlier Vercel Blob design, the client never gets to assert a URL --
+// only a path, which is meaningless without the matching post/ownership
+// check anyway.
 export const attachImageSchema = z.object({
-  url: z.string().url("올바른 URL이 아닙니다."),
-  pathname: z.string().min(1, "pathname이 필요합니다."),
+  path: z.string().min(1, "path가 필요합니다."),
 });
 export type AttachImageInput = z.infer<typeof attachImageSchema>;

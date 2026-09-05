@@ -1,67 +1,66 @@
-import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
-import { jsonError, withErrorHandling } from "@/lib/posts/http";
+import { jsonError, jsonOk, withErrorHandling } from "@/lib/posts/http";
 import { getFoundPost, getLostPost } from "@/lib/posts/service";
-import { ALLOWED_IMAGE_CONTENT_TYPES, MAX_IMAGE_SIZE_BYTES } from "@/lib/images/config";
-import { isValidImagePathname, parseImagePathname } from "@/lib/images/pathname";
+import { isAllowedImageContentType } from "@/lib/images/config";
+import { buildImagePathname } from "@/lib/images/pathname";
+import { createSignedUploadUrl } from "@/lib/images/supabaseAdmin";
+import { postTypeSchema } from "@/lib/posts/schema";
 
-// Vendor a short-lived, tightly-scoped client upload token instead of
-// proxying the file bytes through this server -- the file goes straight
-// from the browser to Blob storage. BLOB_READ_WRITE_TOKEN itself never
-// leaves the server; only handleUpload() reads it (defaults to
-// process.env.BLOB_READ_WRITE_TOKEN).
+const requestSchema = z.object({
+  postType: postTypeSchema,
+  postId: z.number().int().positive(),
+  contentType: z.string(),
+});
+
+// Mints a short-lived, path-scoped signed upload URL/token for Supabase
+// Storage -- the file's bytes never pass through this server (Vercel's
+// Serverless Function body-size limit is well under this app's 10MB image
+// cap, so proxying the upload through this route isn't viable). This is
+// the one and only place login/nickname/suspension/ownership/pathname are
+// checked for an upload -- mirrors the legacy design's
+// onBeforeGenerateToken() exactly, just against a different storage
+// backend (see src/lib/images/supabaseAdmin.ts).
 export const POST = withErrorHandling(async (request: NextRequest) => {
-  const body = (await request.json()) as HandleUploadBody;
+  const user = await getCurrentUser();
+  if (!user) return jsonError(401, "로그인이 필요합니다.");
+  if (user.nickname === null) return jsonError(403, "닉네임을 먼저 설정해주세요.");
+  if (isCurrentlySuspended(user)) {
+    return jsonError(403, "정지된 계정은 이 기능을 사용할 수 없습니다.");
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonError(400, "잘못된 요청 본문입니다.");
+  }
+
+  const parsed = requestSchema.safeParse(body);
+  if (!parsed.success) {
+    return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
+  }
+  const { postType, postId, contentType } = parsed.data;
+
+  if (!isAllowedImageContentType(contentType)) {
+    return jsonError(400, "JPEG, PNG, WebP 형식만 업로드할 수 있습니다.");
+  }
+
+  const post = postType === "lost" ? await getLostPost(postId) : await getFoundPost(postId);
+  if (!post || post.author.id !== user.id) {
+    return jsonError(403, "본인 게시물에만 이미지를 업로드할 수 있습니다.");
+  }
+
+  const pathname = buildImagePathname(postType, postId, contentType);
 
   try {
-    const jsonResponse = await handleUpload({
-      body,
-      request,
-      onBeforeGenerateToken: async (pathname) => {
-        const user = await getCurrentUser();
-        if (!user) throw new Error("로그인이 필요합니다.");
-        if (user.nickname === null) throw new Error("닉네임을 먼저 설정해주세요.");
-        if (isCurrentlySuspended(user)) {
-          throw new Error("정지된 계정은 이 기능을 사용할 수 없습니다.");
-        }
-
-        // The browser proposes the pathname; it's never trusted as-is --
-        // it must match posts/{lost|found}/{postId}/{uuid}.{ext} exactly
-        // (see src/lib/images/pathname.ts), and postId must be a post
-        // this user actually owns. Both checks together are what stop
-        // someone from minting an upload token for another user's post.
-        if (!isValidImagePathname(pathname)) {
-          throw new Error("잘못된 업로드 경로입니다.");
-        }
-        const parsed = parseImagePathname(pathname);
-        if (!parsed) throw new Error("잘못된 업로드 경로입니다.");
-
-        const post =
-          parsed.postType === "lost"
-            ? await getLostPost(parsed.postId)
-            : await getFoundPost(parsed.postId);
-        if (!post || post.author.id !== user.id) {
-          throw new Error("본인 게시물에만 이미지를 업로드할 수 있습니다.");
-        }
-
-        return {
-          allowedContentTypes: [...ALLOWED_IMAGE_CONTENT_TYPES],
-          maximumSizeInBytes: MAX_IMAGE_SIZE_BYTES,
-          addRandomSuffix: false, // pathname already ends in a uuid
-        };
-      },
-      // onUploadCompleted is intentionally omitted: Vercel calls it back
-      // over the public internet, which a local/undeployed dev server
-      // can't receive. Attaching the finished upload's URL to the post is
-      // instead done by an explicit client call to
-      // /api/posts/[id]/image (see src/lib/images/service.ts), which
-      // re-validates the URL server-side rather than trusting the client.
-    });
-    return NextResponse.json(jsonResponse);
+    const { path, token } = await createSignedUploadUrl(pathname);
+    return jsonOk({ path, token });
   } catch (error) {
-    return jsonError(400, error instanceof Error ? error.message : "업로드 요청을 처리하지 못했습니다.");
+    console.error("Failed to create signed upload URL:", error);
+    return jsonError(502, "업로드 준비 중 오류가 발생했습니다.");
   }
 });

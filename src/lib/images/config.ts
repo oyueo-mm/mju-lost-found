@@ -5,6 +5,11 @@
 // enforce this; the client copy only avoids an obviously-doomed upload
 // attempt and a slow round trip.
 
+// Public bucket (see src/lib/images/supabaseAdmin.ts's publicUrlFor() doc
+// comment for why public is the right choice here) -- the name itself
+// isn't sensitive, so it's fine in a shared/client-reachable module too.
+export const POST_IMAGES_BUCKET = "post-images";
+
 export const ALLOWED_IMAGE_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 export type AllowedImageContentType = (typeof ALLOWED_IMAGE_CONTENT_TYPES)[number];
 

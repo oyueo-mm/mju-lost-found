@@ -29,7 +29,7 @@ describe("POST /api/posts/[id]/image", () => {
     const res = await POST(
       new NextRequest("http://localhost/api/posts/1/image?type=lost", {
         method: "POST",
-        body: JSON.stringify({ url: "https://x/y.jpg", pathname: "posts/lost/1/y.jpg" }),
+        body: JSON.stringify({ path: "posts/lost/1/y.jpg" }),
       }),
       params("1"),
     );
@@ -38,14 +38,14 @@ describe("POST /api/posts/[id]/image", () => {
     expect(setPostImage).not.toHaveBeenCalled();
   });
 
-  it("rejects an arbitrary external URL that never went through our upload flow", async () => {
+  it("rejects a path that never went through our upload flow", async () => {
     requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
-    setPostImage.mockResolvedValueOnce({ kind: "invalid_url" });
+    setPostImage.mockResolvedValueOnce({ kind: "invalid_path" });
 
     const res = await POST(
       new NextRequest("http://localhost/api/posts/1/image?type=lost", {
         method: "POST",
-        body: JSON.stringify({ url: "https://attacker.example/fake.jpg", pathname: "whatever" }),
+        body: JSON.stringify({ path: "whatever" }),
       }),
       params("1"),
     );
@@ -60,7 +60,7 @@ describe("POST /api/posts/[id]/image", () => {
     const res = await POST(
       new NextRequest("http://localhost/api/posts/1/image?type=lost", {
         method: "POST",
-        body: JSON.stringify({ url: "https://x/y.jpg", pathname: "posts/lost/1/y.jpg" }),
+        body: JSON.stringify({ path: "posts/lost/1/y.jpg" }),
       }),
       params("1"),
     );
@@ -75,15 +75,14 @@ describe("POST /api/posts/[id]/image", () => {
     const res = await POST(
       new NextRequest("http://localhost/api/posts/1/image?type=lost", {
         method: "POST",
-        body: JSON.stringify({ url: "https://x/y.jpg", pathname: "posts/lost/1/y.jpg" }),
+        body: JSON.stringify({ path: "posts/lost/1/y.jpg" }),
       }),
       params("1"),
     );
 
     expect(res.status).toBe(200);
     expect(setPostImage).toHaveBeenCalledWith("lost", 1, sessionUser.id, {
-      url: "https://x/y.jpg",
-      pathname: "posts/lost/1/y.jpg",
+      path: "posts/lost/1/y.jpg",
     });
   });
 });

@@ -20,15 +20,15 @@ function imageResultToResponse<T>(result: ImageMutationResult<T>) {
       return jsonError(404, "게시물을 찾을 수 없습니다.");
     case "forbidden":
       return jsonError(403, "본인 게시물만 수정할 수 있습니다.");
-    case "invalid_url":
+    case "invalid_path":
       return jsonError(400, "업로드 결과를 확인할 수 없습니다.");
   }
 }
 
 // Attaches (or replaces) a post's image with one that has already
-// finished uploading directly to Blob storage -- see
+// finished uploading directly to Supabase Storage -- see
 // src/lib/images/service.ts::setPostImage for the "new URL saved before
-// the old blob is deleted" ordering that keeps a failed replace from
+// the old object is deleted" ordering that keeps a failed replace from
 // losing the previous image.
 export const POST = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {

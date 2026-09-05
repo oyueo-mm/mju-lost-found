@@ -1,16 +1,45 @@
 import type { NextConfig } from "next";
 
+// next.config.ts runs in plain Node at build/start time (never bundled to
+// the client), so it can safely read a non-NEXT_PUBLIC_ env var too -- but
+// NEXT_PUBLIC_SUPABASE_URL is used here since that's the one already
+// guaranteed to exist wherever image uploads work at all (see
+// src/lib/images/supabaseAdmin.ts). Guarded so a missing env var during a
+// config-only build (e.g. CI without secrets) doesn't crash next.config.ts
+// itself -- next/image would just have no matching remotePattern, and any
+// <Image> pointed at a real Supabase URL would fail its own check lazily
+// at render time instead, the same "warn/fail lazily, don't crash at
+// import/build time" pattern used elsewhere (prisma.ts, supabaseAdmin.ts).
+function supabaseStorageRemotePattern() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url) return null;
+  try {
+    const { hostname } = new URL(url);
+    return {
+      protocol: "https" as const,
+      hostname,
+      pathname: "/storage/v1/object/public/**",
+    };
+  } catch {
+    return null;
+  }
+}
+
+const supabasePattern = supabaseStorageRemotePattern();
+
 const nextConfig: NextConfig = {
   images: {
-    // Scoped to Vercel Blob's own domain suffix only -- not a blanket
-    // `domains`/wildcard-everything allowance. Every store's public
-    // hostname is "<store-id>.public.blob.vercel-storage.com" (see
-    // src/lib/images/blob.ts), hence the single-level wildcard.
     remotePatterns: [
+      // Scoped to Vercel Blob's own domain suffix only -- not a blanket
+      // `domains`/wildcard-everything allowance. Kept even after Phase 4's
+      // move to Supabase Storage: any post created before that migration
+      // still has a vercel-storage.com imageUrl in the DB, and this app
+      // never bulk-rewrites old data on deploy.
       {
         protocol: "https",
         hostname: "*.public.blob.vercel-storage.com",
       },
+      ...(supabasePattern ? [supabasePattern] : []),
     ],
   },
 };
