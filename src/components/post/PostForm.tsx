@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { CATEGORIES } from "@/lib/posts/schema";
 import type { PostType } from "@/lib/posts/schema";
 import { uploadPostImage } from "@/lib/images/client";
 import { ImageUploader } from "./ImageUploader";
@@ -153,15 +154,27 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
           카테고리
-          <input
+          <select
             name="category"
-            type="text"
             required
-            maxLength={100}
-            defaultValue={initialValues?.category}
+            defaultValue={initialValues?.category ?? CATEGORIES[0]}
             disabled={pending}
             className="rounded-md border border-zinc-300 px-3 py-2 disabled:opacity-60 dark:border-zinc-700 dark:bg-transparent"
-          />
+          >
+            {/* An existing post's category can be a value from before this
+                fixed list existed (or set directly via the API) -- rather
+                than silently dropping it (which would submit a different
+                category than the one shown), it's kept as an extra
+                selectable option instead of being erased. */}
+            {initialValues?.category && !(CATEGORIES as readonly string[]).includes(initialValues.category) && (
+              <option value={initialValues.category}>{initialValues.category}</option>
+            )}
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="flex flex-col gap-1 text-sm">

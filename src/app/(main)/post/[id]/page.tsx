@@ -4,8 +4,9 @@ import { notFound } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { getFoundPost, getLostPost } from "@/lib/posts/service";
-import { postTypeSchema } from "@/lib/posts/schema";
+import { FOUND_STATUSES, LOST_STATUSES, postTypeSchema } from "@/lib/posts/schema";
 import { DeletePostButton } from "@/components/post/DeletePostButton";
+import { StatusChangeControl } from "@/components/post/StatusChangeControl";
 import { listMatchesForPost } from "@/lib/match/service";
 import { MatchPanel } from "@/components/match/MatchPanel";
 import { encodePostTargetId } from "@/lib/report/targets";
@@ -142,6 +143,18 @@ export default async function PostDetailPage({
           </div>
         )}
       </div>
+
+      {/* Owner-only, mirrors legacy pages/3_내_게시물.py's status-change
+          button -- a non-owner never sees this (isOwner gates it, and the
+          PATCH API re-checks ownership regardless). */}
+      {isOwner && (
+        <StatusChangeControl
+          id={post.id}
+          type={type}
+          currentStatus={post.status}
+          statuses={type === "lost" ? LOST_STATUSES : FOUND_STATUSES}
+        />
+      )}
 
       {currentUser && (
         <ReportButton targetType="post" targetId={encodePostTargetId(type, post.id)} />

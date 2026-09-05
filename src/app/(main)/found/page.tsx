@@ -4,8 +4,10 @@ import { SearchFilterBar } from "@/components/search/SearchFilterBar";
 import { Pagination } from "@/components/search/Pagination";
 import { PostCard } from "@/components/post/PostCard";
 import { listFoundPosts } from "@/lib/posts/service";
-import { DEFAULT_LIMIT, DEFAULT_PAGE, listQuerySchema } from "@/lib/posts/schema";
+import { DEFAULT_LIMIT, DEFAULT_PAGE, FOUND_STATUSES, listQuerySchema } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
+
+const STATUS_OPTIONS = FOUND_STATUSES.map((s) => ({ value: s, label: s }));
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -44,10 +46,10 @@ export default async function FoundListPage({
           습득물 등록
         </Link>
       </div>
-      <SearchFilterBar basePath="/found" />
+      <SearchFilterBar basePath="/found" statusOptions={STATUS_OPTIONS} />
       {posts.items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-          {query.q || query.category || query.location
+          {query.q || query.category || query.location || query.status
             ? "검색 결과가 없습니다."
             : "등록된 습득물 게시글이 없습니다."}
         </div>

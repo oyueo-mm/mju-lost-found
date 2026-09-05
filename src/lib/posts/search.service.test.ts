@@ -109,6 +109,37 @@ describe("search logic -- filtering is always done in the DB query, never in JS"
     expect(lostPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: {} }));
   });
 
+  // Phase 9: board status filter -- converts the Korean status string to
+  // the board's own Prisma enum value (LostPost's "찾는 중"/"찾음" here,
+  // FoundPost's separate "보관 중"/"완료" below), never the other board's.
+  it("filters LostPost by status, converted to the Prisma enum value", async () => {
+    await listLostPosts({ page: 1, limit: 20, status: "찾는 중" });
+
+    expect(lostPost.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ status: "SEARCHING" }) }),
+    );
+  });
+
+  it("filters FoundPost by status, converted to its own Prisma enum value", async () => {
+    await listFoundPosts({ page: 1, limit: 20, status: "완료" });
+
+    expect(foundPost.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ status: "COMPLETED" }) }),
+    );
+  });
+
+  it("never applies a LostPost status value to a FoundPost query (or vice versa)", async () => {
+    // listQuerySchema rejects this combination before it would ever reach
+    // the service (see search.schema.test.ts), but this asserts the
+    // service layer's own defense: a status string outside the given
+    // board's map is simply not applied, never passed through as-is.
+    await listFoundPosts({ page: 1, limit: 20, status: "찾는 중" });
+
+    expect(foundPost.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.not.objectContaining({ status: expect.anything() }) }),
+    );
+  });
+
   it("sorts latest (createdAt desc) by default", async () => {
     await listLostPosts({ page: 1, limit: 20 });
 

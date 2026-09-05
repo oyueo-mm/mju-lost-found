@@ -93,6 +93,40 @@ describe("PATCH /api/posts/[id]", () => {
     expect(res.status).toBe(403);
   });
 
+  // Phase 9: StatusChangeControl PATCHes a status-only body through this
+  // same route -- these two confirm the existing auth/ownership gate
+  // (which runs before the body is even inspected) covers that body shape
+  // too, not just a title/description update.
+  it("rejects an unauthenticated status-change request", async () => {
+    requireUserForApi.mockResolvedValueOnce({ response: jsonError(401, "로그인이 필요합니다.") });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/posts/1?type=lost", {
+        method: "PATCH",
+        body: JSON.stringify({ status: "찾음" }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(401);
+    expect(updateLostPost).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-owner's status-change request", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    updateLostPost.mockResolvedValueOnce({ kind: "forbidden", reason: "not_owner" });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/posts/1?type=lost", {
+        method: "PATCH",
+        body: JSON.stringify({ status: "찾음" }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(403);
+  });
+
   it("allows the owner to update their own post", async () => {
     requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
     updateLostPost.mockResolvedValueOnce({ kind: "ok", data: { id: 1, title: "새 제목" } });

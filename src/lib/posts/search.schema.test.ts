@@ -84,3 +84,43 @@ describe("listQuerySchema -- search/filter fields", () => {
     expect(result.page).toBe(1);
   });
 });
+
+// Phase 9: board status filter. LostPost and FoundPost don't share a
+// status vocabulary, so validity depends on `type` (checked in
+// listQuerySchema's superRefine, not a flat z.enum()).
+describe("listQuerySchema -- status filter (Phase 9)", () => {
+  it("accepts a valid LostPost status when type=lost", () => {
+    expect(listQuerySchema.safeParse({ type: "lost", status: "찾는 중" }).success).toBe(true);
+    expect(listQuerySchema.safeParse({ type: "lost", status: "찾음" }).success).toBe(true);
+  });
+
+  it("accepts a valid FoundPost status when type=found", () => {
+    expect(listQuerySchema.safeParse({ type: "found", status: "보관 중" }).success).toBe(true);
+    expect(listQuerySchema.safeParse({ type: "found", status: "완료" }).success).toBe(true);
+  });
+
+  it("rejects a FoundPost status when type=lost (safe handling of a mismatched board)", () => {
+    const result = listQuerySchema.safeParse({ type: "lost", status: "완료" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a LostPost status when type=found", () => {
+    const result = listQuerySchema.safeParse({ type: "found", status: "찾는 중" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an arbitrary/unknown status value instead of crashing or ignoring it", () => {
+    const result = listQuerySchema.safeParse({ type: "lost", status: "존재하지않는상태" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects status combined with type=all (no single board to validate it against)", () => {
+    const result = listQuerySchema.safeParse({ type: "all", status: "찾는 중" });
+    expect(result.success).toBe(false);
+  });
+
+  it("omitting status is still valid (no filter applied)", () => {
+    expect(listQuerySchema.safeParse({ type: "lost" }).success).toBe(true);
+    expect(listQuerySchema.safeParse({ type: "all" }).success).toBe(true);
+  });
+});

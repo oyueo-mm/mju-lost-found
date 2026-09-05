@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CATEGORIES,
   createFoundPostSchema,
   createLostPostSchema,
   DEFAULT_LIMIT,
@@ -77,5 +78,25 @@ describe("listQuerySchema", () => {
   it("clamps an excessive limit instead of allowing an unbounded query", () => {
     const result = listQuerySchema.parse({ type: "lost", limit: "100000" });
     expect(result.limit).toBe(MAX_LIMIT);
+  });
+});
+
+// Phase 9: the single canonical category list every create/edit form and
+// search filter reads from -- this pins it to the legacy
+// ui/common.py::CATEGORIES values so a future edit can't silently drift
+// from what the old data was actually written with.
+describe("CATEGORIES", () => {
+  it("matches the legacy fixed category list exactly, in order", () => {
+    expect(CATEGORIES).toEqual([
+      "전자기기",
+      "필기구",
+      "책",
+      "지갑",
+      "카드",
+      "의류",
+      "가방",
+      "액세서리",
+      "기타",
+    ]);
   });
 });

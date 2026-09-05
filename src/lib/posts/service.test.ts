@@ -50,7 +50,9 @@ const {
   deleteLostPost,
   getLostPost,
   listFoundPosts,
+  listFoundPostsByUser,
   listLostPosts,
+  listLostPostsByUser,
   updateFoundPost,
   updateLostPost,
 } = await import("./service");
@@ -260,6 +262,43 @@ describe("updateLostPost", () => {
   // src/lib/posts/schema.ts). So there's structurally nothing to trigger
   // a re-embed from an image change in the first place.
 
+  // Phase 9: status-change UI (StatusChangeControl) calls the same
+  // PATCH /api/posts/[id] -> updateLostPost()/updateFoundPost() path as
+  // any other field update -- no new API, so these tests exercise that
+  // existing ownership gate specifically for a status-only body.
+  it("owner can change their own post's status", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
+    lostPost.update.mockResolvedValueOnce({
+      id: 1,
+      title: "t",
+      description: "d",
+      category: "c",
+      location: "l",
+      status: "FOUND",
+      imageUrl: null,
+      lostAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+    });
+
+    const result = await updateLostPost(1, 1, { status: "찾음" });
+
+    expect(result.kind).toBe("ok");
+    expect(lostPost.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 1 }, data: expect.objectContaining({ status: "FOUND" }) }),
+    );
+  });
+
+  it("non-owner cannot change another user's post status", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
+
+    const result = await updateLostPost(1, 2, { status: "찾음" });
+
+    expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
+    expect(lostPost.update).not.toHaveBeenCalled();
+  });
+
   it("rejects updating someone else's post", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
 
@@ -318,5 +357,62 @@ describe("deleteLostPost / deleteFoundPost", () => {
 
     expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
     expect(foundPost.delete).not.toHaveBeenCalled();
+  });
+});
+
+// Phase 9: "내 게시물" page's data source -- both functions filter purely
+// by userId (never a client-supplied value, see
+// src/app/(main)/posts/mine/page.tsx), so the only things worth testing
+// here are "only that user's rows come back" and "no posts -> []" (the
+// page renders that as its own empty state, not tested here per this
+// project's no-component-rendering-tests convention).
+describe("listLostPostsByUser / listFoundPostsByUser", () => {
+  it("queries LostPost scoped to the given userId only, newest first", async () => {
+    lostPost.findMany.mockResolvedValueOnce([
+      {
+        id: 1,
+        title: "t",
+        description: "d",
+        category: "c",
+        location: "l",
+        status: "SEARCHING",
+        imageUrl: null,
+        lostAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        user: { id: 7, nickname: "닉네임" },
+      },
+    ]);
+
+    const result = await listLostPostsByUser(7);
+
+    expect(lostPost.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 7 },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      }),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].author.id).toBe(7);
+  });
+
+  it("returns an empty array for a user with no LostPost posts", async () => {
+    lostPost.findMany.mockResolvedValueOnce([]);
+    expect(await listLostPostsByUser(7)).toEqual([]);
+  });
+
+  it("queries FoundPost scoped to the given userId only", async () => {
+    foundPost.findMany.mockResolvedValueOnce([]);
+
+    await listFoundPostsByUser(7);
+
+    expect(foundPost.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 7 } }),
+    );
+  });
+
+  it("returns an empty array for a user with no FoundPost posts", async () => {
+    foundPost.findMany.mockResolvedValueOnce([]);
+    expect(await listFoundPostsByUser(7)).toEqual([]);
   });
 });

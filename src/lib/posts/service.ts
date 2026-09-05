@@ -104,6 +104,11 @@ export type PostFilters = {
   location?: string;
   dateFrom?: Date;
   dateTo?: Date;
+  // Korean status string (e.g. "찾는 중"), already validated against the
+  // right board's enum by listQuerySchema's superRefine before it ever
+  // reaches here -- see buildSearchWhere()'s statusMap param for how it's
+  // turned into the matching Prisma enum value per board.
+  status?: string;
   sort?: SortOption;
 };
 type ListParams = Page & PostFilters;
@@ -111,6 +116,13 @@ type ListParams = Page & PostFilters;
 function totalPagesFor(total: number, limit: number): number {
   return Math.max(1, Math.ceil(total / limit));
 }
+
+// "내 게시물" (Phase 9) has no pagination UI, matching legacy's
+// list_lost_posts_by_user()/list_found_posts_by_user() (also unpaginated)
+// -- but an unbounded `findMany` is still one prolific poster away from an
+// expensive query, so this caps it defensively, same spirit as
+// moderation/service.ts's ADMIN_SCAN_CAP.
+const MY_POSTS_CAP = 200;
 
 // `q` matches title OR description (contains). `mode: "insensitive"` is
 // required here on PostgreSQL to match the legacy behavior: SQLite's `LIKE`
@@ -126,7 +138,21 @@ function totalPagesFor(total: number, limit: number): number {
 // than lostAt/foundAt -- those differ in meaning between the two boards and
 // don't unify for `type=all`, while createdAt is the one date field with
 // identical, unambiguous meaning on both, and is already what `sort` orders by.
-function buildSearchWhere(filters: PostFilters): {
+// statusMap converts filters.status (a Korean string) to the board-specific
+// Prisma enum value -- LOST_STATUS_TO_DB for LostPost queries,
+// FOUND_STATUS_TO_DB for FoundPost queries. Omitted entirely by
+// searchAllPosts() (type=all), which never receives a status filter in the
+// first place (listQuerySchema rejects that combination -- see its
+// superRefine) -- so there's no board to pick a map for there, and this
+// function simply doesn't add a status clause when statusMap is absent.
+// Generic over S (PrismaLostPostStatus or PrismaFoundPostStatus) so the
+// returned `status` field is narrow enough to assign straight into either
+// Prisma.LostPostWhereInput or Prisma.FoundPostWhereInput at the call
+// site, instead of the union of both (which is assignable to neither).
+function buildSearchWhere<S extends PrismaLostPostStatus | PrismaFoundPostStatus>(
+  filters: PostFilters,
+  statusMap?: Record<string, S>,
+): {
   OR?: (
     | { title: { contains: string; mode: "insensitive" } }
     | { description: { contains: string; mode: "insensitive" } }
@@ -134,8 +160,9 @@ function buildSearchWhere(filters: PostFilters): {
   category?: string;
   location?: { contains: string; mode: "insensitive" };
   createdAt?: { gte?: Date; lte?: Date };
+  status?: S;
 } {
-  const where: ReturnType<typeof buildSearchWhere> = {};
+  const where: ReturnType<typeof buildSearchWhere<S>> = {};
   if (filters.q) {
     where.OR = [
       { title: { contains: filters.q, mode: "insensitive" } },
@@ -149,6 +176,9 @@ function buildSearchWhere(filters: PostFilters): {
       ...(filters.dateFrom && { gte: filters.dateFrom }),
       ...(filters.dateTo && { lte: filters.dateTo }),
     };
+  }
+  if (filters.status && statusMap && filters.status in statusMap) {
+    where.status = statusMap[filters.status];
   }
   return where;
 }
@@ -200,7 +230,7 @@ export async function listLostPosts({
   ...filters
 }: ListParams): Promise<PagedResult<LostPostDTO>> {
   const skip = (page - 1) * limit;
-  const where = buildSearchWhere(filters);
+  const where = buildSearchWhere(filters, LOST_STATUS_TO_DB);
   const [rows, total] = await Promise.all([
     prisma.lostPost.findMany({
       where,
@@ -212,6 +242,22 @@ export async function listLostPosts({
     prisma.lostPost.count({ where }),
   ]);
   return { items: rows.map(toLostPostDTO), page, limit, total, totalPages: totalPagesFor(total, limit) };
+}
+
+// Every LostPost owned by userId, newest first -- mirrors legacy
+// list_lost_posts_by_user(). Unlike listLostPosts(), this is never
+// filtered/searched (the "내 게시물" page just shows everything you own),
+// and userId comes from the authenticated session server-side (see
+// src/app/(main)/posts/mine/page.tsx), never from a client-supplied
+// value -- so there's no risk of one user listing another's posts.
+export async function listLostPostsByUser(userId: number): Promise<LostPostDTO[]> {
+  const rows = await prisma.lostPost.findMany({
+    where: { userId },
+    orderBy: buildOrderBy(),
+    take: MY_POSTS_CAP,
+    include: { user: { select: AUTHOR_SELECT } },
+  });
+  return rows.map(toLostPostDTO);
 }
 
 export async function getLostPost(id: number): Promise<LostPostDTO | null> {
@@ -302,7 +348,7 @@ export async function listFoundPosts({
   ...filters
 }: ListParams): Promise<PagedResult<FoundPostDTO>> {
   const skip = (page - 1) * limit;
-  const where = buildSearchWhere(filters);
+  const where = buildSearchWhere(filters, FOUND_STATUS_TO_DB);
   const [rows, total] = await Promise.all([
     prisma.foundPost.findMany({
       where,
@@ -314,6 +360,17 @@ export async function listFoundPosts({
     prisma.foundPost.count({ where }),
   ]);
   return { items: rows.map(toFoundPostDTO), page, limit, total, totalPages: totalPagesFor(total, limit) };
+}
+
+// Mirrors listLostPostsByUser() above -- see its comment.
+export async function listFoundPostsByUser(userId: number): Promise<FoundPostDTO[]> {
+  const rows = await prisma.foundPost.findMany({
+    where: { userId },
+    orderBy: buildOrderBy(),
+    take: MY_POSTS_CAP,
+    include: { user: { select: AUTHOR_SELECT } },
+  });
+  return rows.map(toFoundPostDTO);
 }
 
 export async function getFoundPost(id: number): Promise<FoundPostDTO | null> {
@@ -398,7 +455,12 @@ async function searchAllPosts({
   limit,
   ...filters
 }: ListParams): Promise<PagedResult<PostDTO>> {
-  const where = buildSearchWhere(filters);
+  // No statusMap -- listQuerySchema's superRefine rejects a status filter
+  // combined with type=all, so filters.status is always undefined here;
+  // <never> keeps `where.status` typed as always-undefined, which is
+  // assignable to both LostPost's and FoundPost's WhereInput regardless of
+  // their (different) status enum types.
+  const where = buildSearchWhere<never>(filters);
   const orderBy = buildOrderBy(filters.sort);
   const depth = Math.min(page * limit, 1000);
 

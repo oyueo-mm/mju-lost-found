@@ -7,6 +7,28 @@ import { z } from "zod";
 export const LOST_STATUSES = ["찾는 중", "찾음"] as const;
 export const FOUND_STATUSES = ["보관 중", "완료"] as const;
 
+// Same fixed list as the legacy ui/common.py::CATEGORIES -- the single
+// canonical definition every create/edit form and search filter (Phase 9)
+// reads from, instead of each place hand-typing its own copy. Kept as
+// plain data (not a zod enum) on purpose: the `category` field below stays
+// free-text server-side (existing posts, and any category value already
+// in the DB from before this list was enforced in the UI, must keep
+// working -- see PostForm's/SearchFilterBar's own handling of a value
+// outside this list). This is a UI-level canonical list, not a DB
+// constraint, matching the legacy app's own st.selectbox(CATEGORIES)
+// (client-side only; the DB column itself was never CHECK-constrained).
+export const CATEGORIES = [
+  "전자기기",
+  "필기구",
+  "책",
+  "지갑",
+  "카드",
+  "의류",
+  "가방",
+  "액세서리",
+  "기타",
+] as const;
+
 export const POST_TYPES = ["lost", "found"] as const;
 export type PostType = (typeof POST_TYPES)[number];
 
@@ -36,30 +58,58 @@ export const DEFAULT_LIMIT = 20;
 export const MAX_LIMIT = 50;
 export const DEFAULT_SORT: SortOption = "latest";
 
-export const listQuerySchema = z.object({
-  type: postListTypeSchema,
-  // All search/filter fields are optional -- omitting them means "no
-  // filter", not an error. Unlike page/limit (which silently fall back to
-  // safe defaults, see below), an out-of-range q/date/sort is a genuine
-  // client mistake and is rejected with 400 rather than silently ignored.
-  q: z.string().trim().max(MAX_SEARCH_QUERY_LENGTH, "검색어는 100자를 넘을 수 없습니다.").optional(),
-  category: z.string().trim().max(100).optional(),
-  location: z.string().trim().max(200).optional(),
-  dateFrom: z.coerce.date("dateFrom이 올바르지 않습니다.").optional(),
-  dateTo: z.coerce.date("dateTo가 올바르지 않습니다.").optional(),
-  sort: sortOptionSchema.optional(),
-  page: z.coerce.number().int().min(1).catch(DEFAULT_PAGE),
-  // Anything unparseable (missing, non-numeric, <1) falls back to
-  // DEFAULT_LIMIT; anything parseable but too large (e.g. ?limit=100000)
-  // is clamped down to MAX_LIMIT rather than rejected outright. This
-  // lenient behavior predates this phase (Phase 3) and is left as-is.
-  limit: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .catch(DEFAULT_LIMIT)
-    .transform((n) => Math.min(n, MAX_LIMIT)),
-});
+export const listQuerySchema = z
+  .object({
+    type: postListTypeSchema,
+    // All search/filter fields are optional -- omitting them means "no
+    // filter", not an error. Unlike page/limit (which silently fall back to
+    // safe defaults, see below), an out-of-range q/date/sort is a genuine
+    // client mistake and is rejected with 400 rather than silently ignored.
+    q: z.string().trim().max(MAX_SEARCH_QUERY_LENGTH, "검색어는 100자를 넘을 수 없습니다.").optional(),
+    category: z.string().trim().max(100).optional(),
+    location: z.string().trim().max(200).optional(),
+    dateFrom: z.coerce.date("dateFrom이 올바르지 않습니다.").optional(),
+    dateTo: z.coerce.date("dateTo가 올바르지 않습니다.").optional(),
+    // Board-specific (Phase 9): LostPost's two statuses differ from
+    // FoundPost's, so which values are valid depends on `type` -- checked
+    // below in .superRefine(), not with a flat z.enum() here. Kept as a
+    // permissive string at this level so the specific-vs-invalid
+    // distinction can produce one clear error message instead of zod's
+    // generic "invalid enum value".
+    status: z.string().trim().max(20).optional(),
+    sort: sortOptionSchema.optional(),
+    page: z.coerce.number().int().min(1).catch(DEFAULT_PAGE),
+    // Anything unparseable (missing, non-numeric, <1) falls back to
+    // DEFAULT_LIMIT; anything parseable but too large (e.g. ?limit=100000)
+    // is clamped down to MAX_LIMIT rather than rejected outright. This
+    // lenient behavior predates this phase (Phase 3) and is left as-is.
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .catch(DEFAULT_LIMIT)
+      .transform((n) => Math.min(n, MAX_LIMIT)),
+  })
+  .superRefine((data, ctx) => {
+    if (data.status === undefined) return;
+    // type=all merges LostPost and FoundPost, which don't share a status
+    // vocabulary -- rather than guess which board a bare status string was
+    // meant for (and risk silently filtering out the wrong board's rows,
+    // which would look like "results are missing" rather than an error),
+    // a status filter is only accepted once a specific board is chosen.
+    if (data.type === "all") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["status"],
+        message: "status 필터는 게시판(분실물/습득물)을 선택한 경우에만 사용할 수 있습니다.",
+      });
+      return;
+    }
+    const validStatuses: readonly string[] = data.type === "lost" ? LOST_STATUSES : FOUND_STATUSES;
+    if (!validStatuses.includes(data.status)) {
+      ctx.addIssue({ code: "custom", path: ["status"], message: "status 값이 올바르지 않습니다." });
+    }
+  });
 export type ListQuery = z.infer<typeof listQuerySchema>;
 
 // Shared fields between LostPost/FoundPost -- title/description/category/

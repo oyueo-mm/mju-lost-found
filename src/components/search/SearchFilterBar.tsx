@@ -2,11 +2,19 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { CATEGORIES } from "@/lib/posts/schema";
 import type { PostListType, SortOption } from "@/lib/posts/schema";
+
+type StatusOption = { value: string; label: string };
 
 type SearchFilterBarProps = {
   basePath: string; // where the form navigates to on submit, e.g. "/lost", "/search"
   showTypeFilter?: boolean; // the 게시판 selector only makes sense on /search
+  // Board-specific (Phase 9): LostPost's two statuses differ from
+  // FoundPost's, and listQuerySchema rejects a status filter when
+  // type=all (see its own superRefine) -- so this is only ever passed by
+  // /lost and /found, each with their own two options, never by /search.
+  statusOptions?: StatusOption[];
 };
 
 const TYPE_OPTIONS: { value: PostListType; label: string }[] = [
@@ -20,18 +28,20 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "oldest", label: "오래된순" },
 ];
 
-export function SearchFilterBar({ basePath, showTypeFilter = false }: SearchFilterBarProps) {
+export function SearchFilterBar({ basePath, showTypeFilter = false, statusOptions }: SearchFilterBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const hasActiveFilters = ["q", "category", "location", "sort"].some((key) => searchParams.get(key));
+  const hasActiveFilters = ["q", "category", "location", "status", "sort"].some((key) =>
+    searchParams.get(key),
+  );
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const params = new URLSearchParams();
 
-    for (const key of ["q", "type", "category", "location", "sort"]) {
+    for (const key of ["q", "type", "category", "location", "status", "sort"]) {
       const value = formData.get(key);
       if (typeof value === "string" && value.trim() !== "") {
         params.set(key, value.trim());
@@ -43,6 +53,13 @@ export function SearchFilterBar({ basePath, showTypeFilter = false }: SearchFilt
     const query = params.toString();
     router.push(query ? `${basePath}?${query}` : basePath);
   }
+
+  // Editing an existing post can leave a post's category outside
+  // CATEGORIES (see PostForm's own handling of the same situation) -- if
+  // the current filter value is one of those, it's kept selectable here
+  // too rather than being silently reset to "전체" on the next render.
+  const currentCategory = searchParams.get("category") ?? "";
+  const currentStatus = searchParams.get("status") ?? "";
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
@@ -70,14 +87,36 @@ export function SearchFilterBar({ basePath, showTypeFilter = false }: SearchFilt
           </select>
         )}
 
-        <input
+        <select
           name="category"
-          type="text"
-          placeholder="카테고리"
-          defaultValue={searchParams.get("category") ?? ""}
-          maxLength={100}
+          defaultValue={currentCategory}
           className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-transparent"
-        />
+        >
+          <option value="">카테고리 전체</option>
+          {currentCategory && !(CATEGORIES as readonly string[]).includes(currentCategory) && (
+            <option value={currentCategory}>{currentCategory}</option>
+          )}
+          {CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+
+        {statusOptions && (
+          <select
+            name="status"
+            defaultValue={currentStatus}
+            className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-transparent"
+          >
+            <option value="">상태 전체</option>
+            {statusOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        )}
 
         <input
           name="location"
