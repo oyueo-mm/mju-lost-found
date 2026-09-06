@@ -7,6 +7,19 @@ import { CATEGORIES } from "@/lib/posts/schema";
 import type { PostType } from "@/lib/posts/schema";
 import { uploadPostImage } from "@/lib/images/client";
 import { ImageUploader } from "./ImageUploader";
+import { Button } from "@/components/ui/Button";
+
+const FIELD_CLASS =
+  "rounded-lg border border-border bg-transparent px-3 py-2.5 text-sm text-foreground disabled:opacity-60";
+
+function RequiredMark() {
+  return (
+    <span className="text-destructive" aria-hidden="true">
+      {" "}
+      *
+    </span>
+  );
+}
 
 type PostFormValues = {
   title: string;
@@ -118,105 +131,129 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
       {error && (
-        <p className="rounded-md bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+        <p className="rounded-card border border-destructive/30 bg-destructive-muted px-4 py-2.5 text-sm text-destructive">
           {error}
         </p>
       )}
 
-      <label className="flex flex-col gap-1 text-sm">
-        제목
-        <input
-          name="title"
-          type="text"
-          required
-          maxLength={200}
-          defaultValue={initialValues?.title}
-          disabled={pending}
-          className="rounded-md border border-zinc-300 px-3 py-2 disabled:opacity-60 dark:border-zinc-700 dark:bg-transparent"
-        />
-      </label>
+      <section className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
+        <h2 className="text-sm font-semibold text-foreground">기본 정보</h2>
 
-      <label className="flex flex-col gap-1 text-sm">
-        설명
-        <textarea
-          name="description"
-          required
-          rows={5}
-          maxLength={5000}
-          defaultValue={initialValues?.description}
-          disabled={pending}
-          className="rounded-md border border-zinc-300 px-3 py-2 disabled:opacity-60 dark:border-zinc-700 dark:bg-transparent"
-        />
-      </label>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 text-sm">
-          카테고리
-          <select
-            name="category"
-            required
-            defaultValue={initialValues?.category ?? CATEGORIES[0]}
-            disabled={pending}
-            className="rounded-md border border-zinc-300 px-3 py-2 disabled:opacity-60 dark:border-zinc-700 dark:bg-transparent"
-          >
-            {/* An existing post's category can be a value from before this
-                fixed list existed (or set directly via the API) -- rather
-                than silently dropping it (which would submit a different
-                category than the one shown), it's kept as an extra
-                selectable option instead of being erased. */}
-            {initialValues?.category && !(CATEGORIES as readonly string[]).includes(initialValues.category) && (
-              <option value={initialValues.category}>{initialValues.category}</option>
-            )}
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1 text-sm">
-          위치
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-foreground">
+            제목
+            <RequiredMark />
+          </span>
           <input
-            name="location"
+            name="title"
             type="text"
             required
             maxLength={200}
-            defaultValue={initialValues?.location}
+            defaultValue={initialValues?.title}
             disabled={pending}
-            className="rounded-md border border-zinc-300 px-3 py-2 disabled:opacity-60 dark:border-zinc-700 dark:bg-transparent"
+            className={FIELD_CLASS}
           />
         </label>
-      </div>
 
-      <label className="flex flex-col gap-1 text-sm">
-        {DATE_LABEL[type]}
-        <input
-          name="date"
-          type="datetime-local"
-          required
-          defaultValue={initialValues?.dateValue}
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-foreground">
+            설명
+            <RequiredMark />
+          </span>
+          <textarea
+            name="description"
+            required
+            rows={5}
+            maxLength={5000}
+            defaultValue={initialValues?.description}
+            disabled={pending}
+            className={FIELD_CLASS}
+          />
+        </label>
+      </section>
+
+      <section className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
+        <h2 className="text-sm font-semibold text-foreground">분류 및 장소</h2>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-foreground">
+              카테고리
+              <RequiredMark />
+            </span>
+            <select
+              name="category"
+              required
+              defaultValue={initialValues?.category ?? CATEGORIES[0]}
+              disabled={pending}
+              className={FIELD_CLASS}
+            >
+              {/* An existing post's category can be a value from before this
+                  fixed list existed (or set directly via the API) -- rather
+                  than silently dropping it (which would submit a different
+                  category than the one shown), it's kept as an extra
+                  selectable option instead of being erased. */}
+              {initialValues?.category && !(CATEGORIES as readonly string[]).includes(initialValues.category) && (
+                <option value={initialValues.category}>{initialValues.category}</option>
+              )}
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-foreground">
+              위치
+              <RequiredMark />
+            </span>
+            <input
+              name="location"
+              type="text"
+              required
+              maxLength={200}
+              defaultValue={initialValues?.location}
+              disabled={pending}
+              className={FIELD_CLASS}
+            />
+          </label>
+        </div>
+
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-foreground">
+            {DATE_LABEL[type]}
+            <RequiredMark />
+          </span>
+          <input
+            name="date"
+            type="datetime-local"
+            required
+            defaultValue={initialValues?.dateValue}
+            disabled={pending}
+            className={FIELD_CLASS}
+          />
+        </label>
+      </section>
+
+      <section className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
+        <h2 className="text-sm font-semibold text-foreground">
+          사진 <span className="font-normal text-muted-foreground">(선택)</span>
+        </h2>
+        <ImageUploader
+          existingImageUrl={initialValues?.imageUrl ?? null}
           disabled={pending}
-          className="rounded-md border border-zinc-300 px-3 py-2 disabled:opacity-60 dark:border-zinc-700 dark:bg-transparent"
+          onFileSelected={setSelectedFile}
+          onRemoveExisting={setRemoveExisting}
         />
-      </label>
+      </section>
 
-      <ImageUploader
-        existingImageUrl={initialValues?.imageUrl ?? null}
-        disabled={pending}
-        onFileSelected={setSelectedFile}
-        onRemoveExisting={setRemoveExisting}
-      />
-
-      <button
-        type="submit"
-        disabled={pending}
-        className="self-start rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900"
-      >
+      <Button type="submit" disabled={pending} className="w-full sm:w-auto sm:self-start">
         {pending ? "저장 중..." : postId ? "수정하기" : "등록하기"}
-      </button>
+      </Button>
     </form>
   );
 }

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { signIn } from "@/lib/auth/auth";
 import { getCurrentUser, sanitizeCallbackUrl, type LoginReason } from "@/lib/auth/session";
+import { Button } from "@/components/ui/Button";
 
 const ERROR_MESSAGES: Record<string, string> = {
   AccessDenied: "명지대학교 계정(@mju.ac.kr)만 이용할 수 있습니다.",
@@ -42,62 +43,60 @@ export default async function LoginPage({
   const reasonMessage = reason && isLoginReason(reason) ? REASON_MESSAGES[reason] : null;
 
   return (
-    <div className="flex min-h-full flex-1 flex-col items-center justify-center gap-8 bg-zinc-50 px-6 dark:bg-black">
-      <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          명지 스마트 분실물 센터
-        </h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          @mju.ac.kr 계정으로 로그인하세요.
-        </p>
-      </div>
+    <div className="flex min-h-full flex-1 flex-col items-center justify-center px-6 py-12">
+      <div className="flex w-full max-w-sm flex-col items-center gap-7 text-center">
+        <div className="flex flex-col items-center gap-3">
+          <span className="flex size-14 items-center justify-center rounded-full bg-primary text-xl font-bold text-primary-foreground">
+            M
+          </span>
+          <div className="flex flex-col items-center gap-1">
+            <h1 className="text-xl font-semibold text-foreground">명지 스마트 분실물 센터</h1>
+            <p className="text-sm text-muted-foreground">캠퍼스에서 잃어버린 물건을 빠르게 찾아드려요</p>
+          </div>
+        </div>
 
-      {errorMessage && (
-        <p className="rounded-md bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
-          {errorMessage}
-        </p>
-      )}
+        {errorMessage && (
+          <p className="w-full rounded-card border border-destructive/30 bg-destructive-muted px-4 py-2.5 text-sm text-destructive">
+            {errorMessage}
+          </p>
+        )}
 
-      {/* Phase 14: shown instead of the error box above when this page was
-          reached by requireReadyUser()'s redirect (not by an actual OAuth
-          error) -- a neutral explanation, not a red error message, since
-          "please log in to do X" isn't a failure. */}
-      {!errorMessage && reasonMessage && (
-        <p className="rounded-md bg-zinc-100 px-4 py-2 text-sm text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-          {reasonMessage}
-        </p>
-      )}
+        {/* Phase 14: shown instead of the error box above when this page was
+            reached by requireReadyUser()'s redirect (not by an actual OAuth
+            error) -- a neutral explanation, not a red error message, since
+            "please log in to do X" isn't a failure. */}
+        {!errorMessage && reasonMessage && (
+          <p className="w-full rounded-card border border-border bg-muted px-4 py-2.5 text-sm text-muted-foreground">
+            {reasonMessage}
+          </p>
+        )}
 
-      <form
-        action={async () => {
-          "use server";
-          // callbackUrl was already validated as same-origin-relative by
-          // sanitizeCallbackUrl() above -- signIn's redirectTo accepts it
-          // as-is, sending the user back to the page they came from
-          // instead of always landing on "/".
-          await signIn("google", callbackUrl ? { redirectTo: callbackUrl } : undefined);
-        }}
-      >
-        <button
-          type="submit"
-          className="flex items-center gap-2 rounded-full border border-zinc-300 px-5 py-3 text-sm font-medium text-zinc-700 hover:border-zinc-400 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-600"
+        <form
+          className="w-full"
+          action={async () => {
+            "use server";
+            // callbackUrl was already validated as same-origin-relative by
+            // sanitizeCallbackUrl() above -- signIn's redirectTo accepts it
+            // as-is, sending the user back to the page they came from
+            // instead of always landing on "/".
+            await signIn("google", callbackUrl ? { redirectTo: callbackUrl } : undefined);
+          }}
         >
-          Google로 로그인
-        </button>
-      </form>
+          <Button type="submit" variant="secondary" className="w-full">
+            Google로 로그인
+          </Button>
+        </form>
 
-      <p className="text-xs text-zinc-400 dark:text-zinc-500">
-        학교 계정(@mju.ac.kr)이 아닌 계정은 로그인할 수 없습니다.
-      </p>
+        <p className="text-xs text-muted-foreground">
+          학교 계정(@mju.ac.kr)이 아닌 계정은 로그인할 수 없습니다.
+        </p>
 
-      <div className="flex flex-col items-center gap-1 border-t border-zinc-200 pt-6 text-center dark:border-zinc-800">
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">명지대 계정이 없으신가요?</p>
-        <Link
-          href="/account-guide"
-          className="text-sm font-medium text-zinc-700 underline hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50"
-        >
-          명지대 계정 생성 방법 보기
-        </Link>
+        <div className="flex w-full flex-col items-center gap-1.5 border-t border-border pt-6">
+          <p className="text-sm text-muted-foreground">명지대 계정이 없으신가요?</p>
+          <Link href="/account-guide" className="text-sm font-medium text-primary hover:opacity-80">
+            명지대 계정 생성 방법 보기
+          </Link>
+        </div>
       </div>
     </div>
   );

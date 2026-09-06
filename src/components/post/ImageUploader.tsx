@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { validateImageFile } from "@/lib/images/client";
+import { ImageOffIcon } from "@/components/icons";
 
 type ImageUploaderProps = {
   existingImageUrl: string | null;
@@ -73,82 +74,69 @@ export function ImageUploader({
   }
 
   const showExisting = existingImageUrl && !previewUrl && !markedForRemoval;
+  const hasImage = Boolean(previewUrl || showExisting);
 
   return (
     <div className="flex flex-col gap-3">
-      <span className="text-sm">이미지</span>
+      <div className="relative flex h-56 w-full items-center justify-center overflow-hidden rounded-card border border-border bg-muted">
+        {previewUrl && (
+          // eslint-disable-next-line @next/next/no-img-element -- local blob: object URL preview, not a remote/optimizable image.
+          <img src={previewUrl} alt="선택한 이미지 미리보기" className="h-full w-full object-cover" />
+        )}
 
-      {previewUrl && (
-        // eslint-disable-next-line @next/next/no-img-element -- local blob: object URL preview, not a remote/optimizable image.
-        <img
-          src={previewUrl}
-          alt="선택한 이미지 미리보기"
-          className="h-48 w-full rounded-lg border border-zinc-200 object-cover dark:border-zinc-800"
-        />
-      )}
+        {showExisting && (
+          // eslint-disable-next-line @next/next/no-img-element -- simple form preview; the optimized <Image> is used on read-only pages instead.
+          <img src={existingImageUrl} alt="현재 등록된 이미지" className="h-full w-full object-cover" />
+        )}
 
-      {showExisting && (
-        // eslint-disable-next-line @next/next/no-img-element -- simple form preview; the optimized <Image> is used on read-only pages instead.
-        <img
-          src={existingImageUrl}
-          alt="현재 등록된 이미지"
-          className="h-48 w-full rounded-lg border border-zinc-200 object-cover dark:border-zinc-800"
-        />
-      )}
+        {markedForRemoval && (
+          <div className="flex flex-col items-center gap-2 px-6 text-center text-sm text-muted-foreground">
+            <ImageOffIcon className="size-6" />
+            <span>저장 시 이미지가 삭제됩니다.</span>
+            <button
+              type="button"
+              onClick={handleUndoRemoval}
+              disabled={disabled}
+              className="text-sm font-medium text-primary underline disabled:opacity-60"
+            >
+              삭제 취소
+            </button>
+          </div>
+        )}
 
-      {markedForRemoval && (
-        <div className="flex items-center justify-between rounded-lg border border-dashed border-zinc-300 p-4 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-          <span>저장 시 이미지가 삭제됩니다.</span>
+        {!previewUrl && !showExisting && !markedForRemoval && (
+          <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
+            <ImageOffIcon className="size-6" />
+            <span>등록된 이미지가 없습니다</span>
+          </div>
+        )}
+
+        {showExisting && (
           <button
             type="button"
-            onClick={handleUndoRemoval}
+            onClick={handleRemoveExisting}
             disabled={disabled}
-            className="text-zinc-700 underline disabled:opacity-60 dark:text-zinc-300"
+            className="absolute top-2 right-2 rounded-full bg-card/90 px-3 py-1.5 text-xs font-medium text-destructive shadow-sm backdrop-blur-sm disabled:opacity-60"
           >
-            취소
+            삭제
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
-      {!previewUrl && !showExisting && !markedForRemoval && (
-        <div className="flex h-48 w-full items-center justify-center rounded-lg border border-dashed border-zinc-300 text-sm text-zinc-400 dark:border-zinc-700">
-          등록된 이미지가 없습니다.
-        </div>
-      )}
-
-      <div className="flex items-center gap-3">
+      <label className="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50">
+        {hasImage ? "다른 사진으로 교체" : "사진 선택"}
         <input
           ref={inputRef}
           type="file"
           accept="image/jpeg,image/png,image/webp"
           disabled={disabled}
           onChange={handleFileChange}
-          // Tailwind's Preflight resets ::file-selector-button's border/
-          // padding/margin to 0 (see node_modules/tailwindcss/preflight.css),
-          // which leaves a bare, unstyled "Choose File" text label with no
-          // visible button chrome -- functionally clickable, but easy to
-          // miss entirely against the rest of this form's actual buttons.
-          // The `file:` variant re-styles that pseudo-element to match this
-          // app's other buttons (see the submit button below) instead of
-          // hiding/replacing the native input.
-          className="text-sm text-zinc-500 file:mr-3 file:cursor-pointer file:rounded-full file:border-0 file:bg-zinc-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-zinc-700 disabled:opacity-60 dark:text-zinc-400 dark:file:bg-zinc-50 dark:file:text-zinc-900 dark:hover:file:bg-zinc-300"
+          className="sr-only"
         />
-        {showExisting && (
-          <button
-            type="button"
-            onClick={handleRemoveExisting}
-            disabled={disabled}
-            className="text-sm text-red-600 underline disabled:opacity-60 dark:text-red-400"
-          >
-            이미지 삭제
-          </button>
-        )}
-      </div>
+      </label>
 
-      <p className="text-xs text-zinc-400 dark:text-zinc-500">
-        JPEG, PNG, WebP · 최대 10MB
-      </p>
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      <p className="text-xs text-muted-foreground">JPEG, PNG, WebP · 최대 10MB</p>
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 }
