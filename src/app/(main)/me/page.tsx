@@ -86,7 +86,13 @@ export default async function MePage() {
       <form
         action={async () => {
           "use server";
-          await signOut();
+          // Phase 31: explicit, rather than relying on next-auth's default
+          // (redirect back to the current page) -- signOut() from /me
+          // would otherwise land back on /me, which requireReadyUser()
+          // immediately bounces to /login since there's no session left.
+          // Landing on "/" instead shows LandingHero (see Home()'s own
+          // !user branch), which is the intended logged-out experience.
+          await signOut({ redirectTo: "/" });
         }}
       >
         <button

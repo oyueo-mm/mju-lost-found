@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { CATEGORIES, SEARCH_MODES } from "@/lib/posts/schema";
+import { CAMPUSES, CATEGORIES, SEARCH_MODES } from "@/lib/posts/schema";
 import type { PostListType, SearchMode, SortOption } from "@/lib/posts/schema";
 
 type StatusOption = { value: string; label: string };
@@ -16,6 +16,11 @@ type SearchFilterBarProps = {
   // type=all (see its own superRefine) -- so this is only ever passed by
   // /lost and /found, each with their own two options, never by /search.
   statusOptions?: StatusOption[];
+  // Phase 31: the status the *page* actually queries with when the URL
+  // carries no explicit ?status= (see lost/found page.tsx) -- shown here
+  // as this <select>'s default so it never lies about what's currently
+  // filtered. Irrelevant (and unused) wherever statusOptions is omitted.
+  defaultStatus?: string;
 };
 
 const TYPE_OPTIONS: { value: PostListType; label: string }[] = [
@@ -37,11 +42,16 @@ const MODE_LABELS: Record<SearchMode, string> = {
   semantic: "AI 의미 검색",
 };
 
-export function SearchFilterBar({ basePath, showTypeFilter = false, statusOptions }: SearchFilterBarProps) {
+export function SearchFilterBar({
+  basePath,
+  showTypeFilter = false,
+  statusOptions,
+  defaultStatus,
+}: SearchFilterBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const hasActiveFilters = ["q", "category", "location", "status", "sort", "mode"].some((key) =>
+  const hasActiveFilters = ["q", "category", "campus", "status", "sort", "mode"].some((key) =>
     searchParams.get(key),
   );
 
@@ -69,7 +79,7 @@ export function SearchFilterBar({ basePath, showTypeFilter = false, statusOption
     const formData = new FormData(event.currentTarget);
     const params = new URLSearchParams();
 
-    for (const key of ["q", "type", "category", "location", "status", "sort", "mode"]) {
+    for (const key of ["q", "type", "category", "campus", "status", "sort", "mode"]) {
       const value = formData.get(key);
       if (typeof value === "string" && value.trim() !== "") {
         params.set(key, value.trim());
@@ -87,7 +97,8 @@ export function SearchFilterBar({ basePath, showTypeFilter = false, statusOption
   // the current filter value is one of those, it's kept selectable here
   // too rather than being silently reset to "전체" on the next render.
   const currentCategory = searchParams.get("category") ?? "";
-  const currentStatus = searchParams.get("status") ?? "";
+  const currentStatus = searchParams.get("status") ?? defaultStatus ?? "";
+  const currentCampus = searchParams.get("campus") ?? "";
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-card border border-border bg-card p-4">
@@ -168,14 +179,18 @@ export function SearchFilterBar({ basePath, showTypeFilter = false, statusOption
           </select>
         )}
 
-        <input
-          name="location"
-          type="text"
-          placeholder="위치"
-          defaultValue={searchParams.get("location") ?? ""}
-          maxLength={200}
+        <select
+          name="campus"
+          defaultValue={currentCampus}
           className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
-        />
+        >
+          <option value="">캠퍼스 전체</option>
+          {CAMPUSES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
 
         <select
           name="sort"

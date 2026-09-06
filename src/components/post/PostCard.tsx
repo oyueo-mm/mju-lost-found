@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import type { PostDTO } from "@/lib/posts/service";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { ImageOffIcon, PinIcon, ClockIcon } from "@/components/icons";
+import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium" }).format(date);
@@ -63,6 +63,13 @@ export function PostCard({ post, scoreLabel = "검색 유사도" }: PostCardProp
           <span className="flex items-center gap-1">
             <ClockIcon className="size-3.5 shrink-0" />
             {formatDate(post.createdAt)}
+          </span>
+          {/* Phase 31: same EyeIcon+count pattern as post/[id]/page.tsx's
+              own view-count display -- reuses the existing viewCount DTO
+              field, no new data source. */}
+          <span className="flex items-center gap-1">
+            <EyeIcon className="size-3.5 shrink-0" />
+            {post.viewCount}
           </span>
         </div>
         {/* Phase 12/15-2: only present on a similarity-ranked result (text

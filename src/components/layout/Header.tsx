@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getUnreadNotificationCount } from "@/lib/notification/service";
 import { countUnreadMessagesForUser } from "@/lib/chat/service";
+import { isAdmin } from "@/lib/moderation/service";
 import { DesktopNav } from "./DesktopNav";
 import { BellIcon, UserIcon } from "@/components/icons";
 import { LinkButton } from "@/components/ui/Button";
@@ -43,7 +44,7 @@ export async function Header() {
           <span className="hidden sm:inline">명지 스마트 분실물 센터</span>
         </Link>
 
-        <DesktopNav unreadChatCount={unreadChat} />
+        <DesktopNav unreadChatCount={unreadChat} isAdmin={Boolean(user && isAdmin(user))} />
 
         <div className="flex shrink-0 items-center gap-1.5">
           {user ? (

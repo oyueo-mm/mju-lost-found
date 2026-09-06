@@ -166,6 +166,9 @@ export default async function PostDetailPage({
             {type === "lost" ? "분실물" : "습득물"}
           </span>
           <span>{post.category}</span>
+          <span className="rounded-full bg-primary-muted px-2.5 py-0.5 text-xs font-medium text-primary">
+            {post.campus}
+          </span>
           <span className="flex items-center gap-1">
             <PinIcon className="size-3.5" />
             {post.location}

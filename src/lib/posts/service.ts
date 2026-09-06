@@ -59,6 +59,7 @@ export type LostPostDTO = {
   description: string;
   category: string;
   location: string;
+  campus: string;
   status: string;
   imageUrl: string | null;
   lostAt: Date;
@@ -87,6 +88,7 @@ export type FoundPostDTO = {
   description: string;
   category: string;
   location: string;
+  campus: string;
   status: string;
   imageUrl: string | null;
   foundAt: Date;
@@ -120,7 +122,12 @@ export type PagedResult<T> = {
 export type PostFilters = {
   q?: string;
   category?: string;
-  location?: string;
+  // Phase 31: replaces the old free-text `location` search filter with an
+  // exact match on the fixed campus enum -- see buildSearchWhere's own
+  // comment. `location` remains a real post field (LostPostDTO/
+  // FoundPostDTO, PostForm) -- it's only gone from the *search filter*
+  // shape here.
+  campus?: string;
   // Phase 28-2: admin post-management search only (src/lib/admin/posts.ts)
   // -- no public search UI exposes this. Optional/undefined for every
   // other existing caller, so this is purely additive to buildSearchWhere.
@@ -181,7 +188,11 @@ function buildSearchWhere<S extends PrismaLostPostStatus | PrismaFoundPostStatus
     | { description: { contains: string; mode: "insensitive" } }
   )[];
   category?: string;
-  location?: { contains: string; mode: "insensitive" };
+  // Phase 31: exact match, same as category -- campus is a fixed enum
+  // (see CAMPUSES in posts/schema.ts), not free text, so there's no
+  // partial/contains match to make here the way the old `location` filter
+  // needed.
+  campus?: string;
   user?: { nickname: { contains: string; mode: "insensitive" } };
   createdAt?: { gte?: Date; lte?: Date };
   status?: S;
@@ -194,7 +205,7 @@ function buildSearchWhere<S extends PrismaLostPostStatus | PrismaFoundPostStatus
     ];
   }
   if (filters.category) where.category = filters.category;
-  if (filters.location) where.location = { contains: filters.location, mode: "insensitive" };
+  if (filters.campus) where.campus = filters.campus;
   if (filters.authorQuery) {
     where.user = { nickname: { contains: filters.authorQuery, mode: "insensitive" } };
   }
@@ -221,6 +232,7 @@ export function toLostPostDTO(row: {
   description: string;
   category: string;
   location: string;
+  campus: string;
   status: PrismaLostPostStatus;
   imageUrl: string | null;
   lostAt: Date;
@@ -239,6 +251,7 @@ export function toFoundPostDTO(row: {
   description: string;
   category: string;
   location: string;
+  campus: string;
   status: PrismaFoundPostStatus;
   imageUrl: string | null;
   foundAt: Date;

@@ -125,6 +125,15 @@ model LostPost {
   // whichever phase builds that filter, not this one.
   category    String          @db.Text
   location    String          @db.Text
+  // Phase 31: a fixed set of two real MJU campuses (see CAMPUSES in
+  // src/lib/posts/schema.ts) -- unlike `category`/`location` above, this
+  // is a brand-new field with no legacy free-text data to stay
+  // compatible with, so the API validates it as a real zod enum. Still a
+  // plain String column (not a DB enum) for the same "no CHECK/enum at
+  // the DB level" convention `category` already follows -- see that
+  // field's own comment. Required, defaulting existing/omitted rows to
+  // "인문캠퍼스" per this phase's spec.
+  campus      String          @default("인문캠퍼스") @db.Text
   lostAt      DateTime        @map("lost_at")
   status      LostPostStatus  @default(SEARCHING)
   imageUrl    String?         @db.Text @map("image_url")
@@ -171,6 +180,8 @@ model FoundPost {
   description String           @db.Text
   category    String           @db.Text
   location    String           @db.Text
+  // See LostPost.campus's comment -- identical shape/reasoning.
+  campus      String           @default("인문캠퍼스") @db.Text
   foundAt     DateTime         @map("found_at")
   status      FoundPostStatus  @default(KEEPING)
   imageUrl    String?          @db.Text @map("image_url")

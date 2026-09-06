@@ -118,6 +118,7 @@ describe("createLostPost / createFoundPost", () => {
       description: "d",
       category: "c",
       location: "l",
+      campus: "인문캠퍼스",
       lostAt: new Date(),
     });
 
@@ -147,6 +148,7 @@ describe("createLostPost / createFoundPost", () => {
       description: "d",
       category: "c",
       location: "l",
+      campus: "인문캠퍼스",
       lostAt: new Date(),
     });
 
@@ -161,6 +163,7 @@ describe("createLostPost / createFoundPost", () => {
       description: "d",
       category: "c",
       location: "l",
+      campus: "인문캠퍼스",
       foundAt: new Date(),
     });
 
@@ -382,7 +385,7 @@ describe("searchPosts -- mode=semantic (Phase 12)", () => {
     expect(result.total).toBe(2);
   });
 
-  it("passes category/status/location/dateFrom/dateTo through to findPostsBySemanticQuery", async () => {
+  it("passes category/campus/status/dateFrom/dateTo through to findPostsBySemanticQuery", async () => {
     embed.mockResolvedValueOnce([0.1]);
     findPostsBySemanticQuery.mockResolvedValueOnce([]);
     const dateFrom = new Date("2026-01-01");
@@ -395,7 +398,7 @@ describe("searchPosts -- mode=semantic (Phase 12)", () => {
       page: 1,
       limit: 20,
       category: "지갑",
-      location: "정문",
+      campus: "인문캠퍼스",
       status: "보관 중",
       dateFrom,
       dateTo,
@@ -405,7 +408,7 @@ describe("searchPosts -- mode=semantic (Phase 12)", () => {
       "found",
       [0.1],
       10,
-      expect.objectContaining({ category: "지갑", location: "정문", status: "보관 중", dateFrom, dateTo }),
+      expect.objectContaining({ category: "지갑", campus: "인문캠퍼스", status: "보관 중", dateFrom, dateTo }),
     );
   });
 

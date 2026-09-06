@@ -37,13 +37,20 @@ describe("listQuerySchema -- search/filter fields", () => {
     expect(result.success).toBe(true);
   });
 
-  it("accepts category and location filters", () => {
+  it("accepts category and campus filters", () => {
     const result = listQuerySchema.safeParse({
       type: "lost",
       category: "전자기기",
-      location: "인문캠퍼스",
+      campus: "인문캠퍼스",
     });
     expect(result.success).toBe(true);
+  });
+
+  // Phase 31: campus replaces the old free-text `location` search filter
+  // with a fixed enum -- unlike location, an out-of-list value is rejected.
+  it("rejects a campus value outside CAMPUSES", () => {
+    const result = listQuerySchema.safeParse({ type: "lost", campus: "다른캠퍼스" });
+    expect(result.success).toBe(false);
   });
 
   it("accepts valid dateFrom/dateTo", () => {

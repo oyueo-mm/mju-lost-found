@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { CATEGORIES } from "@/lib/posts/schema";
+import { CAMPUSES, CATEGORIES, DEFAULT_CAMPUS } from "@/lib/posts/schema";
 import type { PostType } from "@/lib/posts/schema";
 import { uploadPostImage } from "@/lib/images/client";
 import { ImageUploader } from "./ImageUploader";
@@ -26,6 +26,7 @@ type PostFormValues = {
   description: string;
   category: string;
   location: string;
+  campus: string;
   dateValue: string; // <input type="datetime-local"> value
   imageUrl: string | null;
 };
@@ -58,23 +59,17 @@ function nowAsDateTimeLocalValue(): string {
   return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
-// 캠퍼스 선택은 순수 UI 힌트일 뿐 -- 어떤 <input>/<select>의 값도 되지 않고,
-// handleSubmit의 FormData에도 전혀 등장하지 않는다 (name 속성이 없는 plain
-// <button>이라 폼 제출에 포함될 수 없음). `location`은 완전히 별개의 자유
-// 입력 필드로 남아 있어, 이 선택이 DB/API로 전달되는 값에 영향을 주지 않는다.
-const CAMPUS_OPTIONS = ["자연캠", "인문캠"] as const;
-type Campus = (typeof CAMPUS_OPTIONS)[number];
-
 export function PostForm({ type, postId, initialValues }: PostFormProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [removeExisting, setRemoveExisting] = useState(false);
-  // Not persisted anywhere (see comment on CAMPUS_OPTIONS above), so an
-  // edit-mode post has no prior campus to restore here -- it always starts
-  // unselected, same as a brand-new post.
-  const [campus, setCampus] = useState<Campus | null>(null);
+  // Phase 31: required, unlike the earlier decorative version of this
+  // control -- always starts on a real value (the existing post's campus
+  // in edit mode, DEFAULT_CAMPUS for a brand-new one), and the toggle
+  // buttons below no longer allow deselecting back to "none".
+  const [campus, setCampus] = useState<string>(initialValues?.campus ?? DEFAULT_CAMPUS);
 
   async function applyImageChange(id: number): Promise<string | null> {
     if (selectedFile) {
@@ -120,6 +115,10 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
       description: formData.get("description"),
       category: formData.get("category"),
       location: formData.get("location"),
+      // Not a form field (see the toggle-button group below, same reason
+      // `type` itself is added directly rather than read from FormData) --
+      // tracked in this component's own `campus` state instead.
+      campus,
       [DATE_FIELD[type]]: formData.get("date"),
     };
 
@@ -240,17 +239,18 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
 
           <div className="flex flex-col gap-1.5 text-sm">
             {/* Plain <span>, not a <label> -- these buttons don't label or
-                control any single form field (see the CAMPUS_OPTIONS
-                comment above), so there's nothing for a <label> to target.
-                Keeps the same "buttons never nested inside a <label>"
-                accessibility fix as before: each renders with a real
-                "button" role, and aria-pressed reports which one (if any)
-                is selected. */}
+                control a native form field, `campus` is submitted directly
+                from this component's own state (see handleSubmit) instead
+                of via FormData. Each button still renders with a real
+                "button" role, and aria-pressed reports which one is
+                selected -- exactly one, always (no deselect-to-none), now
+                that campus is required. */}
             <span className="font-medium text-foreground">
-              캠퍼스 <span className="font-normal text-muted-foreground">(선택, 추천용)</span>
+              캠퍼스
+              <RequiredMark />
             </span>
             <div className="flex gap-1.5" role="group" aria-label="캠퍼스 선택">
-              {CAMPUS_OPTIONS.map((c) => (
+              {CAMPUSES.map((c) => (
                 <Button
                   key={c}
                   type="button"
@@ -258,7 +258,7 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
                   size="sm"
                   aria-pressed={campus === c}
                   disabled={pending}
-                  onClick={() => setCampus((prev) => (prev === c ? null : c))}
+                  onClick={() => setCampus(c)}
                   className="h-8 px-3 text-xs"
                 >
                   {c}

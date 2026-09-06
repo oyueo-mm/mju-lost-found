@@ -171,14 +171,14 @@ describe("findPostsBySemanticQuery", () => {
       expect(sqlArg.values).toContain("지갑");
     });
 
-    it("applies a location filter as a case-insensitive contains, bound not spliced", async () => {
+    it("applies a campus filter as a bound exact-match parameter (replaces the old location ILIKE filter)", async () => {
       $queryRaw.mockResolvedValueOnce([]);
 
-      await findPostsBySemanticQuery("lost", [0.1], 10, { location: "학생회관" });
+      await findPostsBySemanticQuery("lost", [0.1], 10, { campus: "인문캠퍼스" });
 
       const [sqlArg] = $queryRaw.mock.calls[0];
-      expect(sqlArg.sql).toContain("location ILIKE");
-      expect(sqlArg.values).toContain("%학생회관%");
+      expect(sqlArg.sql).toContain("campus =");
+      expect(sqlArg.values).toContain("인문캠퍼스");
     });
 
     it("applies a status filter cast to the board's own Postgres enum type", async () => {
@@ -218,12 +218,12 @@ describe("findPostsBySemanticQuery", () => {
     it("combines multiple filters in the same query (AND), all still bound", async () => {
       $queryRaw.mockResolvedValueOnce([]);
 
-      await findPostsBySemanticQuery("found", [0.1], 10, { category: "지갑", location: "정문", status: "보관 중" });
+      await findPostsBySemanticQuery("found", [0.1], 10, { category: "지갑", campus: "인문캠퍼스", status: "보관 중" });
 
       const [sqlArg] = $queryRaw.mock.calls[0];
       expect(sqlArg.sql).toContain(" AND ");
       expect(sqlArg.values).toEqual(
-        expect.arrayContaining(["[0.1]", "지갑", "%정문%", "보관 중", 10]),
+        expect.arrayContaining(["[0.1]", "지갑", "인문캠퍼스", "보관 중", 10]),
       );
     });
 

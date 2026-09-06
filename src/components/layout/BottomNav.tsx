@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { NAV_ITEMS, isNavActive } from "./NavLinks";
-import { HomeIcon, BoxIcon, HandboxIcon, ChatIcon, UserIcon } from "@/components/icons";
+import { ADMIN_NAV_ITEM, NAV_ITEMS, isNavActive } from "./NavLinks";
+import { HomeIcon, BoxIcon, HandboxIcon, ChatIcon, UserIcon, ShieldIcon } from "@/components/icons";
 
 const ICONS = {
   home: HomeIcon,
@@ -12,6 +12,7 @@ const ICONS = {
   found: HandboxIcon,
   chat: ChatIcon,
   me: UserIcon,
+  admin: ShieldIcon,
 } as const;
 
 // Phase 17: mobile bottom Navigation (hidden on md+ -- Header's own
@@ -19,8 +20,11 @@ const ICONS = {
 // component only for usePathname()'s active-tab highlighting; the unread
 // chat count is computed server-side (Header's own data fetch) and passed
 // down as a plain prop, so this never queries anything itself.
-export function BottomNav({ unreadChatCount }: { unreadChatCount: number }) {
+export function BottomNav({ unreadChatCount, isAdmin = false }: { unreadChatCount: number; isAdmin?: boolean }) {
   const pathname = usePathname();
+  // Phase 31: appended, never a permanent member of NAV_ITEMS -- see
+  // ADMIN_NAV_ITEM's own comment in NavLinks.ts for why.
+  const items = isAdmin ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
 
   return (
     <nav
@@ -29,7 +33,7 @@ export function BottomNav({ unreadChatCount }: { unreadChatCount: number }) {
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <ul className="mx-auto flex max-w-4xl items-stretch justify-between px-1">
-        {NAV_ITEMS.map((item) => {
+        {items.map((item) => {
           const Icon = ICONS[item.key];
           const active = isNavActive(item.key, item.href, pathname);
           const badge = item.key === "chat" && unreadChatCount > 0 ? unreadChatCount : null;

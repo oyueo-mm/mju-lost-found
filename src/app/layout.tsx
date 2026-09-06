@@ -13,6 +13,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  // Phase 31: resolves opengraph-image.png's relative path to an absolute
+  // URL for link previews -- VERCEL_PROJECT_PRODUCTION_URL is a Vercel-
+  // provided system env var (no manual configuration needed), falling
+  // back to localhost for local dev.
+  metadataBase: new URL(
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000",
+  ),
   title: "명지 스마트 분실물 센터",
   description: "MJU Lost & Found",
 };

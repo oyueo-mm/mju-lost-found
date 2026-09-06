@@ -90,7 +90,10 @@ async function hasEmbedding(type: PostType, id: number): Promise<boolean> {
 
 export type SemanticSearchFilters = {
   category?: string;
-  location?: string;
+  // Phase 31: exact match, same as category -- see posts/service.ts's
+  // buildSearchWhere() comment on the same replacement of the old
+  // free-text `location` filter with the fixed campus enum.
+  campus?: string;
   // Korean status string (e.g. "찾는 중") -- already validated against the
   // right board's enum by listQuerySchema's superRefine before it ever
   // reaches here (see posts/schema.ts), same contract as
@@ -139,7 +142,7 @@ export async function findPostsBySemanticQuery(
   // fragment keeps its own bound parameter.
   const conditions: InstanceType<typeof Prisma.Sql>[] = [Prisma.sql`embedding IS NOT NULL`];
   if (filters.category) conditions.push(Prisma.sql`category = ${filters.category}`);
-  if (filters.location) conditions.push(Prisma.sql`location ILIKE ${`%${filters.location}%`}`);
+  if (filters.campus) conditions.push(Prisma.sql`campus = ${filters.campus}`);
   if (filters.status) conditions.push(Prisma.sql`status = ${filters.status}::${statusType}`);
   if (filters.dateFrom) conditions.push(Prisma.sql`created_at >= ${filters.dateFrom}`);
   if (filters.dateTo) conditions.push(Prisma.sql`created_at <= ${filters.dateTo}`);

@@ -59,6 +59,7 @@ export default async function EditPostPage({
           description: post.description,
           category: post.category,
           location: post.location,
+          campus: post.campus,
           dateValue: toDateTimeLocalValue(dateValue),
           imageUrl: post.imageUrl,
         }}

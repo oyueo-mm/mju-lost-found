@@ -69,13 +69,11 @@ describe("search logic -- filtering is always done in the DB query, never in JS"
     );
   });
 
-  it("uses a case-insensitive contains (partial) match for location", async () => {
-    await listFoundPosts({ page: 1, limit: 20, location: "인문캠퍼스" });
+  it("uses an exact match for campus (replaces the old free-text location filter)", async () => {
+    await listFoundPosts({ page: 1, limit: 20, campus: "인문캠퍼스" });
 
     expect(foundPost.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ location: { contains: "인문캠퍼스", mode: "insensitive" } }),
-      }),
+      expect.objectContaining({ where: expect.objectContaining({ campus: "인문캠퍼스" }) }),
     );
   });
 
@@ -90,8 +88,8 @@ describe("search logic -- filtering is always done in the DB query, never in JS"
     );
   });
 
-  it("combines q, category, and location into a single where clause", async () => {
-    await listLostPosts({ page: 1, limit: 20, q: "지갑", category: "지갑", location: "학생회관" });
+  it("combines q, category, and campus into a single where clause", async () => {
+    await listLostPosts({ page: 1, limit: 20, q: "지갑", category: "지갑", campus: "인문캠퍼스" });
 
     expect(lostPost.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -101,7 +99,7 @@ describe("search logic -- filtering is always done in the DB query, never in JS"
             { description: { contains: "지갑", mode: "insensitive" } },
           ],
           category: "지갑",
-          location: { contains: "학생회관", mode: "insensitive" },
+          campus: "인문캠퍼스",
         },
       }),
     );

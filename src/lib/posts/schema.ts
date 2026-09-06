@@ -29,6 +29,15 @@ export const CATEGORIES = [
   "기타",
 ] as const;
 
+// Phase 31: the two real MJU campuses. Unlike CATEGORIES above, this is a
+// brand-new field (no pre-existing free-text data to stay compatible
+// with), so it's a real zod enum -- an out-of-list value is a validation
+// error, not silently accepted. DEFAULT_CAMPUS matches the DB column's
+// own default (see schema.prisma), so a create request that omits campus
+// and one that explicitly sends "인문캠퍼스" behave identically.
+export const CAMPUSES = ["인문캠퍼스", "자연캠퍼스"] as const;
+export const DEFAULT_CAMPUS: (typeof CAMPUSES)[number] = "인문캠퍼스";
+
 export const POST_TYPES = ["lost", "found"] as const;
 export type PostType = (typeof POST_TYPES)[number];
 
@@ -78,7 +87,11 @@ export const listQuerySchema = z
     // client mistake and is rejected with 400 rather than silently ignored.
     q: z.string().trim().max(MAX_SEARCH_QUERY_LENGTH, "검색어는 100자를 넘을 수 없습니다.").optional(),
     category: z.string().trim().max(100).optional(),
-    location: z.string().trim().max(200).optional(),
+    // Phase 31: replaces the old free-text `location` search filter --
+    // campus is a fixed enum (unlike category, an out-of-list value is
+    // rejected rather than silently kept, since there's no legacy data to
+    // stay compatible with).
+    campus: z.enum(CAMPUSES).optional(),
     dateFrom: z.coerce.date("dateFrom이 올바르지 않습니다.").optional(),
     dateTo: z.coerce.date("dateTo가 올바르지 않습니다.").optional(),
     // Board-specific (Phase 9): LostPost's two statuses differ from
@@ -153,12 +166,18 @@ const title = z.string().trim().min(1, "제목을 입력해주세요.").max(200)
 const description = z.string().trim().min(1, "설명을 입력해주세요.").max(5000);
 const category = z.string().trim().min(1, "카테고리를 입력해주세요.").max(100);
 const location = z.string().trim().min(1, "위치를 입력해주세요.").max(200);
+// Phase 31: required on every create -- unlike location (free text, no
+// fixed list), an omitted/invalid campus is a validation error rather
+// than falling back to DEFAULT_CAMPUS server-side, so the form's own
+// pre-selected default is what actually reaches the API.
+const campus = z.enum(CAMPUSES, "캠퍼스를 선택해주세요.");
 
 export const createLostPostSchema = z.object({
   title,
   description,
   category,
   location,
+  campus,
   lostAt: z.coerce.date("분실 일시가 올바르지 않습니다."),
   status: z.enum(LOST_STATUSES).optional(),
 });
@@ -172,6 +191,7 @@ export const createFoundPostSchema = z.object({
   description,
   category,
   location,
+  campus,
   foundAt: z.coerce.date("습득 일시가 올바르지 않습니다."),
   status: z.enum(FOUND_STATUSES).optional(),
 });

@@ -22,7 +22,14 @@ export default async function LostListPage({
   // `type` is always "lost" here regardless of the URL -- this board's
   // identity isn't user-controlled the way it is on /search.
   const parsed = listQuerySchema.safeParse({ ...raw, type: "lost" });
-  const query = parsed.success ? parsed.data : { type: "lost" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
+  const baseQuery = parsed.success ? parsed.data : { type: "lost" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
+  // Phase 31: no explicit status filter defaults to "찾는 중" (still
+  // in-progress) rather than every status ever recorded -- browsing this
+  // board is about items still being looked for, not archived "찾음"
+  // posts. LOST_STATUSES[0] is that in-progress status by construction
+  // (see its own definition). Only applied when `status` is absent from
+  // the URL -- an explicit ?status=찾음 still works exactly as before.
+  const query = { ...baseQuery, status: raw.status ?? LOST_STATUSES[0] };
   // Phase 13-2: previously called listLostPosts() directly, which silently
   // ignored `mode=semantic` (the SearchFilterBar toggle had no effect on
   // this page -- see Phase 13-1's finding). Keyword mode reuses the same
@@ -58,18 +65,18 @@ export default async function LostListPage({
           분실물 등록
         </LinkButton>
       </div>
-      <SearchFilterBar basePath="/lost" statusOptions={STATUS_OPTIONS} />
+      <SearchFilterBar basePath="/lost" statusOptions={STATUS_OPTIONS} defaultStatus={LOST_STATUSES[0]} />
       <SemanticSearchNotice mode={mode} />
       {posts.items.length === 0 ? (
         <EmptyState
-          title={raw.q || raw.category || raw.location || raw.status ? "검색 결과가 없어요." : "아직 등록된 분실물이 없어요."}
+          title={raw.q || raw.category || raw.campus || raw.status ? "검색 결과가 없어요." : "아직 등록된 분실물이 없어요."}
           description={
-            raw.q || raw.category || raw.location || raw.status
+            raw.q || raw.category || raw.campus || raw.status
               ? "다른 검색어나 필터로 다시 시도해보세요."
               : "가장 먼저 물건을 등록해보세요."
           }
           action={
-            !(raw.q || raw.category || raw.location || raw.status) && (
+            !(raw.q || raw.category || raw.campus || raw.status) && (
               <LinkButton href="/lost/new">분실물 등록하기</LinkButton>
             )
           }

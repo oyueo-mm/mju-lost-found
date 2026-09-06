@@ -20,7 +20,11 @@ export default async function FoundListPage({
 }) {
   const raw = normalizeSearchParams(await searchParams);
   const parsed = listQuerySchema.safeParse({ ...raw, type: "found" });
-  const query = parsed.success ? parsed.data : { type: "found" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
+  const baseQuery = parsed.success ? parsed.data : { type: "found" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
+  // Phase 31: see the matching comment in lost/page.tsx -- no explicit
+  // status filter defaults to "보관 중" (still in-progress) rather than
+  // every status ever recorded.
+  const query = { ...baseQuery, status: raw.status ?? FOUND_STATUSES[0] };
   // Phase 13-2: see the matching comment in lost/page.tsx -- previously
   // listFoundPosts() ignored `mode=semantic` entirely.
   const mode = parsed.success ? parsed.data.mode : "keyword";
@@ -51,18 +55,18 @@ export default async function FoundListPage({
           습득물 등록
         </LinkButton>
       </div>
-      <SearchFilterBar basePath="/found" statusOptions={STATUS_OPTIONS} />
+      <SearchFilterBar basePath="/found" statusOptions={STATUS_OPTIONS} defaultStatus={FOUND_STATUSES[0]} />
       <SemanticSearchNotice mode={mode} />
       {posts.items.length === 0 ? (
         <EmptyState
-          title={raw.q || raw.category || raw.location || raw.status ? "검색 결과가 없어요." : "아직 등록된 습득물이 없어요."}
+          title={raw.q || raw.category || raw.campus || raw.status ? "검색 결과가 없어요." : "아직 등록된 습득물이 없어요."}
           description={
-            raw.q || raw.category || raw.location || raw.status
+            raw.q || raw.category || raw.campus || raw.status
               ? "다른 검색어나 필터로 다시 시도해보세요."
               : "주운 물건을 등록해서 주인을 찾아주세요."
           }
           action={
-            !(raw.q || raw.category || raw.location || raw.status) && (
+            !(raw.q || raw.category || raw.campus || raw.status) && (
               <LinkButton href="/found/new">습득물 등록하기</LinkButton>
             )
           }

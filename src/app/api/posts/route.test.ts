@@ -72,12 +72,12 @@ describe("GET /api/posts", () => {
     expect(res.status).toBe(400);
   });
 
-  it("passes q/category/location/sort through to the service layer", async () => {
+  it("passes q/category/campus/sort through to the service layer", async () => {
     searchPosts.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 0, totalPages: 1 });
 
     await GET(
       new NextRequest(
-        "http://localhost/api/posts?type=lost&q=지갑&category=전자기기&location=학생회관&sort=oldest",
+        "http://localhost/api/posts?type=lost&q=지갑&category=전자기기&campus=인문캠퍼스&sort=oldest",
       ),
     );
 
@@ -86,7 +86,7 @@ describe("GET /api/posts", () => {
         type: "lost",
         q: "지갑",
         category: "전자기기",
-        location: "학생회관",
+        campus: "인문캠퍼스",
         sort: "oldest",
       }),
     );
@@ -229,6 +229,7 @@ describe("POST /api/posts", () => {
           description: "검은색 지갑",
           category: "지갑",
           location: "학생회관",
+          campus: "인문캠퍼스",
           lostAt: "2026-01-01T10:00",
           userId: 999, // must be ignored -- author comes from the session
         }),
@@ -257,6 +258,7 @@ describe("POST /api/posts", () => {
           description: "검은색 지갑",
           category: "지갑",
           location: "학생회관",
+          campus: "인문캠퍼스",
           foundAt: "2026-01-01T10:00",
         }),
       }),
