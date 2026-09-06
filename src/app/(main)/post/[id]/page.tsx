@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth/session";
-import { findSimilarPostsByImageForDisplay, getFoundPost, getLostPost, type PostDTO } from "@/lib/posts/service";
+import { getFoundPost, getLostPost, type PostDTO } from "@/lib/posts/service";
+import { findSimilarPostsByImageForDisplay } from "@/lib/posts/aiService";
 import { FOUND_STATUSES, LOST_STATUSES, postTypeSchema } from "@/lib/posts/schema";
 import { DeletePostButton } from "@/components/post/DeletePostButton";
 import { PostCard } from "@/components/post/PostCard";

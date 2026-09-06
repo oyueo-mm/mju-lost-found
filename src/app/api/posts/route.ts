@@ -12,7 +12,7 @@ import {
   listQuerySchema,
   postTypeSchema,
 } from "@/lib/posts/schema";
-import { createFoundPost, createLostPost, searchPosts } from "@/lib/posts/service";
+import { createFoundPost, createLostPost, searchPosts } from "@/lib/posts/aiService";
 
 // POST creates a post, which triggers embedPostBestEffort() -- real
 // ONNX Runtime inference (@huggingface/transformers, a native addon) that

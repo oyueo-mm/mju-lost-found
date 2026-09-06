@@ -18,7 +18,7 @@ vi.mock("@/lib/posts/http", async () => {
   const response = await import("@/lib/posts/response");
   return { ...response, requireUserForApi };
 });
-vi.mock("@/lib/posts/service", () => ({
+vi.mock("@/lib/posts/aiService", () => ({
   searchPosts,
   createLostPost,
   createFoundPost,

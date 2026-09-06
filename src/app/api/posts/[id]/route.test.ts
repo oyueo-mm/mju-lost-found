@@ -23,10 +23,12 @@ vi.mock("@/lib/posts/http", async () => {
 vi.mock("@/lib/posts/service", () => ({
   getLostPost,
   getFoundPost,
-  updateLostPost,
-  updateFoundPost,
   deleteLostPost,
   deleteFoundPost,
+}));
+vi.mock("@/lib/posts/aiService", () => ({
+  updateLostPost,
+  updateFoundPost,
 }));
 vi.mock("@/lib/ai/postEmbedding", () => ({ embedPostImageBestEffort }));
 

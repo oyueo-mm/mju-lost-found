@@ -8,14 +8,8 @@ import {
   withErrorHandling,
 } from "@/lib/posts/http";
 import { postTypeSchema, updateFoundPostSchema, updateLostPostSchema } from "@/lib/posts/schema";
-import {
-  deleteFoundPost,
-  deleteLostPost,
-  getFoundPost,
-  getLostPost,
-  updateFoundPost,
-  updateLostPost,
-} from "@/lib/posts/service";
+import { deleteFoundPost, deleteLostPost, getFoundPost, getLostPost } from "@/lib/posts/service";
+import { updateFoundPost, updateLostPost } from "@/lib/posts/aiService";
 import { embedPostImageBestEffort } from "@/lib/ai/postEmbedding";
 
 // PATCH conditionally triggers embedPostBestEffort() -- real ONNX Runtime
