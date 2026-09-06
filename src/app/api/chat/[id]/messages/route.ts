@@ -74,7 +74,7 @@ export const POST = withErrorHandling(
       return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
     }
 
-    const result = await sendMessage(id, auth.user, parsed.data.content);
+    const result = await sendMessage(id, auth.user, parsed.data.content ?? "", parsed.data.imagePath);
     return chatMutationResultToResponse(result, 201);
   },
 );

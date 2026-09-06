@@ -145,6 +145,50 @@ describe("POST /api/chat/[id]/messages", () => {
     );
 
     expect(res.status).toBe(201);
-    expect(sendMessage).toHaveBeenCalledWith(1, sessionUser, "안녕");
+    expect(sendMessage).toHaveBeenCalledWith(1, sessionUser, "안녕", undefined);
+  });
+
+  // Phase 28-3
+  it("forwards imagePath through to sendMessage unchanged", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    sendMessage.mockResolvedValueOnce({ kind: "ok", data: { id: 1, imageUrl: "https://x/y.jpg" } });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/chat/1/messages", {
+        method: "POST",
+        body: JSON.stringify({ imagePath: "chat/1/y.jpg" }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(201);
+    expect(sendMessage).toHaveBeenCalledWith(1, sessionUser, "", "chat/1/y.jpg");
+  });
+
+  it("rejects a body with neither content nor imagePath", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/chat/1/messages", { method: "POST", body: JSON.stringify({}) }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(400);
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when sendMessage rejects an invalid image path", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    sendMessage.mockResolvedValueOnce({ kind: "invalid_image" });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/chat/1/messages", {
+        method: "POST",
+        body: JSON.stringify({ imagePath: "chat/999/y.jpg" }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(400);
   });
 });

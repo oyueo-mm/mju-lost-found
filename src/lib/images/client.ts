@@ -49,3 +49,26 @@ export async function uploadPostImage(
 
   return { path: data.path };
 }
+
+// Chat-image counterpart of uploadPostImage() above -- same three-step
+// flow (mint a signed credential from our server, upload straight to
+// Storage, hand back only the path for the caller to report to POST
+// /api/chat/[id]/messages, which re-derives/re-validates the URL itself),
+// just against POST /api/chat/[id]/upload instead (that route checks chat
+// room membership, not post ownership -- see its own comment).
+export async function uploadChatImage(chatRoomId: number, file: File): Promise<{ path: string }> {
+  const res = await fetch(`/api/chat/${chatRoomId}/upload`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contentType: file.type }),
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json.error ?? "업로드 준비 중 오류가 발생했습니다.");
+  }
+  const { data } = (await res.json()) as { data: { path: string; token: string } };
+
+  await uploadToSignedUrl(data.path, data.token, file);
+
+  return { path: data.path };
+}

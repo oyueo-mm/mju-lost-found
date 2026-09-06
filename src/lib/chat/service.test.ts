@@ -41,6 +41,14 @@ vi.mock("@/generated/prisma/client", () => ({
 vi.mock("@/lib/auth/suspension", () => ({
   isCurrentlySuspended: (user: { isSuspended?: boolean }) => Boolean(user?.isSuspended),
 }));
+// Phase 28-3: sendMessage()'s own image-path re-validation -- mocked
+// wholesale (same convention every other collaborator in this file
+// follows) so these tests control exactly what a "valid" vs "wrong room"
+// path looks like without depending on the real regex.
+const parseChatImagePathname = vi.fn();
+const publicUrlFor = vi.fn();
+vi.mock("@/lib/images/pathname", () => ({ parseChatImagePathname }));
+vi.mock("@/lib/images/supabaseAdmin", () => ({ publicUrlFor }));
 
 const {
   countUnreadMessagesForUser,
@@ -100,6 +108,7 @@ const sender = { id: lostOwner, nickname: "닉네임", isSuspended: false, suspe
 beforeEach(() => {
   vi.clearAllMocks();
   userTable.findUnique.mockResolvedValue({ id: foundOwner, nickname: "상대닉네임" });
+  publicUrlFor.mockImplementation((path: string) => `https://storage.example/post-images/${path}`);
 });
 
 describe("getOrCreateChatRoomForMatch", () => {
@@ -485,6 +494,49 @@ describe("listMessages", () => {
     if (result.kind === "ok") expect(result.data.items[0].content).toBe("[관리자에 의해 숨겨진 메시지입니다.]");
   });
 
+  // Phase 28-3
+  it("passes an image message's imageUrl through unmasked", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    message.findMany.mockResolvedValueOnce([
+      {
+        id: 1,
+        senderUserId: lostOwner,
+        content: "",
+        imageUrl: "https://x/y.jpg",
+        createdAt: new Date(),
+        readAt: null,
+        hiddenAt: null,
+        sender: { nickname: "n" },
+      },
+    ]);
+
+    const result = await listMessages(100, lostOwner);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.data.items[0].imageUrl).toBe("https://x/y.jpg");
+  });
+
+  it("masks a hidden message's image too, not just its text", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    message.findMany.mockResolvedValueOnce([
+      {
+        id: 1,
+        senderUserId: foundOwner,
+        content: "real content",
+        imageUrl: "https://x/y.jpg",
+        createdAt: new Date(),
+        readAt: null,
+        hiddenAt: new Date(),
+        sender: { nickname: "n" },
+      },
+    ]);
+
+    const result = await listMessages(100, lostOwner);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.data.items[0].imageUrl).toBeNull();
+  });
+
   it("reports hasMore via the limit+1 lookahead", async () => {
     chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
     const rows = Array.from({ length: 51 }, (_, i) => ({
@@ -674,6 +726,94 @@ describe("sendMessage", () => {
     $transaction.mockRejectedValueOnce(new Error("connection lost"));
 
     await expect(sendMessage(100, sender, "안녕하세요")).rejects.toThrow("connection lost");
+  });
+
+  // Phase 28-3: image messages -- imagePath is only ever a Storage path
+  // the client already uploaded (never a trusted URL), re-validated here
+  // against the chat room it's actually being sent to.
+  describe("image messages", () => {
+    it("rejects an imagePath that doesn't parse as a valid chat image pathname", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      parseChatImagePathname.mockReturnValueOnce(null);
+
+      const result = await sendMessage(100, sender, "", "not-a-real-path.jpg");
+
+      expect(result).toEqual({ kind: "invalid_image" });
+      expect($transaction).not.toHaveBeenCalled();
+    });
+
+    it("rejects an imagePath that names a different chat room (never trusts the client)", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      parseChatImagePathname.mockReturnValueOnce({ chatRoomId: 999 });
+
+      const result = await sendMessage(100, sender, "", "chat/999/y.jpg");
+
+      expect(result).toEqual({ kind: "invalid_image" });
+      expect($transaction).not.toHaveBeenCalled();
+    });
+
+    it("sends an image-only message (empty content is allowed when an image is attached)", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      parseChatImagePathname.mockReturnValueOnce({ chatRoomId: 100 });
+      txMessageCreate.mockResolvedValueOnce({
+        id: 1,
+        senderUserId: lostOwner,
+        content: "",
+        imageUrl: "https://storage.example/post-images/chat/100/y.jpg",
+        createdAt: new Date(),
+        readAt: null,
+        sender: { nickname: "닉네임" },
+      });
+
+      const result = await sendMessage(100, sender, "", "chat/100/y.jpg");
+
+      expect(result.kind).toBe("ok");
+      expect(txMessageCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            content: "",
+            imageUrl: "https://storage.example/post-images/chat/100/y.jpg",
+          }),
+        }),
+      );
+      if (result.kind === "ok") {
+        expect(result.data.imageUrl).toBe("https://storage.example/post-images/chat/100/y.jpg");
+      }
+    });
+
+    it("sends text + image together", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      parseChatImagePathname.mockReturnValueOnce({ chatRoomId: 100 });
+      txMessageCreate.mockResolvedValueOnce({
+        id: 1,
+        senderUserId: lostOwner,
+        content: "이거 본인 물건 맞나요?",
+        imageUrl: "https://storage.example/post-images/chat/100/y.jpg",
+        createdAt: new Date(),
+        readAt: null,
+        sender: { nickname: "닉네임" },
+      });
+
+      await sendMessage(100, sender, "이거 본인 물건 맞나요?", "chat/100/y.jpg");
+
+      expect(txMessageCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            content: "이거 본인 물건 맞나요?",
+            imageUrl: "https://storage.example/post-images/chat/100/y.jpg",
+          }),
+        }),
+      );
+    });
+
+    it("still rejects an empty message when there's no image either", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+
+      const result = await sendMessage(100, sender, "   ", undefined);
+
+      expect(result).toEqual({ kind: "invalid_content" });
+      expect($transaction).not.toHaveBeenCalled();
+    });
   });
 
   // Phase 10: direct-room participants send/receive exactly like a

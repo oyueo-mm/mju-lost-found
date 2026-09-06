@@ -121,6 +121,10 @@ export type PostFilters = {
   q?: string;
   category?: string;
   location?: string;
+  // Phase 28-2: admin post-management search only (src/lib/admin/posts.ts)
+  // -- no public search UI exposes this. Optional/undefined for every
+  // other existing caller, so this is purely additive to buildSearchWhere.
+  authorQuery?: string;
   dateFrom?: Date;
   dateTo?: Date;
   // Korean status string (e.g. "찾는 중"), already validated against the
@@ -178,6 +182,7 @@ function buildSearchWhere<S extends PrismaLostPostStatus | PrismaFoundPostStatus
   )[];
   category?: string;
   location?: { contains: string; mode: "insensitive" };
+  user?: { nickname: { contains: string; mode: "insensitive" } };
   createdAt?: { gte?: Date; lte?: Date };
   status?: S;
 } {
@@ -190,6 +195,9 @@ function buildSearchWhere<S extends PrismaLostPostStatus | PrismaFoundPostStatus
   }
   if (filters.category) where.category = filters.category;
   if (filters.location) where.location = { contains: filters.location, mode: "insensitive" };
+  if (filters.authorQuery) {
+    where.user = { nickname: { contains: filters.authorQuery, mode: "insensitive" } };
+  }
   if (filters.dateFrom || filters.dateTo) {
     where.createdAt = {
       ...(filters.dateFrom && { gte: filters.dateFrom }),
@@ -292,10 +300,16 @@ export async function getLostPost(id: number): Promise<LostPostDTO | null> {
 export async function deleteLostPost(
   id: number,
   userId: number,
+  // Phase 28-2: lets an admin delete a post they don't own (see
+  // src/lib/admin/posts.ts::deletePostForAdmin) without duplicating this
+  // function's delete+Storage-cleanup logic. Omitted (the default) for
+  // every existing caller -- ownership is still enforced exactly as
+  // before, byte-for-byte the same behavior this function already had.
+  options?: { asAdmin?: boolean },
 ): Promise<PostMutationResult<{ id: number }>> {
   const existing = await prisma.lostPost.findUnique({ where: { id } });
   if (!existing) return { kind: "not_found" };
-  if (existing.userId !== userId) return { kind: "forbidden", reason: "not_owner" };
+  if (existing.userId !== userId && !options?.asAdmin) return { kind: "forbidden", reason: "not_owner" };
 
   // A plain delete -- the ON DELETE CASCADE already declared on
   // Match/ChatRoom/Message's relations (see schema.prisma) is what keeps
@@ -353,10 +367,12 @@ export async function getFoundPost(id: number): Promise<FoundPostDTO | null> {
 export async function deleteFoundPost(
   id: number,
   userId: number,
+  // See deleteLostPost's own comment -- identical shape/reasoning.
+  options?: { asAdmin?: boolean },
 ): Promise<PostMutationResult<{ id: number }>> {
   const existing = await prisma.foundPost.findUnique({ where: { id } });
   if (!existing) return { kind: "not_found" };
-  if (existing.userId !== userId) return { kind: "forbidden", reason: "not_owner" };
+  if (existing.userId !== userId && !options?.asAdmin) return { kind: "forbidden", reason: "not_owner" };
 
   await prisma.foundPost.delete({ where: { id } });
   if (existing.imageUrl) await deleteObjectSafely(existing.imageUrl);

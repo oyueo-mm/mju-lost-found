@@ -20,11 +20,15 @@ function formatDate(date: Date): string {
 export default async function AdminDashboardPage() {
   const admin = await requireAdmin(); // redirects unless logged in, ready, and DB-flagged admin
 
-  const [pendingResult, suspendedCount, lostCount, foundCount] = await Promise.all([
+  const [pendingResult, suspendedCount, lostCount, foundCount, userCount] = await Promise.all([
     listReportsForAdmin(admin, { status: "pending", page: 1, limit: 5 }),
     prisma.user.count({ where: { isSuspended: true } }),
     prisma.lostPost.count(),
     prisma.foundPost.count(),
+    // Phase 28-1: real count backing the new "사용자 관리" entry point below
+    // -- same "every number here is a real query, never mock data" rule
+    // this page's own top comment already states.
+    prisma.user.count(),
   ]);
 
   const pending = pendingResult.kind === "ok" ? pendingResult.data : { items: [], total: 0 };
@@ -36,7 +40,7 @@ export default async function AdminDashboardPage() {
         <h1 className="text-xl font-semibold text-foreground">관리자 센터</h1>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Link
           href="/admin/reports?status=pending"
           className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"
@@ -44,14 +48,24 @@ export default async function AdminDashboardPage() {
           <span className="text-xs text-muted-foreground">신고 대기</span>
           <span className="text-2xl font-bold text-foreground">{pending.total}</span>
         </Link>
+        <Link
+          href="/admin/users"
+          className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"
+        >
+          <span className="text-xs text-muted-foreground">전체 사용자</span>
+          <span className="text-2xl font-bold text-foreground">{userCount}</span>
+        </Link>
         <div className="flex flex-col gap-1 rounded-card border border-border bg-card p-4">
           <span className="text-xs text-muted-foreground">제재 사용자</span>
           <span className="text-2xl font-bold text-foreground">{suspendedCount}</span>
         </div>
-        <div className="flex flex-col gap-1 rounded-card border border-border bg-card p-4">
+        <Link
+          href="/admin/posts"
+          className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"
+        >
           <span className="text-xs text-muted-foreground">게시글</span>
           <span className="text-2xl font-bold text-foreground">{lostCount + foundCount}</span>
-        </div>
+        </Link>
       </div>
 
       <section className="flex flex-col gap-3">

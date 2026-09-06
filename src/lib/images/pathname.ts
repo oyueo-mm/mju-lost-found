@@ -32,3 +32,29 @@ export function parseImagePathname(
 export function isValidImagePathname(pathname: string): boolean {
   return PATHNAME_PATTERN.test(pathname);
 }
+
+// Phase 28-3: chat/{chatRoomId}/{uuid}.{ext} -- same bucket (post-images)
+// and signed-upload-URL mechanism as post images (see
+// src/app/api/chat/[id]/upload/route.ts), just a different path prefix so
+// the two never collide and parseChatImagePathname() below can't be
+// tricked by a post's own pathname. The chat room must already exist and
+// the uploader must already be verified as a participant (checked by that
+// route via getChatRoomForUser(), the same membership check every other
+// chat read/write path uses) before this is ever called.
+const CHAT_PATHNAME_PATTERN =
+  /^chat\/(\d+)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/;
+
+export function buildChatImagePathname(chatRoomId: number, contentType: AllowedImageContentType): string {
+  const id = crypto.randomUUID();
+  return `chat/${chatRoomId}/${id}.${extensionForContentType(contentType)}`;
+}
+
+// Re-validates a client-reported path actually names the chat room the
+// message is being sent to -- same "never trust a client-supplied path
+// beyond what upload minted it for" rule parseImagePathname() enforces for
+// posts (see chat/service.ts::sendMessage's own call site).
+export function parseChatImagePathname(pathname: string): { chatRoomId: number } | null {
+  const match = CHAT_PATHNAME_PATTERN.exec(pathname);
+  if (!match) return null;
+  return { chatRoomId: Number(match[1]) };
+}

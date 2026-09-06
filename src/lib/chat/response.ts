@@ -31,5 +31,7 @@ export function chatMutationResultToResponse<T>(
       return jsonError(403, "이 채팅방에 접근할 권한이 없습니다.");
     case "invalid_content":
       return jsonError(400, "메시지를 입력해주세요.");
+    case "invalid_image":
+      return jsonError(400, "이미지를 확인할 수 없습니다. 다시 업로드해주세요.");
   }
 }

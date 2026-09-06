@@ -29,7 +29,15 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
   const room = result.data;
 
   return (
-    <div className="flex h-[70vh] flex-col gap-4">
+    // h-[70dvh], not h-[70vh]: `dvh` (dynamic viewport height) tracks the
+    // browser's *actual* visible viewport, which shrinks when a mobile
+    // on-screen keyboard opens or the browser chrome (address bar) hides/
+    // shows -- plain `vh` stays pinned to the layout viewport and doesn't
+    // adjust, which is what let the compose bar end up hidden behind the
+    // keyboard on mobile. This bounded height is what gives ChatThread's
+    // own flex column (see its own comment) a real height to fill and
+    // scroll within -- no `position: fixed` needed.
+    <div className="flex h-[70dvh] flex-col gap-4">
       <div className="flex items-center justify-between border-b border-border pb-4">
         <div className="flex flex-col">
           <span className="font-semibold text-foreground">

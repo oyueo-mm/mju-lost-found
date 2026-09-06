@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { buildImagePathname, isValidImagePathname, parseImagePathname } from "./pathname";
+import {
+  buildChatImagePathname,
+  buildImagePathname,
+  isValidImagePathname,
+  parseChatImagePathname,
+  parseImagePathname,
+} from "./pathname";
 
 describe("buildImagePathname / isValidImagePathname", () => {
   it("builds a pathname that passes its own validator", () => {
@@ -36,5 +42,34 @@ describe("buildImagePathname / isValidImagePathname", () => {
 
   it("rejects an arbitrary user-supplied filename instead of the expected shape", () => {
     expect(isValidImagePathname("my-original-filename.jpg")).toBe(false);
+  });
+});
+
+// Phase 28-3: same shape/pattern as buildImagePathname/parseImagePathname
+// above, just for chat/{chatRoomId}/{uuid}.{ext} instead of
+// posts/{postType}/{postId}/{uuid}.{ext}.
+describe("buildChatImagePathname / parseChatImagePathname", () => {
+  it("builds a pathname that round-trips through parseChatImagePathname", () => {
+    const pathname = buildChatImagePathname(42, "image/jpeg");
+    expect(pathname).toMatch(/^chat\/42\/[0-9a-f-]{36}\.jpg$/);
+    expect(parseChatImagePathname(pathname)).toEqual({ chatRoomId: 42 });
+  });
+
+  it("rejects a post pathname (wrong prefix)", () => {
+    expect(parseChatImagePathname("posts/lost/1/11111111-1111-1111-1111-111111111111.jpg")).toBeNull();
+  });
+
+  it("rejects a chat pathname naming a different chat room than expected (caller's own re-check)", () => {
+    const pathname = buildChatImagePathname(1, "image/png");
+    const parsed = parseChatImagePathname(pathname);
+    expect(parsed?.chatRoomId).not.toBe(2);
+  });
+
+  it("rejects a non-numeric chatRoomId segment", () => {
+    expect(parseChatImagePathname("chat/not-a-number/" + "a".repeat(36) + ".jpg")).toBeNull();
+  });
+
+  it("rejects a path-traversal attempt", () => {
+    expect(parseChatImagePathname("chat/../../etc/passwd")).toBeNull();
   });
 });

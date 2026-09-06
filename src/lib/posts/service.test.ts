@@ -131,6 +131,59 @@ describe("deleteLostPost / deleteFoundPost", () => {
     expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
     expect(foundPost.delete).not.toHaveBeenCalled();
   });
+
+  // Phase 28-2: admin/posts.ts::deletePostForAdmin passes { asAdmin: true }
+  // to delete a post the caller doesn't own -- every other existing caller
+  // never passes this option, so their behavior (tested above) is unchanged.
+  it("allows deleting someone else's post when asAdmin is true", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 99, imageUrl: "https://x/y.jpg" });
+    lostPost.delete.mockResolvedValueOnce({});
+
+    const result = await deleteLostPost(1, 1, { asAdmin: true });
+
+    expect(result).toEqual({ kind: "ok", data: { id: 1 } });
+    expect(lostPost.delete).toHaveBeenCalledWith({ where: { id: 1 } });
+    expect(deleteObjectSafely).toHaveBeenCalledWith("https://x/y.jpg");
+  });
+
+  it("still rejects deleting someone else's post when asAdmin is false/omitted", async () => {
+    foundPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 99 });
+
+    const result = await deleteFoundPost(1, 1, { asAdmin: false });
+
+    expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
+    expect(foundPost.delete).not.toHaveBeenCalled();
+  });
+});
+
+// Phase 28-2: authorQuery is the one new (purely additive) filter this
+// phase adds to buildSearchWhere -- every other filter's existing test
+// coverage (q/category/location/status/sort) is unaffected.
+describe("listLostPosts authorQuery filter", () => {
+  it("filters by the post author's nickname when authorQuery is given", async () => {
+    lostPost.findMany.mockResolvedValueOnce([]);
+    lostPost.count.mockResolvedValueOnce(0);
+
+    await listLostPosts({ page: 1, limit: 20, authorQuery: "닉네임" });
+
+    expect(lostPost.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          user: { nickname: { contains: "닉네임", mode: "insensitive" } },
+        }),
+      }),
+    );
+  });
+
+  it("omits the user filter entirely when authorQuery isn't given", async () => {
+    lostPost.findMany.mockResolvedValueOnce([]);
+    lostPost.count.mockResolvedValueOnce(0);
+
+    await listLostPosts({ page: 1, limit: 20 });
+
+    const call = lostPost.findMany.mock.calls[0][0];
+    expect(call.where.user).toBeUndefined();
+  });
 });
 
 // Phase 9: "내 게시물" page's data source -- both functions filter purely

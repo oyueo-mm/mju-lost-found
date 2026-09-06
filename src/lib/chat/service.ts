@@ -2,6 +2,8 @@ import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { NotificationType, Prisma, type User } from "@/generated/prisma/client";
 import type { PostType } from "@/lib/posts/schema";
+import { parseChatImagePathname } from "@/lib/images/pathname";
+import { publicUrlFor } from "@/lib/images/supabaseAdmin";
 import { MESSAGE_PAGE_SIZE } from "./schema";
 
 // Same placeholder text as the legacy HIDDEN_MESSAGE_PLACEHOLDER --
@@ -35,7 +37,11 @@ export type ChatMutationResult<T> =
   | { kind: "not_found" }
   | { kind: "forbidden"; reason?: "suspended" | "self" }
   | { kind: "match_not_found" }
-  | { kind: "invalid_content" };
+  | { kind: "invalid_content" }
+  // Phase 28-3: imagePath was given but doesn't parse as a real chat
+  // image pathname, or names a different chat room than the one the
+  // message is being sent to -- see sendMessage()'s own comment.
+  | { kind: "invalid_image" };
 
 // Discriminated on roomType so a caller (UI included) can never confuse
 // the two shapes -- e.g. a "match" room always has both lostPost and
@@ -69,6 +75,7 @@ export type MessageDTO = {
   senderUserId: number;
   senderNickname: string | null;
   content: string;
+  imageUrl: string | null;
   createdAt: Date;
   readAt: Date | null;
   isMine: boolean;
@@ -385,6 +392,11 @@ export async function listMessages(
     senderUserId: m.senderUserId,
     senderNickname: m.sender.nickname,
     content: m.hiddenAt ? HIDDEN_MESSAGE_PLACEHOLDER : m.content,
+    // A hidden message's image is masked too -- same "real content never
+    // altered, only masked for display" rule as `content` above (an admin
+    // hiding a message shouldn't leave its photo visible while its text
+    // is replaced).
+    imageUrl: m.hiddenAt ? null : m.imageUrl,
     createdAt: m.createdAt,
     readAt: m.readAt,
     isMine: m.senderUserId === requesterId,
@@ -456,10 +468,19 @@ export async function markMessageNotificationsReadForChatRoom(
 // chat room's), so distinct messages each get their own notification
 // instead of colliding on Notification's
 // UNIQUE(userId, type, relatedType, relatedId).
+// Phase 28-3: imagePath is the Storage *path* the client already uploaded
+// to via POST /api/chat/[id]/upload (which itself gated the upload on
+// chat-room membership) -- never a client-supplied URL, same "the server
+// derives the URL itself from a re-validated path" rule
+// posts/images/service.ts::setPostImage already established. Re-parsing
+// it here and requiring it to name exactly this chatRoomId is what closes
+// the gap a trusted-URL design would leave open (a participant of room A
+// reporting room B's path/URL as their own).
 export async function sendMessage(
   chatRoomId: number,
   sender: User,
   content: string,
+  imagePath?: string,
 ): Promise<ChatMutationResult<MessageDTO>> {
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
@@ -469,7 +490,20 @@ export async function sendMessage(
   if (isCurrentlySuspended(sender)) return { kind: "forbidden" };
 
   const trimmed = content.trim();
-  if (!trimmed) return { kind: "invalid_content" }; // defense-in-depth; the API's zod schema already rejects this
+
+  let imageUrl: string | null = null;
+  if (imagePath) {
+    const parsed = parseChatImagePathname(imagePath);
+    if (!parsed || parsed.chatRoomId !== chatRoomId) return { kind: "invalid_image" };
+    imageUrl = publicUrlFor(imagePath);
+  }
+
+  // An image-only message stores "" for content (the column stays
+  // required/NOT NULL -- see schema.prisma's own comment on this) --
+  // "nothing at all" is only rejected when there's no image either,
+  // matching the API schema's own .refine() (defense-in-depth; that
+  // schema already rejects this shape before it reaches here).
+  if (!trimmed && !imageUrl) return { kind: "invalid_content" };
 
   // Works for either room shape: participantIds is always exactly the
   // sender + the one other participant (a direct room's initiator/post-
@@ -480,7 +514,7 @@ export async function sendMessage(
 
   const message = await prisma.$transaction(async (tx) => {
     const created = await tx.message.create({
-      data: { chatRoomId, senderUserId: sender.id, content: trimmed },
+      data: { chatRoomId, senderUserId: sender.id, content: trimmed, imageUrl },
       include: { sender: { select: { nickname: true } } },
     });
 
@@ -510,6 +544,7 @@ export async function sendMessage(
       senderUserId: message.senderUserId,
       senderNickname: message.sender.nickname,
       content: message.content,
+      imageUrl: message.imageUrl,
       createdAt: message.createdAt,
       readAt: message.readAt,
       isMine: true,

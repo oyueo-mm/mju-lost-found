@@ -314,6 +314,14 @@ model Message {
   hiddenByUserId   Int?      @map("hidden_by_user_id")
   hiddenBy         User?     @relation("MessageHiddenBy", fields: [hiddenByUserId], references: [id], onDelete: Restrict)
   hiddenReason     String?   @db.Text @map("hidden_reason")
+  // Phase 28-3: same "public Storage URL string, nullable" shape as
+  // LostPost/FoundPost.imageUrl -- a message can carry an image instead
+  // of (or alongside) text; `content` stays a required column (an
+  // image-only message stores "" there, see chat/service.ts::sendMessage),
+  // so this is a purely additive column with zero migration needed for
+  // any existing row (defaults to NULL, meaning "no image", for every
+  // message sent before this phase).
+  imageUrl         String?   @db.Text @map("image_url")
 
   @@index([chatRoomId], map: "idx_message_chat_room_id")
   // Mirrors idx_message_chat_room_created_id, which backs the
