@@ -1,9 +1,8 @@
-import Link from "next/link";
-
 import { getCurrentUser } from "@/lib/auth/session";
 import { listLostPosts, listFoundPosts } from "@/lib/posts/service";
 import { HomeSearchBar } from "@/components/home/HomeSearchBar";
 import { CategoryShortcuts } from "@/components/home/CategoryShortcuts";
+import { LandingHero } from "@/components/home/LandingHero";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { PostRail } from "@/components/post/PostRail";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -20,8 +19,17 @@ const RECENT_LIMIT = 6;
 // listLostPosts()/listFoundPosts() every board page already uses (no new
 // query, no mock data) with page=1/limit=6 -- newest-first is already
 // buildOrderBy()'s default with no `sort` filter given.
+//
+// Phase 29: a logged-out visitor sees LandingHero instead -- a first-time
+// stranger needs "what is this service" answered before a dashboard full
+// of today's posts means anything. Everything below this check (the
+// search bar, recent-posts rails, etc.) is exactly what a logged-in user
+// already saw before this phase; nothing there changed.
 export default async function Home() {
   const user = await getCurrentUser();
+  if (!user) {
+    return <LandingHero />;
+  }
 
   let recentLost: Awaited<ReturnType<typeof listLostPosts>> | null = null;
   let recentFound: Awaited<ReturnType<typeof listFoundPosts>> | null = null;
@@ -61,21 +69,6 @@ export default async function Home() {
           </LinkButton>
         </div>
       </section>
-
-      {!user && (
-        <section className="flex flex-col items-start gap-3 rounded-card border border-border bg-muted/60 p-6">
-          <p className="text-sm text-muted-foreground">
-            명지대학교 학생들을 위한 분실물 · 습득물 서비스입니다. 게시글 작성, 채팅 등을 이용하려면
-            로그인해주세요.
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <LinkButton href="/login">Google로 로그인하기</LinkButton>
-            <Link href="/account-guide" className="text-sm text-muted-foreground underline hover:text-foreground">
-              명지대 계정이 없으신가요?
-            </Link>
-          </div>
-        </section>
-      )}
 
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold text-foreground">어떤 물건을 찾고 있나요?</h2>

@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { signIn } from "@/lib/auth/auth";
 import { getCurrentUser, sanitizeCallbackUrl, type LoginReason } from "@/lib/auth/session";
 import { Button } from "@/components/ui/Button";
-import { LoginTabs } from "@/components/auth/LoginTabs";
 
 const ERROR_MESSAGES: Record<string, string> = {
   AccessDenied: "명지대학교 계정(@mju.ac.kr)만 이용할 수 있습니다.",
@@ -56,53 +55,48 @@ export default async function LoginPage({
           </div>
         </div>
 
-        <LoginTabs>
-          <div className="flex w-full flex-col items-center gap-7 text-center">
-            {errorMessage && (
-              <p className="w-full rounded-card border border-destructive/30 bg-destructive-muted px-4 py-2.5 text-sm text-destructive">
-                {errorMessage}
-              </p>
-            )}
+        {errorMessage && (
+          <p className="w-full rounded-card border border-destructive/30 bg-destructive-muted px-4 py-2.5 text-sm text-destructive">
+            {errorMessage}
+          </p>
+        )}
 
-            {/* Phase 14: shown instead of the error box above when this page
-                was reached by requireReadyUser()'s redirect (not by an
-                actual OAuth error) -- a neutral explanation, not a red
-                error message, since "please log in to do X" isn't a
-                failure. */}
-            {!errorMessage && reasonMessage && (
-              <p className="w-full rounded-card border border-border bg-muted px-4 py-2.5 text-sm text-muted-foreground">
-                {reasonMessage}
-              </p>
-            )}
+        {/* Phase 14: shown instead of the error box above when this page was
+            reached by requireReadyUser()'s redirect (not by an actual OAuth
+            error) -- a neutral explanation, not a red error message, since
+            "please log in to do X" isn't a failure. */}
+        {!errorMessage && reasonMessage && (
+          <p className="w-full rounded-card border border-border bg-muted px-4 py-2.5 text-sm text-muted-foreground">
+            {reasonMessage}
+          </p>
+        )}
 
-            <form
-              className="w-full"
-              action={async () => {
-                "use server";
-                // callbackUrl was already validated as same-origin-relative by
-                // sanitizeCallbackUrl() above -- signIn's redirectTo accepts it
-                // as-is, sending the user back to the page they came from
-                // instead of always landing on "/".
-                await signIn("google", callbackUrl ? { redirectTo: callbackUrl } : undefined);
-              }}
-            >
-              <Button type="submit" variant="secondary" className="w-full">
-                Google로 로그인
-              </Button>
-            </form>
+        <form
+          className="w-full"
+          action={async () => {
+            "use server";
+            // callbackUrl was already validated as same-origin-relative by
+            // sanitizeCallbackUrl() above -- signIn's redirectTo accepts it
+            // as-is, sending the user back to the page they came from
+            // instead of always landing on "/".
+            await signIn("google", callbackUrl ? { redirectTo: callbackUrl } : undefined);
+          }}
+        >
+          <Button type="submit" variant="secondary" className="w-full">
+            Google로 로그인
+          </Button>
+        </form>
 
-            <p className="text-xs text-muted-foreground">
-              학교 계정(@mju.ac.kr)이 아닌 계정은 로그인할 수 없습니다.
-            </p>
+        <p className="text-xs text-muted-foreground">
+          학교 계정(@mju.ac.kr)이 아닌 계정은 로그인할 수 없습니다.
+        </p>
 
-            <div className="flex w-full flex-col items-center gap-1.5 border-t border-border pt-6">
-              <p className="text-sm text-muted-foreground">명지대 계정이 없으신가요?</p>
-              <Link href="/account-guide" className="text-sm font-medium text-primary hover:opacity-80">
-                명지대 계정 생성 방법 보기
-              </Link>
-            </div>
-          </div>
-        </LoginTabs>
+        <div className="flex w-full flex-col items-center gap-1.5 border-t border-border pt-6">
+          <p className="text-sm text-muted-foreground">명지대 계정이 없으신가요?</p>
+          <Link href="/account-guide" className="text-sm font-medium text-primary hover:opacity-80">
+            명지대 계정 생성 방법 보기
+          </Link>
+        </div>
       </div>
     </div>
   );
