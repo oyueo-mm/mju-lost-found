@@ -10,9 +10,10 @@ export function ImageSearchShowcase() {
       <div className="grid grid-cols-1 items-center gap-10 md:grid-cols-2 md:gap-16">
         <div className="order-2 flex flex-col gap-3 text-center md:order-1 md:text-left">
           <span className="text-xs font-medium text-primary">이미지 검색</span>
-          <h2 className="text-xl font-bold text-foreground md:text-2xl">사진 한 장이면 충분해요</h2>
+          <h2 className="text-xl font-bold text-foreground md:text-2xl">사진 한 장이면 충분합니다</h2>
           <p className="text-sm text-muted-foreground md:text-base">
-            찾고 있는 물건과 닮은 사진을 올리면, AI가 비슷하게 생긴 게시물을 찾아드려요. 제품명을 몰라도 괜찮아요.
+            찾고 있는 물건과 닮은 사진을 올리면, AI가 비슷하게 생긴 게시물을 찾아드립니다. 제품명을 몰라도
+            괜찮습니다.
           </p>
         </div>
 

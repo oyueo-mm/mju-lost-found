@@ -12,7 +12,7 @@ const STEPS: { Icon: ComponentType<{ className?: string }>; label: string }[] = 
 export function HowItWorks() {
   return (
     <section className="flex flex-col gap-8 py-14 md:py-20">
-      <h2 className="text-center text-xl font-bold text-foreground md:text-2xl">이용 방법은 간단해요</h2>
+      <h2 className="text-center text-xl font-bold text-foreground md:text-2xl">이용 방법은 간단합니다</h2>
 
       <div className="flex flex-col items-center gap-3 md:flex-row md:justify-center">
         {STEPS.map((step, index) => (

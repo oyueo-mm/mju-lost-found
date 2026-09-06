@@ -11,27 +11,27 @@ const FEATURES: { Icon: ComponentType<{ className?: string }>; title: string; de
   {
     Icon: PlusIcon,
     title: "분실물 · 습득물 등록",
-    description: "잃어버리거나 주운 물건을 사진과 함께 올려요.",
+    description: "잃어버리거나 주운 물건을 사진과 함께 올릴 수 있습니다.",
   },
   {
     Icon: SearchIcon,
     title: "검색",
-    description: "제목, 카테고리, 위치로 원하는 게시물을 빠르게 찾아요.",
+    description: "제목, 카테고리, 위치로 원하는 게시물을 빠르게 찾을 수 있습니다.",
   },
   {
     Icon: ShieldIcon,
     title: "AI 검색 · 매칭",
-    description: "AI가 비슷한 분실물과 습득물을 자동으로 찾아 연결해줘요.",
+    description: "AI가 비슷한 분실물과 습득물을 자동으로 찾아 연결해드립니다.",
   },
   {
     Icon: EyeIcon,
     title: "사진으로 비슷한 게시물 찾기",
-    description: "사진 한 장이면 비슷하게 생긴 게시물을 바로 찾아봐요.",
+    description: "사진 한 장이면 비슷하게 생긴 게시물을 바로 찾아볼 수 있습니다.",
   },
   {
     Icon: ChatIcon,
     title: "채팅으로 바로 연락",
-    description: "게시물 작성자와 채팅으로 연락해 물건을 주고받아요.",
+    description: "게시물 작성자와 채팅으로 연락해 물건을 주고받을 수 있습니다.",
   },
 ];
 
@@ -40,7 +40,7 @@ export function FeatureGrid() {
     <section className="flex flex-col gap-8 py-14 md:py-20">
       <div className="flex flex-col items-center gap-2 text-center">
         <h2 className="text-xl font-bold text-foreground md:text-2xl">핵심 기능</h2>
-        <p className="text-sm text-muted-foreground md:text-base">분실물 찾기부터 채팅까지, 필요한 기능은 다 있어요.</p>
+        <p className="text-sm text-muted-foreground md:text-base">분실물 찾기부터 채팅까지, 필요한 기능은 다 있습니다.</p>
       </div>
 
       <ul className="grid grid-cols-1 gap-x-8 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">

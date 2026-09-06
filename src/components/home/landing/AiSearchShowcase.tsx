@@ -16,10 +16,10 @@ export function AiSearchShowcase() {
       <div className="grid grid-cols-1 items-center gap-10 md:grid-cols-2 md:gap-16">
         <div className="flex flex-col gap-3 text-center md:text-left">
           <span className="text-xs font-medium text-primary">AI 검색</span>
-          <h2 className="text-xl font-bold text-foreground md:text-2xl">말하듯 검색하면, AI가 알아들어요</h2>
+          <h2 className="text-xl font-bold text-foreground md:text-2xl">말하듯 검색하면, AI가 알아듣습니다</h2>
           <p className="text-sm text-muted-foreground md:text-base">
-            핵심 단어만 적지 않아도 괜찮아요. 상황을 그대로 문장으로 적으면 AI가 의미를 이해해서 비슷한 게시물을
-            찾아드려요.
+            핵심 단어만 적지 않아도 괜찮습니다. 상황을 그대로 문장으로 적으면 AI가 의미를 이해해서 비슷한 게시물을
+            찾아드립니다.
           </p>
         </div>
 

@@ -19,11 +19,11 @@ export function Hero() {
       <h1 className="max-w-2xl text-3xl leading-tight font-bold text-balance text-foreground md:text-5xl">
         잃어버린 물건,
         <br />
-        <span className="text-primary">AI</span>가 대신 찾아드려요
+        <span className="text-primary">AI</span>가 대신 찾아드립니다
       </h1>
 
       <p className="max-w-md text-sm text-muted-foreground md:max-w-lg md:text-base">
-        명지대학교 캠퍼스 전용 분실물 · 습득물 서비스예요. 등록만 하면 AI가 비슷한 물건을 자동으로 찾아 연결해드려요.
+        명지대학교 캠퍼스 전용 분실물 · 습득물 서비스입니다. 등록만 하면 AI가 비슷한 물건을 자동으로 찾아 연결해드립니다.
       </p>
 
       <LinkButton href="/login" size="md" className="mt-2 px-8">
