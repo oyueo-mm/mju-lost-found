@@ -58,19 +58,12 @@ function nowAsDateTimeLocalValue(): string {
   return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
-// Suggestion-only shortcut buttons next to the location field (requested:
-// "선택은 추천/가이드용, 실제 위치 입력은 기존처럼 자유 양식") -- clicking one just
-// prepends/swaps a campus label in the plain-text `location` field the API
-// already expects; there's no new column, no new field, nothing the
-// backend needs to know about.
+// 캠퍼스 선택은 순수 UI 힌트일 뿐 -- 어떤 <input>/<select>의 값도 되지 않고,
+// handleSubmit의 FormData에도 전혀 등장하지 않는다 (name 속성이 없는 plain
+// <button>이라 폼 제출에 포함될 수 없음). `location`은 완전히 별개의 자유
+// 입력 필드로 남아 있어, 이 선택이 DB/API로 전달되는 값에 영향을 주지 않는다.
 const CAMPUS_OPTIONS = ["자연캠", "인문캠"] as const;
 type Campus = (typeof CAMPUS_OPTIONS)[number];
-const CAMPUS_PREFIX_RE = /^(자연캠|인문캠)\s*/;
-
-function activeCampusOf(location: string): Campus | null {
-  const match = location.match(CAMPUS_PREFIX_RE);
-  return (match?.[1] as Campus | undefined) ?? null;
-}
 
 export function PostForm({ type, postId, initialValues }: PostFormProps) {
   const router = useRouter();
@@ -78,13 +71,10 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
   const [pending, setPending] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [removeExisting, setRemoveExisting] = useState(false);
-  const [location, setLocation] = useState(initialValues?.location ?? "");
-  const activeCampus = activeCampusOf(location);
-
-  function toggleCampus(campus: Campus) {
-    const rest = location.replace(CAMPUS_PREFIX_RE, "");
-    setLocation(activeCampus === campus ? rest : rest ? `${campus} ${rest}` : campus);
-  }
+  // Not persisted anywhere (see comment on CAMPUS_OPTIONS above), so an
+  // edit-mode post has no prior campus to restore here -- it always starts
+  // unselected, same as a brand-new post.
+  const [campus, setCampus] = useState<Campus | null>(null);
 
   async function applyImageChange(id: number): Promise<string | null> {
     if (selectedFile) {
@@ -249,46 +239,51 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
           </label>
 
           <div className="flex flex-col gap-1.5 text-sm">
-            {/* A <label> should wrap/target exactly one form control -- the
-                campus toggle buttons used to sit inside this label alongside
-                the location input, which left Chromium's accessibility tree
-                not exposing them with a "button" role at all (confirmed via
-                manual browser testing). Splitting the label out to target
-                the input by id, with the buttons as a plain sibling div,
-                fixes that without changing how anything looks or behaves. */}
-            <label htmlFor="location-input" className="font-medium text-foreground">
-              위치
-              <RequiredMark />
-            </label>
-            <div className="flex gap-1.5">
-              {CAMPUS_OPTIONS.map((campus) => (
+            {/* Plain <span>, not a <label> -- these buttons don't label or
+                control any single form field (see the CAMPUS_OPTIONS
+                comment above), so there's nothing for a <label> to target.
+                Keeps the same "buttons never nested inside a <label>"
+                accessibility fix as before: each renders with a real
+                "button" role, and aria-pressed reports which one (if any)
+                is selected. */}
+            <span className="font-medium text-foreground">
+              캠퍼스 <span className="font-normal text-muted-foreground">(선택, 추천용)</span>
+            </span>
+            <div className="flex gap-1.5" role="group" aria-label="캠퍼스 선택">
+              {CAMPUS_OPTIONS.map((c) => (
                 <Button
-                  key={campus}
+                  key={c}
                   type="button"
-                  variant={activeCampus === campus ? "primary" : "secondary"}
+                  variant={campus === c ? "primary" : "secondary"}
                   size="sm"
+                  aria-pressed={campus === c}
                   disabled={pending}
-                  onClick={() => toggleCampus(campus)}
+                  onClick={() => setCampus((prev) => (prev === c ? null : c))}
                   className="h-8 px-3 text-xs"
                 >
-                  {campus}
+                  {c}
                 </Button>
               ))}
             </div>
-            <input
-              id="location-input"
-              name="location"
-              type="text"
-              required
-              maxLength={200}
-              placeholder="예: 학생회관 3층 카페"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              disabled={pending}
-              className={FIELD_CLASS}
-            />
           </div>
         </div>
+
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-foreground">
+            위치
+            <RequiredMark />
+          </span>
+          <input
+            name="location"
+            type="text"
+            required
+            maxLength={200}
+            placeholder="예: 학생회관 3층 카페"
+            defaultValue={initialValues?.location}
+            disabled={pending}
+            className={FIELD_CLASS}
+          />
+        </label>
 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-foreground">
