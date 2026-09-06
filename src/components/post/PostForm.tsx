@@ -38,6 +38,39 @@ type PostFormProps = {
 
 const DATE_FIELD = { lost: "lostAt", found: "foundAt" } as const;
 const DATE_LABEL = { lost: "분실 일시", found: "습득 일시" } as const;
+const TITLE_PLACEHOLDER = {
+  lost: "예: 학생회관 앞에서 검정색 우산을 잃어버렸어요",
+  found: "예: 도서관 열람실에서 우산을 주웠어요",
+} as const;
+const DESCRIPTION_PLACEHOLDER = {
+  lost: "색상, 브랜드, 특징 등을 자세히 적어주시면 찾는 데 도움이 돼요.",
+  found: "색상, 브랜드, 특징 등을 자세히 적어주시면 주인을 찾는 데 도움이 돼요.",
+} as const;
+
+// datetime-local wants "YYYY-MM-DDTHH:mm" in local time, not UTC -- same
+// conversion the edit page already does for an existing post's date
+// (post/[id]/edit/page.tsx's toDateTimeLocalValue), duplicated here rather
+// than shared since one is a Server Component helper and this one only
+// ever needs "now" (create mode has no post to read a date from yet).
+function nowAsDateTimeLocalValue(): string {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+// Suggestion-only shortcut buttons next to the location field (requested:
+// "선택은 추천/가이드용, 실제 위치 입력은 기존처럼 자유 양식") -- clicking one just
+// prepends/swaps a campus label in the plain-text `location` field the API
+// already expects; there's no new column, no new field, nothing the
+// backend needs to know about.
+const CAMPUS_OPTIONS = ["자연캠", "인문캠"] as const;
+type Campus = (typeof CAMPUS_OPTIONS)[number];
+const CAMPUS_PREFIX_RE = /^(자연캠|인문캠)\s*/;
+
+function activeCampusOf(location: string): Campus | null {
+  const match = location.match(CAMPUS_PREFIX_RE);
+  return (match?.[1] as Campus | undefined) ?? null;
+}
 
 export function PostForm({ type, postId, initialValues }: PostFormProps) {
   const router = useRouter();
@@ -45,6 +78,13 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
   const [pending, setPending] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [removeExisting, setRemoveExisting] = useState(false);
+  const [location, setLocation] = useState(initialValues?.location ?? "");
+  const activeCampus = activeCampusOf(location);
+
+  function toggleCampus(campus: Campus) {
+    const rest = location.replace(CAMPUS_PREFIX_RE, "");
+    setLocation(activeCampus === campus ? rest : rest ? `${campus} ${rest}` : campus);
+  }
 
   async function applyImageChange(id: number): Promise<string | null> {
     if (selectedFile) {
@@ -151,6 +191,7 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
             type="text"
             required
             maxLength={200}
+            placeholder={TITLE_PLACEHOLDER[type]}
             defaultValue={initialValues?.title}
             disabled={pending}
             className={FIELD_CLASS}
@@ -167,6 +208,7 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
             required
             rows={5}
             maxLength={5000}
+            placeholder={DESCRIPTION_PLACEHOLDER[type]}
             defaultValue={initialValues?.description}
             disabled={pending}
             className={FIELD_CLASS}
@@ -206,21 +248,46 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
             </select>
           </label>
 
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-foreground">
+          <div className="flex flex-col gap-1.5 text-sm">
+            {/* A <label> should wrap/target exactly one form control -- the
+                campus toggle buttons used to sit inside this label alongside
+                the location input, which left Chromium's accessibility tree
+                not exposing them with a "button" role at all (confirmed via
+                manual browser testing). Splitting the label out to target
+                the input by id, with the buttons as a plain sibling div,
+                fixes that without changing how anything looks or behaves. */}
+            <label htmlFor="location-input" className="font-medium text-foreground">
               위치
               <RequiredMark />
-            </span>
+            </label>
+            <div className="flex gap-1.5">
+              {CAMPUS_OPTIONS.map((campus) => (
+                <Button
+                  key={campus}
+                  type="button"
+                  variant={activeCampus === campus ? "primary" : "secondary"}
+                  size="sm"
+                  disabled={pending}
+                  onClick={() => toggleCampus(campus)}
+                  className="h-8 px-3 text-xs"
+                >
+                  {campus}
+                </Button>
+              ))}
+            </div>
             <input
+              id="location-input"
               name="location"
               type="text"
               required
               maxLength={200}
-              defaultValue={initialValues?.location}
+              placeholder="예: 학생회관 3층 카페"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
               disabled={pending}
               className={FIELD_CLASS}
             />
-          </label>
+          </div>
         </div>
 
         <label className="flex flex-col gap-1.5 text-sm">
@@ -232,7 +299,7 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
             name="date"
             type="datetime-local"
             required
-            defaultValue={initialValues?.dateValue}
+            defaultValue={initialValues?.dateValue ?? nowAsDateTimeLocalValue()}
             disabled={pending}
             className={FIELD_CLASS}
           />
