@@ -41,6 +41,15 @@ import {
 // `import()`) was enough to bloat every one of those routes' Vercel
 // function bundle before this split.
 
+// Phase 23: a post's own embedding changing means its cached match
+// candidates (src/lib/match/candidates.ts) may no longer reflect it --
+// delete rather than recompute here, since this module has no reason to
+// eagerly re-run a pgvector search the owner may never look at again;
+// the next "매칭 후보 찾기" click recomputes fresh instead.
+async function invalidateMatchCandidateCache(sourceType: PostType, sourcePostId: number): Promise<void> {
+  await prisma.matchCandidateCache.deleteMany({ where: { sourceType, sourcePostId } });
+}
+
 // ---------- Mutations (create/update trigger embedPostBestEffort) ----------
 
 export async function createLostPost(
@@ -91,6 +100,7 @@ export async function updateLostPost(
   // that's already correctly embedded.
   if (EMBEDDING_INPUT_FIELDS.some((field) => field in rest)) {
     await embedPostBestEffort("lost", row.id, row);
+    await invalidateMatchCandidateCache("lost", row.id);
   }
   return { kind: "ok", data: toLostPostDTO(row) };
 }
@@ -135,6 +145,7 @@ export async function updateFoundPost(
   });
   if (EMBEDDING_INPUT_FIELDS.some((field) => field in rest)) {
     await embedPostBestEffort("found", row.id, row);
+    await invalidateMatchCandidateCache("found", row.id);
   }
   return { kind: "ok", data: toFoundPostDTO(row) };
 }

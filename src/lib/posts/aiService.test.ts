@@ -15,6 +15,9 @@ const foundPost = {
   create: vi.fn(),
   update: vi.fn(),
 };
+// Phase 23: updateLostPost/updateFoundPost invalidate this cache after a
+// re-embed -- see aiService.ts's invalidateMatchCandidateCache().
+const matchCandidateCache = { deleteMany: vi.fn() };
 
 const embedPostBestEffort = vi.fn();
 // Phase 12: semantic search's two collaborators, mocked wholesale --
@@ -25,7 +28,7 @@ const findPostsBySemanticQuery = vi.fn();
 // Phase 15-2: image similarity's own collaborator, mocked the same way.
 const findSimilarPostsByImage = vi.fn();
 
-vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost, matchCandidateCache } }));
 vi.mock("@/generated/prisma/client", () => ({
   LostPostStatus: { SEARCHING: "SEARCHING", FOUND: "FOUND" },
   FoundPostStatus: { KEEPING: "KEEPING", COMPLETED: "COMPLETED" },
@@ -210,6 +213,33 @@ describe("updateLostPost", () => {
     expect(embedPostBestEffort).toHaveBeenCalledWith("lost", 1, expect.objectContaining({ title: "새 제목" }));
   });
 
+  // Phase 23: a changed embedding can change what this post's cached
+  // match candidates should be (see match/candidates.ts's own comment) --
+  // the stale cache row must be cleared, not left to serve outdated
+  // candidates forever.
+  it("invalidates this post's cached match candidates when it re-embeds", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
+    lostPost.update.mockResolvedValueOnce({
+      id: 1,
+      title: "새 제목",
+      description: "d",
+      category: "c",
+      location: "l",
+      status: "SEARCHING",
+      imageUrl: null,
+      lostAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+    });
+
+    await updateLostPost(1, 1, { title: "새 제목" });
+
+    expect(matchCandidateCache.deleteMany).toHaveBeenCalledWith({
+      where: { sourceType: "lost", sourcePostId: 1 },
+    });
+  });
+
   it("does not re-embed for a status-only update (no embedding-relevant field changed)", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
     lostPost.update.mockResolvedValueOnce({
@@ -229,6 +259,7 @@ describe("updateLostPost", () => {
     await updateLostPost(1, 1, { status: "찾음" });
 
     expect(embedPostBestEffort).not.toHaveBeenCalled();
+    expect(matchCandidateCache.deleteMany).not.toHaveBeenCalled();
   });
 
   // No "image-only update -> no re-embed" test here: image changes never

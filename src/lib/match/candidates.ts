@@ -24,6 +24,36 @@ export type MatchCandidateResult =
   | { kind: "forbidden" }
   | { kind: "ai_unavailable" };
 
+// Phase 23: raw AI candidates were never persisted before this phase --
+// findMatchCandidates() recomputed a real pgvector search on every single
+// call, including every automatic page-load (see MatchPanel's old
+// useEffect). Now that a button click is the only caller, a *cache*
+// (never Match itself -- see schema.prisma's MatchCandidateCache comment
+// for why that would be the wrong place) makes a second click on an
+// already-computed post free. Invalidated by src/lib/posts/aiService.ts
+// whenever this source post's own embedding is recomputed; a new post
+// appearing on the opposite board after this was cached does not
+// invalidate it -- an accepted staleness trade-off (see this phase's
+// report), not something this cache tries to solve.
+async function readCachedCandidates(sourceType: PostType, sourcePostId: number): Promise<EnrichedCandidate[] | null> {
+  const cached = await prisma.matchCandidateCache.findUnique({
+    where: { sourceType_sourcePostId: { sourceType, sourcePostId } },
+  });
+  return cached ? (cached.candidates as unknown as EnrichedCandidate[]) : null;
+}
+
+async function writeCachedCandidates(
+  sourceType: PostType,
+  sourcePostId: number,
+  candidates: EnrichedCandidate[],
+): Promise<void> {
+  await prisma.matchCandidateCache.upsert({
+    where: { sourceType_sourcePostId: { sourceType, sourcePostId } },
+    create: { sourceType, sourcePostId, candidates: candidates as unknown as object },
+    update: { candidates: candidates as unknown as object, computedAt: new Date() },
+  });
+}
+
 // Requires the requester to own the source post -- same visibility rule
 // as listMatchesForPost() in src/lib/match/service.ts (a match/candidate
 // pairing isn't public the way the posts themselves are).
@@ -38,6 +68,9 @@ export async function findMatchCandidates(
       : await prisma.foundPost.findUnique({ where: { id: sourceId } });
   if (!source) return { kind: "not_found" };
   if (source.userId !== requesterId) return { kind: "forbidden" };
+
+  const cached = await readCachedCandidates(sourceType, sourceId);
+  if (cached) return { kind: "ok", data: cached };
 
   const candidateType: PostType = sourceType === "lost" ? "found" : "lost";
 
@@ -64,7 +97,10 @@ export async function findMatchCandidates(
     return { kind: "ai_unavailable" };
   }
 
-  if (ranked.length === 0) return { kind: "ok", data: [] };
+  if (ranked.length === 0) {
+    await writeCachedCandidates(sourceType, sourceId, []);
+    return { kind: "ok", data: [] };
+  }
 
   const ids = ranked.map((r) => r.id);
   const pool =
@@ -89,5 +125,6 @@ export async function findMatchCandidates(
     ];
   });
 
+  await writeCachedCandidates(sourceType, sourceId, data);
   return { kind: "ok", data };
 }

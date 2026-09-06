@@ -65,6 +65,8 @@ export type LostPostDTO = {
   createdAt: Date;
   updatedAt: Date;
   author: Author;
+  // Phase 23: plain counter, see LostPost.viewCount's schema comment.
+  viewCount: number;
   // Phase 12/15-2: only ever set on a semantic-search or image-similarity
   // result (normalizeScore()'s 0-1 scale, same as Match.score) -- absent
   // (never present-but-null) on every other DTO-producing path (list/get/
@@ -91,6 +93,7 @@ export type FoundPostDTO = {
   createdAt: Date;
   updatedAt: Date;
   author: Author;
+  viewCount: number;
   score?: number;
 };
 
@@ -215,6 +218,7 @@ export function toLostPostDTO(row: {
   lostAt: Date;
   createdAt: Date;
   updatedAt: Date;
+  viewCount: number;
   user: Author;
 }): LostPostDTO {
   const { user, status, ...rest } = row;
@@ -232,6 +236,7 @@ export function toFoundPostDTO(row: {
   foundAt: Date;
   createdAt: Date;
   updatedAt: Date;
+  viewCount: number;
   user: Author;
 }): FoundPostDTO {
   const { user, status, ...rest } = row;

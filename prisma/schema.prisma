@@ -99,6 +99,7 @@ model User {
 
   lostPosts             LostPost[]
   foundPosts            FoundPost[]
+  comments              Comment[]
   initiatedChatRooms    ChatRoom[]         @relation("ChatRoomInitiator")
   sentMessages          Message[]          @relation("MessageSender")
   hiddenMessages        Message[]          @relation("MessageHiddenBy")
@@ -146,8 +147,14 @@ model LostPost {
   // `embedding`: no image yet, or image-embedding generation failed,
   // simply means this post doesn't participate in image similarity search.
   imageEmbedding Unsupported("vector(768)")?
+  // Phase 23: plain view counter, incremented via PostView's dedup ledger
+  // (src/lib/posts/views.ts) rather than on every render -- see that
+  // file's own comment for why. Existing rows default to 0 via the
+  // migration, same as any other additive column in this schema.
+  viewCount   Int             @default(0) @map("view_count")
 
   matches          Match[]
+  comments         Comment[]
   directChatRooms  ChatRoom[] @relation("ChatRoomDirectLostPost")
 
   @@index([userId], map: "idx_lostpost_user_id")
@@ -173,8 +180,11 @@ model FoundPost {
   embedding   Unsupported("vector(768)")?
   // See LostPost.imageEmbedding's comment -- identical shape/reasoning.
   imageEmbedding Unsupported("vector(768)")?
+  // See LostPost.viewCount's comment -- identical shape/reasoning.
+  viewCount   Int              @default(0) @map("view_count")
 
   matches          Match[]
+  comments         Comment[]
   directChatRooms  ChatRoom[] @relation("ChatRoomDirectFoundPost")
 
   @@index([userId], map: "idx_foundpost_user_id")
@@ -198,6 +208,37 @@ model Match {
   @@index([lostPostId], map: "idx_match_lost_post_id")
   @@index([foundPostId], map: "idx_match_found_post_id")
   @@map("Match")
+}
+
+// ---------- MatchCandidateCache (Phase 23) ----------
+
+// Match itself means "user-confirmed pairing" (see the comment on
+// listMyMatchesSummary() in src/lib/match/service.ts -- a Match row's
+// mere existence already means confirmed, there is no pending state) --
+// so raw AI-ranked candidates (never confirmed, never owned by anyone)
+// must not be stored there. This is a separate, disposable cache: one row
+// per source post, holding whatever findMatchCandidates() last computed,
+// so a second "매칭 후보 찾기" click can reuse it instead of re-running
+// real ONNX inference + a pgvector scan every time. sourceType is a plain
+// string (not an FK-backed enum) for the same reason Report.targetType/
+// Notification.relatedType are -- see those models' own comments; there is
+// no PostType enum at the DB level, only the app-level "lost"|"found"
+// union. Invalidated (deleted) by src/lib/posts/aiService.ts whenever the
+// source post's own embedding is recomputed, since a changed embedding can
+// change what its candidates should be; a *new* post appearing on the
+// opposite board does not invalidate an existing cache row -- accepted as
+// a known staleness trade-off (see this phase's report) rather than
+// building a full invalidation system for a "recommend, not authoritative"
+// feature.
+model MatchCandidateCache {
+  id           Int      @id @default(autoincrement())
+  sourceType   String   @map("source_type")
+  sourcePostId Int      @map("source_post_id")
+  candidates   Json
+  computedAt   DateTime @default(now()) @map("computed_at")
+
+  @@unique([sourceType, sourcePostId])
+  @@map("MatchCandidateCache")
 }
 
 // ---------- ChatRoom ----------
@@ -351,4 +392,55 @@ model Notification {
   @@unique([userId, type, relatedType, relatedId])
   @@index([userId, isRead, createdAt(sort: Desc)], map: "idx_notification_user_read_created")
   @@map("Notification")
+}
+
+// ---------- Comment (Phase 23) ----------
+
+// Same "exactly one of two nullable direct-post FKs" shape as ChatRoom's
+// directLostPostId/directFoundPostId (see that model's own long comment)
+// -- chosen over a polymorphic (postType, postId) pair with no real FK
+// (the way Report.targetId/Notification.relatedId work) specifically so
+// deleting a LostPost/FoundPost real-FK-cascades its comments at the DB
+// level, with no orphan rows possible and no application code needed to
+// clean them up. Enforced as "exactly one set" by application code only
+// (comment/service.ts), not a DB constraint -- same convention this
+// schema already uses everywhere a row can point at one of two tables.
+model Comment {
+  id             Int        @id @default(autoincrement())
+  lostPostId     Int?       @map("lost_post_id")
+  lostPost       LostPost?  @relation(fields: [lostPostId], references: [id], onDelete: Cascade)
+  foundPostId    Int?       @map("found_post_id")
+  foundPost      FoundPost? @relation(fields: [foundPostId], references: [id], onDelete: Cascade)
+  authorUserId   Int        @map("author_user_id")
+  author         User       @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+  content        String     @db.Text
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  @@index([lostPostId, createdAt], map: "idx_comment_lost_post_created")
+  @@index([foundPostId, createdAt], map: "idx_comment_found_post_created")
+  @@map("Comment")
+}
+
+// ---------- PostView (Phase 23) ----------
+
+// A dedup ledger, not a page-view analytics table: one row per (post,
+// viewer), overwritten (not appended) on every subsequent view -- see
+// src/lib/posts/views.ts for the actual "skip increment if viewedAt is
+// recent" window logic. viewerKey is "u:<User.id>" for a signed-in viewer
+// or "a:<anonymous cookie id>" for a logged-out one (this app's read
+// paths are intentionally public/no-auth-required -- see posts/service.ts
+// -- so view counting must work without a User row to key on). No FK to
+// LostPost/FoundPost (same polymorphic postType/postId convention as
+// Report.targetId) -- a row surviving after its post is deleted is inert
+// bookkeeping, never read back for anything once the post is gone.
+model PostView {
+  id         Int      @id @default(autoincrement())
+  postType   String   @map("post_type")
+  postId     Int      @map("post_id")
+  viewerKey  String   @map("viewer_key")
+  viewedAt   DateTime @default(now()) @map("viewed_at")
+
+  @@unique([postType, postId, viewerKey])
+  @@map("PostView")
 }

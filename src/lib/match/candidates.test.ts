@@ -2,6 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const lostPost = { findUnique: vi.fn(), findMany: vi.fn() };
 const foundPost = { findUnique: vi.fn(), findMany: vi.fn() };
+// Phase 23: defaults to a cache miss (findUnique -> null) on every test
+// unless a test overrides it -- so the existing tests below keep
+// exercising the real findSimilarPosts() path unchanged; upsert is a
+// no-op mock, its own write behavior is covered by this file's own
+// "candidate cache" describe block further down.
+const matchCandidateCache = { findUnique: vi.fn(), upsert: vi.fn() };
 const findSimilarPosts = vi.fn();
 
 class FakeEmbeddingNotAvailableError extends Error {}
@@ -10,7 +16,7 @@ class FakeEmbeddingNotAvailableError extends Error {}
 // findMatchCandidates ever touched prisma.match (e.g. to auto-create one),
 // this would throw "Cannot read properties of undefined", proving AI
 // candidate generation never writes a Match on its own.
-vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost, matchCandidateCache } }));
 vi.mock("@/lib/ai/vectorSearch", () => ({
   findSimilarPosts,
   EmbeddingNotAvailableError: FakeEmbeddingNotAvailableError,
@@ -32,6 +38,7 @@ const post = (overrides: Partial<Record<string, unknown>> = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  matchCandidateCache.findUnique.mockResolvedValue(null);
 });
 
 describe("findMatchCandidates", () => {
@@ -130,5 +137,56 @@ describe("findMatchCandidates", () => {
 
     expect(result).toEqual({ kind: "ok", data: [] });
     expect(findSimilarPosts).toHaveBeenCalledWith("found", 1, expect.any(Number));
+  });
+});
+
+// Phase 23: Match itself means "confirmed pairing" (see schema.prisma's
+// MatchCandidateCache comment), so raw AI candidates are cached
+// separately -- these tests are what actually proves "두 번째 클릭 -> 저장된
+// 결과 확인" (this phase's own spec section 4), not just that the cache
+// table exists.
+describe("findMatchCandidates -- candidate cache (Phase 23)", () => {
+  it("returns a cached result without calling findSimilarPosts again", async () => {
+    lostPost.findUnique.mockResolvedValueOnce(post());
+    matchCandidateCache.findUnique.mockResolvedValueOnce({
+      id: 1,
+      sourceType: "lost",
+      sourcePostId: 1,
+      candidates: [{ postId: 5, type: "found", score: 0.9, title: "습득한 지갑", category: "지갑", location: "학생회관", imageUrl: null }],
+      computedAt: new Date(),
+    });
+
+    const result = await findMatchCandidates("lost", 1, 1);
+
+    expect(findSimilarPosts).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      kind: "ok",
+      data: [{ postId: 5, type: "found", score: 0.9, title: "습득한 지갑", category: "지갑", location: "학생회관", imageUrl: null }],
+    });
+  });
+
+  it("computes and writes to the cache on a cache miss", async () => {
+    lostPost.findUnique.mockResolvedValueOnce(post());
+    findSimilarPosts.mockResolvedValueOnce([{ id: 5, score: 0.87 }]);
+    foundPost.findMany.mockResolvedValueOnce([post({ id: 5, title: "습득한 지갑" })]);
+
+    await findMatchCandidates("lost", 1, 1);
+
+    expect(matchCandidateCache.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { sourceType_sourcePostId: { sourceType: "lost", sourcePostId: 1 } },
+      }),
+    );
+  });
+
+  it("caches an empty result too, so a post with genuinely no candidates isn't re-searched every click", async () => {
+    lostPost.findUnique.mockResolvedValueOnce(post());
+    findSimilarPosts.mockResolvedValueOnce([]);
+
+    await findMatchCandidates("lost", 1, 1);
+
+    expect(matchCandidateCache.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ create: expect.objectContaining({ candidates: [] }) }),
+    );
   });
 });

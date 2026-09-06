@@ -6,17 +6,21 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getFoundPost, getLostPost, type PostDTO } from "@/lib/posts/service";
 import { findSimilarPostsByImageForDisplay } from "@/lib/posts/aiService";
 import { FOUND_STATUSES, LOST_STATUSES, postTypeSchema } from "@/lib/posts/schema";
+import { isAdmin } from "@/lib/moderation/service";
+import { listCommentsForPost } from "@/lib/comment/service";
 import { DeletePostButton } from "@/components/post/DeletePostButton";
 import { PostCard } from "@/components/post/PostCard";
 import { StatusChangeControl } from "@/components/post/StatusChangeControl";
+import { ViewTracker } from "@/components/post/ViewTracker";
 import { DirectChatButton } from "@/components/chat/DirectChatButton";
 import { listMatchesForPost } from "@/lib/match/service";
 import { MatchPanel } from "@/components/match/MatchPanel";
+import { CommentSection } from "@/components/comment/CommentSection";
 import { encodePostTargetId } from "@/lib/report/targets";
 import { ReportButton } from "@/components/report/ReportButton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LinkButton } from "@/components/ui/Button";
-import { ImageOffIcon, PinIcon, ClockIcon } from "@/components/icons";
+import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
@@ -45,8 +49,21 @@ export default async function PostDetailPage({
 
   const currentUser = await getCurrentUser();
   const isOwner = currentUser?.id === post.author.id;
+  const viewerIsAdmin = currentUser ? isAdmin(currentUser) : false;
   const dateLabel = post.type === "lost" ? "분실 일시" : "습득 일시";
   const dateValue = post.type === "lost" ? post.lostAt : post.foundAt;
+
+  // Phase 23: plain Prisma reads (comments, view count already on `post`)
+  // -- neither is AI work, so both stay in this page's normal server
+  // render rather than being deferred like matching candidates are (see
+  // MatchPanel's own comment for why *that* one specifically moved behind
+  // a button click).
+  let comments: Awaited<ReturnType<typeof listCommentsForPost>> = [];
+  try {
+    comments = await listCommentsForPost(type, post.id);
+  } catch (error) {
+    console.error("Failed to load comments", error);
+  }
 
   // Phase 15-2: public, best-effort, no auth gate -- same "공개 콘텐츠는
   // 로그인 여부와 무관하게 그대로" policy as the rest of this page (isOwner
@@ -94,6 +111,7 @@ export default async function PostDetailPage({
 
   return (
     <div className="flex flex-col gap-6">
+      <ViewTracker type={type} postId={post.id} />
       {post.imageUrl ? (
         // Not `fill` + a fixed aspect-video box: that forces every image
         // (portrait phone photos included) into a 16:9 crop via
@@ -147,6 +165,10 @@ export default async function PostDetailPage({
           <span className="flex items-center gap-1">
             <ClockIcon className="size-3.5" />
             {dateLabel}: {formatDate(dateValue)}
+          </span>
+          <span className="flex items-center gap-1">
+            <EyeIcon className="size-3.5" />
+            {post.viewCount}
           </span>
         </div>
       </div>
@@ -240,6 +262,14 @@ export default async function PostDetailPage({
           </div>
         </div>
       )}
+
+      <CommentSection
+        postType={type}
+        postId={post.id}
+        initialComments={comments}
+        currentUser={currentUser ? { id: currentUser.id } : null}
+        isAdmin={viewerIsAdmin}
+      />
     </div>
   );
 }

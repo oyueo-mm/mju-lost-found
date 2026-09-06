@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import type { PostType } from "@/lib/posts/schema";
+import { Button } from "@/components/ui/Button";
+import { SearchIcon } from "@/components/icons";
 
 type CounterpartSummary = { id: number; title: string; imageUrl: string | null };
 type MatchRow = { id: number; counterpart: CounterpartSummary };
@@ -30,6 +32,18 @@ type MatchPanelProps = {
 // matching the legacy "내 물건 같아요" button pattern with AI-ranked
 // candidates (GET /api/posts/[id]/matches/candidates) standing in for the
 // legacy Streamlit page's AI candidate list.
+//
+// Phase 23: candidates used to load automatically via a useEffect the
+// instant this panel mounted -- meaning every single post-detail-page
+// visit by the owner triggered a real ONNX embedding + pgvector search,
+// whether or not they cared about matching *that* visit (see this
+// phase's report for why that was worth removing). Now nothing AI-related
+// runs until "매칭 후보 찾기" is clicked; `candidates` staying `null`
+// until then is what gates the fetch, and staying non-null after a
+// successful load is what makes a *second* click on the same panel
+// instance free (the server itself also caches, see
+// src/lib/match/candidates.ts, so even a fresh page load's first click
+// is cheap once a post has been searched before).
 export function MatchPanel({ postType, postId, initialMatches }: MatchPanelProps) {
   const router = useRouter();
   const [matches, setMatches] = useState(initialMatches);
@@ -37,34 +51,27 @@ export function MatchPanel({ postType, postId, initialMatches }: MatchPanelProps
   const [pendingId, setPendingId] = useState<number | null>(null);
 
   const [candidates, setCandidates] = useState<AiCandidate[] | null>(null);
+  const [candidatesLoading, setCandidatesLoading] = useState(false);
   const [candidatesError, setCandidatesError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadCandidates() {
-      setCandidatesError(null);
-      try {
-        const res = await fetch(`/api/posts/${postId}/matches/candidates?type=${postType}`);
-        const json = await res.json();
-        if (cancelled) return;
-        if (!res.ok) {
-          setCandidatesError(json.error ?? "AI 매칭 후보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
-          return;
-        }
-        setCandidates(json.data);
-      } catch {
-        if (!cancelled) {
-          setCandidatesError("AI 매칭 후보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
-        }
+  async function handleFindCandidates() {
+    if (candidatesLoading) return;
+    setCandidatesLoading(true);
+    setCandidatesError(null);
+    try {
+      const res = await fetch(`/api/posts/${postId}/matches/candidates?type=${postType}`);
+      const json = await res.json();
+      if (!res.ok) {
+        setCandidatesError(json.error ?? "AI 매칭 후보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+        return;
       }
+      setCandidates(json.data);
+    } catch {
+      setCandidatesError("AI 매칭 후보를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setCandidatesLoading(false);
     }
-
-    loadCandidates();
-    return () => {
-      cancelled = true;
-    };
-  }, [postType, postId]);
+  }
 
   const matchedIds = new Set(matches.map((m) => m.counterpart.id));
 
@@ -190,46 +197,58 @@ export function MatchPanel({ postType, postId, initialMatches }: MatchPanelProps
         </div>
       )}
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-3">
         <span className="text-sm text-muted-foreground">AI 매칭 후보</span>
 
-        {candidatesError ? (
-          <p className="text-sm text-destructive">{candidatesError}</p>
-        ) : candidates === null ? (
-          <p className="text-sm text-muted-foreground">후보를 불러오는 중...</p>
-        ) : unmatchedCandidates.length === 0 ? (
+        {candidates === null ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={handleFindCandidates}
+            disabled={candidatesLoading}
+            className="self-start"
+          >
+            <SearchIcon className="size-4" />
+            {candidatesLoading ? "매칭 후보를 찾는 중..." : "매칭 후보 찾기"}
+          </Button>
+        ) : null}
+
+        {candidatesError && <p className="text-sm text-destructive">{candidatesError}</p>}
+
+        {candidates !== null && !candidatesError && unmatchedCandidates.length === 0 && (
           <p className="text-sm text-muted-foreground">추천할 후보가 없어요.</p>
-        ) : (
-          unmatchedCandidates.map((c) => (
-            <div
-              key={c.postId}
-              className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-foreground"
-            >
-              <div className="flex min-w-0 flex-col">
-                <span className="truncate">{c.title}</span>
-                <span className="text-xs text-muted-foreground">
-                  {c.category} · {c.location} · 유사도 {Math.round(c.score * 100)}%
-                </span>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Link
-                  href={`/post/${c.postId}?type=${candidateType}`}
-                  className="rounded-full border border-border px-3 py-1 text-xs hover:border-foreground/30"
-                >
-                  게시물 보기
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => handleConfirm(c.postId)}
-                  disabled={pendingId !== null}
-                  className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-60"
-                >
-                  {pendingId === c.postId ? "확정 중..." : "매칭하기"}
-                </button>
-              </div>
-            </div>
-          ))
         )}
+
+        {unmatchedCandidates.map((c) => (
+          <div
+            key={c.postId}
+            className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-foreground"
+          >
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate">{c.title}</span>
+              <span className="text-xs text-muted-foreground">
+                {c.category} · {c.location} · 유사도 {Math.round(c.score * 100)}%
+              </span>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Link
+                href={`/post/${c.postId}?type=${candidateType}`}
+                className="rounded-full border border-border px-3 py-1 text-xs hover:border-foreground/30"
+              >
+                게시물 보기
+              </Link>
+              <button
+                type="button"
+                onClick={() => handleConfirm(c.postId)}
+                disabled={pendingId !== null}
+                className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-60"
+              >
+                {pendingId === c.postId ? "확정 중..." : "매칭하기"}
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
