@@ -43,10 +43,20 @@ export default async function PostDetailPage({
   if (!Number.isInteger(id) || !typeResult.success) notFound();
   const type = typeResult.data;
 
-  const post = type === "lost" ? await getLostPost(id) : await getFoundPost(id);
+  // Phase 24-2-2: getCurrentUser() doesn't read anything derived from the
+  // post (it only needs the request's own session), so it never had to
+  // wait on getLostPost/getFoundPost -- running them concurrently instead
+  // of sequentially removes one full DB round trip from the critical
+  // path. (One side effect worth naming: getCurrentUser() now also runs
+  // on a subsequently-404'd id/type, which it didn't before -- its result
+  // is never used on that path either way, so this changes nothing about
+  // what the viewer sees.)
+  const [post, currentUser] = await Promise.all([
+    type === "lost" ? getLostPost(id) : getFoundPost(id),
+    getCurrentUser(),
+  ]);
   if (!post) notFound();
 
-  const currentUser = await getCurrentUser();
   const isOwner = currentUser?.id === post.author.id;
   const viewerIsAdmin = currentUser ? isAdmin(currentUser) : false;
   const dateLabel = post.type === "lost" ? "분실 일시" : "습득 일시";
@@ -57,11 +67,20 @@ export default async function PostDetailPage({
   // render rather than being deferred like matching candidates are (see
   // MatchPanel's own comment for why *that* one specifically moved behind
   // a button click).
-  let comments: Awaited<ReturnType<typeof listCommentsForPost>> = [];
-  try {
-    comments = await listCommentsForPost(type, post.id);
-  } catch (error) {
-    console.error("Failed to load comments", error);
+  //
+  // Phase 24-2-2: comments and (owner-only) match data don't depend on
+  // each other -- only on `post`/`isOwner`, both already resolved above --
+  // so their two DB round trips run concurrently instead of one after the
+  // other. Each keeps its own try/catch exactly as before (a comments
+  // failure still can't affect match-loading and vice versa); only the
+  // *waiting* is now shared.
+  async function loadComments(): Promise<Awaited<ReturnType<typeof listCommentsForPost>>> {
+    try {
+      return await listCommentsForPost(type, post!.id);
+    } catch (error) {
+      console.error("Failed to load comments", error);
+      return [];
+    }
   }
 
   // Match UI only ever needs to appear on a post the viewer owns (see
@@ -70,14 +89,15 @@ export default async function PostDetailPage({
   // rather than breaking the rest of the (already-successful) page. AI
   // candidates are fetched client-side by MatchPanel itself (GET
   // /api/posts/[id]/matches/candidates), not here.
-  let matchPanelData: {
-    matches: { id: number; counterpart: { id: number; title: string; imageUrl: string | null } }[];
-  } | null = null;
-  let matchLoadError = false;
-
-  if (isOwner) {
+  async function loadMatchPanelData(): Promise<{
+    matchPanelData: {
+      matches: { id: number; counterpart: { id: number; title: string; imageUrl: string | null } }[];
+    } | null;
+    matchLoadError: boolean;
+  }> {
+    if (!isOwner) return { matchPanelData: null, matchLoadError: false };
     try {
-      const matchResult = await listMatchesForPost(type, post.id, currentUser.id);
+      const matchResult = await listMatchesForPost(type, post!.id, currentUser!.id);
       const matches =
         matchResult.kind === "ok"
           ? matchResult.data.map((m) => ({
@@ -85,12 +105,17 @@ export default async function PostDetailPage({
               counterpart: type === "lost" ? m.foundPost : m.lostPost,
             }))
           : [];
-      matchPanelData = { matches };
+      return { matchPanelData: { matches }, matchLoadError: false };
     } catch (error) {
       console.error("Failed to load match data", error);
-      matchLoadError = true;
+      return { matchPanelData: null, matchLoadError: true };
     }
   }
+
+  const [comments, { matchPanelData, matchLoadError }] = await Promise.all([
+    loadComments(),
+    loadMatchPanelData(),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">

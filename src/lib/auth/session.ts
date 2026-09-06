@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth/auth";
@@ -10,12 +11,23 @@ import type { User } from "@/generated/prisma/client";
 // ui/auth.py::current_user() follows (is_admin/is_suspended must never be
 // read from client-controlled state). Returns null for both "not logged
 // in" and "session points at a User that no longer exists".
-export async function getCurrentUser(): Promise<User | null> {
+//
+// Phase 24-2-1: wrapped in React's cache() purely as a request-scoped
+// memoization -- this function was being called independently from
+// (main)/layout.tsx, Header.tsx, and the page itself (post/[id]/page.tsx
+// among others), each one a separate prisma.user.findUnique() round trip
+// to the same row for the same request (see this phase's own performance
+// report). cache() dedupes repeated calls with the same arguments within
+// one request's render, and is a no-op outside of that (e.g. this file's
+// own unit tests, or any plain Node call) -- so no test needed to change,
+// and every call site's auth/permission behavior is byte-for-byte
+// unchanged, it just doesn't re-fetch the same row twice in one request.
+export const getCurrentUser = cache(async (): Promise<User | null> => {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return null;
   return prisma.user.findUnique({ where: { id: Number(userId) } });
-}
+});
 
 // Phase 14: which one-line explanation /login shows above the Google
 // button when a protected page bounces a logged-out visitor there --
