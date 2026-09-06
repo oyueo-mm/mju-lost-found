@@ -3,15 +3,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth/session";
-import { getFoundPost, getLostPost, type PostDTO } from "@/lib/posts/service";
-import { findSimilarPostsByImageForDisplay } from "@/lib/posts/aiService";
+import { getFoundPost, getLostPost } from "@/lib/posts/service";
 import { FOUND_STATUSES, LOST_STATUSES, postTypeSchema } from "@/lib/posts/schema";
 import { isAdmin } from "@/lib/moderation/service";
 import { listCommentsForPost } from "@/lib/comment/service";
 import { DeletePostButton } from "@/components/post/DeletePostButton";
-import { PostCard } from "@/components/post/PostCard";
 import { StatusChangeControl } from "@/components/post/StatusChangeControl";
 import { ViewTracker } from "@/components/post/ViewTracker";
+import { ImageSimilaritySection } from "@/components/post/ImageSimilaritySection";
 import { DirectChatButton } from "@/components/chat/DirectChatButton";
 import { listMatchesForPost } from "@/lib/match/service";
 import { MatchPanel } from "@/components/match/MatchPanel";
@@ -63,22 +62,6 @@ export default async function PostDetailPage({
     comments = await listCommentsForPost(type, post.id);
   } catch (error) {
     console.error("Failed to load comments", error);
-  }
-
-  // Phase 15-2: public, best-effort, no auth gate -- same "공개 콘텐츠는
-  // 로그인 여부와 무관하게 그대로" policy as the rest of this page (isOwner
-  // only decides *write*-adjacent UI, never whether this section renders).
-  // A post with no image, or whose image-embedding hasn't been computed
-  // yet (best-effort -- see embedPostImageBestEffort()), simply gets an
-  // empty array here; no distinct "AI 불가" state is shown for it (see
-  // findSimilarPostsByImageForDisplay's own comment).
-  let imageSimilarPosts: PostDTO[] = [];
-  if (post.imageUrl) {
-    try {
-      imageSimilarPosts = await findSimilarPostsByImageForDisplay(type, post.id);
-    } catch (error) {
-      console.error("Failed to load image-similar posts", error);
-    }
   }
 
   // Match UI only ever needs to appear on a post the viewer owns (see
@@ -241,27 +224,12 @@ export default async function PostDetailPage({
           )
         ))}
 
-      {/* Phase 15-2: only when there's an image AND at least one visually
-          similar post on the other board -- never an empty section, never
-          shown for an image-less post. The disclaimer line is required
-          copy, not optional decoration: this is a candidate search, never
-          an "same item" claim (see docs/IMAGE_EMBEDDING_POC.md section 9
-          and this phase's spec). */}
-      {imageSimilarPosts.length > 0 && (
-        <div className="flex flex-col gap-3 border-t border-border pt-6">
-          <div className="flex flex-col gap-1">
-            <h2 className="font-semibold text-foreground">이 사진과 비슷한 게시물</h2>
-            <p className="text-xs text-muted-foreground">
-              비슷한 물건까지 자동으로 찾아드려요. 실제 동일 물건 여부를 보장하지는 않아요.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {imageSimilarPosts.map((p) => (
-              <PostCard key={`${p.type}-${p.id}`} post={p} scoreLabel="이미지 유사도" />
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Phase 15-2 feature, moved behind a button click (this phase): only
+          rendered at all when there's an image to search against -- an
+          image-less post has nothing for this to find, same as before.
+          AI logic/accuracy unchanged, only *when* it runs (see
+          ImageSimilaritySection's own comment). */}
+      {post.imageUrl && <ImageSimilaritySection postType={type} postId={post.id} />}
 
       <CommentSection
         postType={type}
