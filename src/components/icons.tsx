@@ -1,0 +1,169 @@
+// Phase 17: a small local icon set as inline SVGs -- no icon library was
+// installed before this phase (checked package.json), and the design
+// system rule against unnecessary dependencies means these stay hand-
+// rolled rather than pulling in lucide-react/heroicons for ~15 glyphs.
+// Every icon shares the same visual language: 24x24 viewBox, 1.75px
+// stroke, round joins, `currentColor` (so a parent's text color controls
+// it, same convention Tailwind-based icon sets use).
+import type { SVGProps } from "react";
+
+type IconProps = SVGProps<SVGSVGElement>;
+
+function base(props: IconProps) {
+  return {
+    xmlns: "http://www.w3.org/2000/svg",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.75,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+    ...props,
+  };
+}
+
+export function HomeIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3 11.5 12 4l9 7.5" />
+      <path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9" />
+    </svg>
+  );
+}
+
+export function SearchIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m20 20-3.6-3.6" />
+    </svg>
+  );
+}
+
+export function BoxIcon(props: IconProps) {
+  // 분실물 tab -- a question-marked box reads as "missing item" without
+  // needing a literal magnifying glass (already used for search).
+  return (
+    <svg {...base(props)}>
+      <path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5v-9Z" />
+      <path d="M3.8 7.7 12 12l8.2-4.3" />
+      <path d="M12 12v9" />
+    </svg>
+  );
+}
+
+export function HandboxIcon(props: IconProps) {
+  // 습득물 tab -- same box silhouette with a checkmark, signaling "found /
+  // in safekeeping" as the visual opposite of BoxIcon.
+  return (
+    <svg {...base(props)}>
+      <path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5v-9Z" />
+      <path d="M3.8 7.7 12 12l8.2-4.3" />
+      <path d="M12 12v9" />
+      <path d="M9.3 12.4 11 14l3.2-3.2" />
+    </svg>
+  );
+}
+
+export function ChatIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 5.5h16v10.5H9.5L5 20v-4H4Z" />
+    </svg>
+  );
+}
+
+export function UserIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="8.5" r="3.5" />
+      <path d="M4.8 20a7.2 7.2 0 0 1 14.4 0" />
+    </svg>
+  );
+}
+
+export function ShieldIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 3.5 5 6v5.5c0 4.6 3 8 7 9 4-1 7-4.4 7-9V6Z" />
+      <path d="m9.3 12.2 1.9 1.9 3.5-3.7" />
+    </svg>
+  );
+}
+
+export function PinIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 21s6.5-5.9 6.5-11A6.5 6.5 0 0 0 5.5 10c0 5.1 6.5 11 6.5 11Z" />
+      <circle cx="12" cy="10" r="2.3" />
+    </svg>
+  );
+}
+
+export function ClockIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </svg>
+  );
+}
+
+export function ImageOffIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 4.5h13a2 2 0 0 1 2 2V17" />
+      <path d="M19 19.5H6a2 2 0 0 1-2-2V6" />
+      <path d="m4 16.5 4.2-4.2a1.5 1.5 0 0 1 2.1 0l1.7 1.7" />
+      <circle cx="9" cy="9" r="1.4" />
+      <path d="m3 3 18 18" />
+    </svg>
+  );
+}
+
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="m9 5 7 7-7 7" />
+    </svg>
+  );
+}
+
+export function BellIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10Z" />
+      <path d="M10 18.5a2 2 0 0 0 4 0" />
+    </svg>
+  );
+}
+
+export function LogoutIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M9 20H5.5a1.5 1.5 0 0 1-1.5-1.5v-13A1.5 1.5 0 0 1 5.5 4H9" />
+      <path d="M16 16.5 20.5 12 16 7.5" />
+      <path d="M20.5 12H9.5" />
+    </svg>
+  );
+}
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+export function AlertIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 3.5 2.5 20h19L12 3.5Z" />
+      <path d="M12 10v4" />
+      <circle cx="12" cy="17" r="0.6" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}

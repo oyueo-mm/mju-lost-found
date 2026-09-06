@@ -68,18 +68,18 @@ export function MyMatchActions({ matchId }: MyMatchActionsProps) {
   }
 
   if (cancelled) {
-    return <p className="text-sm text-zinc-400 dark:text-zinc-500">매칭이 취소되었습니다.</p>;
+    return <p className="text-sm text-muted-foreground">매칭이 취소되었어요.</p>;
   }
 
   return (
     <div className="flex flex-col items-end gap-1">
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={handleOpenChat}
           disabled={pending}
-          className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium hover:border-zinc-400 disabled:opacity-60 dark:border-zinc-700 dark:hover:border-zinc-600"
+          className="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-foreground/30 disabled:opacity-60"
         >
           {pending ? "처리 중..." : "채팅하기"}
         </button>
@@ -87,7 +87,7 @@ export function MyMatchActions({ matchId }: MyMatchActionsProps) {
           type="button"
           onClick={handleCancel}
           disabled={pending}
-          className="text-sm text-red-600 underline disabled:opacity-60 dark:text-red-400"
+          className="text-sm text-destructive underline disabled:opacity-60"
         >
           매칭 취소
         </button>

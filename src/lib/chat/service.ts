@@ -532,3 +532,43 @@ export async function getMessage(messageId: number): Promise<{ id: number; chatR
     select: { id: true, chatRoomId: true },
   });
 }
+
+// Phase 17: chat tab's unread badge (Navigation). Reuses exactly the same
+// two-query room-scoping WHERE clauses listChatRoomsForUser() uses (only
+// `select: { id: true }` instead of the full detail shape) to find every
+// room this user participates in, then counts messages in those rooms
+// that are someone else's (senderUserId != requesterId, otherwise your
+// own sent messages would count as "unread") and not yet read
+// (readAt: null). A hidden message (Report/ModerationAction) is still
+// counted -- the notification badge signals "something happened here",
+// not "there's readable new content"; opening the room is what actually
+// clears it via markMessagesAsRead().
+export async function countUnreadMessagesForUser(requesterId: number): Promise<number> {
+  const [matchRooms, directRooms] = await Promise.all([
+    prisma.chatRoom.findMany({
+      where: { match: { OR: [{ lostPost: { userId: requesterId } }, { foundPost: { userId: requesterId } }] } },
+      select: { id: true },
+    }),
+    prisma.chatRoom.findMany({
+      where: {
+        matchId: null,
+        OR: [
+          { initiatorUserId: requesterId },
+          { directLostPost: { userId: requesterId } },
+          { directFoundPost: { userId: requesterId } },
+        ],
+      },
+      select: { id: true },
+    }),
+  ]);
+  const roomIds = [...matchRooms, ...directRooms].map((r) => r.id);
+  if (roomIds.length === 0) return 0;
+
+  return prisma.message.count({
+    where: {
+      chatRoomId: { in: roomIds },
+      senderUserId: { not: requesterId },
+      readAt: null,
+    },
+  });
+}

@@ -33,12 +33,12 @@ export function DeletePostButton({ id, type }: { id: number; type: PostType }) {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
       <button
         type="button"
         onClick={handleDelete}
         disabled={pending}
-        className="rounded-full border border-red-300 px-4 py-2 text-sm font-medium text-red-600 disabled:opacity-60 dark:border-red-900 dark:text-red-400"
+        className="rounded-full border border-destructive/40 px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive-muted disabled:opacity-60"
       >
         {pending ? "삭제 중..." : "삭제"}
       </button>

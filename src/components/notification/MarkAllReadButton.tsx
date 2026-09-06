@@ -29,12 +29,12 @@ export function MarkAllReadButton({ disabled }: { disabled: boolean }) {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
       <button
         type="button"
         onClick={handleClick}
         disabled={disabled || pending}
-        className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium hover:border-zinc-400 disabled:opacity-60 dark:border-zinc-700 dark:hover:border-zinc-600"
+        className="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-foreground/30 disabled:opacity-60"
       >
         {pending ? "처리 중..." : "모두 읽음 처리"}
       </button>

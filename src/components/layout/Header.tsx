@@ -1,97 +1,81 @@
 import Link from "next/link";
 
 import { getCurrentUser } from "@/lib/auth/session";
-import { signOut } from "@/lib/auth/auth";
 import { getUnreadNotificationCount } from "@/lib/notification/service";
-
-const NAV_LINKS = [
-  { href: "/", label: "홈" },
-  { href: "/lost", label: "분실물" },
-  { href: "/found", label: "습득물" },
-  { href: "/search", label: "검색" },
-] as const;
+import { countUnreadMessagesForUser } from "@/lib/chat/service";
+import { DesktopNav } from "./DesktopNav";
+import { BellIcon, UserIcon } from "@/components/icons";
+import { LinkButton } from "@/components/ui/Button";
 
 // A Server Component, not a client one: the current user is read here and
 // only its nickname/email/unread count ever reach the rendered HTML -- no
 // User object is ever serialized into a client bundle for this header.
-// Fetching the unread count here (rather than switching this header to a
+// Fetching the unread counts here (rather than switching this header to a
 // Client Component that polls) keeps that boundary exactly as it was
-// before notifications existed -- see Phase 9 spec section 13.
+// before notifications existed -- see Phase 9 spec section 13. Phase 17:
+// also renders BottomNav's sibling desktop nav and the chat-unread badge
+// (countUnreadMessagesForUser, Phase 17) both surfaces share.
 export async function Header() {
   const user = await getCurrentUser();
 
-  let unreadCount = 0;
+  let unreadNotifications = 0;
+  let unreadChat = 0;
   if (user) {
     try {
-      unreadCount = await getUnreadNotificationCount(user.id);
+      [unreadNotifications, unreadChat] = await Promise.all([
+        getUnreadNotificationCount(user.id),
+        countUnreadMessagesForUser(user.id),
+      ]);
     } catch (error) {
       // A failed unread-count lookup shouldn't take down every page's
-      // header -- the badge just doesn't show a count this time.
-      console.error("Failed to load unread notification count", error);
+      // header -- the badges just don't show a count this time.
+      console.error("Failed to load unread counts", error);
     }
   }
 
   return (
-    <header className="border-b border-zinc-200 dark:border-zinc-800">
-      <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-        <Link href="/" className="font-semibold text-zinc-900 dark:text-zinc-50">
-          명지 스마트 분실물 센터
+    <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur-sm">
+      <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3 md:px-6">
+        <Link href="/" className="flex shrink-0 items-center gap-2 font-semibold text-foreground">
+          <span className="flex size-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+            M
+          </span>
+          <span className="hidden sm:inline">명지 스마트 분실물 센터</span>
         </Link>
-        <nav className="flex items-center gap-4 text-sm text-zinc-600 dark:text-zinc-400">
-          {NAV_LINKS.map((link) => (
-            <Link key={link.href} href={link.href} className="hover:text-zinc-900 dark:hover:text-zinc-50">
-              {link.label}
-            </Link>
-          ))}
-          {user && (
-            <>
-              <Link href="/posts/mine" className="hover:text-zinc-900 dark:hover:text-zinc-50">
-                내 게시물
-              </Link>
-              <Link href="/matches" className="hover:text-zinc-900 dark:hover:text-zinc-50">
-                내 매칭
-              </Link>
-              <Link href="/chat" className="hover:text-zinc-900 dark:hover:text-zinc-50">
-                채팅
-              </Link>
-              <Link href="/notifications" className="hover:text-zinc-900 dark:hover:text-zinc-50">
-                알림{unreadCount > 0 ? ` (${unreadCount})` : ""}
-              </Link>
-              {user.isAdmin && (
-                <Link href="/admin/reports" className="hover:text-zinc-900 dark:hover:text-zinc-50">
-                  관리자
-                </Link>
-              )}
-            </>
-          )}
+
+        <DesktopNav unreadChatCount={unreadChat} />
+
+        <div className="flex shrink-0 items-center gap-1.5">
           {user ? (
             <>
-              <span className="text-zinc-500 dark:text-zinc-400">
-                {user.nickname ?? user.email}
-              </span>
-              <form
-                action={async () => {
-                  "use server";
-                  await signOut();
-                }}
+              <Link
+                href="/notifications"
+                aria-label={`알림${unreadNotifications > 0 ? ` (읽지 않음 ${unreadNotifications}개)` : ""}`}
+                className="relative flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
               >
-                <button
-                  type="submit"
-                  className="rounded-full border border-zinc-300 px-3 py-1 hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-600"
-                >
-                  로그아웃
-                </button>
-              </form>
+                <BellIcon className="size-5" />
+                {unreadNotifications > 0 && (
+                  <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">
+                    {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                  </span>
+                )}
+              </Link>
+              <Link
+                href="/me"
+                className="flex items-center gap-2 rounded-full py-1 pr-3 pl-1 text-sm font-medium text-foreground hover:bg-muted"
+              >
+                <span className="flex size-7 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                  <UserIcon className="size-4" />
+                </span>
+                <span className="hidden max-w-24 truncate sm:inline">{user.nickname ?? user.email}</span>
+              </Link>
             </>
           ) : (
-            <Link
-              href="/login"
-              className="rounded-full border border-zinc-300 px-3 py-1 hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-600"
-            >
+            <LinkButton href="/login" size="sm">
               로그인
-            </Link>
+            </LinkButton>
           )}
-        </nav>
+        </div>
       </div>
     </header>
   );

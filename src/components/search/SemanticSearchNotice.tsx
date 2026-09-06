@@ -15,7 +15,7 @@ export function SemanticSearchNotice({ mode }: { mode: SearchMode }) {
   if (mode !== "semantic") return null;
 
   return (
-    <p className="rounded-md bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+    <p className="rounded-lg bg-primary-muted px-3 py-2 text-xs text-primary">
       AI가 검색어와 가장 관련성이 높은 상위 10건을 보여드립니다.
     </p>
   );

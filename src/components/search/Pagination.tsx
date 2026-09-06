@@ -32,38 +32,31 @@ export function Pagination({ basePath, currentSearchParams, page, totalPages }: 
   return (
     <nav className="flex items-center justify-center gap-2 text-sm">
       {page > 1 ? (
-        <Link href={hrefFor(page - 1)} className="rounded-md px-3 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+        <Link href={hrefFor(page - 1)} className="rounded-lg px-3 py-1.5 text-foreground hover:bg-muted">
           ← 이전
         </Link>
       ) : (
-        <span className="px-3 py-1.5 text-zinc-300 dark:text-zinc-700">← 이전</span>
+        <span className="px-3 py-1.5 text-muted-foreground/50">← 이전</span>
       )}
 
       {pageNumbers.map((n) =>
         n === page ? (
-          <span
-            key={n}
-            className="rounded-md bg-zinc-900 px-3 py-1.5 font-medium text-white dark:bg-zinc-50 dark:text-zinc-900"
-          >
+          <span key={n} className="rounded-lg bg-primary px-3 py-1.5 font-medium text-primary-foreground">
             {n}
           </span>
         ) : (
-          <Link
-            key={n}
-            href={hrefFor(n)}
-            className="rounded-md px-3 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-          >
+          <Link key={n} href={hrefFor(n)} className="rounded-lg px-3 py-1.5 text-foreground hover:bg-muted">
             {n}
           </Link>
         ),
       )}
 
       {page < totalPages ? (
-        <Link href={hrefFor(page + 1)} className="rounded-md px-3 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800">
+        <Link href={hrefFor(page + 1)} className="rounded-lg px-3 py-1.5 text-foreground hover:bg-muted">
           다음 →
         </Link>
       ) : (
-        <span className="px-3 py-1.5 text-zinc-300 dark:text-zinc-700">다음 →</span>
+        <span className="px-3 py-1.5 text-muted-foreground/50">다음 →</span>
       )}
     </nav>
   );

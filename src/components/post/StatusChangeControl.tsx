@@ -55,21 +55,21 @@ export function StatusChangeControl({ id, type, currentStatus, statuses }: Statu
   }
 
   if (isFinal) {
-    return <p className="text-sm text-zinc-400 dark:text-zinc-500">이미 &apos;{final}&apos; 상태입니다.</p>;
+    return <p className="text-sm text-muted-foreground">이미 &apos;{final}&apos; 상태입니다.</p>;
   }
 
   return (
     <div className="flex flex-col items-start gap-1">
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
       <button
         type="button"
         onClick={handleChange}
         disabled={pending}
-        className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium hover:border-zinc-400 disabled:opacity-60 dark:border-zinc-700 dark:hover:border-zinc-600"
+        className="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-foreground/30 disabled:opacity-60"
       >
         {pending ? "변경 중..." : `'${final}'(으)로 상태 변경`}
       </button>
-      <p className="text-xs text-zinc-400 dark:text-zinc-500">현재 상태: {initial}</p>
+      <p className="text-xs text-muted-foreground">현재 상태: {initial}</p>
     </div>
   );
 }

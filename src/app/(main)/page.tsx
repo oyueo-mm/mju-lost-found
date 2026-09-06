@@ -1,75 +1,115 @@
 import Link from "next/link";
 
 import { getCurrentUser } from "@/lib/auth/session";
+import { listLostPosts, listFoundPosts } from "@/lib/posts/service";
+import { HomeSearchBar } from "@/components/home/HomeSearchBar";
+import { CategoryShortcuts } from "@/components/home/CategoryShortcuts";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { PostRail } from "@/components/post/PostRail";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LinkButton } from "@/components/ui/Button";
+import { BoxIcon, HandboxIcon } from "@/components/icons";
 
+const RECENT_LIMIT = 6;
+
+// Phase 17: Home redesigned from a bare link-list into the product's
+// landing/dashboard page (this phase's own primary goal) -- public, no
+// auth gate (getCurrentUser() only decides whether the logged-out CTA
+// renders, same "read the session, never redirect" pattern used since
+// Phase 14). Recent Lost/Found sections call the exact same
+// listLostPosts()/listFoundPosts() every board page already uses (no new
+// query, no mock data) with page=1/limit=6 -- newest-first is already
+// buildOrderBy()'s default with no `sort` filter given.
 export default async function Home() {
-  // Phase 14: public page, no auth gate -- getCurrentUser() only decides
-  // whether the logged-out CTA below renders, exactly the same "read the
-  // session, never redirect" pattern /post/[id]/page.tsx already uses for
-  // isOwner. A logged-in visitor sees the page exactly as before this
-  // phase.
   const user = await getCurrentUser();
 
+  let recentLost: Awaited<ReturnType<typeof listLostPosts>> | null = null;
+  let recentFound: Awaited<ReturnType<typeof listFoundPosts>> | null = null;
+  try {
+    [recentLost, recentFound] = await Promise.all([
+      listLostPosts({ page: 1, limit: RECENT_LIMIT }),
+      listFoundPosts({ page: 1, limit: RECENT_LIMIT }),
+    ]);
+  } catch (error) {
+    console.error("Failed to load recent posts for Home", error);
+  }
+
   return (
-    <div className="flex flex-col gap-10">
-      <section className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          명지 스마트 분실물 센터
+    <div className="flex flex-col gap-12">
+      {/* Hero -- kept to one viewport-friendly section (no full-height
+          hero): headline + one-line subcopy + search, so the first
+          scroll's worth of the page already contains the app's single
+          most important action. */}
+      <section className="flex flex-col items-center gap-5 py-4 text-center md:py-8">
+        <h1 className="text-2xl leading-snug font-bold text-balance text-foreground md:text-3xl">
+          명지대학교 분실물 센터
+          <br />
+          <span className="text-primary">잃어버린 물건</span>, 여기서 찾아보세요
         </h1>
-        <p className="text-zinc-600 dark:text-zinc-400">
-          캠퍼스에서 잃어버린 물건을 찾고, 주운 물건을 등록하세요.
+        <p className="text-sm text-muted-foreground md:text-base">
+          비슷한 물건까지 자동으로 찾아드려요 · 캠퍼스 안에서 안전하게 주고받으세요
         </p>
+        <div className="w-full max-w-xl">
+          <HomeSearchBar />
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <LinkButton href="/lost" variant="secondary" size="sm" className="gap-1.5">
+            <BoxIcon className="size-4" /> 분실물 찾기
+          </LinkButton>
+          <LinkButton href="/found" variant="secondary" size="sm" className="gap-1.5">
+            <HandboxIcon className="size-4" /> 습득물 보기
+          </LinkButton>
+        </div>
       </section>
 
       {!user && (
-        <section className="flex flex-col items-start gap-3 rounded-lg border border-zinc-200 p-6 dark:border-zinc-800">
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            명지대학교 학생들을 위한 분실물 · 습득물 서비스입니다. 게시글 작성, 채팅, 매칭 등을
-            이용하려면 로그인해주세요.
+        <section className="flex flex-col items-start gap-3 rounded-card border border-border bg-muted/60 p-6">
+          <p className="text-sm text-muted-foreground">
+            명지대학교 학생들을 위한 분실물 · 습득물 서비스입니다. 게시글 작성, 채팅 등을 이용하려면
+            로그인해주세요.
           </p>
           <div className="flex flex-wrap items-center gap-3">
-            <Link
-              href="/login"
-              className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white dark:bg-zinc-50 dark:text-zinc-900"
-            >
-              Google로 로그인하기
-            </Link>
-            <Link
-              href="/account-guide"
-              className="text-sm text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-            >
+            <LinkButton href="/login">Google로 로그인하기</LinkButton>
+            <Link href="/account-guide" className="text-sm text-muted-foreground underline hover:text-foreground">
               명지대 계정이 없으신가요?
             </Link>
           </div>
         </section>
       )}
 
-      <section className="grid gap-4 sm:grid-cols-2">
-        <Link
-          href="/lost"
-          className="rounded-lg border border-zinc-200 p-6 hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600"
-        >
-          <h2 className="font-medium text-zinc-900 dark:text-zinc-50">분실물 찾기</h2>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            등록된 분실물 게시글을 둘러봅니다.
-          </p>
-        </Link>
-        <Link
-          href="/found"
-          className="rounded-lg border border-zinc-200 p-6 hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600"
-        >
-          <h2 className="font-medium text-zinc-900 dark:text-zinc-50">습득물 등록/조회</h2>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            주운 물건을 등록하거나 등록된 습득물을 확인합니다.
-          </p>
-        </Link>
+      <section className="flex flex-col gap-4">
+        <h2 className="text-lg font-semibold text-foreground">어떤 물건을 찾고 있나요?</h2>
+        <CategoryShortcuts />
       </section>
 
-      <section className="flex flex-col gap-3">
-        <h2 className="font-medium text-zinc-900 dark:text-zinc-50">최근 게시물</h2>
-        <div className="rounded-lg border border-dashed border-zinc-300 p-6 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-          아직 표시할 게시물이 없습니다. (추후 실제 데이터 연동 예정)
-        </div>
+      <section className="flex flex-col gap-4">
+        <SectionHeader title="최근 분실물" href="/lost" />
+        {recentLost === null ? (
+          <p className="text-sm text-muted-foreground">최근 분실물을 불러오지 못했습니다.</p>
+        ) : recentLost.items.length === 0 ? (
+          <EmptyState
+            title="아직 등록된 분실물이 없어요."
+            description="가장 먼저 물건을 등록해보세요."
+            action={<LinkButton href="/lost/new">분실물 등록하기</LinkButton>}
+          />
+        ) : (
+          <PostRail posts={recentLost.items} />
+        )}
+      </section>
+
+      <section className="flex flex-col gap-4">
+        <SectionHeader title="최근 습득물" href="/found" />
+        {recentFound === null ? (
+          <p className="text-sm text-muted-foreground">최근 습득물을 불러오지 못했습니다.</p>
+        ) : recentFound.items.length === 0 ? (
+          <EmptyState
+            title="아직 등록된 습득물이 없어요."
+            description="주운 물건을 등록해서 주인을 찾아주세요."
+            action={<LinkButton href="/found/new">습득물 등록하기</LinkButton>}
+          />
+        ) : (
+          <PostRail posts={recentFound.items} />
+        )}
       </section>
     </div>
   );

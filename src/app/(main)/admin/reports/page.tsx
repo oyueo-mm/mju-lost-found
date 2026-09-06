@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth/session";
 import { listReportsForAdmin } from "@/lib/moderation/service";
 import { REPORT_STATUSES_FOR_FILTER, REPORT_TARGET_TYPES_FOR_FILTER } from "@/lib/moderation/schema";
 import { REPORT_STATUS_LABELS, REPORT_TARGET_TYPE_LABELS } from "@/lib/report/schema";
+import { ShieldIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
@@ -35,15 +36,18 @@ export default async function AdminReportsPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">🛡️ 관리자 - 신고 처리</h1>
+      <div className="flex items-center gap-2">
+        <ShieldIcon className="size-5 text-primary" />
+        <h1 className="text-xl font-semibold text-foreground">신고 처리</h1>
+      </div>
 
       <div className="flex flex-wrap gap-4 text-sm">
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">처리 상태</span>
+          <span className="text-xs text-muted-foreground">처리 상태</span>
           <div className="flex gap-2">
             <Link
               href={`/admin/reports${targetType ? `?targetType=${targetType}` : ""}`}
-              className={!status ? "font-semibold underline" : "text-zinc-500 dark:text-zinc-400"}
+              className={!status ? "font-semibold underline" : "text-muted-foreground"}
             >
               전체
             </Link>
@@ -51,7 +55,7 @@ export default async function AdminReportsPage({
               <Link
                 key={s}
                 href={filterHref({ status: s })}
-                className={status === s ? "font-semibold underline" : "text-zinc-500 dark:text-zinc-400"}
+                className={status === s ? "font-semibold underline" : "text-muted-foreground"}
               >
                 {REPORT_STATUS_LABELS[s]}
               </Link>
@@ -59,11 +63,11 @@ export default async function AdminReportsPage({
           </div>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">신고 유형</span>
+          <span className="text-xs text-muted-foreground">신고 유형</span>
           <div className="flex gap-2">
             <Link
               href={`/admin/reports${status ? `?status=${status}` : ""}`}
-              className={!targetType ? "font-semibold underline" : "text-zinc-500 dark:text-zinc-400"}
+              className={!targetType ? "font-semibold underline" : "text-muted-foreground"}
             >
               전체
             </Link>
@@ -71,7 +75,7 @@ export default async function AdminReportsPage({
               <Link
                 key={t}
                 href={filterHref({ targetType: t })}
-                className={targetType === t ? "font-semibold underline" : "text-zinc-500 dark:text-zinc-400"}
+                className={targetType === t ? "font-semibold underline" : "text-muted-foreground"}
               >
                 {REPORT_TARGET_TYPE_LABELS[t]}
               </Link>
@@ -80,31 +84,31 @@ export default async function AdminReportsPage({
         </div>
       </div>
 
-      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+      <p className="text-sm text-muted-foreground">
         {page}페이지 · {items.length}건 표시 (전체 {total}건)
       </p>
 
       {items.length === 0 ? (
-        <p className="text-sm text-zinc-400 dark:text-zinc-500">조건에 맞는 신고가 없습니다.</p>
+        <p className="text-sm text-muted-foreground">조건에 맞는 신고가 없습니다.</p>
       ) : (
         <div className="flex flex-col gap-3">
           {items.map((r) => (
             <Link
               key={r.id}
               href={`/admin/reports/${r.id}`}
-              className="flex flex-col gap-1 rounded-lg border border-zinc-200 p-4 text-sm hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600"
+              className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 text-sm transition-colors hover:border-foreground/30"
             >
               <div className="flex items-center gap-2">
-                <span className="font-medium text-zinc-900 dark:text-zinc-50">신고 #{r.id}</span>
-                <span className="text-zinc-400 dark:text-zinc-500">·</span>
+                <span className="font-medium text-foreground">신고 #{r.id}</span>
+                <span className="text-muted-foreground">·</span>
                 <span>{REPORT_TARGET_TYPE_LABELS[r.targetType]}</span>
-                <span className="text-zinc-400 dark:text-zinc-500">·</span>
+                <span className="text-muted-foreground">·</span>
                 <span>{REPORT_STATUS_LABELS[r.status]}</span>
               </div>
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="text-xs text-muted-foreground">
                 신고자: {r.reporterNickname ?? "알 수 없음"} · 신고일: {formatDate(r.createdAt)}
               </span>
-              <span className="text-zinc-600 dark:text-zinc-400">사유: {r.reason}</span>
+              <span className="text-foreground">사유: {r.reason}</span>
             </Link>
           ))}
         </div>

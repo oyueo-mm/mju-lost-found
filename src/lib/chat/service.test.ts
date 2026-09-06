@@ -11,7 +11,7 @@ class FakePrismaClientKnownRequestError extends Error {
 
 const match = { findUnique: vi.fn() };
 const chatRoom = { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() };
-const message = { findMany: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() };
+const message = { findMany: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), count: vi.fn() };
 const userTable = { findUnique: vi.fn() };
 const notification = { updateMany: vi.fn() };
 const lostPostTable = { findUnique: vi.fn() };
@@ -43,6 +43,7 @@ vi.mock("@/lib/auth/suspension", () => ({
 }));
 
 const {
+  countUnreadMessagesForUser,
   getChatRoomForUser,
   getMessage,
   getOrCreateChatRoomForMatch,
@@ -404,6 +405,30 @@ describe("listChatRoomsForUser", () => {
 
     expect(results).toHaveLength(2);
     expect(results.map((r) => r.roomType).sort()).toEqual(["direct", "match"]);
+  });
+});
+
+// Phase 17: Navigation's chat-unread badge.
+describe("countUnreadMessagesForUser", () => {
+  it("returns 0 without querying messages when the user has no rooms at all", async () => {
+    chatRoom.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+    const count = await countUnreadMessagesForUser(lostOwner);
+
+    expect(count).toBe(0);
+    expect(message.count).not.toHaveBeenCalled();
+  });
+
+  it("counts unread messages across both match and direct rooms, excluding the user's own messages", async () => {
+    chatRoom.findMany.mockResolvedValueOnce([{ id: 1 }]).mockResolvedValueOnce([{ id: 2 }]);
+    message.count.mockResolvedValueOnce(3);
+
+    const count = await countUnreadMessagesForUser(lostOwner);
+
+    expect(count).toBe(3);
+    expect(message.count).toHaveBeenCalledWith({
+      where: { chatRoomId: { in: [1, 2] }, senderUserId: { not: lostOwner }, readAt: null },
+    });
   });
 });
 

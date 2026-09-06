@@ -2,6 +2,7 @@ import { SearchFilterBar } from "@/components/search/SearchFilterBar";
 import { Pagination } from "@/components/search/Pagination";
 import { SemanticSearchNotice } from "@/components/search/SemanticSearchNotice";
 import { PostCard } from "@/components/post/PostCard";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { searchPosts } from "@/lib/posts/service";
 import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, listQuerySchema } from "@/lib/posts/schema";
@@ -36,9 +37,9 @@ export default async function SearchPage({
     console.error("Failed to search posts", error);
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">통합 검색</h1>
-        <div className="rounded-lg border border-red-200 bg-red-50 p-10 text-center text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-          검색 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.
+        <h1 className="text-xl font-semibold text-foreground">통합 검색</h1>
+        <div className="rounded-card border border-destructive/30 bg-destructive-muted p-10 text-center text-sm text-destructive">
+          검색 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.
         </div>
       </div>
     );
@@ -46,15 +47,13 @@ export default async function SearchPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">통합 검색</h1>
+      <h1 className="text-xl font-semibold text-foreground">통합 검색</h1>
       <SearchFilterBar basePath="/search" showTypeFilter />
       <SemanticSearchNotice mode={mode} />
       {results.items.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-          검색 결과가 없습니다.
-        </div>
+        <EmptyState title="검색 결과가 없어요." description="다른 검색어나 필터로 다시 시도해보세요." />
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {results.items.map((post) => (
             <PostCard key={`${post.type}-${post.id}`} post={post} />
           ))}

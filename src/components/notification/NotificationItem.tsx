@@ -47,20 +47,20 @@ export function NotificationItem({ id, title, content, typeLabel, isRead: initia
     <button
       type="button"
       onClick={handleClick}
-      className="flex w-full flex-col gap-1 rounded-lg border border-zinc-200 p-4 text-left text-sm hover:border-zinc-400 disabled:opacity-60 dark:border-zinc-800 dark:hover:border-zinc-600"
+      className="flex w-full flex-col gap-1 rounded-card border border-border bg-card p-4 text-left text-sm transition-colors hover:border-foreground/30 disabled:opacity-60"
       disabled={pending}
     >
       <div className="flex items-center gap-2">
         {!isRead && (
-          <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
+          <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-primary" />
         )}
-        <span className={isRead ? "font-normal text-zinc-700 dark:text-zinc-300" : "font-semibold text-zinc-900 dark:text-zinc-50"}>
+        <span className={isRead ? "font-normal text-muted-foreground" : "font-semibold text-foreground"}>
           {title}
         </span>
-        <span className="text-xs text-zinc-400 dark:text-zinc-500">{typeLabel}</span>
+        <span className="text-xs text-muted-foreground">{typeLabel}</span>
       </div>
-      <p className="text-zinc-600 dark:text-zinc-400">{content}</p>
-      <span className="text-xs text-zinc-400 dark:text-zinc-500">{createdAt}</span>
+      <p className="text-muted-foreground">{content}</p>
+      <span className="text-xs text-muted-foreground">{createdAt}</span>
     </button>
   );
 }

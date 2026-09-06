@@ -90,8 +90,8 @@ export function SearchFilterBar({ basePath, showTypeFilter = false, statusOption
   const currentStatus = searchParams.get("status") ?? "";
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-      <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-600 dark:text-zinc-400">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-card border border-border bg-card p-4">
+      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
         {SEARCH_MODES.map((m) => (
           <label key={m} className="flex items-center gap-1.5">
             <input
@@ -112,11 +112,11 @@ export function SearchFilterBar({ basePath, showTypeFilter = false, statusOption
         placeholder={mode === "semantic" ? "예: 검은색 에어팟을 도서관에서 잃어버렸어요" : "검색어를 입력하세요"}
         defaultValue={searchParams.get("q") ?? ""}
         maxLength={100}
-        className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-transparent"
+        className="w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
       />
 
       {semanticBlockedByType && (
-        <p className="text-xs text-amber-600 dark:text-amber-400">
+        <p className="text-xs text-warning">
           AI 의미 검색은 분실물 또는 습득물 게시판을 선택한 경우에만 사용할 수 있습니다.
         </p>
       )}
@@ -127,7 +127,7 @@ export function SearchFilterBar({ basePath, showTypeFilter = false, statusOption
             name="type"
             value={type}
             onChange={(e) => setType(e.target.value as PostListType)}
-            className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-transparent"
+            className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
           >
             {TYPE_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -140,7 +140,7 @@ export function SearchFilterBar({ basePath, showTypeFilter = false, statusOption
         <select
           name="category"
           defaultValue={currentCategory}
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-transparent"
+          className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
         >
           <option value="">카테고리 전체</option>
           {currentCategory && !(CATEGORIES as readonly string[]).includes(currentCategory) && (
@@ -157,7 +157,7 @@ export function SearchFilterBar({ basePath, showTypeFilter = false, statusOption
           <select
             name="status"
             defaultValue={currentStatus}
-            className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-transparent"
+            className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
           >
             <option value="">상태 전체</option>
             {statusOptions.map((option) => (
@@ -174,13 +174,13 @@ export function SearchFilterBar({ basePath, showTypeFilter = false, statusOption
           placeholder="위치"
           defaultValue={searchParams.get("location") ?? ""}
           maxLength={200}
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-transparent"
+          className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
         />
 
         <select
           name="sort"
           defaultValue={searchParams.get("sort") ?? "latest"}
-          className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-transparent"
+          className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
         >
           {SORT_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -192,7 +192,7 @@ export function SearchFilterBar({ basePath, showTypeFilter = false, statusOption
         <button
           type="submit"
           disabled={semanticBlockedByType}
-          className="ml-auto rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900"
+          className="ml-auto rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
         >
           검색
         </button>
@@ -202,7 +202,7 @@ export function SearchFilterBar({ basePath, showTypeFilter = false, statusOption
         <button
           type="button"
           onClick={() => router.push(basePath)}
-          className="self-start text-xs text-zinc-500 underline dark:text-zinc-400"
+          className="self-start text-xs text-muted-foreground underline hover:text-foreground"
         >
           필터 초기화
         </button>

@@ -106,45 +106,45 @@ export function ChatThread({ chatRoomId }: { chatRoomId: number }) {
   return (
     <div className="flex flex-1 flex-col gap-4">
       {error && (
-        <p className="rounded-md bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+        <p className="rounded-lg bg-destructive-muted px-4 py-2 text-sm text-destructive">
           {error}
         </p>
       )}
 
-      <div className="flex flex-1 flex-col gap-3">
+      <div className="flex flex-1 flex-col gap-3 overflow-y-auto">
         {hasMore && (
           <button
             type="button"
             onClick={loadOlder}
             disabled={loadingMore}
-            className="self-center rounded-full border border-zinc-300 px-4 py-1 text-xs disabled:opacity-60 dark:border-zinc-700"
+            className="self-center rounded-full border border-border px-4 py-1 text-xs text-foreground disabled:opacity-60"
           >
             {loadingMore ? "불러오는 중..." : "이전 메시지 불러오기"}
           </button>
         )}
 
         {messages === null ? (
-          <p className="text-center text-sm text-zinc-400 dark:text-zinc-500">메시지를 불러오는 중...</p>
+          <p className="text-center text-sm text-muted-foreground">메시지를 불러오는 중...</p>
         ) : messages.length === 0 ? (
-          <p className="text-center text-sm text-zinc-400 dark:text-zinc-500">
-            아직 주고받은 메시지가 없습니다. 첫 메시지를 보내보세요.
+          <p className="text-center text-sm text-muted-foreground">
+            아직 주고받은 메시지가 없어요. 첫 메시지를 보내보세요.
           </p>
         ) : (
           messages.map((m) => (
             <div key={m.id} className={`flex flex-col ${m.isMine ? "items-end" : "items-start"}`}>
               {!m.isMine && (
-                <span className="mb-0.5 text-xs text-zinc-400 dark:text-zinc-500">{m.senderNickname ?? "알 수 없음"}</span>
+                <span className="mb-0.5 text-xs text-muted-foreground">{m.senderNickname ?? "알 수 없음"}</span>
               )}
               <div
                 className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${
                   m.isMine
-                    ? "rounded-br-sm bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
-                    : "rounded-bl-sm bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"
+                    ? "rounded-br-sm bg-primary text-primary-foreground"
+                    : "rounded-bl-sm bg-muted text-foreground"
                 }`}
               >
                 {m.content}
               </div>
-              <span className="mt-0.5 text-xs text-zinc-400 dark:text-zinc-500">
+              <span className="mt-0.5 text-xs text-muted-foreground">
                 {formatTime(m.createdAt)}
                 {m.isMine ? ` · ${m.readAt ? "읽음" : "안 읽음"}` : ""}
               </span>
@@ -153,7 +153,7 @@ export function ChatThread({ chatRoomId }: { chatRoomId: number }) {
                   message, so this isn't hidden for m.isMine either -- same
                   "validate at submit, not in the UI" rule as ReportButton
                   on the post detail page. */}
-              <ReportButton targetType="message" targetId={m.id} buttonLabel="🚩 신고" />
+              <ReportButton targetType="message" targetId={m.id} buttonLabel="신고" />
             </div>
           ))
         )}
@@ -167,12 +167,12 @@ export function ChatThread({ chatRoomId }: { chatRoomId: number }) {
           placeholder="메시지를 입력하세요"
           maxLength={2000}
           disabled={sending}
-          className="flex-1 rounded-full border border-zinc-300 px-4 py-2 text-sm disabled:opacity-60 dark:border-zinc-700 dark:bg-transparent"
+          className="flex-1 rounded-full border border-border bg-transparent px-4 py-2 text-sm text-foreground disabled:opacity-60"
         />
         <button
           type="submit"
           disabled={sending || !content.trim()}
-          className="rounded-full bg-zinc-900 px-5 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900"
+          className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
         >
           {sending ? "전송 중..." : "전송"}
         </button>

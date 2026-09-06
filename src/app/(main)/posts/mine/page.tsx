@@ -1,8 +1,9 @@
-import Link from "next/link";
-
 import { requireReadyUser } from "@/lib/auth/session";
 import { listFoundPostsByUser, listLostPostsByUser } from "@/lib/posts/service";
 import { PostCard } from "@/components/post/PostCard";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { LinkButton } from "@/components/ui/Button";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 
 // "내 게시물" (Phase 9) -- mirrors legacy pages/3_내_게시물.py's two tabs,
 // as two sections instead (no client-side tab state needed for a page
@@ -29,9 +30,9 @@ export default async function MyPostsPage() {
   if (loadError || !lostPosts || !foundPosts) {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">내 게시물</h1>
-        <div className="rounded-lg border border-red-200 bg-red-50 p-10 text-center text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-          게시물을 불러오는 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.
+        <h1 className="text-xl font-semibold text-foreground">내 게시물</h1>
+        <div className="rounded-card border border-destructive/30 bg-destructive-muted p-10 text-center text-sm text-destructive">
+          게시물을 불러오지 못했어요. 잠시 후 다시 시도해주세요.
         </div>
       </div>
     );
@@ -39,21 +40,14 @@ export default async function MyPostsPage() {
 
   return (
     <div className="flex flex-col gap-10">
-      <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">내 게시물</h1>
+      <h1 className="text-xl font-semibold text-foreground">내 게시물</h1>
 
       <section className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-medium text-zinc-900 dark:text-zinc-50">내 분실물 게시글</h2>
-          <Link href="/lost/new" className="text-sm text-zinc-500 underline dark:text-zinc-400">
-            분실물 등록
-          </Link>
-        </div>
+        <SectionHeader title="내 분실물 게시글" action={<LinkButton href="/lost/new" size="sm">분실물 등록</LinkButton>} />
         {lostPosts.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-            작성한 분실물 게시글이 없습니다.
-          </div>
+          <EmptyState title="작성한 분실물 게시글이 없어요." />
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {lostPosts.map((post) => (
               <PostCard key={post.id} post={post} />
             ))}
@@ -62,18 +56,11 @@ export default async function MyPostsPage() {
       </section>
 
       <section className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-medium text-zinc-900 dark:text-zinc-50">내 습득물 게시글</h2>
-          <Link href="/found/new" className="text-sm text-zinc-500 underline dark:text-zinc-400">
-            습득물 등록
-          </Link>
-        </div>
+        <SectionHeader title="내 습득물 게시글" action={<LinkButton href="/found/new" size="sm">습득물 등록</LinkButton>} />
         {foundPosts.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-            작성한 습득물 게시글이 없습니다.
-          </div>
+          <EmptyState title="작성한 습득물 게시글이 없어요." />
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {foundPosts.map((post) => (
               <PostCard key={post.id} post={post} />
             ))}

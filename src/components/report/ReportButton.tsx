@@ -20,7 +20,7 @@ type ReportButtonProps = {
 // was (e.g. every post detail page, regardless of who owns it) --
 // self-reports are rejected at submit time with a normal error message,
 // not hidden from the UI ahead of time, matching legacy exactly.
-export function ReportButton({ targetType, targetId, buttonLabel = "🚩 신고하기" }: ReportButtonProps) {
+export function ReportButton({ targetType, targetId, buttonLabel = "신고하기" }: ReportButtonProps) {
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
   const [reason, setReason] = useState<string>(REPORT_REASONS[0]);
@@ -29,7 +29,7 @@ export function ReportButton({ targetType, targetId, buttonLabel = "🚩 신고�
   const [submitting, setSubmitting] = useState(false);
 
   if (done) {
-    return <p className="text-sm text-zinc-500 dark:text-zinc-400">✅ 신고가 접수되었습니다.</p>;
+    return <p className="text-sm text-success">신고가 접수되었습니다.</p>;
   }
 
   if (!open) {
@@ -37,7 +37,7 @@ export function ReportButton({ targetType, targetId, buttonLabel = "🚩 신고�
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-sm text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+        className="text-sm text-muted-foreground underline hover:text-foreground"
       >
         {buttonLabel}
       </button>
@@ -71,15 +71,15 @@ export function ReportButton({ targetType, targetId, buttonLabel = "🚩 신고�
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3 text-sm dark:border-zinc-700"
+      className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3 text-sm"
     >
-      {error && <p className="text-red-600 dark:text-red-400">{error}</p>}
+      {error && <p className="text-destructive">{error}</p>}
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">신고 사유</span>
+        <span className="text-xs text-muted-foreground">신고 사유</span>
         <select
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          className="rounded-md border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700"
+          className="rounded-lg border border-border bg-transparent px-2 py-1 text-foreground"
         >
           {REPORT_REASONS.map((r) => (
             <option key={r} value={r}>
@@ -89,19 +89,19 @@ export function ReportButton({ targetType, targetId, buttonLabel = "🚩 신고�
         </select>
       </label>
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">상세 내용 (선택)</span>
+        <span className="text-xs text-muted-foreground">상세 내용 (선택)</span>
         <textarea
           value={detail}
           onChange={(e) => setDetail(e.target.value)}
           rows={2}
-          className="rounded-md border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700"
+          className="rounded-lg border border-border bg-transparent px-2 py-1 text-foreground"
         />
       </label>
       <div className="flex gap-2">
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-full bg-zinc-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900"
+          className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-60"
         >
           {submitting ? "제출 중..." : "신고 제출"}
         </button>
@@ -109,7 +109,7 @@ export function ReportButton({ targetType, targetId, buttonLabel = "🚩 신고�
           type="button"
           onClick={() => setOpen(false)}
           disabled={submitting}
-          className="rounded-full border border-zinc-300 px-3 py-1 text-xs disabled:opacity-60 dark:border-zinc-700"
+          className="rounded-full border border-border px-3 py-1 text-xs text-foreground disabled:opacity-60"
         >
           취소
         </button>

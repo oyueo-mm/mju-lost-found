@@ -20,8 +20,8 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
   if (result.kind === "not_found") notFound();
   if (result.kind !== "ok") {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-        이 채팅방에 접근할 권한이 없습니다.
+      <div className="rounded-card border border-destructive/30 bg-destructive-muted p-6 text-sm text-destructive">
+        이 채팅방에 접근할 권한이 없어요.
       </div>
     );
   }
@@ -30,24 +30,24 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
 
   return (
     <div className="flex h-[70vh] flex-col gap-4">
-      <div className="flex items-center justify-between border-b border-zinc-200 pb-4 dark:border-zinc-800">
+      <div className="flex items-center justify-between border-b border-border pb-4">
         <div className="flex flex-col">
-          <span className="font-medium text-zinc-900 dark:text-zinc-50">
+          <span className="font-semibold text-foreground">
             {room.counterpart.nickname ?? "알 수 없음"}
           </span>
-          <span className="text-xs text-zinc-400 dark:text-zinc-500">
+          <span className="text-xs text-muted-foreground">
             {room.roomType === "match"
               ? `${room.lostPost.title} ↔ ${room.foundPost.title}`
-              : `💬 ${room.post.title}`}
+              : room.post.title}
           </span>
         </div>
         <div className="flex items-center gap-3">
           <ReportButton
             targetType="user"
             targetId={room.counterpart.id}
-            buttonLabel={`🚩 ${room.counterpart.nickname ?? "상대방"}님 신고하기`}
+            buttonLabel={`${room.counterpart.nickname ?? "상대방"}님 신고하기`}
           />
-          <Link href="/chat" className="text-sm text-zinc-500 underline dark:text-zinc-400">
+          <Link href="/chat" className="text-sm text-muted-foreground underline hover:text-foreground">
             채팅 목록
           </Link>
         </div>

@@ -13,6 +13,9 @@ import { listMatchesForPost } from "@/lib/match/service";
 import { MatchPanel } from "@/components/match/MatchPanel";
 import { encodePostTargetId } from "@/lib/report/targets";
 import { ReportButton } from "@/components/report/ReportButton";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { LinkButton } from "@/components/ui/Button";
+import { ImageOffIcon, PinIcon, ClockIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
@@ -108,7 +111,7 @@ export default async function PostDetailPage({
         // whatever width the image ends up at and fill the leftover
         // space with a neutral background (same tone as PostCard's
         // no-image placeholder) instead of showing bare white/black.
-        <div className="flex w-full items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800">
+        <div className="flex w-full items-center justify-center overflow-hidden rounded-card border border-border bg-muted">
           <Image
             src={post.imageUrl}
             alt={post.title}
@@ -120,29 +123,36 @@ export default async function PostDetailPage({
           />
         </div>
       ) : (
-        <div className="flex aspect-video w-full items-center justify-center rounded-lg border border-dashed border-zinc-300 text-sm text-zinc-400 dark:border-zinc-700">
+        <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-card border border-dashed border-border text-sm text-muted-foreground">
+          <ImageOffIcon className="size-7" />
           등록된 이미지가 없습니다.
         </div>
       )}
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">{post.title}</h1>
-          <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-            {post.status}
-          </span>
+          <h1 className="text-xl font-semibold text-foreground">{post.title}</h1>
+          <StatusBadge status={post.status} />
         </div>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-zinc-500 dark:text-zinc-400">
-          <span>{type === "lost" ? "분실물" : "습득물"}</span>
-          <span>카테고리: {post.category}</span>
-          <span>위치: {post.location}</span>
-          <span>{dateLabel}: {formatDate(dateValue)}</span>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
+            {type === "lost" ? "분실물" : "습득물"}
+          </span>
+          <span>{post.category}</span>
+          <span className="flex items-center gap-1">
+            <PinIcon className="size-3.5" />
+            {post.location}
+          </span>
+          <span className="flex items-center gap-1">
+            <ClockIcon className="size-3.5" />
+            {dateLabel}: {formatDate(dateValue)}
+          </span>
         </div>
       </div>
 
-      <p className="whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-400">{post.description}</p>
+      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{post.description}</p>
 
-      <div className="flex items-center justify-between rounded-lg border border-zinc-200 p-4 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+      <div className="flex items-center justify-between rounded-card border border-border bg-muted/50 p-4 text-sm text-muted-foreground">
         <div className="flex flex-col gap-1">
           <span>작성자: {post.author.nickname ?? "알 수 없음"}</span>
           <span>작성일: {formatDate(post.createdAt)}</span>
@@ -151,12 +161,9 @@ export default async function PostDetailPage({
 
         {isOwner && (
           <div className="flex items-center gap-2">
-            <Link
-              href={`/post/${post.id}/edit?type=${type}`}
-              className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-600"
-            >
+            <LinkButton href={`/post/${post.id}/edit?type=${type}`} variant="secondary" size="sm">
               수정
-            </Link>
+            </LinkButton>
             <DeletePostButton id={post.id} type={type} />
           </div>
         )}
@@ -190,9 +197,9 @@ export default async function PostDetailPage({
         ) : (
           <Link
             href={`/login?reason=chat&callbackUrl=${encodeURIComponent(`/post/${post.id}?type=${type}`)}`}
-            className="w-fit rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-600"
+            className="w-fit rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-foreground/30"
           >
-            💬 작성자에게 문의하기
+            작성자에게 문의하기
           </Link>
         ))}
 
@@ -202,7 +209,7 @@ export default async function PostDetailPage({
 
       {isOwner &&
         (matchLoadError ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+          <div className="rounded-card border border-destructive/30 bg-destructive-muted p-4 text-sm text-destructive">
             매칭 정보를 불러오는 중 문제가 발생했습니다.
           </div>
         ) : (
@@ -218,14 +225,14 @@ export default async function PostDetailPage({
           an "same item" claim (see docs/IMAGE_EMBEDDING_POC.md section 9
           and this phase's spec). */}
       {imageSimilarPosts.length > 0 && (
-        <div className="flex flex-col gap-3 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+        <div className="flex flex-col gap-3 border-t border-border pt-6">
           <div className="flex flex-col gap-1">
-            <h2 className="font-medium text-zinc-900 dark:text-zinc-50">이 사진과 비슷한 게시물</h2>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500">
-              이미지가 시각적으로 비슷한 게시물을 보여줍니다. 실제 동일 물건 여부를 보장하지 않습니다.
+            <h2 className="font-semibold text-foreground">이 사진과 비슷한 게시물</h2>
+            <p className="text-xs text-muted-foreground">
+              비슷한 물건까지 자동으로 찾아드려요. 실제 동일 물건 여부를 보장하지는 않아요.
             </p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {imageSimilarPosts.map((p) => (
               <PostCard key={`${p.type}-${p.id}`} post={p} scoreLabel="이미지 유사도" />
             ))}

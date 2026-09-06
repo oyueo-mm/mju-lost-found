@@ -1,26 +1,113 @@
 @import "tailwindcss";
 
+/* Phase 17 design system: a small, deliberately short list of semantic
+   tokens (never raw zinc-NNN scattered through every component) so every
+   page shares one visual language. Light palette lives on bare :root;
+   dark overrides only the tokens that actually change, guarded by
+   prefers-color-scheme (this app has no explicit light/dark toggle, so
+   system preference is the only signal). */
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --muted: #f4f5f7;
+  --muted-foreground: #6b7280;
+  --border: #e4e4e7;
+  --ring: #2f6fed;
+
+  /* Primary: a confident blue -- trustworthy/"campus official" without
+     reading as a government-site navy. Used for the brand mark, primary
+     CTAs, active nav state, and links. */
+  --primary: #2f6fed;
+  --primary-foreground: #ffffff;
+  --primary-muted: #eaf1ff;
+
+  /* Semantic status colors -- exactly three, matching the only three
+     states this app's UI actually needs to distinguish: an in-progress
+     post (warning), a resolved one (success), and a destructive action
+     (delete/report). Never used for anything else. */
+  --success: #15803d;
+  --success-foreground: #ffffff;
+  --success-muted: #ecfdf3;
+  --warning: #b45309;
+  --warning-foreground: #ffffff;
+  --warning-muted: #fff7ed;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --destructive-muted: #fef2f2;
+
+  --radius: 0.875rem;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-muted: var(--primary-muted);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-muted: var(--success-muted);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-muted: var(--warning-muted);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-muted: var(--destructive-muted);
+  --radius-card: var(--radius);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0b0d12;
+    --foreground: #f1f2f4;
+    --card: #14161c;
+    --card-foreground: #f1f2f4;
+    --muted: #1c1f27;
+    --muted-foreground: #9497a1;
+    --border: #262a35;
+    --ring: #5b8ef2;
+
+    --primary: #5b8ef2;
+    --primary-foreground: #0b0d12;
+    --primary-muted: #182238;
+
+    --success: #34d399;
+    --success-foreground: #06281c;
+    --success-muted: #0e2420;
+    --warning: #fb923c;
+    --warning-foreground: #2b1503;
+    --warning-muted: #2a1d10;
+    --destructive: #f87171;
+    --destructive-foreground: #2b0a0a;
+    --destructive-muted: #2a1414;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Horizontal scroll snap strip -- used by Home's "최근 분실물/습득물" card
+   rails on small screens where a full grid would force a page-wide
+   horizontal scroll (forbidden by this phase's own responsive-design
+   rule). Hides the scrollbar visually without disabling scroll/keyboard
+   access. */
+.scroll-rail {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll-rail::-webkit-scrollbar {
+  display: none;
 }

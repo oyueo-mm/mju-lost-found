@@ -8,6 +8,7 @@ import { resolveHref } from "./resolveHref";
 import { NotificationItem } from "@/components/notification/NotificationItem";
 import { MarkAllReadButton } from "@/components/notification/MarkAllReadButton";
 import { Pagination } from "@/components/search/Pagination";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { DEFAULT_LIMIT, DEFAULT_PAGE } from "@/lib/notification/schema";
 
 function formatDate(date: Date): string {
@@ -43,9 +44,9 @@ export default async function NotificationsPage({
   if (loadError || !result) {
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">알림</h1>
-        <div className="rounded-lg border border-red-200 bg-red-50 p-10 text-center text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-          알림을 불러오는 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.
+        <h1 className="text-xl font-semibold text-foreground">알림</h1>
+        <div className="rounded-card border border-destructive/30 bg-destructive-muted p-10 text-center text-sm text-destructive">
+          알림을 불러오지 못했어요. 잠시 후 다시 시도해주세요.
         </div>
       </div>
     );
@@ -63,18 +64,16 @@ export default async function NotificationsPage({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+        <h1 className="text-xl font-semibold text-foreground">
           읽지 않은 알림 {unreadCount}개
         </h1>
         <MarkAllReadButton disabled={unreadCount === 0} />
       </div>
 
       {items.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-          새로운 알림이 없습니다.
-        </div>
+        <EmptyState title="새로운 알림이 없어요." />
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2.5">
           {items.map((n) => (
             <NotificationItem
               key={n.id}

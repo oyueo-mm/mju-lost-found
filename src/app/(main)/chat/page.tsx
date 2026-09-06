@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import { requireReadyUser } from "@/lib/auth/session";
 import { listChatRoomsForUser } from "@/lib/chat/service";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ChatIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
@@ -17,9 +19,9 @@ export default async function ChatListPage() {
     console.error("Failed to load chat rooms", error);
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">채팅</h1>
-        <div className="rounded-lg border border-red-200 bg-red-50 p-10 text-center text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-          채팅 목록을 불러오는 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.
+        <h1 className="text-xl font-semibold text-foreground">채팅</h1>
+        <div className="rounded-card border border-destructive/30 bg-destructive-muted p-10 text-center text-sm text-destructive">
+          채팅 목록을 불러오지 못했어요. 잠시 후 다시 시도해주세요.
         </div>
       </div>
     );
@@ -27,38 +29,44 @@ export default async function ChatListPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">채팅</h1>
+      <h1 className="text-xl font-semibold text-foreground">채팅</h1>
 
       {rooms.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-          아직 채팅방이 없습니다. 게시물 상세 화면에서 매칭을 확정하거나 작성자에게 문의하기를 누르면 채팅을 시작할 수 있습니다.
-        </div>
+        <EmptyState
+          title="아직 채팅방이 없어요."
+          description="게시물 상세 화면에서 매칭을 확정하거나 작성자에게 문의하기를 누르면 채팅을 시작할 수 있어요."
+        />
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2.5">
           {rooms.map((room) => (
             <Link
               key={room.id}
               href={`/chat/${room.id}`}
-              className="flex flex-col gap-1 rounded-lg border border-zinc-200 p-4 text-sm hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600"
+              className="flex items-center gap-3 rounded-card border border-border bg-card p-4 text-sm transition-colors hover:border-foreground/30"
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                  {room.counterpart.nickname ?? "알 수 없음"}
-                </span>
-                {room.lastMessage && (
-                  <span className="shrink-0 text-xs text-zinc-400 dark:text-zinc-500">
-                    {formatDate(room.lastMessage.createdAt)}
-                  </span>
-                )}
-              </div>
-              <span className="text-xs text-zinc-400 dark:text-zinc-500">
-                {room.roomType === "match"
-                  ? `${room.lostPost.title} ↔ ${room.foundPost.title}`
-                  : `💬 ${room.post.title}`}
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary-muted text-primary">
+                <ChatIcon className="size-5" />
               </span>
-              <p className="truncate text-zinc-600 dark:text-zinc-400">
-                {room.lastMessage ? room.lastMessage.content : "아직 주고받은 메시지가 없습니다."}
-              </p>
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-semibold text-foreground">
+                    {room.counterpart.nickname ?? "알 수 없음"}
+                  </span>
+                  {room.lastMessage && (
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {formatDate(room.lastMessage.createdAt)}
+                    </span>
+                  )}
+                </div>
+                <span className="truncate text-xs text-muted-foreground">
+                  {room.roomType === "match"
+                    ? `${room.lostPost.title} ↔ ${room.foundPost.title}`
+                    : room.post.title}
+                </span>
+                <p className="truncate text-muted-foreground">
+                  {room.lastMessage ? room.lastMessage.content : "아직 주고받은 메시지가 없어요."}
+                </p>
+              </div>
             </Link>
           ))}
         </div>
