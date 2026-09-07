@@ -96,6 +96,28 @@ describe("POST /api/posts/[id]/image", () => {
     });
   });
 
+  // Phase G-4: the optional cleanup hint just passes through the schema to
+  // setPostImage unchanged -- all the actual re-validation of it happens
+  // server-side inside setPostImage itself (see that module's own tests),
+  // this only confirms the route wires the field through at all.
+  it("forwards previousAttemptPath to setPostImage when the client includes it", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    setPostImage.mockResolvedValueOnce({ kind: "ok", data: { imageUrl: "https://x/y.jpg" } });
+
+    await POST(
+      new NextRequest("http://localhost/api/posts/1/image?type=lost", {
+        method: "POST",
+        body: JSON.stringify({ path: "posts/lost/1/y.jpg", previousAttemptPath: "posts/lost/1/old.jpg" }),
+      }),
+      params("1"),
+    );
+
+    expect(setPostImage).toHaveBeenCalledWith("lost", 1, sessionUser.id, {
+      path: "posts/lost/1/y.jpg",
+      previousAttemptPath: "posts/lost/1/old.jpg",
+    });
+  });
+
   // Phase 15-2: only a successful attach triggers the internal
   // image-embedding request -- never for a rejected one (already covered
   // by the `not.toHaveBeenCalled()` assertions above).

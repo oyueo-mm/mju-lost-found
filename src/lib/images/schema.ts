@@ -9,5 +9,12 @@ import { z } from "zod";
 // check anyway.
 export const attachImageSchema = z.object({
   path: z.string().min(1, "path가 필요합니다."),
+  // Phase G-4: optional hint naming a *different* Storage object the
+  // client uploaded on an earlier, failed attempt at this same attach call
+  // (e.g. a retry after this endpoint returned an error last time) -- see
+  // src/lib/images/service.ts::setPostImage's own comment for how this is
+  // re-validated server-side before anything is deleted. Omitted entirely
+  // on a normal (first-attempt) attach.
+  previousAttemptPath: z.string().min(1).optional(),
 });
 export type AttachImageInput = z.infer<typeof attachImageSchema>;

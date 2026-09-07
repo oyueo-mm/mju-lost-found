@@ -212,6 +212,7 @@ export function SearchFilterBar({
 
             <select
               name="category"
+              aria-label="카테고리"
               defaultValue={currentCategory}
               className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
             >
@@ -243,6 +244,7 @@ export function SearchFilterBar({
 
             <select
               name="campus"
+              aria-label="캠퍼스"
               defaultValue={currentCampus}
               className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
             >
@@ -256,6 +258,7 @@ export function SearchFilterBar({
 
             <select
               name="sort"
+              aria-label="정렬"
               defaultValue={searchParams.get("sort") ?? "latest"}
               className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
             >

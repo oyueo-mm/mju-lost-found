@@ -96,6 +96,76 @@ describe("setPostImage", () => {
     expect(deleteObjectSafely).not.toHaveBeenCalled();
   });
 
+  // Phase G-4: orphan cleanup for a previous failed attach attempt.
+  describe("previousAttemptPath cleanup", () => {
+    const PREVIOUS_PATH = "posts/lost/1/22222222-2222-2222-2222-222222222222.jpg";
+
+    it("deletes a previousAttemptPath that names the same (type, id) as this request", async () => {
+      lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
+      lostPost.update.mockResolvedValueOnce({ imageUrl: "https://storage.example/post-images/" + VALID_PATH });
+
+      await setPostImage("lost", 1, 1, { path: VALID_PATH, previousAttemptPath: PREVIOUS_PATH });
+
+      expect(deleteObjectSafely).toHaveBeenCalledWith("https://storage.example/post-images/" + PREVIOUS_PATH);
+    });
+
+    it("never trusts a previousAttemptPath at face value -- ignores one naming a different post id", async () => {
+      lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
+      lostPost.update.mockResolvedValueOnce({ imageUrl: "https://storage.example/post-images/" + VALID_PATH });
+
+      await setPostImage("lost", 1, 1, {
+        path: VALID_PATH,
+        previousAttemptPath: "posts/lost/999/22222222-2222-2222-2222-222222222222.jpg",
+      });
+
+      expect(deleteObjectSafely).not.toHaveBeenCalled();
+    });
+
+    it("ignores a previousAttemptPath naming the right id but the wrong board", async () => {
+      lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
+      lostPost.update.mockResolvedValueOnce({ imageUrl: "https://storage.example/post-images/" + VALID_PATH });
+
+      await setPostImage("lost", 1, 1, {
+        path: VALID_PATH,
+        previousAttemptPath: "posts/found/1/22222222-2222-2222-2222-222222222222.jpg",
+      });
+
+      expect(deleteObjectSafely).not.toHaveBeenCalled();
+    });
+
+    it("ignores a malformed previousAttemptPath instead of failing the whole attach", async () => {
+      lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
+      lostPost.update.mockResolvedValueOnce({ imageUrl: "https://storage.example/post-images/" + VALID_PATH });
+
+      const result = await setPostImage("lost", 1, 1, {
+        path: VALID_PATH,
+        previousAttemptPath: "not-a-real-path",
+      });
+
+      expect(result.kind).toBe("ok");
+      expect(deleteObjectSafely).not.toHaveBeenCalled();
+    });
+
+    it("does not re-delete the same path it just attached (previousAttemptPath === path)", async () => {
+      lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
+      lostPost.update.mockResolvedValueOnce({ imageUrl: "https://storage.example/post-images/" + VALID_PATH });
+
+      await setPostImage("lost", 1, 1, { path: VALID_PATH, previousAttemptPath: VALID_PATH });
+
+      expect(deleteObjectSafely).not.toHaveBeenCalled();
+    });
+
+    it("cleans up both the previous *attached* image and a previousAttemptPath orphan in the same call", async () => {
+      lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://old/image.jpg" });
+      lostPost.update.mockResolvedValueOnce({ imageUrl: "https://storage.example/post-images/" + VALID_PATH });
+
+      await setPostImage("lost", 1, 1, { path: VALID_PATH, previousAttemptPath: PREVIOUS_PATH });
+
+      expect(deleteObjectSafely).toHaveBeenCalledWith("https://old/image.jpg");
+      expect(deleteObjectSafely).toHaveBeenCalledWith("https://storage.example/post-images/" + PREVIOUS_PATH);
+      expect(deleteObjectSafely).toHaveBeenCalledTimes(2);
+    });
+  });
 });
 
 describe("clearPostImage", () => {
@@ -126,5 +196,24 @@ describe("clearPostImage", () => {
     await clearPostImage("found", 1, 1);
 
     expect(deleteObjectSafely).not.toHaveBeenCalled();
+  });
+
+  // Phase G-4: a transient failure clearing the (separate) imageEmbedding
+  // column must never turn an already-committed imageUrl removal into a
+  // reported failure -- the imageUrl write above already succeeded and
+  // there's no transaction to roll it back with either way.
+  it("still succeeds (imageUrl already cleared) even when saveImageEmbedding throws", async () => {
+    foundPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x/y.jpg" });
+    foundPost.update.mockResolvedValueOnce({ imageUrl: null });
+    saveImageEmbedding.mockRejectedValueOnce(new Error("transient DB error"));
+
+    const result = await clearPostImage("found", 1, 1);
+
+    expect(result).toEqual({ kind: "ok", data: { imageUrl: null } });
+    expect(foundPost.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { imageUrl: null } });
+    // Storage cleanup still runs even though the embedding write failed --
+    // the two are independent best-effort side effects, not one guarding
+    // the other.
+    expect(deleteObjectSafely).toHaveBeenCalledWith("https://x/y.jpg");
   });
 });

@@ -9,6 +9,8 @@ function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium" }).format(date);
 }
 
+const TYPE_LABEL: Record<PostDTO["type"], string> = { lost: "분실물", found: "습득물" };
+
 type PostCardProps = {
   post: PostDTO;
   // Phase 15-2: the same `post.score` field is reused by two different
@@ -50,6 +52,15 @@ export function PostCard({ post, scoreLabel = "검색 유사도" }: PostCardProp
             <span className="text-xs">이미지 없음</span>
           </div>
         )}
+        {/* Phase G-2: on /search (mixed 분실물+습득물 results), the status
+            badge alone ("찾는 중"/"보관 중") only implies which board a card
+            belongs to -- this makes it explicit. Harmless on /lost and
+            /found too (board is already fixed there by the page itself),
+            so it's added unconditionally rather than threading a new prop
+            through every PostCard call site just to hide it there. */}
+        <span className="absolute top-2 left-2 inline-flex shrink-0 items-center rounded-full bg-card/90 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm">
+          {TYPE_LABEL[post.type]}
+        </span>
         <StatusBadge status={post.status} className="absolute top-2 right-2 shadow-sm" />
       </div>
 

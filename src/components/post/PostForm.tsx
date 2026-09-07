@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 import { CAMPUSES, CATEGORIES, DEFAULT_CAMPUS } from "@/lib/posts/schema";
 import type { PostType } from "@/lib/posts/schema";
@@ -65,6 +66,21 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
   const [pending, setPending] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [removeExisting, setRemoveExisting] = useState(false);
+  // Phase G-2: set only once the post row itself is confirmed saved (right
+  // before applyImageChange runs) -- lets the error banner below offer a
+  // concrete "다시 시도"/게시물로 이동 action instead of just prose, since at
+  // that point the post already exists at a real id/url regardless of
+  // whether the image step succeeds.
+  const [savedPostId, setSavedPostId] = useState<number | null>(null);
+  // Phase G-4: names a Storage object from an *earlier* upload attempt
+  // that finished uploading but never got attached (this same attach call
+  // failed last time, see applyImageChange below) -- sent along with the
+  // next attempt's request so the server can clean it up too (see
+  // setPostImage's own re-validation of this). A ref, not state: it's only
+  // ever read by applyImageChange itself, synchronously between one call
+  // and the next, and must never be stale the way a state read inside the
+  // same call that just set it would be (React batches state updates).
+  const staleUploadPathRef = useRef<string | null>(null);
   // Phase 31: required, unlike the earlier decorative version of this
   // control -- always starts on a real value (the existing post's campus
   // in edit mode, DEFAULT_CAMPUS for a brand-new one), and the toggle
@@ -73,12 +89,29 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
 
   async function applyImageChange(id: number): Promise<string | null> {
     if (selectedFile) {
+      let uploaded: { path: string };
       try {
-        const uploaded = await uploadPostImage(type, id, selectedFile);
+        uploaded = await uploadPostImage(type, id, selectedFile);
+      } catch {
+        return "이미지 업로드에 실패했습니다.";
+      }
+
+      // Whatever this ref still holds is an orphan from an earlier failed
+      // attempt (nothing else clears it except a successful attach below)
+      // -- ask the server to sweep it up together with this attempt.
+      const previousAttemptPath = staleUploadPathRef.current ?? undefined;
+      // This attempt's own path becomes the new "stale" candidate the
+      // moment it exists, in case *this* attach call also fails and a
+      // further retry follows -- set before the attach call, not after,
+      // since the file is already sitting in Storage regardless of how
+      // the attach call below turns out.
+      staleUploadPathRef.current = uploaded.path;
+
+      try {
         const res = await fetch(`/api/posts/${id}/image?type=${type}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(uploaded),
+          body: JSON.stringify({ ...uploaded, previousAttemptPath }),
         });
         if (!res.ok) {
           const json = await res.json().catch(() => ({}));
@@ -87,6 +120,10 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
       } catch {
         return "이미지 업로드에 실패했습니다.";
       }
+      // Attached successfully -- this path is now the post's real image,
+      // not an orphan, and any previous attempt was just cleaned up
+      // server-side too.
+      staleUploadPathRef.current = null;
       return null;
     }
 
@@ -140,13 +177,15 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
       }
 
       const id = postId ?? json.data.id;
+      setSavedPostId(id);
 
       const imageError = await applyImageChange(id);
       if (imageError) {
         // The post itself was already saved successfully -- only the
         // image step failed, so this isn't treated as a full failure.
-        // The user can retry the image from the edit page.
-        setError(`게시물은 저장되었습니다. 다만 ${imageError} 게시물 페이지에서 다시 시도해주세요.`);
+        // savedPostId being set now is what makes the error banner below
+        // render the "다시 시도"/게시물로 이동 actions instead of plain text.
+        setError(imageError);
         setPending(false);
         return;
       }
@@ -159,13 +198,56 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
     }
   }
 
+  // Phase G-2: re-runs just the image step against the already-saved post
+  // (savedPostId), reusing whatever file/removal choice is still selected
+  // in the form -- no need to resubmit title/description/etc, which are
+  // already saved. On success, proceeds exactly like a normal submit
+  // (navigate to the post); on failure, the same error banner + retry stays
+  // up so the user can try again or leave via the link below without losing
+  // their place.
+  async function handleRetryImage() {
+    if (savedPostId === null) return;
+    setPending(true);
+    setError(null);
+
+    const imageError = await applyImageChange(savedPostId);
+    if (imageError) {
+      setError(imageError);
+      setPending(false);
+      return;
+    }
+
+    router.push(`/post/${savedPostId}?type=${type}`);
+    router.refresh();
+  }
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-      {error && (
-        <p className="rounded-card border border-destructive/30 bg-destructive-muted px-4 py-2.5 text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {error &&
+        (savedPostId === null ? (
+          <p className="rounded-card border border-destructive/30 bg-destructive-muted px-4 py-2.5 text-sm text-destructive">
+            {error}
+          </p>
+        ) : (
+          // Phase G-2: the post row itself is already saved at this point
+          // (only the image step failed) -- this replaces the old
+          // one-sentence-of-prose banner with the two things the user
+          // actually needs: what to do right now (재시도, reusing the same
+          // file already selected below) and where to go instead if they'd
+          // rather not (게시물 페이지로 이동, where ImageUploader is
+          // available again on the edit form).
+          <div className="flex flex-col gap-2 rounded-card border border-destructive/30 bg-destructive-muted px-4 py-3 text-sm text-destructive">
+            <p>게시물은 정상적으로 저장되었습니다. 다만 {error}</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button type="button" variant="secondary" size="sm" onClick={handleRetryImage} disabled={pending}>
+                {pending ? "다시 시도하는 중..." : "사진 다시 시도"}
+              </Button>
+              <Link href={`/post/${savedPostId}/edit?type=${type}`} className="text-sm font-medium underline">
+                게시물 수정 페이지로 이동
+              </Link>
+            </div>
+          </div>
+        ))}
 
       <section className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
         <h2 className="text-sm font-semibold text-foreground">기본 정보</h2>

@@ -33,7 +33,7 @@ export async function setPostImage(
   type: PostType,
   id: number,
   userId: number,
-  upload: { path: string },
+  upload: { path: string; previousAttemptPath?: string },
 ): Promise<ImageMutationResult<{ imageUrl: string }>> {
   const existing = await findOwnedPost(type, id);
   if (!existing) return { kind: "not_found" };
@@ -58,6 +58,28 @@ export async function setPostImage(
 
   if (previousUrl && previousUrl !== newUrl) {
     await deleteObjectSafely(previousUrl);
+  }
+
+  // Phase G-4: orphan cleanup for a *previous* upload attempt that finished
+  // uploading to Storage but never got this far (e.g. this same attach call
+  // failed last time, and the client re-uploaded to a new path on retry --
+  // see PostForm.tsx's staleUploadPathRef). Never trusted at face value:
+  // re-parsed and required to name this exact (type, id), same as `upload
+  // .path` above, so a client can't use this field to make the server
+  // delete an arbitrary object elsewhere in the bucket -- an
+  // unrecognized/mismatched value is silently ignored (this is an optional
+  // best-effort hint, not a required part of the request) rather than
+  // failing the whole attach over it.
+  if (upload.previousAttemptPath) {
+    const parsedPrevious = parseImagePathname(upload.previousAttemptPath);
+    if (
+      parsedPrevious &&
+      parsedPrevious.postType === type &&
+      parsedPrevious.postId === id &&
+      upload.previousAttemptPath !== upload.path
+    ) {
+      await deleteObjectSafely(publicUrlFor(upload.previousAttemptPath));
+    }
   }
 
   // Phase 15-2: image-embedding computation is deliberately NOT called
@@ -88,10 +110,20 @@ export async function clearPostImage(
 
   const previousUrl = existing.imageUrl;
   await writeImageUrl(type, id, null);
-  // No image left to embed -- unlike setPostImage's best-effort call
-  // above, this is a plain, always-succeeds column write (no model
-  // involved), so it isn't wrapped in a try/catch of its own.
-  await saveImageEmbedding(type, id, null);
+  // Phase G-4: best-effort, matching setPostImage's own treatment of this
+  // exact side effect (that path delegates it to an internal best-effort
+  // HTTP call; this one calls it directly since it has nothing else to
+  // await either way). The imageUrl column above is the source of truth
+  // for "does this post have an image" -- a transient failure clearing the
+  // (separate, independent) imageEmbedding column must never turn an
+  // already-committed image removal into a reported failure, which is what
+  // an unguarded throw here used to do (withErrorHandling has no
+  // transaction to roll the first write back with regardless).
+  try {
+    await saveImageEmbedding(type, id, null);
+  } catch (error) {
+    console.error(`Failed to clear image embedding for ${type} post ${id}:`, error);
+  }
 
   if (previousUrl) {
     await deleteObjectSafely(previousUrl);

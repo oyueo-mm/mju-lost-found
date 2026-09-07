@@ -151,6 +151,20 @@ export function ImageSearchPanel({ type }: ImageSearchPanelProps) {
 
       {results !== null && (
         <div className="flex flex-col gap-3">
+          {/* Phase G-2: same Top-K framing as SearchFilterBar's own
+              SemanticSearchNotice (AI 의미 검색) -- image search is the
+              same shape of ranked-recommendation, capped server-side (see
+              /api/posts's mode=image handler), so it deserves the same
+              "this isn't the full result set" expectation-setting. Shown
+              only once results actually came back (matching
+              SemanticSearchNotice's own "never on an empty/not-yet-
+              searched state" behavior), not above the picker where there's
+              nothing yet to caveat. */}
+          {results.length > 0 && (
+            <p className="rounded-lg bg-primary-muted px-3 py-2 text-xs text-primary">
+              AI가 사진과 가장 유사한 상위 10건을 보여드립니다.
+            </p>
+          )}
           {results.length === 0 ? (
             <EmptyState title="비슷한 게시물을 찾지 못했어요." description="다른 사진으로 다시 시도해보세요." />
           ) : (
