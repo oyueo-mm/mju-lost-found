@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/db/prisma";
-import { NotificationType, type User } from "@/generated/prisma/client";
+import {
+  ModerationActionType,
+  NotificationType,
+  ReportTargetType,
+  type User,
+} from "@/generated/prisma/client";
 import { isAdmin } from "@/lib/moderation/service";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import type { AdminUserAction } from "./schema";
@@ -59,7 +64,11 @@ export type AdminUserMutationResult<T> =
   // harmless and stays allowed -- there's nothing to protect against
   // there). Checked here, not just in the UI, so a direct API call can't
   // bypass it either.
-  | { kind: "self" };
+  | { kind: "self" }
+  // Phase I: action is "suspend" but reasonCategory and/or reason came in
+  // blank -- mirrors moderation/service.ts's applyReportAction's own
+  // "reason_required" kind for the report-flow suspend path.
+  | { kind: "reason_required" };
 
 export type PagedAdminUsers = {
   items: AdminUserDTO[];
@@ -121,11 +130,21 @@ export async function updateUserByAdmin(
   targetUserId: number,
   action: AdminUserAction,
   suspendDurationDays?: number,
+  // Phase I: required (checked below) only when action === "suspend" --
+  // every other action ignores both, unchanged.
+  reasonCategory?: string,
+  reason?: string,
 ): Promise<AdminUserMutationResult<AdminUserDTO>> {
   if (!isAdmin(admin)) return { kind: "forbidden" };
 
   if (targetUserId === admin.id && (action === "demote" || action === "suspend")) {
     return { kind: "self" };
+  }
+
+  const trimmedReasonCategory = reasonCategory?.trim() || null;
+  const trimmedReason = reason?.trim() || null;
+  if (action === "suspend" && (!trimmedReasonCategory || !trimmedReason)) {
+    return { kind: "reason_required" };
   }
 
   const existing = await prisma.user.findUnique({ where: { id: targetUserId } });
@@ -185,6 +204,24 @@ export async function updateUserByAdmin(
           content: `계정이 ${suspendDesc}`,
           relatedType: null,
           relatedId: null,
+        },
+      });
+      // Phase I: this phase's own spec section 3 -- a direct suspend
+      // (unlike the report-flow's applyReportAction) previously created no
+      // ModerationAction at all, since that table required a real Report
+      // to attach to (reportId was NOT NULL). reportId: null now records
+      // this exact same audit trail for a direct suspend -- see
+      // schema.prisma's own comment on why that column is nullable.
+      await tx.moderationAction.create({
+        data: {
+          reportId: null,
+          targetType: ReportTargetType.USER,
+          targetId: targetUserId,
+          actionType: ModerationActionType.SUSPEND_USER,
+          reason: trimmedReason,
+          reasonCategory: trimmedReasonCategory,
+          adminUserId: admin.id,
+          expiresAt: data.suspendedUntil ?? null,
         },
       });
       return user;

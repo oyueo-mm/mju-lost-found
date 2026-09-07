@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -29,6 +29,15 @@ const FIELD_CLASS =
 // check against, so that list is intentionally left as only generic,
 // campus-agnostic terms (no 자연캠퍼스-specific building invented without
 // evidence) -- see the H-6 report's own note on this asymmetry.
+//
+// Phase I section 5: this data itself is unchanged (re-checked against the
+// same evidence H-6 already gathered -- there is still nothing new to add
+// or remove without inventing a building name). Only *how* it's offered
+// changed: the always-visible chip row below the input was replaced by a
+// popover toggle (see the 위치 label's own comment further down) that
+// lists every campus's buildings under its own heading, so a user can see
+// how 인문캠퍼스/자연캠퍼스 differ instead of only ever seeing whichever one
+// their current campus toggle happens to be on.
 const LOCATION_SUGGESTIONS: Record<string, string[]> = {
   인문캠퍼스: ["종합관", "국제관", "학생회관", "중앙도서관", "학생식당", "정문", "후문"],
   자연캠퍼스: ["학생회관", "중앙도서관", "공과대학", "자연과학관", "생활관(기숙사)", "학생식당", "정문"],
@@ -127,11 +136,32 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
   // write into it directly, the same way a user's own typing would,
   // without turning the field into controlled state just for this.
   const locationInputRef = useRef<HTMLInputElement>(null);
+  // Phase I section 5: the popover this ref anchors replaces the old
+  // always-visible chip row below the input -- see the "위치" label's own
+  // comment further down for the full rationale.
+  const locationMenuRef = useRef<HTMLDivElement>(null);
+  const [locationMenuOpen, setLocationMenuOpen] = useState(false);
   // Phase 31: required, unlike the earlier decorative version of this
   // control -- always starts on a real value (the existing post's campus
   // in edit mode, DEFAULT_CAMPUS for a brand-new one), and the toggle
   // buttons below no longer allow deselecting back to "none".
   const [campus, setCampus] = useState<string>(initialValues?.campus ?? DEFAULT_CAMPUS);
+
+  // Same outside-click-to-close mechanism PostManageMenu already
+  // established (Phase H-6) -- plain useState + a document listener, no
+  // new dependency, no setState-inside-useEffect for the open/close state
+  // itself (only this cleanup-driven close does, which is the same
+  // already-accepted pattern PostManageMenu uses).
+  useEffect(() => {
+    if (!locationMenuOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (locationMenuRef.current && !locationMenuRef.current.contains(event.target as Node)) {
+        setLocationMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [locationMenuOpen]);
 
   async function applyImageChange(id: number): Promise<string | null> {
     if (selectedFile) {
@@ -410,38 +440,68 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
             위치
             <RequiredMark />
           </span>
-          <input
-            ref={locationInputRef}
-            name="location"
-            type="text"
-            required
-            maxLength={200}
-            placeholder="예: 학생회관 3층 카페"
-            defaultValue={initialValues?.location}
-            disabled={pending}
-            className={FIELD_CLASS}
-          />
-          {/* Phase H-3: shortcuts only -- clicking one fills the input
-              above with that text (still fully editable afterward), but
-              direct free-text entry works exactly as before whether or
-              not any chip is ever clicked. */}
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label="추천 장소">
-            {(LOCATION_SUGGESTIONS[campus] ?? []).map((place) => (
-              <button
-                key={place}
-                type="button"
-                disabled={pending}
-                onClick={() => {
-                  if (locationInputRef.current) {
-                    locationInputRef.current.value = place;
-                    locationInputRef.current.focus();
-                  }
-                }}
-                className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
+          {/* Phase I section 5: replaces the old always-visible chip row
+              below the input with a dropdown/popover toggle next to it --
+              same underlying LOCATION_SUGGESTIONS data and "click fills the
+              input, still fully editable either way" behavior, just not
+              permanently taking up vertical space. Free-text entry is
+              untouched: the input itself is unchanged (same name/required/
+              maxLength/ref), so typing directly still works exactly as
+              before whether or not the popover is ever opened. */}
+          <div ref={locationMenuRef} className="relative flex gap-2">
+            <input
+              ref={locationInputRef}
+              name="location"
+              type="text"
+              required
+              maxLength={200}
+              placeholder="예: 학생회관 3층 카페"
+              defaultValue={initialValues?.location}
+              disabled={pending}
+              className={`${FIELD_CLASS} flex-1`}
+            />
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => setLocationMenuOpen((open) => !open)}
+              aria-haspopup="menu"
+              aria-expanded={locationMenuOpen}
+              aria-label="추천 장소 목록 열기"
+              className="shrink-0 rounded-lg border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
+            >
+              추천 장소
+            </button>
+
+            {locationMenuOpen && (
+              <div
+                role="menu"
+                className="absolute top-full right-0 z-10 mt-1 max-h-80 w-64 overflow-y-auto rounded-card border border-border bg-card p-3 shadow-lg"
               >
-                {place}
-              </button>
-            ))}
+                {CAMPUSES.map((c) => (
+                  <div key={c} className="mb-3 flex flex-col gap-1.5 last:mb-0">
+                    <span className="text-xs font-semibold text-foreground">{c}</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(LOCATION_SUGGESTIONS[c] ?? []).map((place) => (
+                        <button
+                          key={place}
+                          type="button"
+                          onClick={() => {
+                            if (locationInputRef.current) {
+                              locationInputRef.current.value = place;
+                              locationInputRef.current.focus();
+                            }
+                            setLocationMenuOpen(false);
+                          }}
+                          className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                        >
+                          {place}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </label>
 

@@ -18,5 +18,7 @@ export function adminMutationResultToResponse<T>(result: AdminMutationResult<T>,
       return jsonError(400, "이 신고 대상에는 사용할 수 없는 조치입니다.");
     case "target_gone":
       return jsonError(409, "대상이 이미 삭제되어 조치를 적용할 수 없습니다.");
+    case "reason_required":
+      return jsonError(400, "사용자 정지에는 사유 카테고리와 상세 사유가 모두 필요합니다.");
   }
 }

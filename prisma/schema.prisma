@@ -132,6 +132,15 @@ model User {
   // is enough; a full Account table only earns its keep once a second
   // login provider needs linking to the same User.
   googleId        String?   @unique @map("google_id")
+  // Phase I: cooldown gate for nickname changes from /me (onboarding's own
+  // one-time initial set, onboarding/actions.ts, never touches this --
+  // only a later *change* does). Stores the next allowed change instant
+  // directly (not a "last changed at" timestamp the app would then have to
+  // add a cooldown constant to on every read) per this phase's own spec
+  // ("변경 후 다음 변경 가능 시각을 DB에 기록한다"). Null means never changed
+  // via /me yet -- always allowed, same as every existing user before this
+  // migration.
+  nicknameChangeAvailableAt DateTime? @map("nickname_change_available_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
@@ -153,6 +162,11 @@ model User {
   // be declared on both models for a self-relation.
   suspendedByActions    User[]             @relation("UserSuspendedBy")
   appSettingsUpdates    AppSettings[]
+  // Phase I: appeals this user has filed against their own suspension(s),
+  // and (separately) appeals this user has reviewed as an admin -- see
+  // SuspensionAppeal's own comment for the full shape.
+  suspensionAppeals         SuspensionAppeal[] @relation("SuspensionAppealUser")
+  suspensionAppealsReviewed SuspensionAppeal[] @relation("SuspensionAppealReviewedBy")
 
   @@map("User")
 }
@@ -462,18 +476,65 @@ model Report {
 
 model ModerationAction {
   id           Int                  @id @default(autoincrement())
-  reportId     Int                  @unique @map("report_id")
-  report       Report               @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  // Phase I: nullable now -- a direct admin suspension (admin/users.ts's
+  // updateUserByAdmin, unlike the report-flow's applyReportAction) has no
+  // underlying Report to attach to, so it records a ModerationAction with
+  // reportId: null instead of skipping the audit trail entirely (which is
+  // what happened before this phase; see this phase's own spec section 3).
+  // Still @unique: Postgres treats every NULL as distinct from every other
+  // NULL in a unique index, so any number of reportId: null rows coexist
+  // fine, while a real report can still only ever have one action, exactly
+  // as before.
+  reportId     Int?                 @unique @map("report_id")
+  report       Report?              @relation(fields: [reportId], references: [id], onDelete: Restrict)
   targetType   ReportTargetType     @map("target_type")
   targetId     Int                  @map("target_id")
   actionType   ModerationActionType @map("action_type")
+  // Phase I: the free-form "상세 사유" -- unchanged column, now paired with
+  // reasonCategory below. Required (application-layer, not a DB
+  // constraint -- same "no CHECK/enum" convention every free-text reason
+  // column in this schema already follows, see Report.reason's own
+  // comment) specifically for actionType=SUSPEND_USER; stays optional for
+  // the other three action types exactly as before.
   reason       String?              @db.Text
+  // Phase I: the picked preset (허위 게시물/부적절한 게시물/욕설·비방/반복적인
+  // 규정 위반/스팸·도배/기타), only ever populated alongside `reason` for a
+  // SUSPEND_USER action -- null for delete_post/hide_message/delete_comment,
+  // which this phase does not touch.
+  reasonCategory String?            @db.Text @map("reason_category")
   adminUserId  Int                  @map("admin_user_id")
   adminUser    User                 @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
   createdAt    DateTime             @default(now()) @map("created_at")
   expiresAt    DateTime?            @map("expires_at")
 
   @@map("ModerationAction")
+}
+
+// ---------- SuspensionAppeal (Phase I) ----------
+
+// Deliberately minimal, per this phase's own spec ("운영자가 승인/거절하는
+// 복잡한 workflow가 현재 구조상 과도하다면... 최소한의 구조로 구현"): one row
+// per appeal a suspended user files, with a single reviewed/not-reviewed
+// state -- no separate approve/reject decision, no link back to a specific
+// ModerationAction (a user may be suspended, unsuspended, and re-suspended
+// over time; this just records "이 사람이 이의를 제기했다" against the user,
+// not against one specific sanction instance). An admin "확인 처리"
+// (reviewedAt/reviewedByUserId set) is the only workflow step -- whether
+// to actually unsuspend the user afterward is a separate, already-existing
+// action (UserActionButtons' own "정지 해제"), not something this model
+// drives directly.
+model SuspensionAppeal {
+  id               Int       @id @default(autoincrement())
+  userId           Int       @map("user_id")
+  user             User      @relation("SuspensionAppealUser", fields: [userId], references: [id], onDelete: Restrict)
+  content          String    @db.Text
+  createdAt        DateTime  @default(now()) @map("created_at")
+  reviewedAt       DateTime? @map("reviewed_at")
+  reviewedByUserId Int?      @map("reviewed_by_user_id")
+  reviewedBy       User?     @relation("SuspensionAppealReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([userId], map: "idx_suspension_appeal_user_id")
+  @@map("SuspensionAppeal")
 }
 
 // ---------- Notification ----------

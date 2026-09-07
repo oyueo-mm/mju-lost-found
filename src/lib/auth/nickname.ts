@@ -11,6 +11,16 @@
 export const NICKNAME_MIN_LENGTH = 2;
 export const NICKNAME_MAX_LENGTH = 20;
 
+// Phase I section 7: how long a user must wait between nickname changes
+// from /me (never applies to onboarding's own one-time initial set, which
+// isn't a "change" -- see me/actions.ts's own comment). 7 days: a
+// once-a-week cadence, the middle of this phase's own suggested 1/3/7/30
+// range -- frequent enough that a genuine rebrand/typo-fix never feels
+// blocked for long, infrequent enough to meaningfully discourage using
+// nickname changes as a way to dodge being recognized right after
+// something like a comment/report dispute.
+export const NICKNAME_CHANGE_COOLDOWN_DAYS = 7;
+
 const NICKNAME_PATTERN = /^[가-힣a-zA-Z0-9]+$/;
 
 export type NicknameValidation =

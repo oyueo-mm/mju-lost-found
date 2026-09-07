@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { AdminUserDTO } from "@/lib/admin/users";
-import { SUSPEND_DURATION_DAY_OPTIONS } from "@/lib/moderation/schema";
+import { SUSPEND_DURATION_DAY_OPTIONS, SUSPEND_REASON_CATEGORIES } from "@/lib/moderation/schema";
 import { Button } from "@/components/ui/Button";
 
 type UserActionButtonsProps = {
@@ -40,19 +40,32 @@ export function UserActionButtons({ user, isSelf }: UserActionButtonsProps) {
   const [suspendMenuOpen, setSuspendMenuOpen] = useState(false);
   const [suspendChoice, setSuspendChoice] = useState<SuspendChoice>(`${SUSPEND_DURATION_DAY_OPTIONS[0]}`);
   const [customDays, setCustomDays] = useState("");
+  // Phase I: this phase's own spec section 2 -- a direct suspend now needs
+  // the same required category+detail-reason pair as the report-flow
+  // suspend (ReportProcessForm), recorded into the same ModerationAction
+  // audit trail (see admin/users.ts's updateUserByAdmin).
+  const [reasonCategory, setReasonCategory] = useState<string>(SUSPEND_REASON_CATEGORIES[0]);
+  const [reason, setReason] = useState("");
 
   async function callAction(
     action: "promote" | "demote" | "suspend" | "unsuspend",
     kind: "role" | "suspend",
     suspendDurationDays?: number,
+    suspendReasonCategory?: string,
+    suspendReason?: string,
   ) {
     setPending(kind);
     setError(null);
     try {
+      const body: Record<string, unknown> = { action };
+      if (suspendDurationDays !== undefined) body.suspendDurationDays = suspendDurationDays;
+      if (suspendReasonCategory !== undefined) body.reasonCategory = suspendReasonCategory;
+      if (suspendReason !== undefined) body.reason = suspendReason;
+
       const res = await fetch(`/api/admin/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(suspendDurationDays !== undefined ? { action, suspendDurationDays } : { action }),
+        body: JSON.stringify(body),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -102,10 +115,19 @@ export function UserActionButtons({ user, isSelf }: UserActionButtonsProps) {
       duration = Number(suspendChoice);
     }
 
+    // Phase I: same required-detail-reason check as ReportProcessForm's
+    // own suspendReasonMissing -- reasonCategory always has a real value
+    // (the <select> below defaults to the first preset), so only the
+    // free-form detail needs a blank check here.
+    if (!reason.trim()) {
+      setError("정지 사유(상세)를 입력해주세요.");
+      return;
+    }
+
     const label = user.nickname ?? user.email;
     const durationLabel = duration ? `${duration}일` : "영구";
     if (!confirm(`${label}님을 ${durationLabel} 정지하시겠습니까?`)) return;
-    callAction("suspend", "suspend", duration);
+    callAction("suspend", "suspend", duration, reasonCategory, reason);
   }
 
   return (
@@ -186,6 +208,37 @@ export function UserActionButtons({ user, isSelf }: UserActionButtonsProps) {
               일 ({MIN_CUSTOM_DAYS}~{MAX_CUSTOM_DAYS})
             </label>
           )}
+          {/* Phase I: this phase's own spec section 2 -- required, same
+              category+detail pair as ReportProcessForm's suspend_user
+              branch, recorded into the same ModerationAction audit trail. */}
+          <label className="flex flex-col gap-1 text-foreground">
+            <span>
+              추천 사유<span className="text-destructive"> *</span>
+            </span>
+            <select
+              value={reasonCategory}
+              onChange={(e) => setReasonCategory(e.target.value)}
+              className="rounded border border-border bg-card px-1.5 py-1"
+            >
+              {SUSPEND_REASON_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-foreground">
+            <span>
+              상세 사유<span className="text-destructive"> *</span>
+            </span>
+            <input
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="구체적인 정지 사유를 입력하세요."
+              className="rounded border border-border bg-card px-1.5 py-1"
+            />
+          </label>
           <div className="flex gap-2">
             <Button
               type="button"

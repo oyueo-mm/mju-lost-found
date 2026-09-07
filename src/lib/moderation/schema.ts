@@ -35,6 +35,22 @@ export const TARGET_TYPE_TO_ACTION_TYPE: Record<ReportTargetType, ModerationActi
 // suspendDurationDays schema field below (positive/int/max(365)) either way.
 export const SUSPEND_DURATION_DAY_OPTIONS = [1, 3, 7, 30] as const;
 
+// Phase I: preset categories for the *required* suspend reason (this
+// phase's own spec section 2's example list, adapted for this project). A
+// UI convenience/consistency aid only, same "free TEXT column, no DB
+// CHECK/enum" convention as REPORT_REASONS (report/schema.ts) -- the
+// server only enforces "both category and detail are non-blank when
+// actionType is suspend_user" (see applyReportAction()/updateUserByAdmin()),
+// never restricts the category to exactly these six strings.
+export const SUSPEND_REASON_CATEGORIES = [
+  "허위 게시물",
+  "부적절한 게시물",
+  "욕설/비방",
+  "반복적인 규정 위반",
+  "스팸/도배",
+  "기타",
+] as const;
+
 // A single endpoint (POST /api/admin/reports/[id]/process) dispatches to
 // legacy's two distinct admin decisions: db.process_report(status=
 // "dismissed") and db.apply_report_action(...) -- combining them behind
@@ -48,6 +64,14 @@ export const processReportSchema = z.discriminatedUnion("decision", [
   }),
   z.object({
     decision: z.literal("action"),
+    // Phase I: `actionReasonCategory` is new; `actionReason` (the "상세
+    // 사유") already existed. Both stay optional *here* -- this schema has
+    // no way to know yet whether the report's target resolves to
+    // suspend_user (that's derived server-side from the report row) -- the
+    // real "required specifically for suspend_user" rule is enforced in
+    // applyReportAction() itself, the same place TARGET_TYPE_TO_ACTION_TYPE
+    // is already checked.
+    actionReasonCategory: z.string().trim().max(100).optional(),
     actionReason: z.string().trim().max(500).optional(),
     adminNote: z.string().trim().max(2000).optional(),
     // Phase F-2: capped at 365 -- a suspend duration of, say, 999999 days is

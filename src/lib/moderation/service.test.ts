@@ -352,7 +352,11 @@ describe("applyReportAction", () => {
     userTable.findUnique.mockResolvedValueOnce({ id: 88 });
     txReport.updateMany.mockResolvedValueOnce({ count: 1 });
 
-    const result = await applyReportAction(admin, 10, "suspend_user", { suspendDurationDays: 7 });
+    const result = await applyReportAction(admin, 10, "suspend_user", {
+      suspendDurationDays: 7,
+      actionReasonCategory: "욕설/비방",
+      actionReason: "반복적인 욕설",
+    });
 
     expect(result.kind).toBe("ok");
     expect(txUser.update).toHaveBeenCalledWith({
@@ -370,7 +374,11 @@ describe("applyReportAction", () => {
     userTable.findUnique.mockResolvedValueOnce({ id: 88 });
     txReport.updateMany.mockResolvedValueOnce({ count: 1 });
 
-    const result = await applyReportAction(admin, 10, "suspend_user", { suspendDurationDays: 1 });
+    const result = await applyReportAction(admin, 10, "suspend_user", {
+      suspendDurationDays: 1,
+      actionReasonCategory: "욕설/비방",
+      actionReason: "반복적인 욕설",
+    });
 
     expect(result.kind).toBe("ok");
     expect(txUser.update).toHaveBeenCalledWith({
@@ -384,12 +392,36 @@ describe("applyReportAction", () => {
     userTable.findUnique.mockResolvedValueOnce({ id: 88 });
     txReport.updateMany.mockResolvedValueOnce({ count: 1 });
 
-    await applyReportAction(admin, 10, "suspend_user", {});
+    await applyReportAction(admin, 10, "suspend_user", {
+      actionReasonCategory: "욕설/비방",
+      actionReason: "반복적인 욕설",
+    });
 
     expect(txUser.update).toHaveBeenCalledWith({
       where: { id: 88 },
       data: { isSuspended: true, suspendedUntil: null, suspendedByUserId: admin.id },
     });
+  });
+
+  // Phase I section 2.
+  it("returns reason_required and never opens a transaction when suspend_user has no reason", async () => {
+    report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "USER", targetId: 88 }));
+
+    const result = await applyReportAction(admin, 10, "suspend_user", { suspendDurationDays: 7 });
+
+    expect(result).toEqual({ kind: "reason_required" });
+    expect($transaction).not.toHaveBeenCalled();
+  });
+
+  it("returns reason_required when only the category is given, without the detail", async () => {
+    report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "USER", targetId: 88 }));
+
+    const result = await applyReportAction(admin, 10, "suspend_user", {
+      suspendDurationDays: 7,
+      actionReasonCategory: "욕설/비방",
+    });
+
+    expect(result).toEqual({ kind: "reason_required" });
   });
 
   it("returns target_gone (and never inserts a ModerationAction) if the post was deleted before the transaction ran", async () => {

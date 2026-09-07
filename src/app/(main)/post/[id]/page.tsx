@@ -9,7 +9,7 @@ import { isAdmin } from "@/lib/moderation/service";
 import { listCommentsForPost } from "@/lib/comment/service";
 import { PostManageMenu } from "@/components/post/PostManageMenu";
 import { ViewTracker } from "@/components/post/ViewTracker";
-import { ImageSimilaritySection } from "@/components/post/ImageSimilaritySection";
+import { SimilarPostsSection } from "@/components/post/SimilarPostsSection";
 import { DirectChatButton } from "@/components/chat/DirectChatButton";
 import { listMatchesForPost } from "@/lib/match/service";
 import { MatchPanel } from "@/components/match/MatchPanel";
@@ -183,13 +183,29 @@ export default async function PostDetailPage({
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <StatusBadge status={post.status} />
-            {isOwner && (
+            {/* Phase I section 8: 소유자는 관리 메뉴, 그 외 로그인 사용자는 신고
+                액션 -- 항상 둘 중 하나만(동시에 둘 다는 절대 없음) 같은 자리에
+                렌더링해서 "관리/보조 액션 영역"을 하나로 통일했다. 기존에는
+                신고 버튼이 콘텐츠 중앙(채팅하기/매칭 사이)에 별도 줄로
+                떠 있었는데, 그 자리를 없애고 여기로 옮긴 것뿐 -- 신고 API,
+                권한 검사(자기 신고 거부 등)는 ReportButton/createReport 그대로,
+                UI 위치와 트리거 스타일만 바뀌었다. */}
+            {isOwner ? (
               <PostManageMenu
                 id={post.id}
                 type={type}
                 currentStatus={post.status}
                 statuses={type === "lost" ? LOST_STATUSES : FOUND_STATUSES}
               />
+            ) : (
+              currentUser && (
+                <ReportButton
+                  targetType="post"
+                  targetId={encodePostTargetId(type, post.id)}
+                  buttonLabel="신고"
+                  triggerClassName="flex h-9 shrink-0 items-center rounded-full px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                />
+              )
             )}
           </div>
         </div>
@@ -244,10 +260,6 @@ export default async function PostDetailPage({
           </Link>
         ))}
 
-      {currentUser && (
-        <ReportButton targetType="post" targetId={encodePostTargetId(type, post.id)} />
-      )}
-
       {isOwner &&
         (matchLoadError ? (
           <div className="rounded-card border border-destructive/30 bg-destructive-muted p-4 text-sm text-destructive">
@@ -259,12 +271,14 @@ export default async function PostDetailPage({
           )
         ))}
 
-      {/* Phase 15-2 feature, moved behind a button click (this phase): only
-          rendered at all when there's an image to search against -- an
-          image-less post has nothing for this to find, same as before.
-          AI logic/accuracy unchanged, only *when* it runs (see
-          ImageSimilaritySection's own comment). */}
-      {post.imageUrl && <ImageSimilaritySection postType={type} postId={post.id} />}
+      {/* Phase I section 9: replaces ImageSimilaritySection -- unlike that
+          component (only shown when the post itself had an image, since it
+          searched using *this post's own* photo automatically), this is
+          always rendered: both modes now take fresh user input (typed
+          text or a picked photo), neither depends on this post having an
+          image at all. See SimilarPostsSection's own comment for how each
+          mode reuses the exact existing search endpoints/AI logic. */}
+      <SimilarPostsSection sourceType={type} />
 
       <CommentSection
         postType={type}

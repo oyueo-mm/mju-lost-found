@@ -61,10 +61,15 @@ export default async function AdminDashboardPage() {
           <span className="text-xs text-muted-foreground">전체 사용자</span>
           <span className="text-2xl font-bold text-foreground">{userCount}</span>
         </Link>
-        <div className="flex flex-col gap-1 rounded-card border border-border bg-card p-4">
+        {/* Phase I: now a real link -- /admin/sanctions (신고 처리와 별개의
+            "제재 기록" 전체 목록 + 이의신청 큐, 이번 phase에서 신규 추가). */}
+        <Link
+          href="/admin/sanctions"
+          className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"
+        >
           <span className="text-xs text-muted-foreground">제재 사용자</span>
           <span className="text-2xl font-bold text-foreground">{suspendedCount}</span>
-        </div>
+        </Link>
         <Link
           href="/admin/posts"
           className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"

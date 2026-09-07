@@ -12,6 +12,7 @@ import {
 import { TARGET_TYPE_FROM_DB, TARGET_TYPE_TO_DB, toReportDTO, type ReportDTO } from "@/lib/report/service";
 import type { ReportStatusValue, ReportTargetType } from "@/lib/report/schema";
 import { resolveCommentTarget, resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "@/lib/report/targets";
+import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { TARGET_TYPE_TO_ACTION_TYPE, type ModerationActionTypeValue } from "./schema";
 
 // Same duplication tradeoff as notification/service.ts's
@@ -54,6 +55,10 @@ export type ModerationActionDTO = {
   id: number;
   actionType: ModerationActionTypeValue;
   reason: string | null;
+  // Phase I: additive -- null for every ModerationAction created before
+  // this phase (delete_post/hide_message/delete_comment stay null forever,
+  // see schema.prisma's own comment on this column).
+  reasonCategory: string | null;
   adminNickname: string | null;
   createdAt: Date;
   expiresAt: Date | null;
@@ -64,6 +69,7 @@ function toModerationActionDTO(row: ModerationAction & { adminUser: { nickname: 
     id: row.id,
     actionType: ACTION_TYPE_FROM_DB[row.actionType],
     reason: row.reason,
+    reasonCategory: row.reasonCategory,
     adminNickname: row.adminUser.nickname,
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
@@ -202,7 +208,10 @@ export type AdminMutationResult<T> =
   | { kind: "not_found" }
   | { kind: "already_processed" }
   | { kind: "invalid_action_type" }
-  | { kind: "target_gone" };
+  | { kind: "target_gone" }
+  // Phase I: actionType is suspend_user but reasonCategory and/or the
+  // detail reason came in blank -- see applyReportAction()'s own comment.
+  | { kind: "reason_required" };
 
 export type PagedReportsForAdmin = {
   items: ReportAdminDTO[];
@@ -358,7 +367,12 @@ export async function applyReportAction(
   admin: User,
   reportId: number,
   actionType: ModerationActionTypeValue,
-  { actionReason, adminNote, suspendDurationDays }: { actionReason?: string; adminNote?: string; suspendDurationDays?: number },
+  {
+    actionReasonCategory,
+    actionReason,
+    adminNote,
+    suspendDurationDays,
+  }: { actionReasonCategory?: string; actionReason?: string; adminNote?: string; suspendDurationDays?: number },
 ): Promise<AdminMutationResult<ReportDTO>> {
   if (!isAdmin(admin)) return { kind: "forbidden" };
 
@@ -370,8 +384,18 @@ export async function applyReportAction(
     return { kind: "invalid_action_type" };
   }
 
+  const trimmedReasonCategory = actionReasonCategory?.trim() || null;
   const trimmedReason = actionReason?.trim() || null;
   const trimmedNote = adminNote?.trim() || null;
+
+  // Phase I: this phase's own spec section 2 -- a suspend action must
+  // always carry both a picked preset category and a non-blank detail
+  // reason. Only suspend_user is gated; delete_post/hide_message/
+  // delete_comment keep their pre-existing "reason entirely optional"
+  // behavior, unchanged.
+  if (actionType === "suspend_user" && (!trimmedReasonCategory || !trimmedReason)) {
+    return { kind: "reason_required" };
+  }
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -461,6 +485,7 @@ export async function applyReportAction(
           targetId: report.targetId,
           actionType: ACTION_TYPE_TO_DB[actionType],
           reason: trimmedReason,
+          reasonCategory: trimmedReasonCategory,
           adminUserId: admin.id,
           expiresAt,
         },
@@ -501,4 +526,126 @@ export async function applyReportAction(
     }
     throw error;
   }
+}
+
+// ---------- Suspension log (Phase I) ----------
+
+// This phase's own spec section 3: an admin-only "제재 기록" listing every
+// SUSPEND_USER ModerationAction, whether it came from the report-flow
+// (applyReportAction, reportId set) or a direct admin suspend
+// (admin/users.ts's updateUserByAdmin, reportId: null) -- both write to
+// this same table/actionType now (see schema.prisma's own comment on
+// ModerationAction.reportId), so one query covers both origins uniformly.
+export type SuspensionActionDTO = {
+  id: number;
+  targetUser: { id: number; publicId: string; nickname: string | null } | null;
+  adminNickname: string | null;
+  reasonCategory: string | null;
+  reason: string | null;
+  createdAt: Date;
+  expiresAt: Date | null;
+  // Phase I: computed at read time from the *target user's own current*
+  // isSuspended/suspendedUntil (via isCurrentlySuspended()), never stored
+  // -- same "current state only, not a history log" convention every
+  // other suspended-status display in this app already follows (see
+  // admin/users.ts's own AdminUserDTO.currentlySuspended). A user can be
+  // unsuspended, or a timed suspension can simply expire, without this
+  // historical ModerationAction row changing at all -- this field is what
+  // stays accurate regardless.
+  targetCurrentlySuspended: boolean;
+  viaReport: boolean;
+};
+
+export type PagedSuspensionActions = {
+  items: SuspensionActionDTO[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+export async function listSuspensionActionsForAdmin(
+  admin: User,
+  { page, limit }: { page: number; limit: number },
+): Promise<AdminMutationResult<PagedSuspensionActions>> {
+  if (!isAdmin(admin)) return { kind: "forbidden" };
+
+  const where = { actionType: PrismaModerationActionType.SUSPEND_USER } as const;
+  const skip = (page - 1) * limit;
+
+  const [rows, total] = await Promise.all([
+    prisma.moderationAction.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+      include: { adminUser: { select: { nickname: true } } },
+    }),
+    prisma.moderationAction.count({ where }),
+  ]);
+
+  // targetId is a plain int (no FK -- see schema.prisma's own comment on
+  // ModerationAction.targetId), so the target User rows are fetched
+  // separately and joined back by id, same "no cross-model relation"
+  // pattern posts/service.ts's searchAllPosts() and aiService.ts's
+  // findSimilarPostsByImageForDisplay() already use.
+  const targetIds = [...new Set(rows.map((r) => r.targetId))];
+  const targetUsers = await prisma.user.findMany({
+    where: { id: { in: targetIds } },
+    select: { id: true, publicId: true, nickname: true, isSuspended: true, suspendedUntil: true },
+  });
+  const targetUserById = new Map(targetUsers.map((u) => [u.id, u]));
+
+  const items: SuspensionActionDTO[] = rows.map((row) => {
+    const targetUser = targetUserById.get(row.targetId) ?? null;
+    return {
+      id: row.id,
+      targetUser: targetUser
+        ? { id: targetUser.id, publicId: targetUser.publicId, nickname: targetUser.nickname }
+        : null,
+      adminNickname: row.adminUser.nickname,
+      reasonCategory: row.reasonCategory,
+      reason: row.reason,
+      createdAt: row.createdAt,
+      expiresAt: row.expiresAt,
+      targetCurrentlySuspended: targetUser ? isCurrentlySuspended(targetUser) : false,
+      viaReport: row.reportId !== null,
+    };
+  });
+
+  return {
+    kind: "ok",
+    data: { items, page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+  };
+}
+
+export type LatestSuspensionRecordDTO = {
+  reasonCategory: string | null;
+  reason: string | null;
+  // Phase I: "정지 시작 시각" -- User itself has no suspended-at column
+  // (only suspendedUntil, the *end*), so this is read from the most
+  // recent SUSPEND_USER ModerationAction's own createdAt instead of a new
+  // column, now that both suspend paths (direct + report-flow) always
+  // write one (see this phase's own spec section 3 / schema.prisma's
+  // comment on ModerationAction.reportId). A suspension applied before
+  // this phase's migration has no such row -- this function simply
+  // returns null then, same "unrecoverable historical data stays unknown"
+  // convention User.suspendedByUserId's own comment already established,
+  // rather than guessing.
+  startedAt: Date | null;
+};
+
+// No admin check -- called by the suspended user themselves (see
+// (auth)/suspended/page.tsx) to explain *their own* current suspension,
+// same "reading your own account's data needs no extra permission" shape
+// getCurrentUser() itself already has. `userId` here is always the
+// caller's own id, read from their session by the page, never accepted as
+// a parameter from client input.
+export async function getLatestSuspensionRecord(userId: number): Promise<LatestSuspensionRecordDTO | null> {
+  const row = await prisma.moderationAction.findFirst({
+    where: { actionType: PrismaModerationActionType.SUSPEND_USER, targetId: userId, targetType: "USER" },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!row) return null;
+  return { reasonCategory: row.reasonCategory, reason: row.reason, startedAt: row.createdAt };
 }

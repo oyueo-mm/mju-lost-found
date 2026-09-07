@@ -37,6 +37,12 @@ export const updateUserByAdminSchema = z.object({
   // the identical duration contract, so an admin can't pass an
   // effectively-unbounded duration through whichever path lacks a cap.
   suspendDurationDays: z.coerce.number().int().positive().max(365).optional(),
+  // Phase I: same "required specifically for action=suspend" shape as
+  // moderation/schema.ts's processReportSchema -- kept optional at the
+  // schema layer (this schema has no per-action branching), the real
+  // requiredness check lives in updateUserByAdmin() itself.
+  reasonCategory: z.string().trim().max(100).optional(),
+  reason: z.string().trim().max(500).optional(),
 });
 export type UpdateUserByAdminInput = z.infer<typeof updateUserByAdminSchema>;
 

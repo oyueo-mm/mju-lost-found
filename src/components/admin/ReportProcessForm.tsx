@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   MODERATION_ACTION_TYPE_LABELS,
   SUSPEND_DURATION_DAY_OPTIONS,
+  SUSPEND_REASON_CATEGORIES,
   TARGET_TYPE_TO_ACTION_TYPE,
 } from "@/lib/moderation/schema";
 import type { ReportTargetType } from "@/lib/report/schema";
@@ -39,6 +40,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
 
   const [decision, setDecision] = useState<"dismiss" | "action">("dismiss");
   const [adminNote, setAdminNote] = useState("");
+  const [actionReasonCategory, setActionReasonCategory] = useState<string>(SUSPEND_REASON_CATEGORIES[0]);
   const [actionReason, setActionReason] = useState("");
   const [suspendChoice, setSuspendChoice] = useState<SuspendChoice>(`${SUSPEND_DURATION_DAY_OPTIONS[0]}`);
   const [customDays, setCustomDays] = useState("");
@@ -54,6 +56,15 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
     actionType === "suspend_user" &&
     suspendChoice === "custom" &&
     !(Number.isInteger(Number(customDays)) && Number(customDays) >= MIN_CUSTOM_DAYS && Number(customDays) <= MAX_CUSTOM_DAYS);
+
+  // Phase I: this phase's own spec section 2 -- a suspend action must
+  // always carry a non-blank detail reason (the category always has a
+  // real value, since the <select> below defaults to the first preset and
+  // is never blank). The server re-enforces this regardless (see
+  // applyReportAction's own "reason_required" result) -- this is only so
+  // "처리하기" doesn't even submit an obviously-incomplete suspend.
+  const suspendReasonMissing =
+    decision === "action" && actionType === "suspend_user" && actionReason.trim().length === 0;
 
   async function handleConfirm() {
     setSubmitting(true);
@@ -73,6 +84,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
           ? { decision: "dismiss" as const, adminNote: adminNote || undefined }
           : {
               decision: "action" as const,
+              actionReasonCategory: actionType === "suspend_user" ? actionReasonCategory : undefined,
               actionReason: actionReason || undefined,
               adminNote: adminNote || undefined,
               suspendDurationDays,
@@ -217,15 +229,54 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
               )}
             </label>
           )}
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-muted-foreground">제재 사유 (선택)</span>
-            <input
-              type="text"
-              value={actionReason}
-              onChange={(e) => setActionReason(e.target.value)}
-              className={`${FIELD_CLASS} bg-card`}
-            />
-          </label>
+          {actionType === "suspend_user" ? (
+            // Phase I: suspend_user's reason is now required (this phase's
+            // own spec section 2) -- a preset dropdown + a free-form detail
+            // field that must still be filled in even after picking a
+            // preset ("추천 사유를 선택하더라도 상세 사유는 필수").
+            <>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">
+                  추천 사유
+                  <span className="text-destructive"> *</span>
+                </span>
+                <select
+                  value={actionReasonCategory}
+                  onChange={(e) => setActionReasonCategory(e.target.value)}
+                  className={`${FIELD_CLASS} bg-card`}
+                >
+                  {SUSPEND_REASON_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground">
+                  상세 사유
+                  <span className="text-destructive"> *</span>
+                </span>
+                <input
+                  type="text"
+                  value={actionReason}
+                  onChange={(e) => setActionReason(e.target.value)}
+                  placeholder="구체적인 정지 사유를 입력하세요."
+                  className={`${FIELD_CLASS} bg-card`}
+                />
+              </label>
+            </>
+          ) : (
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">제재 사유 (선택)</span>
+              <input
+                type="text"
+                value={actionReason}
+                onChange={(e) => setActionReason(e.target.value)}
+                className={`${FIELD_CLASS} bg-card`}
+              />
+            </label>
+          )}
         </div>
       )}
 
@@ -239,7 +290,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
         variant={decision === "action" ? "destructive" : "primary"}
         size="sm"
         onClick={() => setConfirming(true)}
-        disabled={customDaysInvalid}
+        disabled={customDaysInvalid || suspendReasonMissing}
         className="self-start"
       >
         처리하기
@@ -249,6 +300,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
           사용자 지정 기간은 {MIN_CUSTOM_DAYS}~{MAX_CUSTOM_DAYS}일 사이의 정수여야 합니다.
         </p>
       )}
+      {suspendReasonMissing && <p className="text-xs text-destructive">사용자 정지에는 상세 사유가 필요합니다.</p>}
     </div>
   );
 }

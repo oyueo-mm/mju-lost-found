@@ -18,6 +18,8 @@ export function adminUserMutationResultToResponse<T>(
       return jsonError(404, "사용자를 찾을 수 없습니다.");
     case "self":
       return jsonError(400, "본인 계정에는 이 작업을 적용할 수 없습니다.");
+    case "reason_required":
+      return jsonError(400, "사용자 정지에는 사유 카테고리와 상세 사유가 모두 필요합니다.");
   }
 }
 

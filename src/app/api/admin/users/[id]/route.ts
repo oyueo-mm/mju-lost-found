@@ -32,7 +32,14 @@ export const PATCH = withErrorHandling(
       return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
     }
 
-    const result = await updateUserByAdmin(auth.user, id, parsed.data.action, parsed.data.suspendDurationDays);
+    const result = await updateUserByAdmin(
+      auth.user,
+      id,
+      parsed.data.action,
+      parsed.data.suspendDurationDays,
+      parsed.data.reasonCategory,
+      parsed.data.reason,
+    );
     return adminUserMutationResultToResponse(result);
   },
 );

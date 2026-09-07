@@ -147,7 +147,7 @@ describe("PATCH /api/admin/users/[id]", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(updateUserByAdmin).toHaveBeenCalledWith(admin, 5, "suspend", 365);
+    expect(updateUserByAdmin).toHaveBeenCalledWith(admin, 5, "suspend", 365, undefined, undefined);
   });
 
   it("promotes the target user and forwards suspendDurationDays when given", async () => {
@@ -164,7 +164,7 @@ describe("PATCH /api/admin/users/[id]", () => {
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    expect(updateUserByAdmin).toHaveBeenCalledWith(admin, 5, "suspend", 7);
+    expect(updateUserByAdmin).toHaveBeenCalledWith(admin, 5, "suspend", 7, undefined, undefined);
     expect(json.data.id).toBe(5);
   });
 });

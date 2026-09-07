@@ -8,9 +8,13 @@ const user = { findMany: vi.fn(), count: vi.fn(), findUnique: vi.fn(), update: v
 // already asserts against, so every pre-F-2 assertion on user.update stays
 // valid unchanged).
 const notification = { create: vi.fn() };
-const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn({ user, notification }));
+// Phase I: a direct suspend now also creates a ModerationAction row inside
+// the same transaction (see admin/users.ts's own comment on why) -- added
+// to the tx object alongside user/notification, same shape.
+const moderationAction = { create: vi.fn() };
+const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn({ user, notification, moderationAction }));
 
-vi.mock("@/lib/db/prisma", () => ({ prisma: { user, notification, $transaction } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { user, notification, moderationAction, $transaction } }));
 // isAdmin() is a one-line `return user.isAdmin` in moderation/service.ts,
 // but that module also pulls in report/service.ts and report/targets.ts --
 // mocked wholesale here (same convention other route/service tests in this
@@ -18,9 +22,11 @@ vi.mock("@/lib/db/prisma", () => ({ prisma: { user, notification, $transaction }
 // only ever depends on what it actually exercises.
 vi.mock("@/lib/moderation/service", () => ({ isAdmin: (u: { isAdmin: boolean }) => u.isAdmin }));
 // Same convention as comment/service.test.ts's own mock of this module --
-// only the one enum member this file actually exercises is stubbed.
+// only the members this file actually exercises are stubbed.
 vi.mock("@/generated/prisma/client", () => ({
   NotificationType: { USER_SUSPENDED: "USER_SUSPENDED" },
+  ModerationActionType: { SUSPEND_USER: "SUSPEND_USER" },
+  ReportTargetType: { USER: "USER" },
 }));
 
 const { listUsersForAdmin, updateUserByAdmin } = await import("./users");
@@ -180,7 +186,7 @@ describe("updateUserByAdmin", () => {
     user.findUnique.mockResolvedValueOnce(baseRow);
     user.update.mockResolvedValueOnce({ ...baseRow, isSuspended: true, suspendedUntil: null });
 
-    await updateUserByAdmin(admin as never, 5, "suspend");
+    await updateUserByAdmin(admin as never, 5, "suspend", undefined, "욕설/비방", "반복적인 욕설");
 
     expect($transaction).toHaveBeenCalledTimes(1);
     expect(user.update).toHaveBeenCalledWith({
@@ -212,7 +218,7 @@ describe("updateUserByAdmin", () => {
       user.findUnique.mockResolvedValueOnce(baseRow);
       user.update.mockResolvedValueOnce({ ...baseRow, isSuspended: true });
 
-      await updateUserByAdmin(admin as never, 5, "suspend", 7);
+      await updateUserByAdmin(admin as never, 5, "suspend", 7, "욕설/비방", "반복적인 욕설");
 
       const call = user.update.mock.calls[0][0];
       expect(call.where).toEqual({ id: 5 });
@@ -237,7 +243,7 @@ describe("updateUserByAdmin", () => {
     user.findUnique.mockResolvedValueOnce(baseRow);
     user.update.mockResolvedValueOnce({ ...baseRow, isSuspended: true });
 
-    await updateUserByAdmin(admin as never, 5, "suspend", 1);
+    await updateUserByAdmin(admin as never, 5, "suspend", 1, "욕설/비방", "반복적인 욕설");
 
     expect(notification.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ content: "계정이 1일 정지되었습니다." }) }),
@@ -248,7 +254,7 @@ describe("updateUserByAdmin", () => {
     user.findUnique.mockResolvedValueOnce(baseRow);
     user.update.mockResolvedValueOnce({ ...baseRow, isSuspended: true });
 
-    await updateUserByAdmin(admin as never, 5, "suspend", 45);
+    await updateUserByAdmin(admin as never, 5, "suspend", 45, "욕설/비방", "반복적인 욕설");
 
     const call = user.update.mock.calls[0][0];
     expect(call.data.suspendedUntil).toBeInstanceOf(Date);
@@ -267,7 +273,7 @@ describe("updateUserByAdmin", () => {
       suspendedBy: { nickname: "관리자닉네임" },
     });
 
-    const result = await updateUserByAdmin(admin as never, 5, "suspend");
+    const result = await updateUserByAdmin(admin as never, 5, "suspend", undefined, "욕설/비방", "반복적인 욕설");
 
     expect(result.kind).toBe("ok");
     if (result.kind === "ok") expect(result.data.suspendedByNickname).toBe("관리자닉네임");
@@ -293,6 +299,78 @@ describe("updateUserByAdmin", () => {
       where: { id: 5 },
       data: { isSuspended: false, suspendedUntil: null, suspendedByUserId: null },
       include: { suspendedBy: { select: { nickname: true } } },
+    });
+  });
+
+  // Phase I section 2/3.
+  describe("required suspend reason", () => {
+    it("rejects a suspend with neither reasonCategory nor reason, without touching the DB", async () => {
+      const result = await updateUserByAdmin(admin as never, 5, "suspend");
+
+      expect(result).toEqual({ kind: "reason_required" });
+      expect(user.findUnique).not.toHaveBeenCalled();
+      expect($transaction).not.toHaveBeenCalled();
+    });
+
+    it("rejects a suspend with only reasonCategory and a blank detail", async () => {
+      const result = await updateUserByAdmin(admin as never, 5, "suspend", undefined, "욕설/비방", "   ");
+      expect(result).toEqual({ kind: "reason_required" });
+    });
+
+    it("rejects a suspend with only the detail and no category", async () => {
+      const result = await updateUserByAdmin(admin as never, 5, "suspend", undefined, undefined, "상세 사유만 있음");
+      expect(result).toEqual({ kind: "reason_required" });
+    });
+
+    it("does not require a reason for unsuspend/promote/demote", async () => {
+      user.findUnique.mockResolvedValueOnce({ ...baseRow, isSuspended: true, suspendedUntil: new Date() });
+      user.update.mockResolvedValueOnce({ ...baseRow, isSuspended: false, suspendedUntil: null });
+
+      const result = await updateUserByAdmin(admin as never, 5, "unsuspend");
+
+      expect(result.kind).toBe("ok");
+    });
+
+    // Phase I section 3: a direct suspend now also records a
+    // ModerationAction (reportId: null, since there's no Report behind a
+    // direct suspend) -- this is the one existing gap the phase's own spec
+    // called out ("기존 report 기반 정지와 직접 사용자 정지 모두 사유를 기록할
+    // 수 있도록 통합한다").
+    it("creates a ModerationAction with reportId: null, the category, and the trimmed detail", async () => {
+      user.findUnique.mockResolvedValueOnce(baseRow);
+      user.update.mockResolvedValueOnce({ ...baseRow, isSuspended: true, suspendedUntil: null });
+
+      await updateUserByAdmin(admin as never, 5, "suspend", undefined, "욕설/비방", "  반복적인 욕설  ");
+
+      expect(moderationAction.create).toHaveBeenCalledWith({
+        data: {
+          reportId: null,
+          targetType: "USER",
+          targetId: 5,
+          actionType: "SUSPEND_USER",
+          reason: "반복적인 욕설",
+          reasonCategory: "욕설/비방",
+          adminUserId: admin.id,
+          expiresAt: null,
+        },
+      });
+    });
+
+    it("stamps the ModerationAction's expiresAt to match the computed suspendedUntil for a timed suspension", async () => {
+      const start = new Date("2026-01-01T00:00:00.000Z");
+      vi.useFakeTimers();
+      vi.setSystemTime(start);
+      try {
+        user.findUnique.mockResolvedValueOnce(baseRow);
+        user.update.mockResolvedValueOnce({ ...baseRow, isSuspended: true });
+
+        await updateUserByAdmin(admin as never, 5, "suspend", 7, "욕설/비방", "반복적인 욕설");
+
+        const call = moderationAction.create.mock.calls[0][0];
+        expect(call.data.expiresAt).toEqual(new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000));
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

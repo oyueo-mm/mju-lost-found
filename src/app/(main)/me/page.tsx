@@ -7,6 +7,7 @@ import { isAdmin } from "@/lib/moderation/service";
 import { UserIcon, ChevronRightIcon, BellIcon, ShieldIcon, LogoutIcon, ChatBubbleIcon } from "@/components/icons";
 import { ThemeSettings } from "@/components/settings/ThemeSettings";
 import { NicknameSettings } from "@/components/settings/NicknameSettings";
+import { CopyPublicId } from "@/components/settings/CopyPublicId";
 import type { ReactNode } from "react";
 
 // Phase 17: "내 정보" -- the hub this phase's Navigation redesign
@@ -56,9 +57,17 @@ export default async function MePage() {
         <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary-muted text-primary">
           <UserIcon className="size-7" />
         </span>
-        <div className="flex flex-col gap-0.5">
+        <div className="flex min-w-0 flex-col gap-0.5">
           <span className="font-semibold text-foreground">{user.nickname ?? "닉네임 미설정"}</span>
           <span className="text-sm text-muted-foreground">{user.email}</span>
+          {/* Phase I section 6: same publicId /profile/[publicId] already
+              shows -- User.id itself is never rendered anywhere, here or
+              on the public profile (see user/service.ts's own
+              PublicProfileDTO comment). */}
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <span className="truncate text-xs text-muted-foreground">ID: {user.publicId}</span>
+            <CopyPublicId publicId={user.publicId} />
+          </div>
         </div>
       </section>
 
@@ -66,8 +75,10 @@ export default async function MePage() {
           onboarding/NicknameForm.tsx) but can now be changed any number of
           times from here -- duplicate nicknames are allowed by design (see
           NicknameSettings/actions.ts's own comments), so this never blocks
-          on a uniqueness conflict the way onboarding's initial set did. */}
-      <NicknameSettings currentNickname={user.nickname ?? ""} />
+          on a uniqueness conflict the way onboarding's initial set did.
+          Phase I section 7: now also cooldown-gated -- see
+          NicknameSettings/me/actions.ts's own comments. */}
+      <NicknameSettings currentNickname={user.nickname ?? ""} nicknameChangeAvailableAt={user.nicknameChangeAvailableAt} />
 
       {/* Phase H-8: "내 활동" -- 내가 쓴 게시글(기존 /posts/mine, 라벨만 통일) +
           내가 쓴 댓글(신규 /me/comments). 두 페이지 모두 세션의 본인 id만 사용,

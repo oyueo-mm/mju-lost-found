@@ -19,6 +19,13 @@ type ReportButtonProps = {
   // uses this to close the whole popover instead of leaving it open on
   // the success caption. Unused (and harmless) everywhere else.
   onSuccess?: () => void;
+  // Phase I section 8: lets one caller (post/[id]/page.tsx) restyle just
+  // the closed-state trigger button -- e.g. into a small pill sitting next
+  // to PostManageMenu's own "⋯" trigger instead of this component's
+  // default underlined-text link -- without touching the other three call
+  // sites (chat header, CommentSection, MessageActionMenu), which all omit
+  // this and keep their exact existing look.
+  triggerClassName?: string;
 };
 
 // Client-side port of legacy ui/common.py::render_report_control(): a
@@ -37,6 +44,7 @@ export function ReportButton({
   buttonLabel = "신고하기",
   autoOpen = false,
   onSuccess,
+  triggerClassName,
 }: ReportButtonProps) {
   const [open, setOpen] = useState(autoOpen);
   const [done, setDone] = useState(false);
@@ -54,7 +62,7 @@ export function ReportButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-sm text-muted-foreground underline hover:text-foreground"
+        className={triggerClassName ?? "text-sm text-muted-foreground underline hover:text-foreground"}
       >
         {buttonLabel}
       </button>

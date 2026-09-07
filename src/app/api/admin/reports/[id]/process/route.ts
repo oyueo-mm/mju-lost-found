@@ -39,8 +39,9 @@ export const POST = withErrorHandling(
     const targetType = await getReportTargetType(id);
     if (!targetType) return jsonError(404, "신고를 찾을 수 없습니다.");
 
-    const { actionReason, adminNote, suspendDurationDays } = parsed.data;
+    const { actionReasonCategory, actionReason, adminNote, suspendDurationDays } = parsed.data;
     const result = await applyReportAction(auth.user, id, TARGET_TYPE_TO_ACTION_TYPE[targetType], {
+      actionReasonCategory,
       actionReason,
       adminNote,
       suspendDurationDays,
