@@ -51,6 +51,11 @@ enum ReportTargetType {
   POST    @map("post")
   MESSAGE @map("message")
   USER    @map("user")
+  // Phase C-3: Comment.id is its own single AUTOINCREMENT sequence (unlike
+  // LostPost/FoundPost, which independently restart at 1 and need the
+  // sign-encoding trick in report/targets.ts) -- so, like MESSAGE/USER
+  // above, no encoding is needed for a comment target_id either.
+  COMMENT @map("comment")
 }
 
 enum ReportStatus {
@@ -60,9 +65,12 @@ enum ReportStatus {
 }
 
 enum ModerationActionType {
-  DELETE_POST  @map("delete_post")
-  HIDE_MESSAGE @map("hide_message")
-  SUSPEND_USER @map("suspend_user")
+  DELETE_POST    @map("delete_post")
+  HIDE_MESSAGE   @map("hide_message")
+  SUSPEND_USER   @map("suspend_user")
+  // Phase C-3: the one action a COMMENT-targeted report can apply -- see
+  // moderation/service.ts's applyReportAction().
+  DELETE_COMMENT @map("delete_comment")
 }
 
 enum NotificationType {
@@ -72,6 +80,7 @@ enum NotificationType {
   POST_DELETED     @map("post_deleted")
   MESSAGE_HIDDEN   @map("message_hidden")
   USER_SUSPENDED   @map("user_suspended")
+  COMMENT_REPLY    @map("comment_reply")
 }
 
 // ---------- User ----------
@@ -435,9 +444,19 @@ model Comment {
   content        String     @db.Text
   createdAt      DateTime   @default(now()) @map("created_at")
   updatedAt      DateTime   @updatedAt @map("updated_at")
+  // Phase C-2: one level of replies only, enforced in application code
+  // (comment/service.ts rejects creating a reply whose parent already has
+  // a parentId of its own) -- not a DB constraint, same convention as the
+  // "exactly one of lostPostId/foundPostId" rule above. onDelete: Cascade
+  // means deleting a top-level comment also deletes its own replies,
+  // never anything deeper (depth is capped at 1 by construction).
+  parentId       Int?       @map("parent_id")
+  parent         Comment?   @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies        Comment[]  @relation("CommentReplies")
 
   @@index([lostPostId, createdAt], map: "idx_comment_lost_post_created")
   @@index([foundPostId, createdAt], map: "idx_comment_found_post_created")
+  @@index([parentId], map: "idx_comment_parent")
   @@map("Comment")
 }
 

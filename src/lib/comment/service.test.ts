@@ -11,8 +11,16 @@ const comment = {
 };
 const lostPost = { findUnique: vi.fn() };
 const foundPost = { findUnique: vi.fn() };
+// Phase C-2: createComment() now runs its create (+ optional reply
+// notification) inside prisma.$transaction -- same tx-mock shape as
+// chat/service.test.ts's own $transaction mock, just handing back
+// `comment`/`notification` themselves as `tx` (this file's tests only
+// ever assert against comment.create/notification.create directly, same
+// as before the transaction wrap).
+const notification = { create: vi.fn() };
+const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn({ comment, notification }));
 
-vi.mock("@/lib/db/prisma", () => ({ prisma: { comment, lostPost, foundPost } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { comment, lostPost, foundPost, notification, $transaction } }));
 // Mocked wholesale (not via importActual): moderation/service.ts's own
 // import chain (report/service.ts, report/targets.ts, generated Prisma
 // enums) has nothing to do with what this file tests -- isAdmin() is a
@@ -21,6 +29,11 @@ vi.mock("@/lib/db/prisma", () => ({ prisma: { comment, lostPost, foundPost } }))
 // wholesale (e.g. posts/service.test.ts mocking @/lib/ai/postEmbedding).
 vi.mock("@/lib/moderation/service", () => ({
   isAdmin: (user: { isAdmin: boolean }) => user.isAdmin,
+}));
+// Same convention as chat/service.test.ts's own mock of this module --
+// only the one enum member this file actually exercises is stubbed.
+vi.mock("@/generated/prisma/client", () => ({
+  NotificationType: { COMMENT_REPLY: "COMMENT_REPLY" },
 }));
 
 const { createComment, deleteComment, listCommentsForPost, updateComment } = await import("./service");
@@ -87,6 +100,132 @@ describe("createComment", () => {
         data: expect.objectContaining({ authorUserId: 1, lostPostId: 1 }),
       }),
     );
+  });
+
+  it("creates a reply attached to an existing top-level comment on the same post", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1 });
+    comment.findUnique.mockResolvedValueOnce({
+      id: 50,
+      parentId: null,
+      authorUserId: 2,
+      lostPostId: 1,
+      foundPostId: null,
+    });
+    comment.create.mockResolvedValueOnce({
+      id: 51,
+      content: "네 맞아요!",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      parentId: 50,
+      author: { id: 1, nickname: "닉네임" },
+    });
+
+    const result = await createComment(author, "lost", 1, { content: "네 맞아요!", parentId: 50 });
+
+    expect(result.kind).toBe("ok");
+    expect(comment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ authorUserId: 1, lostPostId: 1, parentId: 50 }),
+      }),
+    );
+  });
+
+  it("returns parent_not_found when parentId doesn't exist", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1 });
+    comment.findUnique.mockResolvedValueOnce(null);
+
+    const result = await createComment(author, "lost", 1, { content: "내용", parentId: 999 });
+
+    expect(result).toEqual({ kind: "parent_not_found" });
+    expect(comment.create).not.toHaveBeenCalled();
+  });
+
+  it("returns parent_not_found when parentId belongs to a different post", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1 });
+    comment.findUnique.mockResolvedValueOnce({
+      id: 50,
+      parentId: null,
+      authorUserId: 2,
+      lostPostId: 2, // a different LostPost than the one being commented on (id 1)
+      foundPostId: null,
+    });
+
+    const result = await createComment(author, "lost", 1, { content: "내용", parentId: 50 });
+
+    expect(result).toEqual({ kind: "parent_not_found" });
+    expect(comment.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects replying to a comment that is itself already a reply", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1 });
+    comment.findUnique.mockResolvedValueOnce({
+      id: 51,
+      parentId: 50, // already a reply -- only one level of nesting is allowed
+      authorUserId: 2,
+      lostPostId: 1,
+      foundPostId: null,
+    });
+
+    const result = await createComment(author, "lost", 1, { content: "내용", parentId: 51 });
+
+    expect(result).toEqual({ kind: "reply_to_reply" });
+    expect(comment.create).not.toHaveBeenCalled();
+  });
+
+  it("notifies the parent comment's author when a reply is created", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1 });
+    comment.findUnique.mockResolvedValueOnce({
+      id: 50,
+      parentId: null,
+      authorUserId: 2,
+      lostPostId: 1,
+      foundPostId: null,
+    });
+    comment.create.mockResolvedValueOnce({
+      id: 51,
+      content: "네 맞아요!",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      parentId: 50,
+      author: { id: 1, nickname: "답변자" },
+    });
+
+    await createComment(author, "lost", 1, { content: "네 맞아요!", parentId: 50 });
+
+    expect(notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 2,
+          type: "COMMENT_REPLY",
+          relatedType: "comment",
+          relatedId: 51,
+        }),
+      }),
+    );
+  });
+
+  it("does not notify when replying to your own comment", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1 });
+    comment.findUnique.mockResolvedValueOnce({
+      id: 50,
+      parentId: null,
+      authorUserId: 1, // same as the replier below
+      lostPostId: 1,
+      foundPostId: null,
+    });
+    comment.create.mockResolvedValueOnce({
+      id: 51,
+      content: "제 댓글에 제가 답글",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      parentId: 50,
+      author: { id: 1, nickname: "닉네임" },
+    });
+
+    const result = await createComment(author, "lost", 1, { content: "제 댓글에 제가 답글", parentId: 50 });
+
+    expect(result.kind).toBe("ok");
+    expect(notification.create).not.toHaveBeenCalled();
   });
 });
 

@@ -52,6 +52,10 @@ export const POST = withErrorHandling(
         return jsonOk(created.data, { status: 201 });
       case "post_not_found":
         return jsonError(404, "게시물을 찾을 수 없습니다.");
+      case "parent_not_found":
+        return jsonError(404, "답글을 달 댓글을 찾을 수 없습니다.");
+      case "reply_to_reply":
+        return jsonError(400, "답글에는 답글을 달 수 없습니다.");
       case "forbidden":
         return jsonError(403, "정지된 계정은 댓글을 작성할 수 없습니다.");
       case "not_found":

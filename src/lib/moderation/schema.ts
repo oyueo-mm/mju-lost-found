@@ -1,14 +1,17 @@
 import { z } from "zod";
 
 // Same three values as legacy MODERATION_ACTION_TYPES and
-// prisma/schema.prisma's ModerationActionType enum.
-export const MODERATION_ACTION_TYPES = ["delete_post", "hide_message", "suspend_user"] as const;
+// prisma/schema.prisma's ModerationActionType enum. "delete_comment"
+// (Phase C-3) is this branch's own addition, for the one action a
+// COMMENT-targeted report can apply.
+export const MODERATION_ACTION_TYPES = ["delete_post", "hide_message", "suspend_user", "delete_comment"] as const;
 export type ModerationActionTypeValue = (typeof MODERATION_ACTION_TYPES)[number];
 
 export const MODERATION_ACTION_TYPE_LABELS: Record<ModerationActionTypeValue, string> = {
   delete_post: "게시물 삭제",
   hide_message: "메시지 숨김",
   suspend_user: "사용자 정지",
+  delete_comment: "댓글 삭제",
 };
 
 // The one action_type valid for each Report.targetType -- enforced in
@@ -21,6 +24,7 @@ export const TARGET_TYPE_TO_ACTION_TYPE: Record<ReportTargetType, ModerationActi
   post: "delete_post",
   message: "hide_message",
   user: "suspend_user",
+  comment: "delete_comment",
 };
 
 // Same three choices as legacy's SUSPEND_DURATION_OPTIONS ("7일"/"30일"/
@@ -49,7 +53,7 @@ export const processReportSchema = z.discriminatedUnion("decision", [
 export type ProcessReportInput = z.infer<typeof processReportSchema>;
 
 export const REPORT_STATUSES_FOR_FILTER = ["pending", "dismissed", "actioned"] as const;
-export const REPORT_TARGET_TYPES_FOR_FILTER = ["post", "message", "user"] as const;
+export const REPORT_TARGET_TYPES_FOR_FILTER = ["post", "message", "user", "comment"] as const;
 
 export const DEFAULT_ADMIN_PAGE = 1;
 export const DEFAULT_ADMIN_LIMIT = 20;

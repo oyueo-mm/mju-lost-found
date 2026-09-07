@@ -14,12 +14,13 @@ const lostPost = { findUnique: vi.fn() };
 const foundPost = { findUnique: vi.fn() };
 const message = { findUnique: vi.fn() };
 const userTable = { findUnique: vi.fn() };
+const comment = { findUnique: vi.fn() };
 
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { report, lostPost, foundPost, message, user: userTable },
+  prisma: { report, lostPost, foundPost, message, user: userTable, comment },
 }));
 vi.mock("@/generated/prisma/client", () => ({
-  ReportTargetType: { POST: "POST", MESSAGE: "MESSAGE", USER: "USER" },
+  ReportTargetType: { POST: "POST", MESSAGE: "MESSAGE", USER: "USER", COMMENT: "COMMENT" },
   ReportStatus: { PENDING: "PENDING", DISMISSED: "DISMISSED", ACTIONED: "ACTIONED" },
   Prisma: { PrismaClientKnownRequestError: FakePrismaClientKnownRequestError },
 }));
@@ -107,6 +108,58 @@ describe("createReport", () => {
     const result = await createReport(reporter, { targetType: "user", targetId: reporter.id, reason: "기타" });
 
     expect(result).toEqual({ kind: "self_report" });
+  });
+
+  it("rejects reporting a nonexistent comment", async () => {
+    comment.findUnique.mockResolvedValueOnce(null);
+
+    const result = await createReport(reporter, { targetType: "comment", targetId: 42, reason: "욕설/비방" });
+
+    expect(result).toEqual({ kind: "target_not_found" });
+    expect(report.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects self-reporting your own comment", async () => {
+    comment.findUnique.mockResolvedValueOnce({ id: 42, authorUserId: reporter.id });
+
+    const result = await createReport(reporter, { targetType: "comment", targetId: 42, reason: "욕설/비방" });
+
+    expect(result).toEqual({ kind: "self_report" });
+    expect(report.create).not.toHaveBeenCalled();
+  });
+
+  it("creates a report for someone else's comment", async () => {
+    comment.findUnique.mockResolvedValueOnce({ id: 42, authorUserId: 999 });
+    report.create.mockResolvedValueOnce(reportRow({ targetType: "COMMENT", targetId: 42 }));
+
+    const result = await createReport(reporter, { targetType: "comment", targetId: 42, reason: "욕설/비방" });
+
+    expect(result.kind).toBe("ok");
+    expect(comment.findUnique).toHaveBeenCalledWith({
+      where: { id: 42 },
+      select: { id: true, authorUserId: true },
+    });
+    expect(report.create).toHaveBeenCalledWith({
+      data: { reporterUserId: reporter.id, targetType: "COMMENT", targetId: 42, reason: "욕설/비방", detail: null },
+    });
+  });
+
+  it("creates a reply's report the same way as a top-level comment's (a reply is just another Comment row)", async () => {
+    comment.findUnique.mockResolvedValueOnce({ id: 43, authorUserId: 999 });
+    report.create.mockResolvedValueOnce(reportRow({ targetType: "COMMENT", targetId: 43 }));
+
+    const result = await createReport(reporter, { targetType: "comment", targetId: 43, reason: "기타" });
+
+    expect(result.kind).toBe("ok");
+  });
+
+  it("relies on the same UNIQUE constraint (P2002) for a duplicate comment report", async () => {
+    comment.findUnique.mockResolvedValueOnce({ id: 42, authorUserId: 999 });
+    report.create.mockRejectedValueOnce(new FakePrismaClientKnownRequestError("P2002"));
+
+    const result = await createReport(reporter, { targetType: "comment", targetId: 42, reason: "기타" });
+
+    expect(result).toEqual({ kind: "duplicate" });
   });
 
   it("creates a report for a valid, non-self target", async () => {

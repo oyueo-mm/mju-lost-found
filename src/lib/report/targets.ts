@@ -42,3 +42,16 @@ export type ResolvedUserTarget = { id: number };
 export async function resolveUserTarget(targetId: number): Promise<ResolvedUserTarget | null> {
   return prisma.user.findUnique({ where: { id: targetId }, select: { id: true } });
 }
+
+export type ResolvedCommentTarget = { id: number; authorUserId: number };
+
+// Phase C-3: Comment.id alone is enough -- no sign-encoding needed (see
+// this file's own comment above resolvePostTarget for why LostPost/
+// FoundPost need one and this doesn't). No separate "does the underlying
+// post still exist" check either: Comment.lostPostId/foundPostId are real
+// FKs with onDelete: Cascade (see schema.prisma), so a Comment row can
+// only exist here at all if its post still does -- finding this row is
+// already proof of that.
+export async function resolveCommentTarget(targetId: number): Promise<ResolvedCommentTarget | null> {
+  return prisma.comment.findUnique({ where: { id: targetId }, select: { id: true, authorUserId: true } });
+}

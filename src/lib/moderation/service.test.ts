@@ -14,6 +14,7 @@ const lostPost = { findUnique: vi.fn() };
 const foundPost = { findUnique: vi.fn() };
 const message = { findUnique: vi.fn() };
 const userTable = { findUnique: vi.fn() };
+const comment = { findUnique: vi.fn() };
 
 // Transaction body operates on a `tx` object -- give it its own set of
 // mocks so assertions on e.g. tx.report.updateMany don't collide with the
@@ -23,6 +24,7 @@ const txLostPost = { delete: vi.fn() };
 const txFoundPost = { delete: vi.fn() };
 const txMessage = { update: vi.fn() };
 const txUser = { update: vi.fn() };
+const txComment = { delete: vi.fn() };
 const txModerationAction = { create: vi.fn() };
 const txNotification = { create: vi.fn() };
 
@@ -33,18 +35,24 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
     foundPost: txFoundPost,
     message: txMessage,
     user: txUser,
+    comment: txComment,
     moderationAction: txModerationAction,
     notification: txNotification,
   }),
 );
 
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { report, lostPost, foundPost, message, user: userTable, $transaction },
+  prisma: { report, lostPost, foundPost, message, user: userTable, comment, $transaction },
 }));
 vi.mock("@/generated/prisma/client", () => ({
-  ReportTargetType: { POST: "POST", MESSAGE: "MESSAGE", USER: "USER" },
+  ReportTargetType: { POST: "POST", MESSAGE: "MESSAGE", USER: "USER", COMMENT: "COMMENT" },
   ReportStatus: { PENDING: "PENDING", DISMISSED: "DISMISSED", ACTIONED: "ACTIONED" },
-  ModerationActionType: { DELETE_POST: "DELETE_POST", HIDE_MESSAGE: "HIDE_MESSAGE", SUSPEND_USER: "SUSPEND_USER" },
+  ModerationActionType: {
+    DELETE_POST: "DELETE_POST",
+    HIDE_MESSAGE: "HIDE_MESSAGE",
+    SUSPEND_USER: "SUSPEND_USER",
+    DELETE_COMMENT: "DELETE_COMMENT",
+  },
   LostPostStatus: { SEARCHING: "SEARCHING", FOUND: "FOUND" },
   FoundPostStatus: { KEEPING: "KEEPING", COMPLETED: "COMPLETED" },
   NotificationType: {
@@ -116,6 +124,39 @@ describe("listReportsForAdmin / getReportForAdmin", () => {
     report.findUnique.mockResolvedValueOnce(null);
     const result = await getReportForAdmin(admin, 999);
     expect(result).toEqual({ kind: "not_found" });
+  });
+
+  it("identifies a comment report and surfaces the comment's content for the admin (Phase C-3)", async () => {
+    report.findUnique.mockResolvedValueOnce({
+      ...reportRow({ targetType: "COMMENT", targetId: 42 }),
+      reporter: { nickname: "신고자" },
+      processedBy: null,
+      moderationAction: null,
+    });
+    comment.findUnique.mockResolvedValueOnce({
+      content: "부적절한 댓글 내용",
+      createdAt: new Date("2026-01-02"),
+      lostPostId: 7,
+      foundPostId: null,
+      parentId: null,
+      author: { nickname: "댓글작성자" },
+    });
+
+    const result = await getReportForAdmin(admin, 10);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.targetDeleted).toBe(false);
+      expect(result.data.targetInfo).toEqual({
+        kind: "comment",
+        content: "부적절한 댓글 내용",
+        authorNickname: "댓글작성자",
+        createdAt: new Date("2026-01-02"),
+        postType: "lost",
+        postId: 7,
+        parentId: null,
+      });
+    }
   });
 
   it("marks the target as deleted when the underlying post is gone", async () => {
@@ -262,6 +303,48 @@ describe("applyReportAction", () => {
     expect(txNotification.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ userId: 55, type: "MESSAGE_HIDDEN" }),
     });
+  });
+
+  it("deletes the target comment, records the ModerationAction, marks the report actioned, and sends no target-owner notification (Phase C-3)", async () => {
+    report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "COMMENT", targetId: 42 }));
+    comment.findUnique.mockResolvedValueOnce({ id: 42, authorUserId: 77 });
+    txReport.updateMany.mockResolvedValueOnce({ count: 1 });
+    txReport.findUniqueOrThrow.mockResolvedValueOnce(reportRow({ targetType: "COMMENT", status: "ACTIONED" }));
+
+    const result = await applyReportAction(admin, 10, "delete_comment", { actionReason: "부적절" });
+
+    expect(result.kind).toBe("ok");
+    expect(txComment.delete).toHaveBeenCalledWith({ where: { id: 42 } });
+    // No notification naming the comment's own author (77) -- only the
+    // reporter's REPORT_PROCESSED one further below.
+    expect(txNotification.create).not.toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: 77 }),
+    });
+    expect(txModerationAction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ reportId: 10, actionType: "DELETE_COMMENT", adminUserId: admin.id }),
+    });
+    expect(txNotification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: 3, type: "REPORT_PROCESSED" }),
+    });
+  });
+
+  it("returns target_gone for a comment report when the comment was already deleted", async () => {
+    report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "COMMENT", targetId: 42 }));
+    comment.findUnique.mockResolvedValueOnce(null);
+
+    const result = await applyReportAction(admin, 10, "delete_comment", {});
+
+    expect(result).toEqual({ kind: "target_gone" });
+    expect(txModerationAction.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects delete_comment against a non-comment report", async () => {
+    report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "POST" }));
+
+    const result = await applyReportAction(admin, 10, "delete_comment", {});
+
+    expect(result).toEqual({ kind: "invalid_action_type" });
+    expect($transaction).not.toHaveBeenCalled();
   });
 
   it("suspends the target user with a timed expiry when suspendDurationDays is given", async () => {

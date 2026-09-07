@@ -90,6 +90,23 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
               {formatDate(report.targetInfo.createdAt)}
             </span>
           </div>
+        ) : report.targetInfo.kind === "comment" ? (
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-foreground">
+              대상 댓글{report.targetInfo.parentId !== null ? " (답글)" : ""}
+            </span>
+            <span className="text-muted-foreground">{report.targetInfo.content}</span>
+            <span className="text-xs text-muted-foreground">
+              작성자: {report.targetInfo.authorNickname ?? "알 수 없음"} · 작성일:{" "}
+              {formatDate(report.targetInfo.createdAt)}
+            </span>
+            <Link
+              href={`/post/${report.targetInfo.postId}?type=${report.targetInfo.postType}`}
+              className="text-xs font-medium text-primary hover:opacity-80"
+            >
+              게시물로 이동
+            </Link>
+          </div>
         ) : (
           <div className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-foreground">대상 사용자</span>

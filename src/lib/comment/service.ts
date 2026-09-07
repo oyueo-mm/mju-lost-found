@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { isAdmin } from "@/lib/moderation/service";
 import type { PostType } from "@/lib/posts/schema";
-import type { User } from "@/generated/prisma/client";
+import { NotificationType, type User } from "@/generated/prisma/client";
 import type { CreateCommentInput, UpdateCommentInput } from "./schema";
 
 // Phase 23. Comment rows point at exactly one of LostPost/FoundPost via
@@ -16,6 +16,11 @@ export type CommentDTO = {
   content: string;
   createdAt: Date;
   updatedAt: Date;
+  // Phase C-2: null for a top-level comment, the parent comment's id for a
+  // reply. Never points at another reply -- see createComment's own
+  // depth check -- so a client can group replies under their parent with
+  // a single pass, no recursion needed.
+  parentId: number | null;
   author: { id: number; nickname: string | null };
 };
 
@@ -23,6 +28,15 @@ export type CommentMutationResult<T> =
   | { kind: "ok"; data: T }
   | { kind: "not_found" }
   | { kind: "post_not_found" }
+  // Phase C-2: parentId refers to a row that doesn't exist, or that
+  // belongs to a different post than the one being commented on (both
+  // treated identically -- from the caller's perspective there is no
+  // valid parent to reply to either way).
+  | { kind: "parent_not_found" }
+  // Phase C-2: parentId refers to a comment that is itself already a
+  // reply -- only one level of nesting is allowed (see this phase's own
+  // report for why).
+  | { kind: "reply_to_reply" }
   | { kind: "forbidden"; reason: "not_owner" | "suspended" | "not_admin" };
 
 const AUTHOR_SELECT = { id: true, nickname: true } as const;
@@ -32,6 +46,7 @@ function toCommentDTO(row: {
   content: string;
   createdAt: Date;
   updatedAt: Date;
+  parentId: number | null;
   author: { id: number; nickname: string | null };
 }): CommentDTO {
   return row;
@@ -79,13 +94,54 @@ export async function createComment(
     return { kind: "post_not_found" };
   }
 
-  const row = await prisma.comment.create({
-    data: {
-      content: input.content,
-      authorUserId: author.id,
-      ...(type === "lost" ? { lostPostId: postId } : { foundPostId: postId }),
-    },
-    include: { author: { select: AUTHOR_SELECT } },
+  // Phase C-2: resolved once, up front, so both the depth check below and
+  // the notification recipient (further down) read the same row -- no
+  // second query needed at notification time.
+  let parent: { id: number; parentId: number | null; authorUserId: number } | null = null;
+  if (input.parentId !== undefined) {
+    const parentRow = await prisma.comment.findUnique({
+      where: { id: input.parentId },
+      select: { id: true, parentId: true, authorUserId: true, lostPostId: true, foundPostId: true },
+    });
+    // Missing, or attached to a different post than this reply targets --
+    // both are "no valid parent here" from the caller's point of view.
+    const belongsToThisPost =
+      parentRow !== null && (type === "lost" ? parentRow.lostPostId === postId : parentRow.foundPostId === postId);
+    if (!parentRow || !belongsToThisPost) return { kind: "parent_not_found" };
+    // parentRow.parentId !== null means parentRow is itself a reply --
+    // only one level of nesting is allowed.
+    if (parentRow.parentId !== null) return { kind: "reply_to_reply" };
+    parent = parentRow;
+  }
+
+  const row = await prisma.$transaction(async (tx) => {
+    const created = await tx.comment.create({
+      data: {
+        content: input.content,
+        authorUserId: author.id,
+        parentId: parent?.id ?? null,
+        ...(type === "lost" ? { lostPostId: postId } : { foundPostId: postId }),
+      },
+      include: { author: { select: AUTHOR_SELECT } },
+    });
+
+    // Never notify yourself for replying to your own comment -- same
+    // "no self-notification" rule as chat/service.ts's own message
+    // notification (see that file's comment on the self-match case).
+    if (parent && parent.authorUserId !== author.id) {
+      await tx.notification.create({
+        data: {
+          userId: parent.authorUserId,
+          type: NotificationType.COMMENT_REPLY,
+          title: "댓글에 답글이 달렸습니다",
+          content: `${author.nickname ?? "누군가"}님이 회원님의 댓글에 답글을 남겼습니다.`,
+          relatedType: "comment",
+          relatedId: created.id,
+        },
+      });
+    }
+
+    return created;
   });
   return { kind: "ok", data: toCommentDTO(row) };
 }

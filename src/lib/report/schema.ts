@@ -2,8 +2,10 @@ import { z } from "zod";
 
 // Same three values as the legacy REPORT_TARGET_TYPES set and
 // prisma/schema.prisma's ReportTargetType enum (@map'd to these exact
-// lowercase strings).
-export const REPORT_TARGET_TYPES = ["post", "message", "user"] as const;
+// lowercase strings). "comment" (Phase C-3) is this branch's own addition
+// on top of that legacy set -- see targets.ts's resolveCommentTarget for
+// why it needs no sign-encoding the way "post" does.
+export const REPORT_TARGET_TYPES = ["post", "message", "user", "comment"] as const;
 export type ReportTargetType = (typeof REPORT_TARGET_TYPES)[number];
 export const reportTargetTypeSchema = z.enum(REPORT_TARGET_TYPES);
 
@@ -35,6 +37,7 @@ export const REPORT_TARGET_TYPE_LABELS: Record<ReportTargetType, string> = {
   post: "게시물",
   message: "메시지",
   user: "사용자",
+  comment: "댓글",
 };
 
 // targetId is signed for target_type="post": positive = LostPost id,

@@ -57,4 +57,19 @@ describe("GET /api/admin/reports", () => {
       expect.objectContaining({ status: "pending", targetType: "post", page: 1, limit: 20 }),
     );
   });
+
+  it("identifies comment reports via the targetType=comment filter (Phase C-3)", async () => {
+    requireAdminForApi.mockResolvedValueOnce({ user: admin });
+    listReportsForAdmin.mockResolvedValueOnce({
+      kind: "ok",
+      data: { items: [{ id: 2, targetType: "comment" }], page: 1, limit: 20, total: 1, totalPages: 1 },
+    });
+
+    const res = await GET(new NextRequest("http://localhost/api/admin/reports?targetType=comment"));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.data.items).toEqual([{ id: 2, targetType: "comment" }]);
+    expect(listReportsForAdmin).toHaveBeenCalledWith(admin, expect.objectContaining({ targetType: "comment" }));
+  });
 });

@@ -11,7 +11,7 @@ import {
 } from "@/generated/prisma/client";
 import { TARGET_TYPE_FROM_DB, TARGET_TYPE_TO_DB, toReportDTO, type ReportDTO } from "@/lib/report/service";
 import type { ReportStatusValue, ReportTargetType } from "@/lib/report/schema";
-import { resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "@/lib/report/targets";
+import { resolveCommentTarget, resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "@/lib/report/targets";
 import { TARGET_TYPE_TO_ACTION_TYPE, type ModerationActionTypeValue } from "./schema";
 
 // Same duplication tradeoff as notification/service.ts's
@@ -32,11 +32,13 @@ const ACTION_TYPE_TO_DB: Record<ModerationActionTypeValue, PrismaModerationActio
   delete_post: PrismaModerationActionType.DELETE_POST,
   hide_message: PrismaModerationActionType.HIDE_MESSAGE,
   suspend_user: PrismaModerationActionType.SUSPEND_USER,
+  delete_comment: PrismaModerationActionType.DELETE_COMMENT,
 };
 const ACTION_TYPE_FROM_DB: Record<PrismaModerationActionType, ModerationActionTypeValue> = {
   DELETE_POST: "delete_post",
   HIDE_MESSAGE: "hide_message",
   SUSPEND_USER: "suspend_user",
+  DELETE_COMMENT: "delete_comment",
 };
 
 // DB-sourced admin check only -- the caller must have obtained `admin` via
@@ -78,7 +80,11 @@ function toModerationActionDTO(row: ModerationAction & { adminUser: { nickname: 
 export type ReportTargetInfo =
   | { kind: "post"; postKind: "lost" | "found"; title: string; description: string; category: string; location: string; status: string; authorNickname: string | null; createdAt: Date }
   | { kind: "message"; content: string; senderNickname: string | null; createdAt: Date; chatRoomId: number }
-  | { kind: "user"; nickname: string | null };
+  | { kind: "user"; nickname: string | null }
+  // Phase C-3: postType/postId let the admin UI link to the post the
+  // comment belongs to (see resolveCommentTarget's own comment on why no
+  // separate "does the post still exist" check is needed here).
+  | { kind: "comment"; content: string; authorNickname: string | null; createdAt: Date; postType: "lost" | "found"; postId: number; parentId: number | null };
 
 async function loadTargetInfo(targetType: ReportTargetType, targetId: number): Promise<ReportTargetInfo | null> {
   if (targetType === "post") {
@@ -132,6 +138,23 @@ async function loadTargetInfo(targetType: ReportTargetType, targetId: number): P
       senderNickname: message.sender.nickname,
       createdAt: message.createdAt,
       chatRoomId: message.chatRoomId,
+    };
+  }
+
+  if (targetType === "comment") {
+    const comment = await prisma.comment.findUnique({
+      where: { id: targetId },
+      include: { author: { select: { nickname: true } } },
+    });
+    if (!comment) return null;
+    return {
+      kind: "comment",
+      content: comment.content,
+      authorNickname: comment.author.nickname,
+      createdAt: comment.createdAt,
+      postType: comment.lostPostId !== null ? "lost" : "found",
+      postId: (comment.lostPostId ?? comment.foundPostId)!,
+      parentId: comment.parentId,
     };
   }
 
@@ -389,6 +412,18 @@ export async function applyReportAction(
             relatedId: reportId,
           },
         });
+      } else if (targetType === "comment") {
+        // Phase C-3: comment deletion, no target-owner notification -- see
+        // this phase's own report for why (notification behavior is kept
+        // untouched this phase; the reporter still gets the usual
+        // REPORT_PROCESSED notification below, unconditionally, same as
+        // every other target type). Deleting a top-level comment cascades
+        // to its own replies via Comment.parentId's onDelete: Cascade
+        // (schema.prisma), same as a self/admin delete through
+        // comment/service.ts's deleteComment().
+        const resolved = await resolveCommentTarget(report.targetId);
+        if (!resolved) return { outcome: "target_gone" as const };
+        await tx.comment.delete({ where: { id: resolved.id } });
       } else {
         const resolved = await resolveUserTarget(report.targetId);
         if (!resolved) return { outcome: "target_gone" as const };

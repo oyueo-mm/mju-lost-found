@@ -7,7 +7,7 @@ import {
   type User,
 } from "@/generated/prisma/client";
 import type { CreateReportInput, ReportStatusValue, ReportTargetType } from "./schema";
-import { resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "./targets";
+import { resolveCommentTarget, resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "./targets";
 
 // Prisma's generated enum values are the ASCII identifiers (POST, MESSAGE,
 // USER / PENDING, DISMISSED, ACTIONED) -- @map only renames the DB column
@@ -18,11 +18,13 @@ export const TARGET_TYPE_TO_DB: Record<ReportTargetType, PrismaReportTargetType>
   post: PrismaReportTargetType.POST,
   message: PrismaReportTargetType.MESSAGE,
   user: PrismaReportTargetType.USER,
+  comment: PrismaReportTargetType.COMMENT,
 };
 export const TARGET_TYPE_FROM_DB: Record<PrismaReportTargetType, ReportTargetType> = {
   POST: "post",
   MESSAGE: "message",
   USER: "user",
+  COMMENT: "comment",
 };
 export const STATUS_FROM_DB: Record<PrismaReportStatus, ReportStatusValue> = {
   PENDING: "pending",
@@ -78,6 +80,10 @@ export async function createReport(reporter: User, input: CreateReportInput): Pr
     const target = await resolveMessageTarget(input.targetId);
     if (!target) return { kind: "target_not_found" };
     if (target.senderUserId === reporter.id) return { kind: "self_report" };
+  } else if (input.targetType === "comment") {
+    const target = await resolveCommentTarget(input.targetId);
+    if (!target) return { kind: "target_not_found" };
+    if (target.authorUserId === reporter.id) return { kind: "self_report" };
   } else {
     const target = await resolveUserTarget(input.targetId);
     if (!target) return { kind: "target_not_found" };

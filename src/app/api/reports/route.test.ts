@@ -113,6 +113,66 @@ describe("POST /api/reports", () => {
     expect(res.status).toBe(409);
   });
 
+  it("creates a comment report for a logged-in user (Phase C-3)", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    createReport.mockResolvedValueOnce({ kind: "ok", data: { id: 1, targetType: "comment", targetId: 42 } });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/reports", {
+        method: "POST",
+        body: JSON.stringify({ targetType: "comment", targetId: 42, reason: "욕설/비방" }),
+      }),
+    );
+
+    expect(res.status).toBe(201);
+    expect(createReport).toHaveBeenCalledWith(
+      sessionUser,
+      expect.objectContaining({ targetType: "comment", targetId: 42, reason: "욕설/비방" }),
+    );
+  });
+
+  it("rejects a blank reason for a comment report before reaching the service", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/reports", {
+        method: "POST",
+        body: JSON.stringify({ targetType: "comment", targetId: 42, reason: "" }),
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(createReport).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for a nonexistent comment target", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    createReport.mockResolvedValueOnce({ kind: "target_not_found" });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/reports", {
+        method: "POST",
+        body: JSON.stringify({ targetType: "comment", targetId: 999, reason: "기타" }),
+      }),
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 409 for a duplicate comment report on the same comment", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    createReport.mockResolvedValueOnce({ kind: "duplicate" });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/reports", {
+        method: "POST",
+        body: JSON.stringify({ targetType: "comment", targetId: 42, reason: "기타" }),
+      }),
+    );
+
+    expect(res.status).toBe(409);
+  });
+
   it("files the report as the authenticated session user, never any reporterId in the body", async () => {
     requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
     createReport.mockResolvedValueOnce({ kind: "ok", data: { id: 1 } });

@@ -86,6 +86,55 @@ describe("POST /api/posts/[id]/comments", () => {
     expect(createComment).toHaveBeenCalledWith(sessionUser, "lost", 1, { content: "안녕하세요" });
   });
 
+  it("passes parentId through to createComment as a reply", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    createComment.mockResolvedValueOnce({
+      kind: "ok",
+      data: { id: 2, content: "네!", createdAt: new Date(), updatedAt: new Date(), parentId: 1, author: sessionUser },
+    });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/posts/1/comments?type=lost", {
+        method: "POST",
+        body: JSON.stringify({ content: "네!", parentId: 1 }),
+      }),
+      params(),
+    );
+
+    expect(res.status).toBe(201);
+    expect(createComment).toHaveBeenCalledWith(sessionUser, "lost", 1, { content: "네!", parentId: 1 });
+  });
+
+  it("returns 404 when replying to a nonexistent/other-post parentId", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    createComment.mockResolvedValueOnce({ kind: "parent_not_found" });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/posts/1/comments?type=lost", {
+        method: "POST",
+        body: JSON.stringify({ content: "네!", parentId: 999 }),
+      }),
+      params(),
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 400 when replying to a reply", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    createComment.mockResolvedValueOnce({ kind: "reply_to_reply" });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/posts/1/comments?type=lost", {
+        method: "POST",
+        body: JSON.stringify({ content: "네!", parentId: 2 }),
+      }),
+      params(),
+    );
+
+    expect(res.status).toBe(400);
+  });
+
   it("blocks a suspended user with 403", async () => {
     requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
     createComment.mockResolvedValueOnce({ kind: "forbidden", reason: "suspended" });
