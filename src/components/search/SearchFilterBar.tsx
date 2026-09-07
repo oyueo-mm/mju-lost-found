@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { CAMPUSES, CATEGORIES, SEARCH_MODES } from "@/lib/posts/schema";
-import type { PostListType, SearchMode, SortOption } from "@/lib/posts/schema";
+import type { PostListType, PostType, SearchMode, SortOption } from "@/lib/posts/schema";
 import { ImageSearchPanel } from "./ImageSearchPanel";
 
 type StatusOption = { value: string; label: string };
@@ -22,10 +22,14 @@ type SearchFilterBarProps = {
   // as this <select>'s default so it never lies about what's currently
   // filtered. Irrelevant (and unused) wherever statusOptions is omitted.
   defaultStatus?: string;
-  // Phase 32: only /search passes this -- /lost and /found keep this
-  // component byte-for-byte unchanged (prop omitted -> defaults false ->
-  // no 3rd radio, no ImageSearchPanel rendered at all).
+  // Phase 32/33: /search, /lost, and /found all pass this now.
   imageSearchEnabled?: boolean;
+  // Phase 33: /lost and /found each fix the board server-side (never
+  // rendered as a selector -- see showTypeFilter's own comment), so
+  // ImageSearchPanel has no `type` state to read there the way /search's
+  // own type <select> provides. Only meaningful when showTypeFilter is
+  // false; ignored (the type <select>'s own state wins) otherwise.
+  fixedType?: PostType;
   // Phase 32: the page's own (server-rendered) keyword/semantic results +
   // pagination, passed down so this component can hide them while
   // ImageSearchPanel owns the results area instead (image mode never
@@ -63,6 +67,7 @@ export function SearchFilterBar({
   statusOptions,
   defaultStatus,
   imageSearchEnabled = false,
+  fixedType,
   children,
 }: SearchFilterBarProps) {
   const router = useRouter();
@@ -88,6 +93,12 @@ export function SearchFilterBar({
   // never rendered as a selector at all, so this can never actually be
   // true there regardless of this component's own `type` state.
   const semanticBlockedByType = showTypeFilter && mode === "semantic" && type === "all";
+  // Phase 33: the board image search actually targets -- /search's own
+  // type <select> when present, otherwise the page's fixed board
+  // (/lost -> "lost", /found -> "found"). Never "all" once fixedType is
+  // given, so the "select a board" warning below never fires on those two
+  // pages.
+  const imageSearchType: PostListType = showTypeFilter ? type : (fixedType ?? "all");
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -146,7 +157,7 @@ export function SearchFilterBar({
 
       {mode === "image" ? (
         <>
-          {type === "all" && (
+          {imageSearchType === "all" && (
             <p className="text-xs text-warning">
               이미지 검색은 분실물 또는 습득물 게시판을 선택한 경우에만 사용할 수 있습니다.
             </p>
@@ -164,7 +175,7 @@ export function SearchFilterBar({
               ))}
             </select>
           )}
-          <ImageSearchPanel type={type} />
+          <ImageSearchPanel type={imageSearchType} />
         </>
       ) : (
         <>

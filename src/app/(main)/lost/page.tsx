@@ -65,30 +65,37 @@ export default async function LostListPage({
           분실물 등록
         </LinkButton>
       </div>
-      <SearchFilterBar basePath="/lost" statusOptions={STATUS_OPTIONS} defaultStatus={LOST_STATUSES[0]} />
-      <SemanticSearchNotice mode={mode} />
-      {posts.items.length === 0 ? (
-        <EmptyState
-          title={raw.q || raw.category || raw.campus || raw.status ? "검색 결과가 없어요." : "아직 등록된 분실물이 없어요."}
-          description={
-            raw.q || raw.category || raw.campus || raw.status
-              ? "다른 검색어나 필터로 다시 시도해보세요."
-              : "가장 먼저 물건을 등록해보세요."
-          }
-          action={
-            !(raw.q || raw.category || raw.campus || raw.status) && (
-              <LinkButton href="/lost/new">분실물 등록하기</LinkButton>
-            )
-          }
-        />
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {posts.items.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
-        </div>
-      )}
-      <Pagination basePath="/lost" currentSearchParams={raw} page={posts.page} totalPages={posts.totalPages} />
+      <SearchFilterBar
+        basePath="/lost"
+        statusOptions={STATUS_OPTIONS}
+        defaultStatus={LOST_STATUSES[0]}
+        imageSearchEnabled
+        fixedType="lost"
+      >
+        <SemanticSearchNotice mode={mode} />
+        {posts.items.length === 0 ? (
+          <EmptyState
+            title={raw.q || raw.category || raw.campus || raw.status ? "검색 결과가 없어요." : "아직 등록된 분실물이 없어요."}
+            description={
+              raw.q || raw.category || raw.campus || raw.status
+                ? "다른 검색어나 필터로 다시 시도해보세요."
+                : "가장 먼저 물건을 등록해보세요."
+            }
+            action={
+              !(raw.q || raw.category || raw.campus || raw.status) && (
+                <LinkButton href="/lost/new">분실물 등록하기</LinkButton>
+              )
+            }
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {posts.items.map((post) => (
+              <PostCard key={post.id} post={post} />
+            ))}
+          </div>
+        )}
+        <Pagination basePath="/lost" currentSearchParams={raw} page={posts.page} totalPages={posts.totalPages} />
+      </SearchFilterBar>
     </div>
   );
 }

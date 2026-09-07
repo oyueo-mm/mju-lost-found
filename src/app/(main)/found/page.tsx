@@ -55,30 +55,37 @@ export default async function FoundListPage({
           습득물 등록
         </LinkButton>
       </div>
-      <SearchFilterBar basePath="/found" statusOptions={STATUS_OPTIONS} defaultStatus={FOUND_STATUSES[0]} />
-      <SemanticSearchNotice mode={mode} />
-      {posts.items.length === 0 ? (
-        <EmptyState
-          title={raw.q || raw.category || raw.campus || raw.status ? "검색 결과가 없어요." : "아직 등록된 습득물이 없어요."}
-          description={
-            raw.q || raw.category || raw.campus || raw.status
-              ? "다른 검색어나 필터로 다시 시도해보세요."
-              : "주운 물건을 등록해서 주인을 찾아주세요."
-          }
-          action={
-            !(raw.q || raw.category || raw.campus || raw.status) && (
-              <LinkButton href="/found/new">습득물 등록하기</LinkButton>
-            )
-          }
-        />
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {posts.items.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
-        </div>
-      )}
-      <Pagination basePath="/found" currentSearchParams={raw} page={posts.page} totalPages={posts.totalPages} />
+      <SearchFilterBar
+        basePath="/found"
+        statusOptions={STATUS_OPTIONS}
+        defaultStatus={FOUND_STATUSES[0]}
+        imageSearchEnabled
+        fixedType="found"
+      >
+        <SemanticSearchNotice mode={mode} />
+        {posts.items.length === 0 ? (
+          <EmptyState
+            title={raw.q || raw.category || raw.campus || raw.status ? "검색 결과가 없어요." : "아직 등록된 습득물이 없어요."}
+            description={
+              raw.q || raw.category || raw.campus || raw.status
+                ? "다른 검색어나 필터로 다시 시도해보세요."
+                : "주운 물건을 등록해서 주인을 찾아주세요."
+            }
+            action={
+              !(raw.q || raw.category || raw.campus || raw.status) && (
+                <LinkButton href="/found/new">습득물 등록하기</LinkButton>
+              )
+            }
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {posts.items.map((post) => (
+              <PostCard key={post.id} post={post} />
+            ))}
+          </div>
+        )}
+        <Pagination basePath="/found" currentSearchParams={raw} page={posts.page} totalPages={posts.totalPages} />
+      </SearchFilterBar>
     </div>
   );
 }
