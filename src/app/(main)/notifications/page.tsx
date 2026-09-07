@@ -57,7 +57,7 @@ export default async function NotificationsPage({
       ...n,
       typeLabel: NOTIFICATION_TYPE_LABELS[n.type] ?? n.type,
       createdAtLabel: formatDate(n.createdAt),
-      href: await resolveHref(user.id, n.relatedType, n.relatedId),
+      href: await resolveHref(user.id, n.type, n.relatedType, n.relatedId),
     })),
   );
 
@@ -78,6 +78,7 @@ export default async function NotificationsPage({
             <NotificationItem
               key={n.id}
               id={n.id}
+              type={n.type}
               title={n.title}
               content={n.content}
               typeLabel={n.typeLabel}

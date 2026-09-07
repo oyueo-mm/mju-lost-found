@@ -296,14 +296,24 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
 
             return (
               <div key={comment.id} className="flex flex-col gap-2">
-                <div className="flex flex-col gap-1 rounded-lg border border-border p-3 text-sm">
+                {/* Phase E-4: id target for notification deep links
+                    (/post/{id}?type=...#comment-{id}) -- pure native
+                    browser anchor scroll, no JS added here. */}
+                <div
+                  id={`comment-${comment.id}`}
+                  className="flex flex-col gap-1 rounded-lg border border-border p-3 text-sm"
+                >
                   {renderCommentBody(comment)}
                 </div>
 
                 {replies.length > 0 && (
                   <div className="ml-6 flex flex-col gap-2 border-l border-border pl-3">
                     {replies.map((reply) => (
-                      <div key={reply.id} className="flex flex-col gap-1 rounded-lg border border-border p-3 text-sm">
+                      <div
+                        key={reply.id}
+                        id={`comment-${reply.id}`}
+                        className="flex flex-col gap-1 rounded-lg border border-border p-3 text-sm"
+                      >
                         {renderCommentBody(reply)}
                       </div>
                     ))}

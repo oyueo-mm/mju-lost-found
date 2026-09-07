@@ -5,6 +5,7 @@ const notification = {
   count: vi.fn(),
   findUnique: vi.fn(),
   updateMany: vi.fn(),
+  delete: vi.fn(),
 };
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: { notification } }));
@@ -15,6 +16,7 @@ vi.mock("@/generated/prisma/client", () => ({
 }));
 
 const {
+  deleteNotification,
   getUnreadNotificationCount,
   listNotifications,
   markAllNotificationsAsRead,
@@ -157,5 +159,64 @@ describe("markAllNotificationsAsRead", () => {
       where: { userId: 1, isRead: false },
       data: { isRead: true },
     });
+  });
+});
+
+// Phase E-2
+describe("deleteNotification", () => {
+  it("returns not_found for a nonexistent notification", async () => {
+    notification.findUnique.mockResolvedValueOnce(null);
+
+    const result = await deleteNotification(999, 1);
+
+    expect(result).toEqual({ kind: "not_found" });
+    expect(notification.delete).not.toHaveBeenCalled();
+  });
+
+  it("rejects deleting another user's notification", async () => {
+    notification.findUnique.mockResolvedValueOnce(notificationRow({ userId: 2 }));
+
+    const result = await deleteNotification(1, 1);
+
+    expect(result).toEqual({ kind: "forbidden" });
+    expect(notification.delete).not.toHaveBeenCalled();
+  });
+
+  it("hard-deletes the owner's own notification", async () => {
+    notification.findUnique.mockResolvedValueOnce(notificationRow({ userId: 1 }));
+    notification.delete.mockResolvedValueOnce({});
+
+    const result = await deleteNotification(1, 1);
+
+    expect(result).toEqual({ kind: "ok", data: { id: 1 } });
+    expect(notification.delete).toHaveBeenCalledWith({ where: { id: 1 } });
+  });
+
+  it("needs no separate unread-count bookkeeping -- deleting an unread notification never touches updateMany/count itself", async () => {
+    notification.findUnique.mockResolvedValueOnce(notificationRow({ userId: 1, isRead: false }));
+    notification.delete.mockResolvedValueOnce({});
+
+    await deleteNotification(1, 1);
+
+    expect(notification.updateMany).not.toHaveBeenCalled();
+    expect(notification.count).not.toHaveBeenCalled();
+  });
+
+  // Not a real DB, so this demonstrates the actual guarantee at the unit
+  // level: getUnreadNotificationCount is one plain COUNT query with no
+  // separate decrement step -- whatever the mock says the table contains
+  // (fewer rows, after a delete) is exactly what the next call reports,
+  // with zero code involved beyond the query itself.
+  it("reflects a lower unread count on the next call after an unread notification is deleted", async () => {
+    notification.count.mockResolvedValueOnce(3);
+    expect(await getUnreadNotificationCount(1)).toBe(3);
+
+    notification.findUnique.mockResolvedValueOnce(notificationRow({ userId: 1, isRead: false }));
+    notification.delete.mockResolvedValueOnce({});
+    await deleteNotification(1, 1);
+
+    notification.count.mockResolvedValueOnce(2);
+    expect(await getUnreadNotificationCount(1)).toBe(2);
+    expect(notification.count).toHaveBeenCalledWith({ where: { userId: 1, isRead: false } });
   });
 });

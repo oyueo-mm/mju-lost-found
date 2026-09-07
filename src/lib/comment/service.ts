@@ -204,3 +204,24 @@ export async function countCommentsForPost(type: PostType, postId: number): Prom
     where: type === "lost" ? { lostPostId: postId } : { foundPostId: postId },
   });
 }
+
+// Phase E-4: resolves a COMMENT_REPLY notification's relatedId (a Comment
+// id -- see createComment()'s own `relatedId: created.id` above, always
+// the reply itself, never its parent) to the post it belongs to. Mirrors
+// chat/service.ts's own getMessage(): deliberately returns only
+// postId/postType, no content/author, and performs no authorization of
+// its own -- comment/post reads are public in this app (see
+// listCommentsForPost's own callers), so there's nothing to gate here;
+// the caller (resolveHref) just needs enough to build a link.
+export async function getCommentPostRef(
+  commentId: number,
+): Promise<{ postId: number; postType: PostType } | null> {
+  const comment = await prisma.comment.findUnique({
+    where: { id: commentId },
+    select: { lostPostId: true, foundPostId: true },
+  });
+  if (!comment) return null;
+  if (comment.lostPostId !== null) return { postId: comment.lostPostId, postType: "lost" };
+  if (comment.foundPostId !== null) return { postId: comment.foundPostId, postType: "found" };
+  return null;
+}

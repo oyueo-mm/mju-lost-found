@@ -33,7 +33,7 @@ vi.mock("@/generated/prisma/client", () => ({
   Prisma: { PrismaClientKnownRequestError: FakePrismaClientKnownRequestError },
 }));
 
-const { createReport, getReportForUser, listReportsForUser } = await import("./service");
+const { createReport, getReportForUser, getReportTargetRef, listReportsForUser } = await import("./service");
 
 const reporter = { id: 1, nickname: "신고자" } as unknown as User;
 
@@ -294,5 +294,32 @@ describe("listReportsForUser", () => {
       orderBy: { createdAt: "desc" },
     });
     expect(result).toHaveLength(1);
+  });
+});
+
+// Phase E-4
+describe("getReportTargetRef", () => {
+  it("returns null for a nonexistent report", async () => {
+    report.findUnique.mockResolvedValueOnce(null);
+    expect(await getReportTargetRef(999)).toBeNull();
+  });
+
+  it("resolves a post-target report, translating the DB enum", async () => {
+    report.findUnique.mockResolvedValueOnce({ targetType: "POST", targetId: 5 });
+
+    const ref = await getReportTargetRef(10);
+
+    expect(ref).toEqual({ targetType: "post", targetId: 5 });
+  });
+
+  it("selects only targetType/targetId -- never reporterUserId/reason/detail/adminNote", async () => {
+    report.findUnique.mockResolvedValueOnce({ targetType: "USER", targetId: 3 });
+
+    await getReportTargetRef(10);
+
+    expect(report.findUnique).toHaveBeenCalledWith({
+      where: { id: 10 },
+      select: { targetType: true, targetId: true },
+    });
   });
 });

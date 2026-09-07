@@ -5,14 +5,15 @@ import { jsonError } from "@/lib/posts/response";
 
 const requireUserForApi = vi.fn();
 const markNotificationAsRead = vi.fn();
+const deleteNotification = vi.fn();
 
 vi.mock("@/lib/posts/http", async () => {
   const response = await import("@/lib/posts/response");
   return { ...response, requireUserForApi };
 });
-vi.mock("@/lib/notification/service", () => ({ markNotificationAsRead }));
+vi.mock("@/lib/notification/service", () => ({ markNotificationAsRead, deleteNotification }));
 
-const { PATCH } = await import("./route");
+const { DELETE, PATCH } = await import("./route");
 
 const sessionUser = { id: 1, nickname: "닉네임" };
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -59,5 +60,59 @@ describe("PATCH /api/notifications/[id]", () => {
     expect(res.status).toBe(200);
     expect(json.data.isRead).toBe(true);
     expect(markNotificationAsRead).toHaveBeenCalledWith(1, sessionUser.id);
+  });
+});
+
+// Phase E-2: same route file as PATCH above -- no new API route.
+describe("DELETE /api/notifications/[id]", () => {
+  it("rejects an unauthenticated request", async () => {
+    requireUserForApi.mockResolvedValueOnce({ response: jsonError(401, "로그인이 필요합니다.") });
+
+    const res = await DELETE(
+      new NextRequest("http://localhost/api/notifications/1", { method: "DELETE" }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(401);
+    expect(deleteNotification).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for a nonexistent notification", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    deleteNotification.mockResolvedValueOnce({ kind: "not_found" });
+
+    const res = await DELETE(
+      new NextRequest("http://localhost/api/notifications/999", { method: "DELETE" }),
+      params("999"),
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects deleting another user's notification", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    deleteNotification.mockResolvedValueOnce({ kind: "forbidden" });
+
+    const res = await DELETE(
+      new NextRequest("http://localhost/api/notifications/1", { method: "DELETE" }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it("deletes the notification for the owner", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    deleteNotification.mockResolvedValueOnce({ kind: "ok", data: { id: 1 } });
+
+    const res = await DELETE(
+      new NextRequest("http://localhost/api/notifications/1", { method: "DELETE" }),
+      params("1"),
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.data.id).toBe(1);
+    expect(deleteNotification).toHaveBeenCalledWith(1, sessionUser.id);
   });
 });

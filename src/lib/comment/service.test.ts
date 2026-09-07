@@ -36,7 +36,9 @@ vi.mock("@/generated/prisma/client", () => ({
   NotificationType: { COMMENT_REPLY: "COMMENT_REPLY" },
 }));
 
-const { createComment, deleteComment, listCommentsForPost, updateComment } = await import("./service");
+const { createComment, deleteComment, getCommentPostRef, listCommentsForPost, updateComment } = await import(
+  "./service"
+);
 
 const author = { id: 1, isSuspended: false, suspendedUntil: null, isAdmin: false } as unknown as User;
 const suspendedAuthor = { ...author, isSuspended: true } as unknown as User;
@@ -293,5 +295,33 @@ describe("deleteComment", () => {
   it("reports not_found for a nonexistent comment", async () => {
     comment.findUnique.mockResolvedValueOnce(null);
     expect(await deleteComment(author, 999)).toEqual({ kind: "not_found" });
+  });
+});
+
+// Phase E-4
+describe("getCommentPostRef", () => {
+  it("resolves a comment on a LostPost", async () => {
+    comment.findUnique.mockResolvedValueOnce({ lostPostId: 5, foundPostId: null });
+
+    const ref = await getCommentPostRef(10);
+
+    expect(ref).toEqual({ postId: 5, postType: "lost" });
+    expect(comment.findUnique).toHaveBeenCalledWith({
+      where: { id: 10 },
+      select: { lostPostId: true, foundPostId: true },
+    });
+  });
+
+  it("resolves a comment on a FoundPost", async () => {
+    comment.findUnique.mockResolvedValueOnce({ lostPostId: null, foundPostId: 7 });
+
+    const ref = await getCommentPostRef(11);
+
+    expect(ref).toEqual({ postId: 7, postType: "found" });
+  });
+
+  it("returns null for a nonexistent comment", async () => {
+    comment.findUnique.mockResolvedValueOnce(null);
+    expect(await getCommentPostRef(999)).toBeNull();
   });
 });

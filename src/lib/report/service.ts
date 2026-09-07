@@ -149,3 +149,19 @@ export async function listReportsForUser(reporterUserId: number): Promise<Report
   });
   return rows.map(toReportDTO);
 }
+
+// Phase E-4: resolves a Report's own target reference -- used only by
+// resolveHref (notifications) to route REPORT_PROCESSED/MESSAGE_HIDDEN
+// deep links back to the *originally reported* content, via the existing
+// resolvePostTarget/resolveMessageTarget/resolveCommentTarget resolvers
+// (targets.ts). Deliberately selects only targetType/targetId --
+// never reporterUserId/reason/detail/adminNote -- so this can never leak
+// who filed the report or an admin's notes to whichever user (reporter
+// or the person sanctioned) resolveHref is building a link for, no
+// matter which of those two callers it ends up serving.
+export async function getReportTargetRef(
+  id: number,
+): Promise<{ targetType: ReportTargetType; targetId: number } | null> {
+  const report = await prisma.report.findUnique({ where: { id }, select: { targetType: true, targetId: true } });
+  return report ? { targetType: TARGET_TYPE_FROM_DB[report.targetType], targetId: report.targetId } : null;
+}

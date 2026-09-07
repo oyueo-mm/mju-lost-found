@@ -138,3 +138,27 @@ export async function markAllNotificationsAsRead(userId: number): Promise<number
   });
   return count;
 }
+
+// Phase E-2: ownership checked explicitly first (same not_found/forbidden
+// shape as markNotificationAsRead above), then a real hard DELETE -- no
+// deletedAt/soft-delete column exists or is needed: Notification has no
+// incoming FK from any other model (nothing ever references
+// Notification.id), so removing a row can't orphan anything. Mirrors
+// comment/service.ts's own deleteComment() for the exact same reason:
+// delete-by-id after a prior ownership read, not a re-scoped deleteMany
+// (that extra scoping is what updateMany's WHERE gives read-status
+// changes above; a delete-by-unique-id has nothing left to gain from it
+// once ownership is already confirmed). Once the row is gone,
+// getUnreadNotificationCount()/listNotifications() simply stop counting/
+// listing it on their next call -- no separate bookkeeping needed.
+export async function deleteNotification(
+  id: number,
+  userId: number,
+): Promise<NotificationMutationResult<{ id: number }>> {
+  const existing = await prisma.notification.findUnique({ where: { id } });
+  if (!existing) return { kind: "not_found" };
+  if (existing.userId !== userId) return { kind: "forbidden" };
+
+  await prisma.notification.delete({ where: { id } });
+  return { kind: "ok", data: { id } };
+}
