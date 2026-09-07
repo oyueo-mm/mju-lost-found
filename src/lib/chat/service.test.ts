@@ -16,6 +16,8 @@ const userTable = { findUnique: vi.fn() };
 const notification = { updateMany: vi.fn() };
 const lostPostTable = { findUnique: vi.fn() };
 const foundPostTable = { findUnique: vi.fn() };
+// Phase D-4
+const messageReaction = { deleteMany: vi.fn(), create: vi.fn(), findMany: vi.fn() };
 const txMessageCreate = vi.fn();
 const txNotificationCreate = vi.fn();
 const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
@@ -27,6 +29,7 @@ vi.mock("@/lib/db/prisma", () => ({
     match,
     chatRoom,
     message,
+    messageReaction,
     user: userTable,
     notification,
     lostPost: lostPostTable,
@@ -53,6 +56,7 @@ vi.mock("@/lib/images/supabaseAdmin", () => ({ publicUrlFor }));
 const {
   countUnreadMessagesForUser,
   getChatRoomForUser,
+  getChatRoomParticipantIds,
   getMessage,
   getOrCreateChatRoomForMatch,
   getOrCreateDirectChatRoom,
@@ -61,6 +65,7 @@ const {
   markMessageNotificationsReadForChatRoom,
   markMessagesAsRead,
   sendMessage,
+  toggleMessageReaction,
 } = await import("./service");
 
 const lostOwner = 1;
@@ -109,6 +114,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   userTable.findUnique.mockResolvedValue({ id: foundOwner, nickname: "상대닉네임" });
   publicUrlFor.mockImplementation((path: string) => `https://storage.example/post-images/${path}`);
+  // Phase D-4: listMessages() always batches a reaction query for the
+  // page it just fetched -- default to "no reactions" so every
+  // pre-existing test in this file (written before reactions existed)
+  // doesn't need its own irrelevant mock just to avoid this resolving to
+  // undefined. Tests that actually care about reactions override this
+  // with their own mockResolvedValueOnce.
+  messageReaction.findMany.mockResolvedValue([]);
 });
 
 describe("getOrCreateChatRoomForMatch", () => {
@@ -369,6 +381,33 @@ describe("getChatRoomForUser", () => {
   });
 });
 
+// Phase D-2: the shared helper report/service.ts's message-report
+// membership check calls -- same findChatRoomRow + participantIdsOf
+// funnel getChatRoomForUser above already exercises, just returning the
+// raw Set (or null) instead of a full DTO/mutation-result.
+describe("getChatRoomParticipantIds", () => {
+  it("returns null for a nonexistent room", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(null);
+    expect(await getChatRoomParticipantIds(999)).toBeNull();
+  });
+
+  it("returns both participants of a Match room", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+
+    const ids = await getChatRoomParticipantIds(100);
+
+    expect(ids).toEqual(new Set([lostOwner, foundOwner]));
+  });
+
+  it("returns both participants of a direct room", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomDirect());
+
+    const ids = await getChatRoomParticipantIds(200);
+
+    expect(ids).toEqual(new Set([lostOwner, stranger]));
+  });
+});
+
 describe("listChatRoomsForUser", () => {
   // Phase 10: the user's match rooms and direct rooms are two separate
   // queries (merged afterward), so both calls need their own mock return.
@@ -535,6 +574,77 @@ describe("listMessages", () => {
 
     expect(result.kind).toBe("ok");
     if (result.kind === "ok") expect(result.data.items[0].imageUrl).toBeNull();
+  });
+
+  // Phase D-3
+  it("includes a masked preview of the replied-to message when it's hidden", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    message.findMany.mockResolvedValueOnce([
+      {
+        id: 2,
+        senderUserId: lostOwner,
+        content: "네 맞아요",
+        createdAt: new Date(),
+        readAt: null,
+        hiddenAt: null,
+        sender: { nickname: "n" },
+        replyToMessage: {
+          id: 1,
+          content: "원본 내용",
+          imageUrl: null,
+          hiddenAt: new Date(),
+          sender: { nickname: "상대방" },
+        },
+      },
+    ]);
+
+    const result = await listMessages(100, lostOwner);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.items[0].replyTo).toEqual({
+        id: 1,
+        senderNickname: "상대방",
+        content: "[관리자에 의해 숨겨진 메시지입니다.]",
+        hasImage: false,
+      });
+    }
+  });
+
+  // Phase D-4
+  it("groups reaction rows into one summary per distinct emoji, marking which are the requester's own", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    message.findMany.mockResolvedValueOnce([
+      { id: 1, senderUserId: lostOwner, content: "c1", createdAt: new Date(), readAt: null, hiddenAt: null, sender: { nickname: "n" } },
+    ]);
+    messageReaction.findMany.mockResolvedValueOnce([
+      { messageId: 1, emoji: "👍", userId: lostOwner },
+      { messageId: 1, emoji: "👍", userId: foundOwner },
+      { messageId: 1, emoji: "❤️", userId: foundOwner },
+    ]);
+
+    const result = await listMessages(100, lostOwner);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.items[0].reactions).toEqual([
+        { emoji: "👍", count: 2, reactedByMe: true },
+        { emoji: "❤️", count: 1, reactedByMe: false },
+      ]);
+    }
+  });
+
+  it("returns an empty reactions array for a message nobody reacted to", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    message.findMany.mockResolvedValueOnce([
+      { id: 1, senderUserId: lostOwner, content: "c1", createdAt: new Date(), readAt: null, hiddenAt: null, sender: { nickname: "n" } },
+    ]);
+    messageReaction.findMany.mockResolvedValueOnce([]);
+
+    const result = await listMessages(100, lostOwner);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.data.items[0].reactions).toEqual([]);
   });
 
   it("reports hasMore via the limit+1 lookahead", async () => {
@@ -816,6 +926,127 @@ describe("sendMessage", () => {
     });
   });
 
+  // Phase D-3
+  describe("replies", () => {
+    it("creates a reply and echoes back a preview of the message it replies to", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      message.findUnique.mockResolvedValueOnce({
+        id: 5,
+        chatRoomId: 100,
+        content: "원본 메시지",
+        imageUrl: null,
+        hiddenAt: null,
+        sender: { nickname: "상대방" },
+      });
+      txMessageCreate.mockResolvedValueOnce({
+        id: 6,
+        senderUserId: lostOwner,
+        content: "네 맞아요",
+        imageUrl: null,
+        createdAt: new Date(),
+        readAt: null,
+        sender: { nickname: "닉네임" },
+      });
+
+      const result = await sendMessage(100, sender, "네 맞아요", undefined, 5);
+
+      expect(result.kind).toBe("ok");
+      expect(txMessageCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ replyToMessageId: 5 }) }),
+      );
+      if (result.kind === "ok") {
+        expect(result.data.replyTo).toEqual({
+          id: 5,
+          senderNickname: "상대방",
+          content: "원본 메시지",
+          hasImage: false,
+        });
+      }
+    });
+
+    it("rejects a replyToMessageId that doesn't exist", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      message.findUnique.mockResolvedValueOnce(null);
+
+      const result = await sendMessage(100, sender, "네 맞아요", undefined, 999);
+
+      expect(result).toEqual({ kind: "invalid_reply" });
+      expect($transaction).not.toHaveBeenCalled();
+    });
+
+    // The core security check: a replyToMessageId is only ever trusted
+    // when the target message's own (DB-read) chatRoomId matches the room
+    // the new message is actually being sent to -- never whatever the
+    // client implies by calling this chatRoomId's own endpoint.
+    it("rejects a replyToMessageId belonging to a different chat room", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      message.findUnique.mockResolvedValueOnce({
+        id: 5,
+        chatRoomId: 999,
+        content: "다른 방의 메시지",
+        imageUrl: null,
+        hiddenAt: null,
+        sender: { nickname: "상대방" },
+      });
+
+      const result = await sendMessage(100, sender, "네 맞아요", undefined, 5);
+
+      expect(result).toEqual({ kind: "invalid_reply" });
+      expect($transaction).not.toHaveBeenCalled();
+    });
+
+    it("allows replying to an already-hidden message, with its preview masked the same way listMessages() masks it", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      message.findUnique.mockResolvedValueOnce({
+        id: 5,
+        chatRoomId: 100,
+        content: "실제 원본 내용",
+        imageUrl: "https://x/y.jpg",
+        hiddenAt: new Date(),
+        sender: { nickname: "상대방" },
+      });
+      txMessageCreate.mockResolvedValueOnce({
+        id: 6,
+        senderUserId: lostOwner,
+        content: "네 맞아요",
+        imageUrl: null,
+        createdAt: new Date(),
+        readAt: null,
+        sender: { nickname: "닉네임" },
+      });
+
+      const result = await sendMessage(100, sender, "네 맞아요", undefined, 5);
+
+      expect(result.kind).toBe("ok");
+      if (result.kind === "ok") {
+        expect(result.data.replyTo).toEqual({
+          id: 5,
+          senderNickname: "상대방",
+          content: "[관리자에 의해 숨겨진 메시지입니다.]",
+          hasImage: false,
+        });
+      }
+    });
+
+    it("a non-reply message has no replyTo (unchanged from before this phase)", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      txMessageCreate.mockResolvedValueOnce({
+        id: 1,
+        senderUserId: lostOwner,
+        content: "그냥 메시지",
+        createdAt: new Date(),
+        readAt: null,
+        sender: { nickname: "닉네임" },
+      });
+
+      const result = await sendMessage(100, sender, "그냥 메시지");
+
+      expect(result.kind).toBe("ok");
+      if (result.kind === "ok") expect(result.data.replyTo).toBeNull();
+      expect(message.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
   // Phase 10: direct-room participants send/receive exactly like a
   // Match room's participants -- same funnel (participantIdsOf), so a
   // third party is rejected the same way too.
@@ -868,6 +1099,140 @@ describe("sendMessage", () => {
       expect(result).toEqual({ kind: "forbidden" });
       expect($transaction).not.toHaveBeenCalled();
     });
+  });
+});
+
+// Phase D-4
+describe("toggleMessageReaction", () => {
+  it("returns not_found for a nonexistent room", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(null);
+
+    const result = await toggleMessageReaction(999, 1, "👍", sender);
+
+    expect(result).toEqual({ kind: "not_found" });
+    expect(messageReaction.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-participant (A's room ID known by B)", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    const strangerUser = { ...sender, id: stranger } as unknown as User;
+
+    const result = await toggleMessageReaction(100, 1, "👍", strangerUser);
+
+    expect(result).toEqual({ kind: "forbidden" });
+    expect(messageReaction.deleteMany).not.toHaveBeenCalled();
+  });
+
+  // Same "never trust a client-supplied id pairing" rule as sendMessage's
+  // own replyToMessageId check -- a messageId that's real but belongs to
+  // a different room is rejected the same way a nonexistent one is.
+  it("rejects a messageId that doesn't exist", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    message.findUnique.mockResolvedValueOnce(null);
+
+    const result = await toggleMessageReaction(100, 999, "👍", sender);
+
+    expect(result).toEqual({ kind: "invalid_reaction" });
+  });
+
+  it("rejects a messageId belonging to a different chat room", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 999 });
+
+    const result = await toggleMessageReaction(100, 1, "👍", sender);
+
+    expect(result).toEqual({ kind: "invalid_reaction" });
+  });
+
+  it("adds a reaction when the requester hasn't picked this emoji yet (delete finds nothing)", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 100 });
+    messageReaction.deleteMany.mockResolvedValueOnce({ count: 0 });
+    messageReaction.findMany.mockResolvedValueOnce([{ emoji: "👍", userId: lostOwner }]);
+
+    const result = await toggleMessageReaction(100, 1, "👍", sender);
+
+    expect(messageReaction.create).toHaveBeenCalledWith({
+      data: { messageId: 1, userId: lostOwner, emoji: "👍" },
+    });
+    expect(result).toEqual({
+      kind: "ok",
+      data: { messageId: 1, reactions: [{ emoji: "👍", count: 1, reactedByMe: true }] },
+    });
+  });
+
+  it("removes the reaction when the requester already picked this emoji (toggle off)", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 100 });
+    messageReaction.deleteMany.mockResolvedValueOnce({ count: 1 });
+    messageReaction.findMany.mockResolvedValueOnce([]);
+
+    const result = await toggleMessageReaction(100, 1, "👍", sender);
+
+    expect(messageReaction.deleteMany).toHaveBeenCalledWith({
+      where: { messageId: 1, userId: lostOwner, emoji: "👍" },
+    });
+    expect(messageReaction.create).not.toHaveBeenCalled();
+    expect(result).toEqual({ kind: "ok", data: { messageId: 1, reactions: [] } });
+  });
+
+  it("lets several different participants react to the same message with different emoji", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 100 });
+    messageReaction.deleteMany.mockResolvedValueOnce({ count: 0 });
+    messageReaction.findMany.mockResolvedValueOnce([
+      { emoji: "👍", userId: foundOwner },
+      { emoji: "❤️", userId: lostOwner },
+    ]);
+
+    const result = await toggleMessageReaction(100, 1, "❤️", sender);
+
+    expect(result).toEqual({
+      kind: "ok",
+      data: {
+        messageId: 1,
+        reactions: [
+          { emoji: "👍", count: 1, reactedByMe: false },
+          { emoji: "❤️", count: 1, reactedByMe: true },
+        ],
+      },
+    });
+  });
+
+  it("converts a concurrent UNIQUE violation (double-click race) into a successful add", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 100 });
+    messageReaction.deleteMany.mockResolvedValueOnce({ count: 0 });
+    messageReaction.create.mockRejectedValueOnce(new FakePrismaClientKnownRequestError("P2002"));
+    messageReaction.findMany.mockResolvedValueOnce([{ emoji: "👍", userId: lostOwner }]);
+
+    const result = await toggleMessageReaction(100, 1, "👍", sender);
+
+    expect(result.kind).toBe("ok");
+  });
+
+  it("rethrows a non-P2002 error from the INSERT", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 100 });
+    messageReaction.deleteMany.mockResolvedValueOnce({ count: 0 });
+    messageReaction.create.mockRejectedValueOnce(new Error("db down"));
+
+    await expect(toggleMessageReaction(100, 1, "👍", sender)).rejects.toThrow("db down");
+  });
+
+  // Phase D-4 spec: reactions are metadata, not content -- a hidden
+  // message can still be reacted to (no hiddenAt check anywhere in
+  // toggleMessageReaction), same "hidden never blocks an action" policy
+  // reply/report already follow.
+  it("allows reacting to an already-hidden message (reactions are metadata, not content)", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 100 });
+    messageReaction.deleteMany.mockResolvedValueOnce({ count: 0 });
+    messageReaction.findMany.mockResolvedValueOnce([{ emoji: "👍", userId: lostOwner }]);
+
+    const result = await toggleMessageReaction(100, 1, "👍", sender);
+
+    expect(result.kind).toBe("ok");
   });
 });
 

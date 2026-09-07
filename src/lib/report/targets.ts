@@ -31,10 +31,17 @@ export async function resolvePostTarget(targetId: number): Promise<ResolvedPostT
   return post ? { postKind: "found", id: post.id, userId: post.userId } : null;
 }
 
-export type ResolvedMessageTarget = { id: number; senderUserId: number };
+// Phase D-2: chatRoomId added so report/service.ts can verify the
+// requester is actually a participant of *this* message's real room
+// (see getChatRoomParticipantIds in chat/service.ts) -- never trusts
+// anything a client might claim about which room a message belongs to.
+export type ResolvedMessageTarget = { id: number; senderUserId: number; chatRoomId: number };
 
 export async function resolveMessageTarget(targetId: number): Promise<ResolvedMessageTarget | null> {
-  return prisma.message.findUnique({ where: { id: targetId }, select: { id: true, senderUserId: true } });
+  return prisma.message.findUnique({
+    where: { id: targetId },
+    select: { id: true, senderUserId: true, chatRoomId: true },
+  });
 }
 
 export type ResolvedUserTarget = { id: number };

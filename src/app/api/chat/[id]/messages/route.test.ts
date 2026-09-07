@@ -8,6 +8,7 @@ const listMessages = vi.fn();
 const markMessagesAsRead = vi.fn();
 const markMessageNotificationsReadForChatRoom = vi.fn();
 const sendMessage = vi.fn();
+const toggleMessageReaction = vi.fn();
 
 vi.mock("@/lib/chat/http", async () => {
   const response = await import("@/lib/posts/response");
@@ -19,9 +20,10 @@ vi.mock("@/lib/chat/service", () => ({
   markMessagesAsRead,
   markMessageNotificationsReadForChatRoom,
   sendMessage,
+  toggleMessageReaction,
 }));
 
-const { GET, POST } = await import("./route");
+const { GET, PATCH, POST } = await import("./route");
 
 const sessionUser = { id: 1, nickname: "닉네임" };
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -145,7 +147,7 @@ describe("POST /api/chat/[id]/messages", () => {
     );
 
     expect(res.status).toBe(201);
-    expect(sendMessage).toHaveBeenCalledWith(1, sessionUser, "안녕", undefined);
+    expect(sendMessage).toHaveBeenCalledWith(1, sessionUser, "안녕", undefined, undefined);
   });
 
   // Phase 28-3
@@ -162,7 +164,39 @@ describe("POST /api/chat/[id]/messages", () => {
     );
 
     expect(res.status).toBe(201);
-    expect(sendMessage).toHaveBeenCalledWith(1, sessionUser, "", "chat/1/y.jpg");
+    expect(sendMessage).toHaveBeenCalledWith(1, sessionUser, "", "chat/1/y.jpg", undefined);
+  });
+
+  // Phase D-3
+  it("forwards replyToMessageId through to sendMessage unchanged", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    sendMessage.mockResolvedValueOnce({ kind: "ok", data: { id: 2, replyTo: { id: 1 } } });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/chat/1/messages", {
+        method: "POST",
+        body: JSON.stringify({ content: "네 맞아요", replyToMessageId: 1 }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(201);
+    expect(sendMessage).toHaveBeenCalledWith(1, sessionUser, "네 맞아요", undefined, 1);
+  });
+
+  it("returns 400 when sendMessage rejects an invalid reply target", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    sendMessage.mockResolvedValueOnce({ kind: "invalid_reply" });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/chat/1/messages", {
+        method: "POST",
+        body: JSON.stringify({ content: "네 맞아요", replyToMessageId: 999 }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(400);
   });
 
   it("rejects a body with neither content nor imagePath", async () => {
@@ -190,5 +224,105 @@ describe("POST /api/chat/[id]/messages", () => {
     );
 
     expect(res.status).toBe(400);
+  });
+});
+
+// Phase D-4: same route file/function as GET/POST above -- see this
+// phase's own function-count constraint (no new route).
+describe("PATCH /api/chat/[id]/messages", () => {
+  it("rejects an unauthenticated request", async () => {
+    requireUserForApi.mockResolvedValueOnce({ response: jsonError(401, "로그인이 필요합니다.") });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/chat/1/messages", {
+        method: "PATCH",
+        body: JSON.stringify({ messageId: 1, emoji: "👍" }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(401);
+    expect(toggleMessageReaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects an emoji outside the fixed allowed set", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/chat/1/messages", {
+        method: "PATCH",
+        body: JSON.stringify({ messageId: 1, emoji: "🍕" }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(400);
+    expect(toggleMessageReaction).not.toHaveBeenCalled();
+  });
+
+  it("toggles the reaction as the authenticated session user, not any userId in the body", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    toggleMessageReaction.mockResolvedValueOnce({
+      kind: "ok",
+      data: { messageId: 1, reactions: [{ emoji: "👍", count: 1, reactedByMe: true }] },
+    });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/chat/1/messages", {
+        method: "PATCH",
+        body: JSON.stringify({ messageId: 1, emoji: "👍", userId: "someone-else" }),
+      }),
+      params("1"),
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.data.reactions).toEqual([{ emoji: "👍", count: 1, reactedByMe: true }]);
+    expect(toggleMessageReaction).toHaveBeenCalledWith(1, 1, "👍", sessionUser);
+  });
+
+  it("rejects a room the user isn't a participant of (A's room ID known by B)", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    toggleMessageReaction.mockResolvedValueOnce({ kind: "forbidden" });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/chat/1/messages", {
+        method: "PATCH",
+        body: JSON.stringify({ messageId: 1, emoji: "👍" }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 400 when toggleMessageReaction rejects a messageId from a different room", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    toggleMessageReaction.mockResolvedValueOnce({ kind: "invalid_reaction" });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/chat/1/messages", {
+        method: "PATCH",
+        body: JSON.stringify({ messageId: 999, emoji: "👍" }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a missing messageId", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/chat/1/messages", {
+        method: "PATCH",
+        body: JSON.stringify({ emoji: "👍" }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(400);
+    expect(toggleMessageReaction).not.toHaveBeenCalled();
   });
 });

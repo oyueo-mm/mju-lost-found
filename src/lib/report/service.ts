@@ -8,6 +8,7 @@ import {
 } from "@/generated/prisma/client";
 import type { CreateReportInput, ReportStatusValue, ReportTargetType } from "./schema";
 import { resolveCommentTarget, resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "./targets";
+import { getChatRoomParticipantIds } from "@/lib/chat/service";
 
 // Prisma's generated enum values are the ASCII identifiers (POST, MESSAGE,
 // USER / PENDING, DISMISSED, ACTIONED) -- @map only renames the DB column
@@ -61,6 +62,11 @@ export function toReportDTO(row: Report): ReportDTO {
 export type CreateReportResult =
   | { kind: "ok"; data: ReportDTO }
   | { kind: "target_not_found" }
+  // Phase D-2: message reports only -- the requester isn't a participant
+  // of the message's own ChatRoom (see getChatRoomParticipantIds). Kept
+  // distinct from self_report/target_not_found since it's a genuinely
+  // different reason and maps to its own 403, not 400/404.
+  | { kind: "not_participant" }
   | { kind: "self_report" }
   | { kind: "duplicate" };
 
@@ -77,8 +83,17 @@ export async function createReport(reporter: User, input: CreateReportInput): Pr
     if (!target) return { kind: "target_not_found" };
     if (target.userId === reporter.id) return { kind: "self_report" };
   } else if (input.targetType === "message") {
+    // Phase D-2: message.chatRoomId here is read fresh from the DB (see
+    // resolveMessageTarget) -- there is no client-supplied chatRoomId
+    // anywhere in this request to begin with, so there's nothing to
+    // "trust or not trust": membership is checked against the message's
+    // one real room, full stop. Order matches this phase's spec: exists
+    // -> real room -> participant -> self-report -> duplicate (below, via
+    // the UNIQUE constraint).
     const target = await resolveMessageTarget(input.targetId);
     if (!target) return { kind: "target_not_found" };
+    const participantIds = await getChatRoomParticipantIds(target.chatRoomId);
+    if (!participantIds || !participantIds.has(reporter.id)) return { kind: "not_participant" };
     if (target.senderUserId === reporter.id) return { kind: "self_report" };
   } else if (input.targetType === "comment") {
     const target = await resolveCommentTarget(input.targetId);

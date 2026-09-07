@@ -8,6 +8,17 @@ type ReportButtonProps = {
   targetType: ReportTargetType;
   targetId: number;
   buttonLabel?: string;
+  // Phase D-2: lets a caller that already has its own trigger (e.g. an
+  // "신고" item inside MessageActionMenu's dropdown) skip this
+  // component's own toggle button and land straight on the reason/detail
+  // form -- everywhere else (post/comment) omits this and keeps the
+  // original two-step "신고하기" link -> form behavior unchanged.
+  autoOpen?: boolean;
+  // Phase D-2: fires once the report is actually accepted (201), after
+  // the "접수되었습니다" message is already showing -- MessageActionMenu
+  // uses this to close the whole popover instead of leaving it open on
+  // the success caption. Unused (and harmless) everywhere else.
+  onSuccess?: () => void;
 };
 
 // Client-side port of legacy ui/common.py::render_report_control(): a
@@ -20,8 +31,14 @@ type ReportButtonProps = {
 // was (e.g. every post detail page, regardless of who owns it) --
 // self-reports are rejected at submit time with a normal error message,
 // not hidden from the UI ahead of time, matching legacy exactly.
-export function ReportButton({ targetType, targetId, buttonLabel = "신고하기" }: ReportButtonProps) {
-  const [open, setOpen] = useState(false);
+export function ReportButton({
+  targetType,
+  targetId,
+  buttonLabel = "신고하기",
+  autoOpen = false,
+  onSuccess,
+}: ReportButtonProps) {
+  const [open, setOpen] = useState(autoOpen);
   const [done, setDone] = useState(false);
   const [reason, setReason] = useState<string>(REPORT_REASONS[0]);
   const [detail, setDetail] = useState("");
@@ -61,6 +78,7 @@ export function ReportButton({ targetType, targetId, buttonLabel = "신고하기
         return;
       }
       setDone(true);
+      onSuccess?.();
     } catch {
       setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
     } finally {

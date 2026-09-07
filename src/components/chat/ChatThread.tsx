@@ -4,7 +4,22 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
 import { uploadChatImage, validateImageFile } from "@/lib/images/client";
-import { ReportButton } from "@/components/report/ReportButton";
+import { MessageActionMenu } from "@/components/chat/MessageActionMenu";
+
+// Phase D-3: mirrors chat/service.ts's MessageReplyPreview -- no
+// createdAt/etc, just enough to render an inline quote (sender + a short
+// snippet), same "preview travels with the reply, no second round-trip"
+// shape the server already sends.
+type ReplyPreview = {
+  id: number;
+  senderNickname: string | null;
+  content: string;
+  hasImage: boolean;
+};
+
+// Phase D-4: mirrors chat/service.ts's ReactionSummary -- one entry per
+// distinct emoji actually used, never one per individual reaction.
+type ReactionSummary = { emoji: string; count: number; reactedByMe: boolean };
 
 type MessageItem = {
   id: number;
@@ -15,6 +30,8 @@ type MessageItem = {
   createdAt: string;
   readAt: string | null;
   isMine: boolean;
+  replyTo: ReplyPreview | null;
+  reactions: ReactionSummary[];
 };
 
 function formatTime(iso: string): string {
@@ -35,6 +52,12 @@ export function ChatThread({ chatRoomId }: { chatRoomId: number }) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [imageError, setImageError] = useState<string | null>(null);
+  // Phase D-3: which message (if any) the compose bar is currently
+  // replying to -- built directly from that message's own already-loaded
+  // MessageItem (no extra fetch needed, same reasoning as
+  // MessageActionMenu's own "no server round-trip for a client action"
+  // design).
+  const [replyingTo, setReplyingTo] = useState<ReplyPreview | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -201,7 +224,11 @@ export function ChatThread({ chatRoomId }: { chatRoomId: number }) {
       const res = await fetch(`/api/chat/${chatRoomId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: trimmed || undefined, imagePath }),
+        body: JSON.stringify({
+          content: trimmed || undefined,
+          imagePath,
+          replyToMessageId: replyingTo?.id,
+        }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -211,11 +238,39 @@ export function ChatThread({ chatRoomId }: { chatRoomId: number }) {
       setMessages((prev) => [...(prev ?? []), json.data]);
       setContent("");
       clearSelectedFile();
+      setReplyingTo(null);
     } catch {
       setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
     } finally {
       setSending(false);
     }
+  }
+
+  // Phase D-4: the server always returns that one message's *full*
+  // reaction summary (never a delta) -- see toggleMessageReaction()'s own
+  // comment on why counts are never incremented/decremented optimistically
+  // on the client (another participant may have reacted concurrently).
+  function handleReactionChange(messageId: number, reactions: ReactionSummary[]) {
+    setMessages((prev) => (prev ? prev.map((m) => (m.id === messageId ? { ...m, reactions } : m)) : prev));
+  }
+
+  // Single fetch reused by both MessageActionMenu's emoji picker and the
+  // reaction badges' own click-to-toggle below -- same PATCH
+  // /api/chat/[id]/messages route the GET/POST handlers already live on
+  // (no new API route). Throws on failure so MessageActionMenu can show
+  // the error inline in its picker; badge clicks fall back to the
+  // existing top-level error banner instead of their own per-message UI.
+  async function toggleReaction(messageId: number, emoji: string) {
+    const res = await fetch(`/api/chat/${chatRoomId}/messages`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messageId, emoji }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      throw new Error(json.error ?? "반응을 남기지 못했습니다.");
+    }
+    handleReactionChange(messageId, json.data.reactions);
   }
 
   return (
@@ -261,39 +316,89 @@ export function ChatThread({ chatRoomId }: { chatRoomId: number }) {
               {!m.isMine && (
                 <span className="mb-0.5 text-xs text-muted-foreground">{m.senderNickname ?? "알 수 없음"}</span>
               )}
-              {m.imageUrl && (
-                <div className="mb-1 max-w-[240px] overflow-hidden rounded-2xl border border-border">
-                  <Image
-                    src={m.imageUrl}
-                    alt="전송된 이미지"
-                    width={480}
-                    height={480}
-                    className="h-auto w-full"
-                    onLoad={handleImageLoad}
-                  />
-                </div>
-              )}
-              {m.content && (
-                <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${
-                    m.isMine
-                      ? "rounded-br-sm bg-primary text-primary-foreground"
-                      : "rounded-bl-sm bg-muted text-foreground"
-                  }`}
-                >
-                  {m.content}
+              {/* Phase D-2: replaces the always-visible "신고" link with an
+                  action menu (desktop hover "⋯", mobile long-press) --
+                  wraps just the image/bubble (not the sender label or
+                  timestamp below), so the press target is the message
+                  content itself. createReport() itself still rejects
+                  reporting your own message, so this isn't hidden for
+                  m.isMine either -- same "validate at submit, not in the
+                  UI" rule the old always-visible button used. */}
+              <MessageActionMenu
+                messageId={m.id}
+                align={m.isMine ? "end" : "start"}
+                onReply={() =>
+                  setReplyingTo({
+                    id: m.id,
+                    senderNickname: m.senderNickname,
+                    content: m.content,
+                    hasImage: Boolean(m.imageUrl),
+                  })
+                }
+                onReact={(emoji) => toggleReaction(m.id, emoji)}
+              >
+                {m.replyTo && (
+                  <div
+                    className={`mb-1 max-w-full truncate rounded-lg border-l-2 border-border bg-muted/60 px-2 py-1 text-xs text-muted-foreground`}
+                  >
+                    <span className="font-medium">{m.replyTo.senderNickname ?? "알 수 없음"}</span>
+                    {": "}
+                    {m.replyTo.content || (m.replyTo.hasImage ? "사진" : "")}
+                  </div>
+                )}
+                {m.imageUrl && (
+                  <div className="mb-1 max-w-[240px] overflow-hidden rounded-2xl border border-border">
+                    <Image
+                      src={m.imageUrl}
+                      alt="전송된 이미지"
+                      width={480}
+                      height={480}
+                      className="h-auto w-full"
+                      onLoad={handleImageLoad}
+                    />
+                  </div>
+                )}
+                {m.content && (
+                  <div
+                    className={`rounded-2xl px-4 py-2 text-sm ${
+                      m.isMine
+                        ? "rounded-br-sm bg-primary text-primary-foreground"
+                        : "rounded-bl-sm bg-muted text-foreground"
+                    }`}
+                  >
+                    {m.content}
+                  </div>
+                )}
+              </MessageActionMenu>
+              {/* Phase D-4: existing badges are themselves clickable (not
+                  just the picker) -- tapping your own already-picked emoji
+                  again removes it, same toggle semantics as picking it
+                  fresh from the menu, just faster than opening the menu
+                  again. reactedByMe gets a filled/tinted style so it's
+                  visually distinct from a badge you haven't picked. */}
+              {m.reactions.length > 0 && (
+                <div className={`mt-1 flex flex-wrap gap-1 ${m.isMine ? "justify-end" : "justify-start"}`}>
+                  {m.reactions.map((r) => (
+                    <button
+                      key={r.emoji}
+                      type="button"
+                      onClick={() => toggleReaction(m.id, r.emoji).catch(() => setError("반응을 남기지 못했습니다."))}
+                      className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
+                        r.reactedByMe
+                          ? "border-primary bg-primary-muted text-primary"
+                          : "border-border bg-card text-muted-foreground hover:border-foreground/30"
+                      }`}
+                    >
+                      <span>{r.emoji}</span>
+                      <span>{r.count}</span>
+                    </button>
+                  ))}
                 </div>
               )}
               <span className="mt-0.5 text-xs text-muted-foreground">
                 {formatTime(m.createdAt)}
                 {m.isMine ? ` · ${m.readAt ? "읽음" : "안 읽음"}` : ""}
               </span>
-              {/* Mirrors legacy pages/5_채팅.py: a report button under every
-                  message. createReport() itself rejects reporting your own
-                  message, so this isn't hidden for m.isMine either -- same
-                  "validate at submit, not in the UI" rule as ReportButton
-                  on the post detail page. */}
-              <ReportButton targetType="message" targetId={m.id} buttonLabel="신고" />
             </div>
           ))
         )}
@@ -321,6 +426,26 @@ export function ChatThread({ chatRoomId }: { chatRoomId: number }) {
               onClick={clearSelectedFile}
               disabled={sending}
               className="absolute -top-1.5 -right-1.5 rounded-full bg-card px-1.5 py-0.5 text-xs text-destructive shadow-sm disabled:opacity-60"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {replyingTo && (
+          <div className="flex items-center gap-2 rounded-lg border-l-2 border-primary bg-muted/60 px-3 py-1.5 text-xs">
+            <div className="min-w-0 flex-1 truncate">
+              <span className="font-medium text-foreground">{replyingTo.senderNickname ?? "알 수 없음"}</span>
+              <span className="text-muted-foreground">
+                {": "}
+                {replyingTo.content || (replyingTo.hasImage ? "사진" : "")}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyingTo(null)}
+              aria-label="답장 취소"
+              className="shrink-0 text-muted-foreground hover:text-foreground"
             >
               ×
             </button>

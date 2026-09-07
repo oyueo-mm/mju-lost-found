@@ -15,10 +15,18 @@ const foundPost = { findUnique: vi.fn() };
 const message = { findUnique: vi.fn() };
 const userTable = { findUnique: vi.fn() };
 const comment = { findUnique: vi.fn() };
+// Phase D-2: report/service.ts's message branch now derives room
+// membership via chat/service.ts's own single-funnel participant
+// helper -- mocked wholesale (not via importActual): its own import
+// chain (Prisma client, images/supabaseAdmin, etc.) has nothing to do
+// with what this file tests, same convention as this file's other
+// wholesale mocks below.
+const getChatRoomParticipantIds = vi.fn();
 
 vi.mock("@/lib/db/prisma", () => ({
   prisma: { report, lostPost, foundPost, message, user: userTable, comment },
 }));
+vi.mock("@/lib/chat/service", () => ({ getChatRoomParticipantIds }));
 vi.mock("@/generated/prisma/client", () => ({
   ReportTargetType: { POST: "POST", MESSAGE: "MESSAGE", USER: "USER", COMMENT: "COMMENT" },
   ReportStatus: { PENDING: "PENDING", DISMISSED: "DISMISSED", ACTIONED: "ACTIONED" },
@@ -84,14 +92,70 @@ describe("createReport", () => {
     const result = await createReport(reporter, { targetType: "message", targetId: 42, reason: "욕설/비방" });
 
     expect(result).toEqual({ kind: "target_not_found" });
+    expect(getChatRoomParticipantIds).not.toHaveBeenCalled();
   });
 
-  it("rejects self-reporting your own message", async () => {
-    message.findUnique.mockResolvedValueOnce({ id: 42, senderUserId: reporter.id });
+  it("creates a report for a message in a room the reporter actually participates in", async () => {
+    message.findUnique.mockResolvedValueOnce({ id: 42, senderUserId: 999, chatRoomId: 7 });
+    getChatRoomParticipantIds.mockResolvedValueOnce(new Set([reporter.id, 999]));
+    report.create.mockResolvedValueOnce(reportRow({ targetType: "MESSAGE", targetId: 42 }));
+
+    const result = await createReport(reporter, { targetType: "message", targetId: 42, reason: "욕설/비방" });
+
+    expect(result.kind).toBe("ok");
+    expect(getChatRoomParticipantIds).toHaveBeenCalledWith(7);
+    expect(report.create).toHaveBeenCalledWith({
+      data: { reporterUserId: reporter.id, targetType: "MESSAGE", targetId: 42, reason: "욕설/비방", detail: null },
+    });
+  });
+
+  // Phase D-2: the core security fix -- a logged-in user who isn't a
+  // participant of the message's own room must be rejected, even though
+  // they'd pass every other check (message exists, isn't their own).
+  it("rejects reporting a message in a room the reporter doesn't participate in (403, not_participant)", async () => {
+    message.findUnique.mockResolvedValueOnce({ id: 42, senderUserId: 999, chatRoomId: 7 });
+    getChatRoomParticipantIds.mockResolvedValueOnce(new Set([999, 1000])); // reporter.id (1) not in here
+
+    const result = await createReport(reporter, { targetType: "message", targetId: 42, reason: "욕설/비방" });
+
+    expect(result).toEqual({ kind: "not_participant" });
+    expect(report.create).not.toHaveBeenCalled();
+  });
+
+  // Same outcome as above, phrased as this phase's own attack scenario:
+  // the message really belongs to a room the reporter has nothing to do
+  // with (never a room the reporter merely *claims*, since this API never
+  // accepts a client-supplied chatRoomId to begin with -- targetId alone
+  // is enough, and the real room is always read fresh from the message
+  // row itself).
+  it("rejects reporting a message that belongs to a different room entirely (never trusts any assumed room)", async () => {
+    message.findUnique.mockResolvedValueOnce({ id: 99, senderUserId: 999, chatRoomId: 55 });
+    getChatRoomParticipantIds.mockResolvedValueOnce(null); // room 55 not found / reporter has no relation to it
+
+    const result = await createReport(reporter, { targetType: "message", targetId: 99, reason: "기타" });
+
+    expect(result).toEqual({ kind: "not_participant" });
+    expect(report.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects self-reporting your own message, only after confirming room participation", async () => {
+    message.findUnique.mockResolvedValueOnce({ id: 42, senderUserId: reporter.id, chatRoomId: 7 });
+    getChatRoomParticipantIds.mockResolvedValueOnce(new Set([reporter.id, 999]));
 
     const result = await createReport(reporter, { targetType: "message", targetId: 42, reason: "욕설/비방" });
 
     expect(result).toEqual({ kind: "self_report" });
+    expect(report.create).not.toHaveBeenCalled();
+  });
+
+  it("relies on the same UNIQUE constraint (P2002) for a duplicate message report", async () => {
+    message.findUnique.mockResolvedValueOnce({ id: 42, senderUserId: 999, chatRoomId: 7 });
+    getChatRoomParticipantIds.mockResolvedValueOnce(new Set([reporter.id, 999]));
+    report.create.mockRejectedValueOnce(new FakePrismaClientKnownRequestError("P2002"));
+
+    const result = await createReport(reporter, { targetType: "message", targetId: 42, reason: "기타" });
+
+    expect(result).toEqual({ kind: "duplicate" });
   });
 
   it("rejects reporting a nonexistent user", async () => {

@@ -37,10 +37,17 @@ export const createChatRoomSchema = z.union([createMatchChatRoomSchema, createDi
 // (never trusts this shape alone -- same "the API schema is the first
 // gate, the service function is the real one" convention every other
 // mutation in this app follows).
+// Phase D-3: replyToMessageId is optional -- omitted means a normal,
+// non-reply message, exactly as before. Whether the referenced message
+// actually exists and belongs to *this* chat room is re-validated
+// server-side in chat/service.ts::sendMessage(), same "schema checks
+// shape only" convention as every other optional id in this app's
+// mutation schemas (e.g. comment/schema.ts's parentId).
 export const sendMessageSchema = z
   .object({
     content: z.string().trim().max(MAX_MESSAGE_LENGTH, "메시지가 너무 깁니다.").optional(),
     imagePath: z.string().min(1).optional(),
+    replyToMessageId: z.coerce.number().int().positive().optional(),
   })
   .refine((data) => Boolean(data.content) || Boolean(data.imagePath), {
     message: "메시지 또는 이미지를 입력해주세요.",
@@ -52,4 +59,21 @@ export const sendMessageSchema = z
 // it returns the most recent page.
 export const listMessagesQuerySchema = z.object({
   before: z.coerce.number().int().positive().optional(),
+});
+
+// Phase D-4: a small, fixed set -- "고정된 소수의 emoji만 제공" -- enforced
+// server-side (not just a UI picker limit) via z.enum below, same
+// defense-in-depth convention this app's other write endpoints follow
+// (e.g. postTypeSchema): the API is the real gate, never just the form.
+export const ALLOWED_REACTION_EMOJIS = ["👍", "❤️", "😂", "😢", "😮"] as const;
+export type ReactionEmoji = (typeof ALLOWED_REACTION_EMOJIS)[number];
+
+// PATCH /api/chat/[id]/messages { messageId, emoji } -- reuses the same
+// route file as GET (list)/POST (send) rather than adding a new one (see
+// this phase's own function-count constraint). Toggle semantics (same
+// emoji again removes it) live in chat/service.ts::toggleMessageReaction,
+// not here -- this schema only checks shape.
+export const toggleReactionSchema = z.object({
+  messageId: z.coerce.number().int().positive("messageId가 올바르지 않습니다."),
+  emoji: z.enum(ALLOWED_REACTION_EMOJIS),
 });

@@ -11,6 +11,8 @@ export function createReportResultToResponse(result: CreateReportResult) {
       return jsonOk(result.data, { status: 201 });
     case "target_not_found":
       return jsonError(404, "신고 대상을 찾을 수 없습니다.");
+    case "not_participant":
+      return jsonError(403, "이 채팅방 참가자만 신고할 수 있습니다.");
     case "self_report":
       return jsonError(400, "자기 자신이 작성/소유한 대상은 신고할 수 없습니다.");
     case "duplicate":

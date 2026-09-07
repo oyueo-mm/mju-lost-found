@@ -173,6 +173,41 @@ describe("POST /api/reports", () => {
     expect(res.status).toBe(409);
   });
 
+  it("creates a message report for a logged-in participant (Phase D-2)", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    createReport.mockResolvedValueOnce({ kind: "ok", data: { id: 1, targetType: "message", targetId: 42 } });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/reports", {
+        method: "POST",
+        body: JSON.stringify({ targetType: "message", targetId: 42, reason: "욕설/비방" }),
+      }),
+    );
+
+    expect(res.status).toBe(201);
+    expect(createReport).toHaveBeenCalledWith(
+      sessionUser,
+      expect.objectContaining({ targetType: "message", targetId: 42, reason: "욕설/비방" }),
+    );
+  });
+
+  // Phase D-2: the security-fix result kind (requester isn't a
+  // participant of the message's own ChatRoom) maps to 403, distinct from
+  // the 400 self_report and 404 target_not_found already covered above.
+  it("returns 403 when the reporter isn't a participant of the message's room", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    createReport.mockResolvedValueOnce({ kind: "not_participant" });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/reports", {
+        method: "POST",
+        body: JSON.stringify({ targetType: "message", targetId: 42, reason: "기타" }),
+      }),
+    );
+
+    expect(res.status).toBe(403);
+  });
+
   it("files the report as the authenticated session user, never any reporterId in the body", async () => {
     requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
     createReport.mockResolvedValueOnce({ kind: "ok", data: { id: 1 } });

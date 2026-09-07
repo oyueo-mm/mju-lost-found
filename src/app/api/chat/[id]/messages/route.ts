@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { chatMutationResultToResponse, jsonError, requireUserForApi, withErrorHandling } from "@/lib/chat/http";
-import { listMessagesQuerySchema, sendMessageSchema } from "@/lib/chat/schema";
+import { listMessagesQuerySchema, sendMessageSchema, toggleReactionSchema } from "@/lib/chat/schema";
 import {
   listMessages,
   markMessageNotificationsReadForChatRoom,
   markMessagesAsRead,
   sendMessage,
+  toggleMessageReaction,
 } from "@/lib/chat/service";
 
 // GET /api/chat/[id]/messages?before= -- oldest-first page of messages,
@@ -74,7 +75,47 @@ export const POST = withErrorHandling(
       return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
     }
 
-    const result = await sendMessage(id, auth.user, parsed.data.content ?? "", parsed.data.imagePath);
+    const result = await sendMessage(
+      id,
+      auth.user,
+      parsed.data.content ?? "",
+      parsed.data.imagePath,
+      parsed.data.replyToMessageId,
+    );
     return chatMutationResultToResponse(result, 201);
+  },
+);
+
+// PATCH /api/chat/[id]/messages { messageId, emoji } -- toggles the
+// authenticated current user's own reaction (never a userId from the
+// body). Lives in this same route file/function rather than a new one --
+// see this phase's own function-count constraint -- the same way Phase
+// 32's image search shares /api/posts via a `mode` field instead of a
+// new route.
+export const PATCH = withErrorHandling(
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+    const auth = await requireUserForApi();
+    if ("response" in auth) return auth.response;
+
+    const { id: idParam } = await params;
+    const id = Number(idParam);
+    if (!Number.isInteger(id)) {
+      return jsonError(400, "id가 올바르지 않습니다.");
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return jsonError(400, "잘못된 요청 본문입니다.");
+    }
+
+    const parsed = toggleReactionSchema.safeParse(body);
+    if (!parsed.success) {
+      return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
+    }
+
+    const result = await toggleMessageReaction(id, parsed.data.messageId, parsed.data.emoji, auth.user);
+    return chatMutationResultToResponse(result);
   },
 );

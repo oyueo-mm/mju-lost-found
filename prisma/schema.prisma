@@ -116,6 +116,7 @@ model User {
   reportsProcessed      Report[]           @relation("ReportProcessedBy")
   moderationActions     ModerationAction[]
   notifications         Notification[]
+  messageReactions      MessageReaction[]
 
   @@map("User")
 }
@@ -342,12 +343,55 @@ model Message {
   // any existing row (defaults to NULL, meaning "no image", for every
   // message sent before this phase).
   imageUrl         String?   @db.Text @map("image_url")
+  // Phase D-3: unlike Comment.parentId (Cascade, capped at one level),
+  // replies here have no depth limit -- replying to a reply is normal
+  // chat UX (KakaoTalk/Instagram DMs both allow it) -- and use
+  // onDelete: SetNull rather than Cascade: there is no message-delete
+  // feature in this app (only hide, via Report/ModerationAction), so this
+  // never fires today, but SetNull is the semantically safe choice if one
+  // is ever added -- losing the "replied to" pointer on an old message
+  // should never cascade-delete an entire reply chain's worth of chat
+  // history.
+  replyToMessageId Int?      @map("reply_to_message_id")
+  replyToMessage   Message?  @relation("MessageReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies          Message[] @relation("MessageReplies")
+  // Phase D-4
+  reactions        MessageReaction[]
 
   @@index([chatRoomId], map: "idx_message_chat_room_id")
   // Mirrors idx_message_chat_room_created_id, which backs the
   // cursor-paginated message list query directly from the index.
   @@index([chatRoomId, createdAt(sort: Desc), id(sort: Desc)], map: "idx_message_chat_room_created_id")
+  @@index([replyToMessageId], map: "idx_message_reply_to")
   @@map("Message")
+}
+
+// ---------- MessageReaction (Phase D-4) ----------
+
+// One row per (message, user, emoji) -- a user can react to the same
+// message with several different emoji at once (each its own row), but
+// never the same emoji twice (the @@unique below is the toggle's actual
+// enforcement: "add" is an insert, "remove" is a delete keyed on this
+// same triple, so a double-click race can't ever produce two rows for
+// the same reaction). message: Cascade (supplementary data tied to the
+// message's own lifecycle, same as Comment.parentId's reasoning) -- user:
+// Restrict, matching every other User relation in this schema (Message.
+// sender, Comment.author, Report.reporter, ...): there is no user-delete
+// feature anywhere in this app, so this never actually blocks anything
+// today, but it keeps this model consistent with the rest instead of
+// inventing its own convention.
+model MessageReaction {
+  id        Int      @id @default(autoincrement())
+  messageId Int      @map("message_id")
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  emoji     String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId], map: "idx_message_reaction_message_id")
+  @@map("MessageReaction")
 }
 
 // ---------- Report ----------
