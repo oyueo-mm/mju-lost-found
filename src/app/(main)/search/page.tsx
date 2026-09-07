@@ -16,6 +16,7 @@ export default async function SearchPage({
   searchParams: Promise<SearchParams>;
 }) {
   const raw = normalizeSearchParams(await searchParams);
+
   // Unlike /lost and /found, `type` here is user-selectable and defaults
   // to "all" (both boards) when not given.
   const parsed = listQuerySchema.safeParse({ type: "all", ...raw });
@@ -48,23 +49,29 @@ export default async function SearchPage({
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-foreground">통합 검색</h1>
-      <SearchFilterBar basePath="/search" showTypeFilter />
-      <SemanticSearchNotice mode={mode} />
-      {results.items.length === 0 ? (
-        <EmptyState title="검색 결과가 없어요." description="다른 검색어나 필터로 다시 시도해보세요." />
-      ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {results.items.map((post) => (
-            <PostCard key={`${post.type}-${post.id}`} post={post} />
-          ))}
-        </div>
-      )}
-      <Pagination
-        basePath="/search"
-        currentSearchParams={raw}
-        page={results.page}
-        totalPages={results.totalPages}
-      />
+      {/* Phase 32: results+pagination passed as children so SearchFilterBar
+          can hide them while its own "이미지로 검색" mode is active
+          (ImageSearchPanel owns the results area then instead) -- see that
+          component's own comment. Harmless for every other mode: rendered
+          exactly as before, just one level deeper in the tree. */}
+      <SearchFilterBar basePath="/search" showTypeFilter imageSearchEnabled>
+        <SemanticSearchNotice mode={mode} />
+        {results.items.length === 0 ? (
+          <EmptyState title="검색 결과가 없어요." description="다른 검색어나 필터로 다시 시도해보세요." />
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {results.items.map((post) => (
+              <PostCard key={`${post.type}-${post.id}`} post={post} />
+            ))}
+          </div>
+        )}
+        <Pagination
+          basePath="/search"
+          currentSearchParams={raw}
+          page={results.page}
+          totalPages={results.totalPages}
+        />
+      </SearchFilterBar>
     </div>
   );
 }

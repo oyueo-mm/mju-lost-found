@@ -91,6 +91,19 @@ describe("TransformersImageEmbeddingProvider", () => {
     expect(vector).toEqual([expect.closeTo(0.6, 5), expect.closeTo(0.8, 5)]);
   });
 
+  // Phase 32: image search embeds an uploaded file that was never written
+  // to Storage (no URL) -- RawImage.read() already accepts a Blob
+  // natively, this just confirms embed() passes it straight through.
+  it("also accepts a Blob input (image search's in-memory upload, no URL)", async () => {
+    mockPooledOutput(new Array(IMAGE_EMBEDDING_DIMENSIONS).fill(0.1));
+
+    const { TransformersImageEmbeddingProvider } = await import("./imageEmbedding");
+    const blob = new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" });
+    await new TransformersImageEmbeddingProvider().embed(blob);
+
+    expect(rawImageRead).toHaveBeenCalledWith(blob);
+  });
+
   it("propagates a RawImage.read() failure (invalid/unreachable image) instead of swallowing it", async () => {
     autoProcessorFromPretrained.mockResolvedValue(vi.fn());
     siglipVisionModelFromPretrained.mockResolvedValue(vi.fn());

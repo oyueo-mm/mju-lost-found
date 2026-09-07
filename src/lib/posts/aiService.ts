@@ -2,7 +2,8 @@ import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { EMBEDDING_INPUT_FIELDS, embedPostBestEffort } from "@/lib/ai/postEmbedding";
 import { getEmbeddingProvider } from "@/lib/ai/embedding";
-import { findPostsBySemanticQuery, findSimilarPostsByImage } from "@/lib/ai/vectorSearch";
+import { getImageEmbeddingProvider } from "@/lib/ai/imageEmbedding";
+import { findPostsByImageQuery, findPostsBySemanticQuery, findSimilarPostsByImage } from "@/lib/ai/vectorSearch";
 import type { User } from "@/generated/prisma/client";
 import type {
   CreateFoundPostInput,
@@ -327,4 +328,60 @@ export async function findSimilarPostsByImageForDisplay(
       return { ...dto, score: scoreById.get(row.id) };
     })
     .slice(0, IMAGE_SIMILARITY_DISPLAY_LIMIT);
+}
+
+// ---------- Image search (Phase 32) ----------
+
+// Same precedent as SEMANTIC_SEARCH_TOP_K/IMAGE_SIMILARITY_TOP_K above --
+// a capped top-K ranking, not a true DB-wide paginated count (same
+// reasoning as searchPostsSemantic's own comment on this).
+const IMAGE_SEARCH_TOP_K = 10;
+
+// mode=image's counterpart to searchPostsSemantic() above -- the query is
+// an uploaded photo (never a stored post's own image, unlike
+// findSimilarPostsByImageForDisplay), embedded on the fly and ranked
+// against `targetType`'s own imageEmbedding column via findPostsByImageQuery
+// (searches the board the caller picked, never the cross-board "AirPods
+// lost -> AirPods found" convention findSimilarPostsByImage/
+// findPostsByImageForDisplay use for the post-detail-page feature -- those
+// two features solve different problems and deliberately stay separate).
+// No lexical tie-breaker here (that's specific to text titles, see
+// searchPostsSemantic's own comment) -- pure cosine ranking.
+export async function searchPostsByImage(
+  targetType: PostType,
+  image: Blob,
+  { page, limit, ...filters }: ListParams,
+): Promise<PagedResult<PostDTO>> {
+  const vector = await getImageEmbeddingProvider().embed(image);
+  const ranked = await findPostsByImageQuery(targetType, vector, IMAGE_SEARCH_TOP_K, filters);
+
+  if (ranked.length === 0) {
+    return { items: [], page, limit, total: 0, totalPages: 1 };
+  }
+
+  const scoreById = new Map(ranked.map((r) => [r.id, r.score]));
+  const ids = ranked.map((r) => r.id);
+  const rows =
+    targetType === "lost"
+      ? await prisma.lostPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT } } })
+      : await prisma.foundPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT } } });
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+
+  // Re-order to match the similarity ranking and drop any id whose row
+  // vanished between the two queries -- same reasoning as
+  // searchPostsSemantic()'s own identical comment.
+  const items: PostDTO[] = ids
+    .map((id) => rowById.get(id))
+    .filter((row): row is NonNullable<typeof row> => row !== undefined)
+    .map((row) => {
+      const dto =
+        targetType === "lost"
+          ? toLostPostDTO(row as Parameters<typeof toLostPostDTO>[0])
+          : toFoundPostDTO(row as Parameters<typeof toFoundPostDTO>[0]);
+      return { ...dto, score: scoreById.get(row.id) };
+    });
+
+  const total = items.length;
+  const skip = (page - 1) * limit;
+  return { items: items.slice(skip, skip + limit), page, limit, total, totalPages: totalPagesFor(total, limit) };
 }

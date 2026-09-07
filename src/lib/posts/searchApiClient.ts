@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 
 import type { PostDTO } from "./service";
+import { reviveDates } from "./reviveDates";
 
 // Phase 13-2: /lost, /found, and /search need mode=semantic to actually
 // work in production, but their own Server Component functions can't
@@ -23,21 +24,6 @@ export type ApiPagedResult = {
   total: number;
   totalPages: number;
 };
-
-// Raw JSON has no Date type -- createdAt/updatedAt/lostAt/foundAt come
-// back as ISO strings and must be revived into real Date objects, the
-// same shape toLostPostDTO()/toFoundPostDTO() produce for the in-process
-// path (PostCard's formatDate() requires an actual Date, not a string).
-function reviveDates(raw: Record<string, unknown>): PostDTO {
-  const revived: Record<string, unknown> = {
-    ...raw,
-    createdAt: new Date(raw.createdAt as string),
-    updatedAt: new Date(raw.updatedAt as string),
-  };
-  if (raw.type === "lost") revived.lostAt = new Date(raw.lostAt as string);
-  else revived.foundAt = new Date(raw.foundAt as string);
-  return revived as unknown as PostDTO;
-}
 
 // `params` is the page's own already-validated raw search params (plus a
 // forced `type`) -- /api/posts re-validates them itself via the same

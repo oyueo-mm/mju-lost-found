@@ -24,7 +24,13 @@ import path from "node:path";
 // is the only one of the two viable for a real deployed service.
 export interface ImageEmbeddingProvider {
   readonly name: string;
-  embed(imageUrl: string): Promise<number[]>;
+  // Phase 32: widened from `string` (a URL) to also accept a `Blob` --
+  // image *search* embeds a user-uploaded photo that was never written to
+  // Storage and has no URL at all (see aiService.ts's searchPostsByImage),
+  // while every existing caller (embedding an already-uploaded post photo)
+  // keeps passing a URL exactly as before. RawImage.read() already
+  // supports both natively (see embed()'s own comment).
+  embed(input: string | Blob): Promise<number[]>;
 }
 
 // Xenova/siglip-base-patch16-224's vision tower output size (SiglipVisionModel's
@@ -87,19 +93,22 @@ export class TransformersImageEmbeddingProvider implements ImageEmbeddingProvide
     return this.sessionPromise;
   }
 
-  // `imageUrl` is the post's own public Supabase Storage URL (or, in
+  // `input` is either the post's own public Supabase Storage URL (or, in
   // principle, any readable image URL/local path) -- transformers.js's
   // RawImage.read() fetches it directly (this is an ordinary image-bytes
   // fetch, unrelated to the "never fetch the model itself over the
   // network" rule above; the model files are already local, the *photo*
-  // was never going to be). A non-existent URL, a non-image response, or
-  // a corrupt file all surface as a plain rejected promise here -- the
-  // caller (embedPostImageBestEffort) is what decides that's a best-effort
-  // failure, not this class's concern.
-  async embed(imageUrl: string): Promise<number[]> {
+  // was never going to be) -- or a `Blob` of already-in-memory bytes
+  // (image search's uploaded file, which has no URL at all; RawImage.read()
+  // accepts a Blob natively, see node_modules/@huggingface/transformers'
+  // own RawImage.read()). A non-existent URL, a non-image response, or a
+  // corrupt file all surface as a plain rejected promise here -- the
+  // caller (embedPostImageBestEffort / searchPostsByImage) is what decides
+  // what to do with that failure, not this class's concern.
+  async embed(input: string | Blob): Promise<number[]> {
     const { processor, model } = await TransformersImageEmbeddingProvider.getSession();
     const { RawImage } = await import("@huggingface/transformers");
-    const image = await RawImage.read(imageUrl);
+    const image = await RawImage.read(input);
     const inputs = await processor(image);
     const { pooler_output } = await model(inputs);
     return normalize(Array.from(pooler_output.data));

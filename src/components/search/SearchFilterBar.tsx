@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { CAMPUSES, CATEGORIES, SEARCH_MODES } from "@/lib/posts/schema";
 import type { PostListType, SearchMode, SortOption } from "@/lib/posts/schema";
+import { ImageSearchPanel } from "./ImageSearchPanel";
 
 type StatusOption = { value: string; label: string };
 
@@ -21,6 +22,18 @@ type SearchFilterBarProps = {
   // as this <select>'s default so it never lies about what's currently
   // filtered. Irrelevant (and unused) wherever statusOptions is omitted.
   defaultStatus?: string;
+  // Phase 32: only /search passes this -- /lost and /found keep this
+  // component byte-for-byte unchanged (prop omitted -> defaults false ->
+  // no 3rd radio, no ImageSearchPanel rendered at all).
+  imageSearchEnabled?: boolean;
+  // Phase 32: the page's own (server-rendered) keyword/semantic results +
+  // pagination, passed down so this component can hide them while
+  // ImageSearchPanel owns the results area instead (image mode never
+  // navigates, so the page itself has no way to know to hide them on its
+  // own). /lost and /found don't pass this (their results stay siblings of
+  // this component, exactly as before) -- omitted here renders nothing,
+  // so their layout is completely unaffected.
+  children?: ReactNode;
 };
 
 const TYPE_OPTIONS: { value: PostListType; label: string }[] = [
@@ -42,11 +55,15 @@ const MODE_LABELS: Record<SearchMode, string> = {
   semantic: "AI 의미 검색",
 };
 
+type LocalMode = SearchMode | "image";
+
 export function SearchFilterBar({
   basePath,
   showTypeFilter = false,
   statusOptions,
   defaultStatus,
+  imageSearchEnabled = false,
+  children,
 }: SearchFilterBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -64,7 +81,7 @@ export function SearchFilterBar({
   // to rank against). Catching that combination here, before it ever
   // reaches the server, avoids a submit that silently comes back with the
   // wrong results instead of an explanation.
-  const [mode, setMode] = useState<SearchMode>((searchParams.get("mode") as SearchMode | null) ?? "keyword");
+  const [mode, setMode] = useState<LocalMode>((searchParams.get("mode") as SearchMode | null) ?? "keyword");
   const [type, setType] = useState<PostListType>((searchParams.get("type") as PostListType | null) ?? "all");
   // Only meaningful when showTypeFilter is true (/search) -- everywhere
   // else (/lost, /found) `type` is fixed server-side to one board and
@@ -74,7 +91,10 @@ export function SearchFilterBar({
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (semanticBlockedByType) return;
+    // Phase 32: image mode never navigates -- ImageSearchPanel (rendered
+    // below in place of the usual query/filter fields) has its own submit
+    // button and does its own client-side fetch instead.
+    if (semanticBlockedByType || mode === "image") return;
 
     const formData = new FormData(event.currentTarget);
     const params = new URLSearchParams();
@@ -101,6 +121,7 @@ export function SearchFilterBar({
   const currentCampus = searchParams.get("campus") ?? "";
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-card border border-border bg-card p-4">
       <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
         {SEARCH_MODES.map((m) => (
@@ -115,105 +136,137 @@ export function SearchFilterBar({
             {MODE_LABELS[m]}
           </label>
         ))}
+        {imageSearchEnabled && (
+          <label className="flex items-center gap-1.5">
+            <input type="radio" name="mode" value="image" checked={mode === "image"} onChange={() => setMode("image")} />
+            이미지로 검색
+          </label>
+        )}
       </div>
 
-      <input
-        name="q"
-        type="text"
-        placeholder={mode === "semantic" ? "예: 검은색 에어팟을 도서관에서 잃어버렸어요" : "검색어를 입력하세요"}
-        defaultValue={searchParams.get("q") ?? ""}
-        maxLength={100}
-        className="w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
-      />
+      {mode === "image" ? (
+        <>
+          {type === "all" && (
+            <p className="text-xs text-warning">
+              이미지 검색은 분실물 또는 습득물 게시판을 선택한 경우에만 사용할 수 있습니다.
+            </p>
+          )}
+          {showTypeFilter && (
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value as PostListType)}
+              className="w-fit rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
+            >
+              {TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          )}
+          <ImageSearchPanel type={type} />
+        </>
+      ) : (
+        <>
+          <input
+            name="q"
+            type="text"
+            placeholder={mode === "semantic" ? "예: 검은색 에어팟을 도서관에서 잃어버렸어요" : "검색어를 입력하세요"}
+            defaultValue={searchParams.get("q") ?? ""}
+            maxLength={100}
+            className="w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
+          />
 
-      {semanticBlockedByType && (
-        <p className="text-xs text-warning">
-          AI 의미 검색은 분실물 또는 습득물 게시판을 선택한 경우에만 사용할 수 있습니다.
-        </p>
+          {semanticBlockedByType && (
+            <p className="text-xs text-warning">
+              AI 의미 검색은 분실물 또는 습득물 게시판을 선택한 경우에만 사용할 수 있습니다.
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-3">
+            {showTypeFilter && (
+              <select
+                name="type"
+                value={type}
+                onChange={(e) => setType(e.target.value as PostListType)}
+                className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
+              >
+                {TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <select
+              name="category"
+              defaultValue={currentCategory}
+              className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
+            >
+              <option value="">카테고리 전체</option>
+              {currentCategory && !(CATEGORIES as readonly string[]).includes(currentCategory) && (
+                <option value={currentCategory}>{currentCategory}</option>
+              )}
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+
+            {statusOptions && (
+              <select
+                name="status"
+                defaultValue={currentStatus}
+                className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
+              >
+                <option value="">상태 전체</option>
+                {statusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <select
+              name="campus"
+              defaultValue={currentCampus}
+              className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
+            >
+              <option value="">캠퍼스 전체</option>
+              {CAMPUSES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+
+            <select
+              name="sort"
+              defaultValue={searchParams.get("sort") ?? "latest"}
+              className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
+            >
+              {SORT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="submit"
+              disabled={semanticBlockedByType}
+              className="ml-auto rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
+            >
+              검색
+            </button>
+          </div>
+        </>
       )}
 
-      <div className="flex flex-wrap gap-3">
-        {showTypeFilter && (
-          <select
-            name="type"
-            value={type}
-            onChange={(e) => setType(e.target.value as PostListType)}
-            className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
-          >
-            {TYPE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        )}
-
-        <select
-          name="category"
-          defaultValue={currentCategory}
-          className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
-        >
-          <option value="">카테고리 전체</option>
-          {currentCategory && !(CATEGORIES as readonly string[]).includes(currentCategory) && (
-            <option value={currentCategory}>{currentCategory}</option>
-          )}
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-
-        {statusOptions && (
-          <select
-            name="status"
-            defaultValue={currentStatus}
-            className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
-          >
-            <option value="">상태 전체</option>
-            {statusOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        )}
-
-        <select
-          name="campus"
-          defaultValue={currentCampus}
-          className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
-        >
-          <option value="">캠퍼스 전체</option>
-          {CAMPUSES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-
-        <select
-          name="sort"
-          defaultValue={searchParams.get("sort") ?? "latest"}
-          className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
-        >
-          {SORT_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-
-        <button
-          type="submit"
-          disabled={semanticBlockedByType}
-          className="ml-auto rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
-        >
-          검색
-        </button>
-      </div>
-
-      {hasActiveFilters && (
+      {mode !== "image" && hasActiveFilters && (
         <button
           type="button"
           onClick={() => router.push(basePath)}
@@ -223,5 +276,7 @@ export function SearchFilterBar({
         </button>
       )}
     </form>
+    {mode !== "image" && children}
+    </>
   );
 }

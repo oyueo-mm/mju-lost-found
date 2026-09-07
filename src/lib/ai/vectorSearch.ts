@@ -240,3 +240,39 @@ export async function findSimilarPostsByImage(
 
   return rows.map((row) => ({ id: row.id, score: normalizeScore(row.similarity) }));
 }
+
+// Phase 32: image *search* -- the query is an arbitrary uploaded photo's
+// embedding (never a stored post's own imageEmbedding, unlike
+// findSimilarPostsByImage above), and the caller picks which board to
+// search (targetType), the same "user picks lost or found" contract
+// findPostsBySemanticQuery already uses for text search. Mirrors that
+// function's shape exactly, `imageEmbedding` in place of `embedding` --
+// same reused filter set (category/campus/status/dateFrom/dateTo), same
+// parameterized Prisma.sql conditions, never string-concatenated.
+export async function findPostsByImageQuery(
+  targetType: PostType,
+  queryVector: number[],
+  topK: number,
+  filters: SemanticSearchFilters = {},
+): Promise<VectorSearchResult[]> {
+  const vectorLiteral = `[${queryVector.join(",")}]`;
+  const table = targetType === "lost" ? Prisma.raw(`"LostPost"`) : Prisma.raw(`"FoundPost"`);
+  const statusType = targetType === "lost" ? Prisma.raw(`"LostPostStatus"`) : Prisma.raw(`"FoundPostStatus"`);
+
+  const conditions: InstanceType<typeof Prisma.Sql>[] = [Prisma.sql`"imageEmbedding" IS NOT NULL`];
+  if (filters.category) conditions.push(Prisma.sql`category = ${filters.category}`);
+  if (filters.campus) conditions.push(Prisma.sql`campus = ${filters.campus}`);
+  if (filters.status) conditions.push(Prisma.sql`status = ${filters.status}::${statusType}`);
+  if (filters.dateFrom) conditions.push(Prisma.sql`created_at >= ${filters.dateFrom}`);
+  if (filters.dateTo) conditions.push(Prisma.sql`created_at <= ${filters.dateTo}`);
+
+  const rows = await prisma.$queryRaw<{ id: number; similarity: number }[]>(Prisma.sql`
+    SELECT id, 1 - ("imageEmbedding" <=> ${vectorLiteral}::vector) AS similarity
+    FROM ${table}
+    WHERE ${Prisma.join(conditions, " AND ")}
+    ORDER BY "imageEmbedding" <=> ${vectorLiteral}::vector, id
+    LIMIT ${topK}
+  `);
+
+  return rows.map((row) => ({ id: row.id, score: normalizeScore(row.similarity) }));
+}

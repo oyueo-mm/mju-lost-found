@@ -12,6 +12,7 @@ const {
   EmbeddingNotAvailableError,
   findSimilarPostsByImage,
   saveImageEmbedding,
+  findPostsByImageQuery,
 } = await import("./vectorSearch");
 
 beforeEach(() => {
@@ -235,6 +236,80 @@ describe("findPostsBySemanticQuery", () => {
       const [sqlArg] = $queryRaw.mock.calls[0];
       expect(sqlArg.sql).toContain("embedding IS NOT NULL");
     });
+  });
+});
+
+// Phase 32: image search's counterpart to findPostsBySemanticQuery -- same
+// shape, `imageEmbedding` in place of `embedding`, so this mirrors that
+// suite's own coverage rather than re-deriving it.
+describe("findPostsByImageQuery", () => {
+  it("searches LostPost (parameterized) for targetType=lost, excluding NULL imageEmbeddings", async () => {
+    $queryRaw.mockResolvedValueOnce([{ id: 7, similarity: 0.5 }]);
+
+    const results = await findPostsByImageQuery("lost", [0.1, 0.2, 0.3], 10);
+
+    expect(results).toEqual([{ id: 7, score: expect.closeTo((0.5 + 1) / 2, 5) }]);
+    const [sqlArg] = $queryRaw.mock.calls[0];
+    expect(sqlArg.sql).toContain('FROM "LostPost"');
+    expect(sqlArg.sql).toContain('"imageEmbedding" IS NOT NULL');
+    expect(sqlArg.sql).toContain('ORDER BY "imageEmbedding" <=>');
+    expect(sqlArg.values).toContain("[0.1,0.2,0.3]");
+    expect(sqlArg.values).toContain(10);
+    expect(sqlArg.sql).not.toContain("0.1,0.2,0.3");
+  });
+
+  it("searches FoundPost for targetType=found", async () => {
+    $queryRaw.mockResolvedValueOnce([]);
+
+    await findPostsByImageQuery("found", [0.4], 5);
+
+    const [sqlArg] = $queryRaw.mock.calls[0];
+    expect(sqlArg.sql).toContain('FROM "FoundPost"');
+  });
+
+  it("orders by cosine distance ascending with an id tiebreaker for stable pagination", async () => {
+    $queryRaw.mockResolvedValueOnce([]);
+
+    await findPostsByImageQuery("lost", [0.1], 10);
+
+    const [sqlArg] = $queryRaw.mock.calls[0];
+    expect(sqlArg.sql).toMatch(/ORDER BY "imageEmbedding" <=> .*?, id/);
+  });
+
+  it("converts cosine similarity to the same 0-1 scale as findPostsBySemanticQuery", async () => {
+    $queryRaw.mockResolvedValueOnce([
+      { id: 1, similarity: 1 },
+      { id: 2, similarity: 0 },
+    ]);
+
+    const results = await findPostsByImageQuery("lost", [0.1], 3);
+
+    expect(results.map((r) => r.score)).toEqual([expect.closeTo(1, 5), expect.closeTo(0.5, 5)]);
+  });
+
+  it("returns an empty array (not an error) when nothing matches", async () => {
+    $queryRaw.mockResolvedValueOnce([]);
+    expect(await findPostsByImageQuery("lost", [0.1], 10)).toEqual([]);
+  });
+
+  it("applies category/campus/status/dateFrom/dateTo filters the same way findPostsBySemanticQuery does", async () => {
+    $queryRaw.mockResolvedValueOnce([]);
+    const dateFrom = new Date("2026-01-01");
+    const dateTo = new Date("2026-01-31");
+
+    await findPostsByImageQuery("found", [0.1], 10, {
+      category: "지갑",
+      campus: "인문캠퍼스",
+      status: "보관 중",
+      dateFrom,
+      dateTo,
+    });
+
+    const [sqlArg] = $queryRaw.mock.calls[0];
+    expect(sqlArg.sql).toContain(" AND ");
+    expect(sqlArg.values).toEqual(
+      expect.arrayContaining(["지갑", "인문캠퍼스", "보관 중", dateFrom, dateTo]),
+    );
   });
 });
 

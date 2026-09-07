@@ -9,10 +9,14 @@ import {
 import {
   createFoundPostSchema,
   createLostPostSchema,
+  DEFAULT_LIMIT,
+  DEFAULT_PAGE,
+  MAX_LIMIT,
   listQuerySchema,
   postTypeSchema,
 } from "@/lib/posts/schema";
-import { createFoundPost, createLostPost, searchPosts } from "@/lib/posts/aiService";
+import { createFoundPost, createLostPost, searchPosts, searchPostsByImage } from "@/lib/posts/aiService";
+import { ALLOWED_IMAGE_CONTENT_TYPES, MAX_IMAGE_SIZE_BYTES, isAllowedImageContentType } from "@/lib/images/config";
 
 // POST creates a post, which triggers embedPostBestEffort() -- real
 // ONNX Runtime inference (@huggingface/transformers, a native addon) that
@@ -39,7 +43,81 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   });
 });
 
+// Phase 32: image search's request/response shape mirrors GET's own
+// listQuerySchema-driven query exactly (type=lost|found, page, limit,
+// same `{ data, pagination }` envelope) -- the only real difference is
+// the query *value* itself (an uploaded photo, which a GET request has no
+// clean way to carry), so this stays a POST branch of this same route
+// file rather than a new one. No new Serverless Function: this file's
+// function bundle already carries the image-embedding model (via
+// aiService.ts -> imageEmbedding.ts), the same one /api/posts/[id]/
+// similar-images.func and /api/posts/[id]/image.func also bundle -- see
+// this project's own Hobby-plan 12-function-cap history.
+function parsePageParam(value: string | null): number {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 1 ? n : DEFAULT_PAGE;
+}
+function parseLimitParam(value: string | null): number {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) return DEFAULT_LIMIT;
+  return Math.min(n, MAX_LIMIT);
+}
+
+async function handleImageSearch(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const typeResult = postTypeSchema.safeParse(searchParams.get("type"));
+  if (!typeResult.success) {
+    return jsonError(400, "이미지 검색은 게시판(분실물 또는 습득물)을 선택한 경우에만 사용할 수 있습니다.");
+  }
+
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch {
+    return jsonError(400, "잘못된 요청 본문입니다. 이미지를 다시 선택해주세요.");
+  }
+
+  const image = formData.get("image");
+  if (!(image instanceof File) || image.size === 0) {
+    return jsonError(400, "검색할 이미지를 선택해주세요.");
+  }
+  if (!isAllowedImageContentType(image.type)) {
+    return jsonError(400, `${ALLOWED_IMAGE_CONTENT_TYPES.join(", ")} 형식의 이미지만 업로드할 수 있습니다.`);
+  }
+  if (image.size > MAX_IMAGE_SIZE_BYTES) {
+    return jsonError(400, "이미지 용량은 10MB를 넘을 수 없습니다.");
+  }
+
+  const page = parsePageParam(searchParams.get("page"));
+  const limit = parseLimitParam(searchParams.get("limit"));
+
+  let result;
+  try {
+    result = await searchPostsByImage(typeResult.data, image, { page, limit });
+  } catch (error) {
+    console.error("Image search failed:", error);
+    return jsonError(502, "이미지를 분석하지 못했습니다. 다른 이미지로 다시 시도해주세요.");
+  }
+
+  return NextResponse.json({
+    data: result.items,
+    pagination: {
+      page: result.page,
+      limit: result.limit,
+      total: result.total,
+      totalPages: result.totalPages,
+    },
+  });
+}
+
 export const POST = withErrorHandling(async (request: NextRequest) => {
+  // Image search is public, same policy as GET's keyword/semantic search
+  // (posts/service.ts) -- no auth gate, checked before requireUserForApi()
+  // below (which only ever applies to the "create a post" path).
+  if (request.nextUrl.searchParams.get("mode") === "image") {
+    return handleImageSearch(request);
+  }
+
   const auth = await requireUserForApi();
   if ("response" in auth) return auth.response;
 
