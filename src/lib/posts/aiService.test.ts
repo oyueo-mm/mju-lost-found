@@ -19,6 +19,28 @@ const foundPost = {
 // re-embed -- see aiService.ts's invalidateMatchCandidateCache().
 const matchCandidateCache = { deleteMany: vi.fn() };
 
+// Phase H-5-1: createLostPost/createFoundPost/updateLostPost/updateFoundPost
+// now defer embedPostBestEffort() (and, for updates, the match-candidate-
+// cache invalidation alongside it) into next/server's after() instead of
+// awaiting them directly -- see aiService.ts's own comments. after() only
+// works inside a real Next.js request scope, which this unit-test suite
+// has none of, so it's mocked here to *capture* the callback instead of
+// running it -- tests that care whether the deferred work eventually runs
+// call flushAfterCallbacks() explicitly (rather than relying on real
+// microtask-ordering timing, which would make these tests fragile), and a
+// dedicated test below asserts the callback is captured but NOT yet run
+// by the time the service function itself returns, which is the actual
+// behavior this phase changes.
+let afterCallbacks: Array<() => unknown> = [];
+const after = vi.fn((callback: () => unknown) => {
+  afterCallbacks.push(callback);
+});
+async function flushAfterCallbacks() {
+  const callbacks = afterCallbacks.splice(0);
+  await Promise.all(callbacks.map((cb) => cb()));
+}
+vi.mock("next/server", () => ({ after }));
+
 const embedPostBestEffort = vi.fn();
 // Phase 12: semantic search's two collaborators, mocked wholesale --
 // never loading the real ~106MB model or issuing a real $queryRaw in this
@@ -96,6 +118,7 @@ function row(overrides: Partial<Record<string, unknown>> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  afterCallbacks = [];
   lostPost.findMany.mockResolvedValue([]);
   lostPost.count.mockResolvedValue(0);
   foundPost.findMany.mockResolvedValue([]);
@@ -156,7 +179,43 @@ describe("createLostPost / createFoundPost", () => {
       campus: "인문캠퍼스",
       lostAt: new Date(),
     });
+    await flushAfterCallbacks();
 
+    expect(embedPostBestEffort).toHaveBeenCalledWith("lost", 1, expect.objectContaining({ title: "t" }));
+  });
+
+  // Phase H-5-1: the actual point of this phase -- embedding must not run
+  // (or be awaited) before createLostPost's own response is ready, only
+  // once the deferred after() callback is explicitly run afterward.
+  it("does not run the embedding until the deferred after() callback is flushed", async () => {
+    lostPost.create.mockResolvedValueOnce({
+      id: 1,
+      title: "t",
+      description: "d",
+      category: "c",
+      location: "l",
+      status: "SEARCHING",
+      imageUrl: null,
+      lostAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+    });
+
+    const result = await createLostPost(author, {
+      title: "t",
+      description: "d",
+      category: "c",
+      location: "l",
+      campus: "인문캠퍼스",
+      lostAt: new Date(),
+    });
+
+    expect(result.kind).toBe("ok"); // the response is ready immediately...
+    expect(after).toHaveBeenCalledTimes(1); // ...with the embedding only *registered*...
+    expect(embedPostBestEffort).not.toHaveBeenCalled(); // ...not yet run.
+
+    await flushAfterCallbacks();
     expect(embedPostBestEffort).toHaveBeenCalledWith("lost", 1, expect.objectContaining({ title: "t" }));
   });
 
@@ -217,6 +276,7 @@ describe("updateLostPost", () => {
     });
 
     await updateLostPost(1, 1, { title: "새 제목" });
+    await flushAfterCallbacks();
 
     expect(embedPostBestEffort).toHaveBeenCalledWith("lost", 1, expect.objectContaining({ title: "새 제목" }));
   });
@@ -242,6 +302,7 @@ describe("updateLostPost", () => {
     });
 
     await updateLostPost(1, 1, { title: "새 제목" });
+    await flushAfterCallbacks();
 
     expect(matchCandidateCache.deleteMany).toHaveBeenCalledWith({
       where: { sourceType: "lost", sourcePostId: 1 },

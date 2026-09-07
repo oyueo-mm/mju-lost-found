@@ -71,6 +71,26 @@ function nowAsDateTimeLocalValue(): string {
   return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
+// Phase H-5-3: in edit mode, only include a field in the PATCH body when it
+// actually differs from the value the form was seeded with -- this is what
+// lets the server's own EMBEDDING_INPUT_FIELDS.some(field => field in rest)
+// check (src/lib/posts/aiService.ts's updateLostPost/updateFoundPost)
+// actually skip re-embedding for an edit that didn't touch title/
+// description/category/location, instead of always re-triggering it just
+// because those keys were always present in the request body regardless of
+// whether their values changed. In create mode (isEdit=false, no
+// initialValues to compare against), every field is always included --
+// exactly the existing behavior, unchanged. updateLostPostSchema/
+// updateFoundPostSchema (createXPostSchema.partial()) already accept a
+// partial body server-side, so omitting an unchanged field here needs no
+// API/schema change.
+function fieldIfChanged(isEdit: boolean, key: string, current: string, initial: string | undefined) {
+  if (!isEdit || initial === undefined || current !== initial) {
+    return { [key]: current };
+  }
+  return {};
+}
+
 export function PostForm({ type, postId, initialValues }: PostFormProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -162,17 +182,26 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
     setPending(true);
 
     const formData = new FormData(event.currentTarget);
+    const title = String(formData.get("title") ?? "");
+    const description = String(formData.get("description") ?? "");
+    const category = String(formData.get("category") ?? "");
+    const location = String(formData.get("location") ?? "");
+    const dateValue = String(formData.get("date") ?? "");
+
+    const isEdit = postId !== undefined;
+    const dateField = DATE_FIELD[type];
+
     const body = {
       type,
-      title: formData.get("title"),
-      description: formData.get("description"),
-      category: formData.get("category"),
-      location: formData.get("location"),
+      ...fieldIfChanged(isEdit, "title", title, initialValues?.title),
+      ...fieldIfChanged(isEdit, "description", description, initialValues?.description),
+      ...fieldIfChanged(isEdit, "category", category, initialValues?.category),
+      ...fieldIfChanged(isEdit, "location", location, initialValues?.location),
       // Not a form field (see the toggle-button group below, same reason
       // `type` itself is added directly rather than read from FormData) --
       // tracked in this component's own `campus` state instead.
-      campus,
-      [DATE_FIELD[type]]: formData.get("date"),
+      ...fieldIfChanged(isEdit, "campus", campus, initialValues?.campus),
+      ...fieldIfChanged(isEdit, dateField, dateValue, initialValues?.dateValue),
     };
 
     const url = postId ? `/api/posts/${postId}?type=${type}` : "/api/posts";

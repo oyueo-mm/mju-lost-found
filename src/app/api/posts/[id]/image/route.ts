@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, after } from "next/server";
 
 import { jsonError, jsonOk, requireUserForApi, withErrorHandling } from "@/lib/posts/http";
 import { postTypeSchema } from "@/lib/posts/schema";
@@ -66,24 +66,37 @@ export const POST = withErrorHandling(
     // there re-checks ownership regardless. Best-effort: a failure here is
     // logged but never turns an already-successful image attach into a
     // failed response.
+    //
+    // Phase H-5-2: the internal fetch itself moves into next/server's
+    // after() -- this route still triggers embedding exactly the same way
+    // (same URL, same forwarded cookie, same target route, same
+    // ONNX-model-bundle-size reasoning above), it just no longer makes the
+    // client wait for that internal request/the PUT route's own image-
+    // embedding inference (H-4 measured this as the single most expensive
+    // step: ~2-3s cold) before returning the attach response. request's
+    // own URL/header data stays valid inside an after() callback -- that's
+    // the point of the API -- so nothing here needs to be captured into a
+    // local variable first.
     if (result.kind === "ok") {
-      try {
-        const embedUrl = `${request.nextUrl.origin}/api/posts/${parsedParams.id}?type=${parsedParams.type}`;
-        const embedRes = await fetch(embedUrl, {
-          method: "PUT",
-          headers: { cookie: request.headers.get("cookie") ?? "" },
-        });
-        if (!embedRes.ok) {
+      after(async () => {
+        try {
+          const embedUrl = `${request.nextUrl.origin}/api/posts/${parsedParams.id}?type=${parsedParams.type}`;
+          const embedRes = await fetch(embedUrl, {
+            method: "PUT",
+            headers: { cookie: request.headers.get("cookie") ?? "" },
+          });
+          if (!embedRes.ok) {
+            console.error(
+              `Image embedding trigger responded with ${embedRes.status} for ${parsedParams.type} post ${parsedParams.id}`,
+            );
+          }
+        } catch (error) {
           console.error(
-            `Image embedding trigger responded with ${embedRes.status} for ${parsedParams.type} post ${parsedParams.id}`,
+            `Failed to trigger image embedding for ${parsedParams.type} post ${parsedParams.id}:`,
+            error,
           );
         }
-      } catch (error) {
-        console.error(
-          `Failed to trigger image embedding for ${parsedParams.type} post ${parsedParams.id}:`,
-          error,
-        );
-      }
+      });
     }
 
     return imageResultToResponse(result);

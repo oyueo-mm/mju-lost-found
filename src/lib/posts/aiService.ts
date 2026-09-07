@@ -1,3 +1,5 @@
+import { after } from "next/server";
+
 import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { EMBEDDING_INPUT_FIELDS, embedPostBestEffort } from "@/lib/ai/postEmbedding";
@@ -73,7 +75,18 @@ export async function createLostPost(
   // A brand-new post always has all four embeddable fields, so this
   // always attempts an embedding (never conditional the way the update
   // path below is).
-  await embedPostBestEffort("lost", row.id, row);
+  //
+  // Phase H-5-1: moved off the request's blocking path via next/server's
+  // after() -- the response below now returns as soon as the DB row is
+  // committed, and this runs afterward in the same Vercel invocation
+  // (after() keeps the function alive for it, unlike a bare
+  // fire-and-forget promise, which a serverless runtime can kill the
+  // instant the response is sent). "Best-effort" already meant errors
+  // here never fail the request (see embedPostBestEffort's own try/catch);
+  // this only changes *when* it runs, not whether a failure is still
+  // silently logged and swallowed -- identical failure behavior, just no
+  // longer awaited before the client gets its response.
+  after(() => embedPostBestEffort("lost", row.id, row));
   return { kind: "ok", data: toLostPostDTO(row) };
 }
 
@@ -99,9 +112,21 @@ export async function updateLostPost(
   // changed -- e.g. a status-only update (marking a post found/complete)
   // or an image-only change shouldn't burn an inference call for text
   // that's already correctly embedded.
+  //
+  // Phase H-5-1: both the re-embed and its cache invalidation move into
+  // the same after() callback, in the same relative order they already
+  // ran in (embed, then invalidate) -- keeping them together (rather than
+  // only deferring embedPostBestEffort) avoids a new race where the stale
+  // MatchCandidateCache row is cleared *before* the new embedding is
+  // actually saved, which could let a candidate search that lands in that
+  // gap recompute against the old vector and re-cache it. See
+  // createLostPost's own comment for why after() (not a bare
+  // fire-and-forget promise) is what makes this safe on Vercel.
   if (EMBEDDING_INPUT_FIELDS.some((field) => field in rest)) {
-    await embedPostBestEffort("lost", row.id, row);
-    await invalidateMatchCandidateCache("lost", row.id);
+    after(async () => {
+      await embedPostBestEffort("lost", row.id, row);
+      await invalidateMatchCandidateCache("lost", row.id);
+    });
   }
   return { kind: "ok", data: toLostPostDTO(row) };
 }
@@ -122,7 +147,9 @@ export async function createFoundPost(
     },
     include: { user: { select: AUTHOR_SELECT } },
   });
-  await embedPostBestEffort("found", row.id, row);
+  // Phase H-5-1: see createLostPost's own comment -- same after()
+  // deferral, same unchanged failure behavior.
+  after(() => embedPostBestEffort("found", row.id, row));
   return { kind: "ok", data: toFoundPostDTO(row) };
 }
 
@@ -144,9 +171,14 @@ export async function updateFoundPost(
     },
     include: { user: { select: AUTHOR_SELECT } },
   });
+  // Phase H-5-1: see updateLostPost's own comment -- embed + invalidate
+  // moved together into after(), same relative order, same failure
+  // handling.
   if (EMBEDDING_INPUT_FIELDS.some((field) => field in rest)) {
-    await embedPostBestEffort("found", row.id, row);
-    await invalidateMatchCandidateCache("found", row.id);
+    after(async () => {
+      await embedPostBestEffort("found", row.id, row);
+      await invalidateMatchCandidateCache("found", row.id);
+    });
   }
   return { kind: "ok", data: toFoundPostDTO(row) };
 }

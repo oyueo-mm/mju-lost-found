@@ -13,11 +13,44 @@ const clearPostImage = vi.fn();
 // is the global fetch call itself, never a model/AI collaborator.
 const fetchMock = vi.fn();
 
+// Phase H-5-2: the internal embedding-trigger fetch now runs inside
+// next/server's after() instead of being awaited directly -- see route.ts's
+// own comment. after() only works inside a real Next.js request scope,
+// which this unit-test suite has none of, so it's mocked to *capture* the
+// callback instead of running it; tests that care whether the deferred
+// work eventually runs call flushAfterCallbacks() explicitly (not relying
+// on microtask-ordering timing). NextRequest itself must stay the real
+// implementation (every test below constructs real requests with it), so
+// next/server is mocked partially via importOriginal rather than replacing
+// the whole module. vi.mock() factories are hoisted above this file's own
+// top-level const declarations, so the shared `after` mock and its
+// callback queue are built inside vi.hoisted() -- the documented way to
+// make a value available both to a vi.mock() factory and to the test
+// bodies below without a temporal-dead-zone error.
+const { after, flushAfterCallbacks, resetAfterCallbacks } = vi.hoisted(() => {
+  let afterCallbacks: Array<() => unknown> = [];
+  const after = vi.fn((callback: () => unknown) => {
+    afterCallbacks.push(callback);
+  });
+  async function flushAfterCallbacks() {
+    const callbacks = afterCallbacks.splice(0);
+    await Promise.all(callbacks.map((cb) => cb()));
+  }
+  function resetAfterCallbacks() {
+    afterCallbacks = [];
+  }
+  return { after, flushAfterCallbacks, resetAfterCallbacks };
+});
+
 vi.mock("@/lib/posts/http", async () => {
   const response = await import("@/lib/posts/response");
   return { ...response, requireUserForApi };
 });
 vi.mock("@/lib/images/service", () => ({ setPostImage, clearPostImage }));
+vi.mock("next/server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/server")>();
+  return { ...actual, after };
+});
 
 const { POST, DELETE } = await import("./route");
 
@@ -26,6 +59,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetAfterCallbacks();
   fetchMock.mockResolvedValue({ ok: true });
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -121,7 +155,7 @@ describe("POST /api/posts/[id]/image", () => {
   // Phase 15-2: only a successful attach triggers the internal
   // image-embedding request -- never for a rejected one (already covered
   // by the `not.toHaveBeenCalled()` assertions above).
-  it("triggers the internal image-embedding request (PUT /api/posts/[id]) after a successful attach", async () => {
+  it("registers the internal image-embedding request (PUT /api/posts/[id]) after a successful attach", async () => {
     requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
     setPostImage.mockResolvedValueOnce({ kind: "ok", data: { imageUrl: "https://x/y.jpg" } });
 
@@ -133,6 +167,7 @@ describe("POST /api/posts/[id]/image", () => {
       }),
       params("1"),
     );
+    await flushAfterCallbacks();
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost/api/posts/1?type=lost",
@@ -140,7 +175,31 @@ describe("POST /api/posts/[id]/image", () => {
     );
   });
 
-  it("still returns the successful attach response even if the embedding trigger request fails", async () => {
+  // Phase H-5-2: the actual point of this phase -- the embedding-trigger
+  // fetch must not run (or be awaited) before the attach response is
+  // ready, only once the deferred after() callback is explicitly flushed
+  // afterward.
+  it("does not run the embedding trigger until the deferred after() callback is flushed", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    setPostImage.mockResolvedValueOnce({ kind: "ok", data: { imageUrl: "https://x/y.jpg" } });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/posts/1/image?type=lost", {
+        method: "POST",
+        body: JSON.stringify({ path: "posts/lost/1/y.jpg" }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(200); // the attach response is ready immediately...
+    expect(after).toHaveBeenCalledTimes(1); // ...with the embedding trigger only *registered*...
+    expect(fetchMock).not.toHaveBeenCalled(); // ...not yet run.
+
+    await flushAfterCallbacks();
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost/api/posts/1?type=lost", expect.objectContaining({ method: "PUT" }));
+  });
+
+  it("still returns the successful attach response even if the (deferred) embedding trigger request fails", async () => {
     requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
     setPostImage.mockResolvedValueOnce({ kind: "ok", data: { imageUrl: "https://x/y.jpg" } });
     fetchMock.mockRejectedValueOnce(new Error("network error"));
@@ -153,7 +212,13 @@ describe("POST /api/posts/[id]/image", () => {
       params("1"),
     );
 
+    // The attach response doesn't depend on the trigger's outcome at all
+    // now -- it's not even attempted yet at this point.
     expect(res.status).toBe(200);
+
+    // And once the deferred trigger *does* run and fails, that failure is
+    // still swallowed (logged, not thrown) -- flushing must not reject.
+    await expect(flushAfterCallbacks()).resolves.toBeUndefined();
   });
 });
 
