@@ -27,10 +27,13 @@ export const TARGET_TYPE_TO_ACTION_TYPE: Record<ReportTargetType, ModerationActi
   comment: "delete_comment",
 };
 
-// Same three choices as legacy's SUSPEND_DURATION_OPTIONS ("7일"/"30일"/
-// "영구") -- undefined/omitted in the request means permanent (no
-// suspendedUntil), matching apply_report_action(suspend_duration_days=None).
-export const SUSPEND_DURATION_DAY_OPTIONS = [7, 30] as const;
+// Phase F-2: expanded from the legacy's ("7일"/"30일") to also offer 1일/3일
+// -- undefined/omitted in the request means permanent (no suspendedUntil),
+// matching apply_report_action(suspend_duration_days=None). "사용자 지정"
+// isn't a fixed member of this list -- the UI offers it as a free-form
+// 1~365 input alongside these presets, validated by the same
+// suspendDurationDays schema field below (positive/int/max(365)) either way.
+export const SUSPEND_DURATION_DAY_OPTIONS = [1, 3, 7, 30] as const;
 
 // A single endpoint (POST /api/admin/reports/[id]/process) dispatches to
 // legacy's two distinct admin decisions: db.process_report(status=
@@ -47,7 +50,12 @@ export const processReportSchema = z.discriminatedUnion("decision", [
     decision: z.literal("action"),
     actionReason: z.string().trim().max(500).optional(),
     adminNote: z.string().trim().max(2000).optional(),
-    suspendDurationDays: z.coerce.number().int().positive().optional(),
+    // Phase F-2: capped at 365 -- a suspend duration of, say, 999999 days is
+    // functionally indistinguishable from permanent but bypasses the
+    // deliberate "no suspendedUntil = permanent" convention (see
+    // admin/users.ts's updateUserByAdmin()) with an arbitrary huge timestamp
+    // instead. 1일~365일 covers every duration the admin UI actually offers.
+    suspendDurationDays: z.coerce.number().int().positive().max(365).optional(),
   }),
 ]);
 export type ProcessReportInput = z.infer<typeof processReportSchema>;

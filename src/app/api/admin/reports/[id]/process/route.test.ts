@@ -88,6 +88,38 @@ describe("POST /api/admin/reports/[id]/process", () => {
     expect(applyReportAction).not.toHaveBeenCalled();
   });
 
+  // Phase F-2: same 1~365 cap as admin/users/[id]/route -- both suspend
+  // paths share the identical duration contract (see moderation/schema.ts's
+  // processReportSchema).
+  it.each([
+    ["366 (over the max)", 366],
+    ["0 (not positive)", 0],
+    ["-1 (negative)", -1],
+    ["1.5 (not an integer)", 1.5],
+  ])("rejects suspendDurationDays = %s", async (_label, suspendDurationDays) => {
+    requireAdminForApi.mockResolvedValueOnce({ user: admin });
+
+    const res = await POST(req({ decision: "action", suspendDurationDays }), params("1"));
+
+    expect(res.status).toBe(400);
+    expect(applyReportAction).not.toHaveBeenCalled();
+  });
+
+  it("accepts a custom in-range duration outside the fixed presets (e.g. 45 days)", async () => {
+    requireAdminForApi.mockResolvedValueOnce({ user: admin });
+    getReportTargetType.mockResolvedValueOnce("user");
+    applyReportAction.mockResolvedValueOnce({ kind: "ok", data: { id: 1, status: "actioned" } });
+
+    const res = await POST(req({ decision: "action", suspendDurationDays: 45 }), params("1"));
+
+    expect(res.status).toBe(201);
+    expect(applyReportAction).toHaveBeenCalledWith(admin, 1, "suspend_user", {
+      actionReason: undefined,
+      adminNote: undefined,
+      suspendDurationDays: 45,
+    });
+  });
+
   it("derives actionType server-side from the report's own target type, never from the request body", async () => {
     requireAdminForApi.mockResolvedValueOnce({ user: admin });
     getReportTargetType.mockResolvedValueOnce("user");

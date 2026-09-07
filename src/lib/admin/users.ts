@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
-import type { User } from "@/generated/prisma/client";
+import { NotificationType, type User } from "@/generated/prisma/client";
 import { isAdmin } from "@/lib/moderation/service";
+import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import type { AdminUserAction } from "./schema";
 
 // Phase 28-1: reuses the exact same User.isAdmin/isSuspended columns and
@@ -17,6 +18,14 @@ export type AdminUserDTO = {
   isAdmin: boolean;
   isSuspended: boolean;
   suspendedUntil: Date | null;
+  // Phase F-2: isSuspended/suspendedUntil above are kept as raw DB fields,
+  // unchanged in meaning (isSuspended is a sticky "was suspended" flag that
+  // an expired timed suspension never clears on its own -- see
+  // auth/suspension.ts). This derived field is what the admin UI should
+  // actually render against, computed with the exact same
+  // isCurrentlySuspended() the authorization layer uses, so the list can
+  // never show "정지됨" for a suspension that has already expired.
+  currentlySuspended: boolean;
   createdAt: Date;
 };
 
@@ -28,6 +37,7 @@ function toAdminUserDTO(row: User): AdminUserDTO {
     isAdmin: row.isAdmin,
     isSuspended: row.isSuspended,
     suspendedUntil: row.suspendedUntil,
+    currentlySuspended: isCurrentlySuspended(row),
     createdAt: row.createdAt,
   };
 }
@@ -124,6 +134,37 @@ export async function updateUserByAdmin(
         return { isSuspended: false, suspendedUntil: null };
     }
   })();
+
+  // Phase F-2: a direct suspend (unlike the report-flow's applyReportAction)
+  // previously left the target with no notification at all -- fixed here by
+  // creating the same USER_SUSPENDED notification, atomically with the
+  // User update. relatedType/relatedId stay null: a direct suspend has no
+  // Report backing it, and resolveHref.ts's existing relatedId===null guard
+  // already renders that safely as a non-clickable notification with no
+  // extra branching needed (E-4). The composite unique index on
+  // Notification (userId, type, relatedType, relatedId) does not reject
+  // repeated (null, null) pairs -- PostgreSQL unique indexes treat NULL as
+  // distinct from NULL (verified against this project's own init migration,
+  // a plain CREATE UNIQUE INDEX with no COALESCE trick), so re-suspending
+  // the same user later just inserts another row, exactly as desired.
+  if (action === "suspend") {
+    const suspendDesc = suspendDurationDays ? `${suspendDurationDays}일 정지되었습니다.` : "영구 정지되었습니다.";
+    const updated = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.update({ where: { id: targetUserId }, data });
+      await tx.notification.create({
+        data: {
+          userId: targetUserId,
+          type: NotificationType.USER_SUSPENDED,
+          title: "계정 정지 안내",
+          content: `계정이 ${suspendDesc}`,
+          relatedType: null,
+          relatedId: null,
+        },
+      });
+      return user;
+    });
+    return { kind: "ok", data: toAdminUserDTO(updated) };
+  }
 
   const updated = await prisma.user.update({ where: { id: targetUserId }, data });
   return { kind: "ok", data: toAdminUserDTO(updated) };

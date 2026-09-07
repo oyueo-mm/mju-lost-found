@@ -32,7 +32,11 @@ export type AdminUserAction = (typeof ADMIN_USER_ACTIONS)[number];
 
 export const updateUserByAdminSchema = z.object({
   action: z.enum(ADMIN_USER_ACTIONS),
-  suspendDurationDays: z.coerce.number().int().positive().optional(),
+  // Phase F-2: same 1~365 cap as moderation/schema.ts's processReportSchema
+  // -- both suspend paths (report-flow and this direct admin toggle) share
+  // the identical duration contract, so an admin can't pass an
+  // effectively-unbounded duration through whichever path lacks a cap.
+  suspendDurationDays: z.coerce.number().int().positive().max(365).optional(),
 });
 export type UpdateUserByAdminInput = z.infer<typeof updateUserByAdminSchema>;
 

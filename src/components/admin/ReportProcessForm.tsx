@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { MODERATION_ACTION_TYPE_LABELS, TARGET_TYPE_TO_ACTION_TYPE } from "@/lib/moderation/schema";
+import {
+  MODERATION_ACTION_TYPE_LABELS,
+  SUSPEND_DURATION_DAY_OPTIONS,
+  TARGET_TYPE_TO_ACTION_TYPE,
+} from "@/lib/moderation/schema";
 import type { ReportTargetType } from "@/lib/report/schema";
 import { Button } from "@/components/ui/Button";
 import { AlertIcon } from "@/components/icons";
@@ -15,6 +19,12 @@ type ReportProcessFormProps = {
   targetType: ReportTargetType;
   targetDeleted: boolean;
 };
+
+// Phase F-2: same duration shape as UserActionButtons' own picker (see that
+// component) -- both suspend flows offer identical choices now.
+type SuspendChoice = `${(typeof SUSPEND_DURATION_DAY_OPTIONS)[number]}` | "permanent" | "custom";
+const MIN_CUSTOM_DAYS = 1;
+const MAX_CUSTOM_DAYS = 365;
 
 // Client-side port of legacy pages/7_관리자.py::_render_process_control():
 // pick a decision (반려/조치 완료), fill in the one action_type the target
@@ -30,15 +40,34 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
   const [decision, setDecision] = useState<"dismiss" | "action">("dismiss");
   const [adminNote, setAdminNote] = useState("");
   const [actionReason, setActionReason] = useState("");
-  const [suspendChoice, setSuspendChoice] = useState<"7" | "30" | "permanent">("7");
+  const [suspendChoice, setSuspendChoice] = useState<SuspendChoice>(`${SUSPEND_DURATION_DAY_OPTIONS[0]}`);
+  const [customDays, setCustomDays] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Client-side range check only, same as UserActionButtons' own custom-days
+  // input -- the server's own suspendDurationDays schema (positive, int,
+  // max 365) is the actual gate regardless of this.
+  const customDaysInvalid =
+    decision === "action" &&
+    actionType === "suspend_user" &&
+    suspendChoice === "custom" &&
+    !(Number.isInteger(Number(customDays)) && Number(customDays) >= MIN_CUSTOM_DAYS && Number(customDays) <= MAX_CUSTOM_DAYS);
 
   async function handleConfirm() {
     setSubmitting(true);
     setError(null);
     try {
+      const suspendDurationDays =
+        actionType === "suspend_user"
+          ? suspendChoice === "permanent"
+            ? undefined
+            : suspendChoice === "custom"
+              ? Number(customDays)
+              : Number(suspendChoice)
+          : undefined;
+
       const body =
         decision === "dismiss"
           ? { decision: "dismiss" as const, adminNote: adminNote || undefined }
@@ -46,10 +75,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
               decision: "action" as const,
               actionReason: actionReason || undefined,
               adminNote: adminNote || undefined,
-              suspendDurationDays:
-                actionType === "suspend_user" && suspendChoice !== "permanent"
-                  ? Number(suspendChoice)
-                  : undefined,
+              suspendDurationDays,
             };
 
       const res = await fetch(`/api/admin/reports/${reportId}/process`, {
@@ -143,19 +169,52 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
           {actionType === "suspend_user" && (
             <label className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-muted-foreground">정지 기간</span>
-              <div className="flex gap-3">
-                {(["7", "30", "permanent"] as const).map((v) => (
-                  <label key={v} className="flex items-center gap-1.5 text-xs text-foreground">
+              <div className="flex flex-wrap gap-3">
+                {SUSPEND_DURATION_DAY_OPTIONS.map((d) => (
+                  <label key={d} className="flex items-center gap-1.5 text-xs text-foreground">
                     <input
                       type="radio"
                       name={`suspend-duration-${reportId}`}
-                      checked={suspendChoice === v}
-                      onChange={() => setSuspendChoice(v)}
+                      checked={suspendChoice === `${d}`}
+                      onChange={() => setSuspendChoice(`${d}`)}
                     />
-                    {v === "7" ? "7일" : v === "30" ? "30일" : "영구"}
+                    {d}일
                   </label>
                 ))}
+                <label className="flex items-center gap-1.5 text-xs text-foreground">
+                  <input
+                    type="radio"
+                    name={`suspend-duration-${reportId}`}
+                    checked={suspendChoice === "permanent"}
+                    onChange={() => setSuspendChoice("permanent")}
+                  />
+                  영구
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-foreground">
+                  <input
+                    type="radio"
+                    name={`suspend-duration-${reportId}`}
+                    checked={suspendChoice === "custom"}
+                    onChange={() => setSuspendChoice("custom")}
+                  />
+                  사용자 지정
+                </label>
               </div>
+              {suspendChoice === "custom" && (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min={MIN_CUSTOM_DAYS}
+                    max={MAX_CUSTOM_DAYS}
+                    value={customDays}
+                    onChange={(e) => setCustomDays(e.target.value)}
+                    className={`${FIELD_CLASS} w-20 bg-card`}
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    일 ({MIN_CUSTOM_DAYS}~{MAX_CUSTOM_DAYS})
+                  </span>
+                </div>
+              )}
             </label>
           )}
           <label className="flex flex-col gap-1.5">
@@ -175,9 +234,21 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
         <textarea value={adminNote} onChange={(e) => setAdminNote(e.target.value)} rows={2} className={FIELD_CLASS} />
       </label>
 
-      <Button type="button" variant={decision === "action" ? "destructive" : "primary"} size="sm" onClick={() => setConfirming(true)} className="self-start">
+      <Button
+        type="button"
+        variant={decision === "action" ? "destructive" : "primary"}
+        size="sm"
+        onClick={() => setConfirming(true)}
+        disabled={customDaysInvalid}
+        className="self-start"
+      >
         처리하기
       </Button>
+      {customDaysInvalid && (
+        <p className="text-xs text-destructive">
+          사용자 지정 기간은 {MIN_CUSTOM_DAYS}~{MAX_CUSTOM_DAYS}일 사이의 정수여야 합니다.
+        </p>
+      )}
     </div>
   );
 }

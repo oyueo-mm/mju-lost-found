@@ -361,6 +361,24 @@ describe("applyReportAction", () => {
     });
   });
 
+  // Phase F-2: the service itself doesn't branch on which specific duration
+  // was chosen (1/3/7/30/custom all flow through the same
+  // `suspendDurationDays * 24h` formula) -- this just confirms the newly
+  // added short preset (1일) still reaches that same code path correctly.
+  it("suspends the target user for a 1-day duration (new F-2 preset)", async () => {
+    report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "USER", targetId: 88 }));
+    userTable.findUnique.mockResolvedValueOnce({ id: 88 });
+    txReport.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    const result = await applyReportAction(admin, 10, "suspend_user", { suspendDurationDays: 1 });
+
+    expect(result.kind).toBe("ok");
+    expect(txUser.update).toHaveBeenCalledWith({
+      where: { id: 88 },
+      data: { isSuspended: true, suspendedUntil: expect.any(Date) },
+    });
+  });
+
   it("suspends permanently (suspendedUntil null) when no duration is given", async () => {
     report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "USER", targetId: 88 }));
     userTable.findUnique.mockResolvedValueOnce({ id: 88 });

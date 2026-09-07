@@ -111,6 +111,45 @@ describe("PATCH /api/admin/users/[id]", () => {
     expect(res.status).toBe(404);
   });
 
+  // Phase F-2: suspendDurationDays now has an upper bound (max 365) so an
+  // admin can't pass an effectively-permanent duration (e.g. 999999) that
+  // bypasses the deliberate "no duration = permanent" convention.
+  it.each([
+    ["366 (over the max)", 366],
+    ["0 (not positive)", 0],
+    ["-1 (negative)", -1],
+    ["1.5 (not an integer)", 1.5],
+  ])("rejects suspendDurationDays = %s", async (_label, suspendDurationDays) => {
+    requireAdminForApi.mockResolvedValueOnce({ user: admin });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/admin/users/5", {
+        method: "PATCH",
+        body: JSON.stringify({ action: "suspend", suspendDurationDays }),
+      }),
+      params("5"),
+    );
+
+    expect(res.status).toBe(400);
+    expect(updateUserByAdmin).not.toHaveBeenCalled();
+  });
+
+  it("accepts suspendDurationDays = 365 (the max)", async () => {
+    requireAdminForApi.mockResolvedValueOnce({ user: admin });
+    updateUserByAdmin.mockResolvedValueOnce({ kind: "ok", data: { id: 5, isSuspended: true } });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/admin/users/5", {
+        method: "PATCH",
+        body: JSON.stringify({ action: "suspend", suspendDurationDays: 365 }),
+      }),
+      params("5"),
+    );
+
+    expect(res.status).toBe(200);
+    expect(updateUserByAdmin).toHaveBeenCalledWith(admin, 5, "suspend", 365);
+  });
+
   it("promotes the target user and forwards suspendDurationDays when given", async () => {
     requireAdminForApi.mockResolvedValueOnce({ user: admin });
     updateUserByAdmin.mockResolvedValueOnce({ kind: "ok", data: { id: 5, isSuspended: true } });

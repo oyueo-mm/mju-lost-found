@@ -81,7 +81,7 @@ export default async function AdminUsersPage({
                       관리자
                     </span>
                   )}
-                  {u.isSuspended && (
+                  {u.currentlySuspended && (
                     <span className="rounded-full bg-destructive-muted px-2 py-0.5 text-[11px] font-medium text-destructive">
                       정지됨
                     </span>
@@ -89,7 +89,8 @@ export default async function AdminUsersPage({
                 </div>
                 <span className="text-xs text-muted-foreground">
                   {u.email} · 가입일: {formatDate(u.createdAt)}
-                  {u.isSuspended && (u.suspendedUntil ? ` · 정지 해제: ${formatDate(u.suspendedUntil)}` : " · 영구 정지")}
+                  {u.currentlySuspended &&
+                    (u.suspendedUntil ? ` · 정지 해제: ${formatDate(u.suspendedUntil)}` : " · 영구 정지")}
                 </span>
               </div>
 
