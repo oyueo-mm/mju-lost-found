@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { signIn } from "@/lib/auth/auth";
 import { getCurrentUser, sanitizeCallbackUrl, type LoginReason } from "@/lib/auth/session";
+import { isGoogleTestModeEnabled } from "@/lib/settings/service";
 import { Button } from "@/components/ui/Button";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -34,7 +35,13 @@ export default async function LoginPage({
   const { error, reason, callbackUrl: rawCallbackUrl } = await searchParams;
   const callbackUrl = sanitizeCallbackUrl(rawCallbackUrl);
 
-  const user = await getCurrentUser();
+  // Phase H-6 section 9: read-only, purely informational -- the real
+  // OAuth gate (which accounts can actually sign in) is enforced server-
+  // side by the NextAuth signIn callback via this same
+  // isGoogleTestModeEnabled(), never by anything on this page. This call
+  // only decides whether to *show* the test-mode banner below; it can't
+  // loosen or tighten who's allowed to log in.
+  const [user, googleTestModeEnabled] = await Promise.all([getCurrentUser(), isGoogleTestModeEnabled()]);
   if (user) {
     redirect(user.nickname ? (callbackUrl ?? "/") : "/onboarding");
   }
@@ -71,6 +78,20 @@ export default async function LoginPage({
           </p>
         )}
 
+        {/* Phase H-6 section 9: only visible while an admin has turned test
+            mode on (see admin settings UI / isGoogleTestModeEnabled) -- when
+            off, this page renders exactly as it did before this phase. Text
+            is the exact wording requested: explains in one glance, without
+            any jargon, that a non-@mju.ac.kr Google account will work for
+            now. This is a UI notice only; the actual OAuth accept/reject
+            decision is unchanged, made server-side by the signIn callback
+            reading the same setting. */}
+        {googleTestModeEnabled && (
+          <p className="w-full whitespace-pre-line rounded-card border border-primary/30 bg-primary-muted px-4 py-2.5 text-sm text-primary">
+            {"🧪 현재 테스트 기간입니다\n\n테스트를 위해 명지대학교 계정이 아닌 일반 Google 계정도\n로그인할 수 있습니다."}
+          </p>
+        )}
+
         <form
           className="w-full"
           action={async () => {
@@ -87,9 +108,17 @@ export default async function LoginPage({
           </Button>
         </form>
 
-        <p className="text-xs text-muted-foreground">
-          학교 계정(@mju.ac.kr)이 아닌 계정은 로그인할 수 없습니다.
-        </p>
+        {/* Phase H-6 section 9: this line would directly contradict the test-
+            mode banner above ("일반 Google 계정도 로그인할 수 있습니다" vs
+            "로그인할 수 없습니다" back to back on the same screen), so it's
+            suppressed only while test mode is on -- the underlying rule
+            itself (and its server-side enforcement) is unchanged, this is
+            purely about not showing two contradictory sentences at once. */}
+        {!googleTestModeEnabled && (
+          <p className="text-xs text-muted-foreground">
+            학교 계정(@mju.ac.kr)이 아닌 계정은 로그인할 수 없습니다.
+          </p>
+        )}
 
         <div className="flex w-full flex-col items-center gap-1.5 border-t border-border pt-6">
           <p className="text-sm text-muted-foreground">명지대 계정이 없으신가요?</p>

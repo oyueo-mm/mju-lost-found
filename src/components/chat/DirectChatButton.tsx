@@ -55,7 +55,7 @@ export function DirectChatButton({ postType, postId }: DirectChatButtonProps) {
         disabled={pending}
         className="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-foreground/30 disabled:opacity-60"
       >
-        {pending ? "여는 중..." : "작성자에게 문의하기"}
+        {pending ? "여는 중..." : "채팅하기"}
       </button>
     </div>
   );

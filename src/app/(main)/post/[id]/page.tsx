@@ -7,8 +7,7 @@ import { getFoundPost, getLostPost } from "@/lib/posts/service";
 import { FOUND_STATUSES, LOST_STATUSES, postTypeSchema } from "@/lib/posts/schema";
 import { isAdmin } from "@/lib/moderation/service";
 import { listCommentsForPost } from "@/lib/comment/service";
-import { DeletePostButton } from "@/components/post/DeletePostButton";
-import { StatusChangeControl } from "@/components/post/StatusChangeControl";
+import { PostManageMenu } from "@/components/post/PostManageMenu";
 import { ViewTracker } from "@/components/post/ViewTracker";
 import { ImageSimilaritySection } from "@/components/post/ImageSimilaritySection";
 import { DirectChatButton } from "@/components/chat/DirectChatButton";
@@ -18,7 +17,6 @@ import { CommentSection } from "@/components/comment/CommentSection";
 import { encodePostTargetId } from "@/lib/report/targets";
 import { ReportButton } from "@/components/report/ReportButton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { LinkButton } from "@/components/ui/Button";
 import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
@@ -121,31 +119,28 @@ export default async function PostDetailPage({
     <div className="flex flex-col gap-6">
       <ViewTracker type={type} postId={post.id} />
       {post.imageUrl ? (
-        // Not `fill` + a fixed aspect-video box: that forces every image
-        // (portrait phone photos included) into a 16:9 crop via
-        // object-cover, which is what made images look "excessively
-        // zoomed in" -- a tall photo has most of its height cropped away
-        // to fill a wide box. Uploaded photos have no stored/known
-        // dimensions (no schema/upload change was warranted just for
-        // this), so width/height below are only Next.js's placeholder
-        // for srcset generation -- `h-auto w-auto` overrides them at
-        // render time, so the browser sizes the <img> from the actual
-        // loaded file's own intrinsic dimensions (never distorted, never
-        // cropped). `max-w-full` shrinks large images to fit the column;
-        // `max-h-[70vh]` caps a very tall portrait so it can't dominate
-        // the whole page; neither one *enlarges* a small image past its
-        // real resolution. The surrounding box only needs to center
-        // whatever width the image ends up at and fill the leftover
-        // space with a neutral background (same tone as PostCard's
-        // no-image placeholder) instead of showing bare white/black.
-        <div className="flex w-full items-center justify-center overflow-hidden rounded-card border border-border bg-muted">
+        // Phase H-3's `width/height` hint + `h-auto w-auto` pattern never
+        // upscales past the source photo's own pixel resolution (that's
+        // what `h-auto w-auto` is *for* -- it makes Next.js size the <img>
+        // from the loaded file's real intrinsic dimensions), which is why
+        // images "felt small" on a wide desktop column: a modest phone
+        // photo simply never grew to fill the space. `fill` inside an
+        // explicitly height-bounded box (`h-[45vh] md:h-[65vh]`, capped
+        // rather than open-ended so a very tall portrait still can't
+        // dominate the whole page) plus `object-contain` (never `-cover`)
+        // is the one combination that satisfies all of: genuinely larger
+        // on both mobile and desktop, uses the full available width,
+        // never crops, and never distorts a portrait or landscape photo
+        // -- any letterboxed leftover space uses the same neutral
+        // `bg-muted` tone as PostCard's own no-image placeholder instead
+        // of bare white/black.
+        <div className="relative h-[45vh] w-full overflow-hidden rounded-card border border-border bg-muted md:h-[65vh]">
           <Image
             src={post.imageUrl}
             alt={post.title}
-            width={1200}
-            height={900}
+            fill
             sizes="(min-width: 768px) 768px, 100vw"
-            className="h-auto max-h-[70vh] w-auto max-w-full"
+            className="object-contain"
             priority
           />
         </div>
@@ -156,17 +151,40 @@ export default async function PostDetailPage({
         </div>
       )}
 
-      {/* Phase H-3: title/status/장소/날짜/카테고리/조회수/설명 -- previously
-          three visually separate blocks (heading+badges, then a bare <p>
-          for the description with no shared container) -- now one card so
+      {/* Phase H-3: title/status/장소/날짜/카테고리/조회수/설명 -- one card so
           the reader's eye has a single, clearly-bounded "이 게시물의 핵심
           정보" region instead of the info trailing off into plain page
-          background. No field removed or renamed, only regrouped;
-          StatusBadge/PinIcon/ClockIcon/EyeIcon usages are unchanged. */}
+          background.
+          Phase H-6: author nickname now sits directly above the title
+          (largest single signal for "누가 올린 글인지") instead of buried in
+          a separate box below; title+status stayed the single most
+          prominent line and only grew (text-2xl on desktop). 작성일/수정일
+          shrank to one small caption line at the very bottom of the same
+          card -- still present, still unaltered data, just no longer
+          competing for attention with title/status/description. Edit/
+          delete/상태변경 collapsed into PostManageMenu's "⋯" trigger next to
+          the status badge (owner-only, same as the controls it replaces).
+          No field removed or renamed, only regrouped; StatusBadge/PinIcon/
+          ClockIcon/EyeIcon usages are unchanged. */}
       <div className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
         <div className="flex items-start justify-between gap-3">
-          <h1 className="text-xl font-semibold text-foreground">{post.title}</h1>
-          <StatusBadge status={post.status} className="shrink-0" />
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="truncate text-sm font-medium text-primary">
+              {post.author.nickname ?? "알 수 없음"}
+            </span>
+            <h1 className="text-xl font-semibold text-foreground md:text-2xl">{post.title}</h1>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <StatusBadge status={post.status} />
+            {isOwner && (
+              <PostManageMenu
+                id={post.id}
+                type={type}
+                currentStatus={post.status}
+                statuses={type === "lost" ? LOST_STATUSES : FOUND_STATUSES}
+              />
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
           <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
@@ -192,36 +210,10 @@ export default async function PostDetailPage({
         <p className="whitespace-pre-wrap border-t border-border pt-4 text-sm leading-relaxed text-foreground">
           {post.description}
         </p>
+        <p className="text-xs text-muted-foreground/70">
+          작성일 {formatDate(post.createdAt)} · 수정일 {formatDate(post.updatedAt)}
+        </p>
       </div>
-
-      <div className="flex items-center justify-between rounded-card border border-border bg-muted/50 p-4 text-sm text-muted-foreground">
-        <div className="flex flex-col gap-1">
-          <span>작성자: {post.author.nickname ?? "알 수 없음"}</span>
-          <span>작성일: {formatDate(post.createdAt)}</span>
-          <span>수정일: {formatDate(post.updatedAt)}</span>
-        </div>
-
-        {isOwner && (
-          <div className="flex items-center gap-2">
-            <LinkButton href={`/post/${post.id}/edit?type=${type}`} variant="secondary" size="sm">
-              수정
-            </LinkButton>
-            <DeletePostButton id={post.id} type={type} />
-          </div>
-        )}
-      </div>
-
-      {/* Owner-only, mirrors legacy pages/3_내_게시물.py's status-change
-          button -- a non-owner never sees this (isOwner gates it, and the
-          PATCH API re-checks ownership regardless). */}
-      {isOwner && (
-        <StatusChangeControl
-          id={post.id}
-          type={type}
-          currentStatus={post.status}
-          statuses={type === "lost" ? LOST_STATUSES : FOUND_STATUSES}
-        />
-      )}
 
       {/* Phase 10: direct-chat entry point -- only a non-owner can message
           the author this way (no Match required); the owner never sees
@@ -241,7 +233,7 @@ export default async function PostDetailPage({
             href={`/login?reason=chat&callbackUrl=${encodeURIComponent(`/post/${post.id}?type=${type}`)}`}
             className="w-fit rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-foreground/30"
           >
-            작성자에게 문의하기
+            채팅하기
           </Link>
         ))}
 

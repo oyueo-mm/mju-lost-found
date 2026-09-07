@@ -40,13 +40,24 @@ type PostCardProps = {
 // (still a fixed ratio + object-cover, so the grid stays perfectly
 // uniform) -- less of the subject is lost, and the image now makes up
 // more of the card's total height instead of stopping short of it.
+//
+// Phase H-6: 4:5 on its own made desktop cards read as too tall once the
+// grid grows past 2 columns (md:grid-cols-3/lg:grid-cols-4, see every
+// caller of this component) -- each card's fixed height compounds across a
+// wide multi-column row in a way it doesn't on a narrow single-column-ish
+// mobile view. `md:aspect-4/3` (same breakpoint BottomNav/Header already
+// use as this app's mobile/desktop line, see layout/BottomNav.tsx) switches
+// back to the original, more landscape ratio from `md:` up only -- mobile
+// keeps 4:5 unchanged. Still a fixed ratio + object-cover at every
+// breakpoint, so every card in a given row stays exactly the same height
+// (never distorted, never a mix of ratios within one grid).
 export function PostCard({ post, scoreLabel = "검색 유사도" }: PostCardProps) {
   return (
     <Link
       href={`/post/${post.id}?type=${post.type}`}
       className="group flex flex-col overflow-hidden rounded-card border border-border bg-card transition-colors hover:border-foreground/30"
     >
-      <div className="relative aspect-4/5 w-full shrink-0 overflow-hidden bg-muted">
+      <div className="relative aspect-4/5 w-full shrink-0 overflow-hidden bg-muted md:aspect-4/3">
         {post.imageUrl ? (
           <Image
             src={post.imageUrl}

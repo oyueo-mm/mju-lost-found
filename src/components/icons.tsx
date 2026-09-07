@@ -185,3 +185,16 @@ export function AlertIcon(props: IconProps) {
     </svg>
   );
 }
+
+// Phase H-6: the "⋯" trigger for PostManageMenu -- three filled dots, no
+// stroke (unlike every icon above), since a thin 1.75px outline circle
+// this small reads as barely visible at typical button sizes.
+export function MoreIcon(props: IconProps) {
+  return (
+    <svg {...base(props)} fill="currentColor" stroke="none">
+      <circle cx="5" cy="12" r="1.6" />
+      <circle cx="12" cy="12" r="1.6" />
+      <circle cx="19" cy="12" r="1.6" />
+    </svg>
+  );
+}

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -5,6 +6,7 @@ import { requireReadyUser } from "@/lib/auth/session";
 import { getChatRoomForUser } from "@/lib/chat/service";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { ReportButton } from "@/components/report/ReportButton";
+import { ImageOffIcon } from "@/components/icons";
 
 export default async function ChatRoomPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: idParam } = await params;
@@ -28,6 +30,21 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
 
   const room = result.data;
 
+  // Phase H-6: a "match" room always has both sides (분실물+습득물), a
+  // "direct" room always has exactly one post -- same discriminated-union
+  // shape resolveDetailDTO() in chat/service.ts already returns, just
+  // normalized here into one array so the chip strip below doesn't need
+  // its own roomType branch. `type` per ref is what makes each link land
+  // on the correct board (/post/[id] requires it, LostPost/FoundPost ids
+  // are independent sequences -- see post/[id]/page.tsx's own comment).
+  const postRefs =
+    room.roomType === "match"
+      ? [
+          { key: "lost", id: room.lostPost.id, type: "lost" as const, title: room.lostPost.title, imageUrl: room.lostPost.imageUrl },
+          { key: "found", id: room.foundPost.id, type: "found" as const, title: room.foundPost.title, imageUrl: room.foundPost.imageUrl },
+        ]
+      : [{ key: "post", id: room.post.id, type: room.post.type, title: room.post.title, imageUrl: room.post.imageUrl }];
+
   return (
     // h-[70dvh], not h-[70vh]: `dvh` (dynamic viewport height) tracks the
     // browser's *actual* visible viewport, which shrinks when a mobile
@@ -37,18 +54,9 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
     // keyboard on mobile. This bounded height is what gives ChatThread's
     // own flex column (see its own comment) a real height to fill and
     // scroll within -- no `position: fixed` needed.
-    <div className="flex h-[70dvh] flex-col gap-4">
-      <div className="flex items-center justify-between border-b border-border pb-4">
-        <div className="flex flex-col">
-          <span className="font-semibold text-foreground">
-            {room.counterpart.nickname ?? "알 수 없음"}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {room.roomType === "match"
-              ? `${room.lostPost.title} ↔ ${room.foundPost.title}`
-              : room.post.title}
-          </span>
-        </div>
+    <div className="flex h-[70dvh] flex-col gap-3">
+      <div className="flex items-center justify-between border-b border-border pb-3">
+        <span className="font-semibold text-foreground">{room.counterpart.nickname ?? "알 수 없음"}</span>
         <div className="flex items-center gap-3">
           <ReportButton
             targetType="user"
@@ -59,6 +67,30 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
             채팅 목록
           </Link>
         </div>
+      </div>
+
+      {/* Phase H-6 section 8: 게시글 -> 채팅 방향은 DirectChatButton/MatchPanel
+          이 이미 처리하므로, 여기서는 채팅 -> 게시글 방향만 추가한다. 썸네일 +
+          제목 + "게시글 보기"를 한 칩으로 묶어 클릭 시 정확히 해당 게시글
+          상세로 이동한다 (match 방은 두 개, direct 방은 한 개). */}
+      <div className="flex flex-wrap gap-2 border-b border-border pb-3">
+        {postRefs.map((ref) => (
+          <Link
+            key={ref.key}
+            href={`/post/${ref.id}?type=${ref.type}`}
+            className="flex items-center gap-2 rounded-full border border-border bg-muted/50 py-1 pr-3 pl-1 text-xs text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+          >
+            <span className="relative size-6 shrink-0 overflow-hidden rounded-full bg-muted">
+              {ref.imageUrl ? (
+                <Image src={ref.imageUrl} alt={ref.title} fill sizes="24px" className="object-cover" />
+              ) : (
+                <ImageOffIcon className="m-auto size-3.5 text-muted-foreground" />
+              )}
+            </span>
+            <span className="max-w-32 truncate">{ref.title}</span>
+            <span className="font-medium text-primary">게시글 보기</span>
+          </Link>
+        ))}
       </div>
 
       <ChatThread chatRoomId={room.id} />

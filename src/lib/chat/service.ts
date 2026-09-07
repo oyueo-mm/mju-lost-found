@@ -12,7 +12,11 @@ import { MESSAGE_PAGE_SIZE } from "./schema";
 // never altered, only masked here for display, exactly as legacy does.
 const HIDDEN_MESSAGE_PLACEHOLDER = "[관리자에 의해 숨겨진 메시지입니다.]";
 
-type PostRef = { id: number; userId: number; title: string };
+// Phase H-6: imageUrl added so a chat room header can show the related
+// post's thumbnail -- an already-existing LostPost/FoundPost column, not a
+// schema change; every consumer of PostRef already tolerates new fields
+// (none of them spread/destructure it exhaustively), so this is additive.
+type PostRef = { id: number; userId: number; title: string; imageUrl: string | null };
 
 // A ChatRoom row is exactly one of two shapes (see schema.prisma's own
 // comment on the model): Match-based (match set, direct* all null) or
@@ -66,15 +70,15 @@ export type ChatRoomDetailDTO =
       matchId: number;
       createdAt: Date;
       counterpart: { id: number; nickname: string | null };
-      lostPost: { id: number; title: string };
-      foundPost: { id: number; title: string };
+      lostPost: { id: number; title: string; imageUrl: string | null };
+      foundPost: { id: number; title: string; imageUrl: string | null };
     }
   | {
       roomType: "direct";
       id: number;
       createdAt: Date;
       counterpart: { id: number; nickname: string | null };
-      post: { id: number; title: string; type: PostType };
+      post: { id: number; title: string; type: PostType; imageUrl: string | null };
     };
 
 export type ChatRoomListItemDTO = ChatRoomDetailDTO & {
@@ -113,7 +117,7 @@ export type MessageDTO = {
   reactions: ReactionSummary[];
 };
 
-const POST_REF_SELECT = { id: true, userId: true, title: true } as const;
+const POST_REF_SELECT = { id: true, userId: true, title: true, imageUrl: true } as const;
 
 // Phase D-3: shared by listMessages/sendMessage so both build the exact
 // same reply-preview shape from the exact same raw shape (whatever a
@@ -223,8 +227,12 @@ async function resolveDetailDTO(
       matchId: room.match.id,
       createdAt: room.createdAt,
       counterpart,
-      lostPost: { id: room.match.lostPost.id, title: room.match.lostPost.title },
-      foundPost: { id: room.match.foundPost.id, title: room.match.foundPost.title },
+      lostPost: { id: room.match.lostPost.id, title: room.match.lostPost.title, imageUrl: room.match.lostPost.imageUrl },
+      foundPost: {
+        id: room.match.foundPost.id,
+        title: room.match.foundPost.title,
+        imageUrl: room.match.foundPost.imageUrl,
+      },
     };
   }
 
@@ -237,7 +245,12 @@ async function resolveDetailDTO(
     id: room.id,
     createdAt: room.createdAt,
     counterpart,
-    post: { id: directPost.id, title: directPost.title, type: room.directLostPost ? "lost" : "found" },
+    post: {
+      id: directPost.id,
+      title: directPost.title,
+      type: room.directLostPost ? "lost" : "found",
+      imageUrl: directPost.imageUrl,
+    },
   };
 }
 

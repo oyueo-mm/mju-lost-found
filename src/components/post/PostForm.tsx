@@ -19,9 +19,19 @@ const FIELD_CLASS =
 // list follows the campus toggle above it; not exhaustive (a made-up
 // exhaustive campus map would be worse than no suggestions at all), just
 // the handful of buildings a lost/found item most often turns up at.
+//
+// Phase H-6: the original H-3 list was written by guessing plausible
+// building names, never checked against real posts. This turn queried
+// actual production LostPost/FoundPost (campus, location) pairs: every
+// real post (11/11) is on 인문캠퍼스, and 종합관/국제관 are genuine locations
+// people actually typed there -- so those two replace 인문사회관/경영관, which
+// had zero supporting evidence. 자연캠퍼스 has literally zero real posts to
+// check against, so that list is intentionally left as only generic,
+// campus-agnostic terms (no 자연캠퍼스-specific building invented without
+// evidence) -- see the H-6 report's own note on this asymmetry.
 const LOCATION_SUGGESTIONS: Record<string, string[]> = {
-  인문캠퍼스: ["학생회관", "중앙도서관", "종합관", "인문사회관", "경영관", "학생식당", "정문", "후문"],
-  자연캠퍼스: ["학생회관", "중앙도서관", "종합관", "공과대학", "자연과학관", "생활관(기숙사)", "학생식당", "정문"],
+  인문캠퍼스: ["종합관", "국제관", "학생회관", "중앙도서관", "학생식당", "정문", "후문"],
+  자연캠퍼스: ["학생회관", "중앙도서관", "공과대학", "자연과학관", "생활관(기숙사)", "학생식당", "정문"],
 };
 
 function RequiredMark() {
