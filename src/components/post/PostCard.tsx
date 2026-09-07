@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import type { PostDTO } from "@/lib/posts/service";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { AuthorLink } from "@/components/user/AuthorLink";
 import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
@@ -51,12 +52,23 @@ type PostCardProps = {
 // keeps 4:5 unchanged. Still a fixed ratio + object-cover at every
 // breakpoint, so every card in a given row stays exactly the same height
 // (never distorted, never a mix of ratios within one grid).
+// Phase H-7: the card is no longer one giant <Link> -- adding a clickable
+// author nickname (this phase's own spec) inside it would otherwise nest
+// an <a> inside an <a>, which is invalid HTML and makes the inner link's
+// click target browser-dependent/unreliable. Instead this uses the
+// standard "stretched link" technique: the outer element is a plain
+// `relative` div, the post-navigation Link is an absolutely-positioned
+// `inset-0` overlay as the LAST child (so it paints on top of everything
+// in normal stacking order), and the one interactive element that should
+// win over it -- AuthorLink -- gets `relative z-10` so it stays on top of
+// the overlay specifically. Clicking anywhere else on the card still
+// navigates to the post exactly as before; clicking the author name goes
+// to their profile instead. `group`/`group-hover` (image zoom on hover)
+// still work unchanged -- :hover is based on the pointer being over the
+// element's box, independent of which descendant is topmost for clicks.
 export function PostCard({ post, scoreLabel = "검색 유사도" }: PostCardProps) {
   return (
-    <Link
-      href={`/post/${post.id}?type=${post.type}`}
-      className="group flex flex-col overflow-hidden rounded-card border border-border bg-card transition-colors hover:border-foreground/30"
-    >
+    <div className="group relative flex flex-col overflow-hidden rounded-card border border-border bg-card transition-colors hover:border-foreground/30">
       <div className="relative aspect-4/5 w-full shrink-0 overflow-hidden bg-muted md:aspect-4/3">
         {post.imageUrl ? (
           <Image
@@ -86,6 +98,11 @@ export function PostCard({ post, scoreLabel = "검색 유사도" }: PostCardProp
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-3.5">
+        <AuthorLink
+          nickname={post.author.nickname}
+          publicId={post.author.publicId}
+          className="relative z-10 w-fit truncate text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+        />
         <h3 className="truncate text-sm font-semibold text-foreground">{post.title}</h3>
         <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
           <span className="flex items-center gap-1 truncate">
@@ -117,6 +134,8 @@ export function PostCard({ post, scoreLabel = "검색 유사도" }: PostCardProp
           </span>
         )}
       </div>
-    </Link>
+
+      <Link href={`/post/${post.id}?type=${post.type}`} aria-label={post.title} className="absolute inset-0" />
+    </div>
   );
 }

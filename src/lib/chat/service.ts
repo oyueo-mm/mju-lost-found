@@ -69,7 +69,7 @@ export type ChatRoomDetailDTO =
       id: number;
       matchId: number;
       createdAt: Date;
-      counterpart: { id: number; nickname: string | null };
+      counterpart: { id: number; nickname: string | null; publicId: string | null };
       lostPost: { id: number; title: string; imageUrl: string | null };
       foundPost: { id: number; title: string; imageUrl: string | null };
     }
@@ -77,7 +77,7 @@ export type ChatRoomDetailDTO =
       roomType: "direct";
       id: number;
       createdAt: Date;
-      counterpart: { id: number; nickname: string | null };
+      counterpart: { id: number; nickname: string | null; publicId: string | null };
       post: { id: number; title: string; type: PostType; imageUrl: string | null };
     };
 
@@ -254,9 +254,21 @@ async function resolveDetailDTO(
   };
 }
 
-async function resolveCounterpart(userId: number): Promise<{ id: number; nickname: string | null }> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, nickname: true } });
-  return user ?? { id: userId, nickname: null };
+// Phase H-7: publicId (nullable only for the fallback below) lets the chat
+// header link the counterpart's name to /profile/[publicId], same as every
+// other author-display site. The `?? {..., publicId: null}` branch only
+// fires if the user row itself no longer exists (deleted account, if that
+// ever becomes possible) -- there is no real profile to link to in that
+// case, so callers treat a null publicId as "not linkable" rather than
+// crashing.
+async function resolveCounterpart(
+  userId: number,
+): Promise<{ id: number; nickname: string | null; publicId: string | null }> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, nickname: true, publicId: true },
+  });
+  return user ?? { id: userId, nickname: null, publicId: null };
 }
 
 // Get-or-create the single ChatRoom for a Match -- mirrors legacy

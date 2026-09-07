@@ -1,10 +1,12 @@
 // Same policy as the legacy Streamlit project's db/database.py
 // (NICKNAME_MIN_LENGTH/MAX_LENGTH/_NICKNAME_RE, enforced in
 // set_initial_nickname()): trim whitespace, 2-20 chars, Korean/English/
-// digits only. Pure and unit-testable -- the actual "can't be changed
-// once set" / "must be unique" guarantees still come from the DB
-// (User.nickname is @unique, and the update in actions.ts only writes
-// when nickname is still NULL), not from this function.
+// digits only. Pure and unit-testable -- shape validation only. Shared by
+// onboarding's initial set (onboarding/actions.ts, once while nickname is
+// still NULL) and the later change flow (me/actions.ts, any number of
+// times) -- neither one enforces uniqueness anymore: Phase H-7 allows
+// duplicate nicknames by design and dropped User.nickname's old @unique
+// constraint, since public identity is now `User.publicId` instead.
 
 export const NICKNAME_MIN_LENGTH = 2;
 export const NICKNAME_MAX_LENGTH = 20;

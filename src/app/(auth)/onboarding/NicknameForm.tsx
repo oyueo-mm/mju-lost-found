@@ -29,7 +29,7 @@ export function NicknameForm() {
         </p>
       )}
       <Button type="submit" disabled={pending} className="w-full">
-        {pending ? "설정 중..." : "닉네임 설정하기 (변경 불가)"}
+        {pending ? "설정 중..." : "닉네임 설정하기"}
       </Button>
     </form>
   );

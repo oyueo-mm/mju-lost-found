@@ -8,8 +8,9 @@ import type { PostType } from "@/lib/posts/schema";
 import { Button } from "@/components/ui/Button";
 import { ChatBubbleIcon } from "@/components/icons";
 import { ReportButton } from "@/components/report/ReportButton";
+import { AuthorLink } from "@/components/user/AuthorLink";
 
-type CommentAuthor = { id: number; nickname: string | null };
+type CommentAuthor = { id: number; nickname: string | null; publicId: string };
 type CommentDTO = {
   id: number;
   content: string;
@@ -250,7 +251,14 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
     return (
       <>
         <div className="flex items-center justify-between gap-2">
-          <span className="font-medium text-foreground">{comment.author.nickname ?? "알 수 없음"}</span>
+          {/* Phase H-7: same profile link every other author display uses --
+              this is exactly the "닉네임 · 시간" shape this phase's spec gives
+              as its own example. */}
+          <AuthorLink
+            nickname={comment.author.nickname}
+            publicId={comment.author.publicId}
+            className="font-medium text-foreground hover:underline"
+          />
           <span className="text-xs text-muted-foreground">{formatRelativeTime(comment.createdAt)}</span>
         </div>
 

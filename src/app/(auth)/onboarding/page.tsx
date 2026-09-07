@@ -19,9 +19,9 @@ export default async function OnboardingPage() {
           </span>
           <h1 className="mt-1 text-xl font-semibold text-foreground">환영합니다, {user.name}님</h1>
           <p className="text-sm text-muted-foreground">
-            서비스를 이용하려면 먼저 고정 닉네임을 설정해주세요.
+            서비스를 이용하려면 먼저 닉네임을 설정해주세요.
             <br />
-            닉네임은 한 번 설정하면 변경할 수 없습니다.
+            닉네임은 나중에 내 정보에서 언제든 변경할 수 있습니다.
           </p>
         </div>
         <NicknameForm />

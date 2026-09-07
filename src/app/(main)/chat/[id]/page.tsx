@@ -6,6 +6,7 @@ import { requireReadyUser } from "@/lib/auth/session";
 import { getChatRoomForUser } from "@/lib/chat/service";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { ReportButton } from "@/components/report/ReportButton";
+import { AuthorLink } from "@/components/user/AuthorLink";
 import { ImageOffIcon } from "@/components/icons";
 
 export default async function ChatRoomPage({ params }: { params: Promise<{ id: string }> }) {
@@ -56,7 +57,18 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
     // scroll within -- no `position: fixed` needed.
     <div className="flex h-[70dvh] flex-col gap-3">
       <div className="flex items-center justify-between border-b border-border pb-3">
-        <span className="font-semibold text-foreground">{room.counterpart.nickname ?? "알 수 없음"}</span>
+        {/* Phase H-7: "채팅 상대방 이름" -- same profile-link convention as
+            PostCard/Post Detail/댓글. Not applied to the chat *list* page's
+            rows (chat/page.tsx): each row there is already one whole-row
+            <Link> to the room, and nesting a second link inside it would
+            hit the same invalid-HTML/unreliable-click problem PostCard's
+            own comment describes -- this room header isn't inside any
+            other link, so no such conflict here. */}
+        <AuthorLink
+          nickname={room.counterpart.nickname}
+          publicId={room.counterpart.publicId}
+          className="font-semibold text-foreground hover:underline"
+        />
         <div className="flex items-center gap-3">
           <ReportButton
             targetType="user"

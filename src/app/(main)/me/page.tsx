@@ -6,6 +6,7 @@ import { getUnreadNotificationCount } from "@/lib/notification/service";
 import { isAdmin } from "@/lib/moderation/service";
 import { UserIcon, ChevronRightIcon, BellIcon, ShieldIcon, LogoutIcon } from "@/components/icons";
 import { ThemeSettings } from "@/components/settings/ThemeSettings";
+import { NicknameSettings } from "@/components/settings/NicknameSettings";
 import type { ReactNode } from "react";
 
 // Phase 17: "내 정보" -- the hub this phase's Navigation redesign
@@ -60,6 +61,13 @@ export default async function MePage() {
           <span className="text-sm text-muted-foreground">{user.email}</span>
         </div>
       </section>
+
+      {/* Phase H-7: nickname is set once during onboarding (see
+          onboarding/NicknameForm.tsx) but can now be changed any number of
+          times from here -- duplicate nicknames are allowed by design (see
+          NicknameSettings/actions.ts's own comments), so this never blocks
+          on a uniqueness conflict the way onboarding's initial set did. */}
+      <NicknameSettings currentNickname={user.nickname ?? ""} />
 
       <section className="overflow-hidden rounded-card border border-border bg-card">
         <MenuRow href="/posts/mine" icon={<UserIcon className="size-4.5" />} label="내 게시물" />

@@ -21,7 +21,10 @@ export type CommentDTO = {
   // depth check -- so a client can group replies under their parent with
   // a single pass, no recursion needed.
   parentId: number | null;
-  author: { id: number; nickname: string | null };
+  // Phase H-7: publicId included so the client can link the author's
+  // nickname to /profile/[publicId] -- `id` itself is never used as a
+  // link target, only for internal comparisons (isOwner, etc).
+  author: { id: number; nickname: string | null; publicId: string };
 };
 
 export type CommentMutationResult<T> =
@@ -35,7 +38,7 @@ export type CommentMutationResult<T> =
   | { kind: "parent_not_found" }
   | { kind: "forbidden"; reason: "not_owner" | "suspended" | "not_admin" };
 
-const AUTHOR_SELECT = { id: true, nickname: true } as const;
+const AUTHOR_SELECT = { id: true, nickname: true, publicId: true } as const;
 
 function toCommentDTO(row: {
   id: number;
@@ -43,7 +46,7 @@ function toCommentDTO(row: {
   createdAt: Date;
   updatedAt: Date;
   parentId: number | null;
-  author: { id: number; nickname: string | null };
+  author: { id: number; nickname: string | null; publicId: string };
 }): CommentDTO {
   return row;
 }

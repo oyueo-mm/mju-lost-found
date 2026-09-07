@@ -17,6 +17,7 @@ import { CommentSection } from "@/components/comment/CommentSection";
 import { encodePostTargetId } from "@/lib/report/targets";
 import { ReportButton } from "@/components/report/ReportButton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { AuthorLink } from "@/components/user/AuthorLink";
 import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
@@ -169,9 +170,15 @@ export default async function PostDetailPage({
       <div className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-col gap-1">
-            <span className="truncate text-sm font-medium text-primary">
-              {post.author.nickname ?? "알 수 없음"}
-            </span>
+            {/* Phase H-7: clickable, same as every other author display in
+                this app (PostCard/CommentSection/chat header) -- including
+                on the viewer's own post, which goes to their own profile,
+                same as anyone else's. */}
+            <AuthorLink
+              nickname={post.author.nickname}
+              publicId={post.author.publicId}
+              className="w-fit truncate text-sm font-medium text-primary hover:underline"
+            />
             <h1 className="text-xl font-semibold text-foreground md:text-2xl">{post.title}</h1>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">

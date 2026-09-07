@@ -87,12 +87,27 @@ enum NotificationType {
 
 model User {
   id              Int       @id @default(autoincrement())
+  // Phase H-7: opaque, unguessable identifier for public profile URLs
+  // (/profile/[publicId]) -- kept entirely separate from `id` above,
+  // which stays the internal identifier for ownership/relations/session
+  // everywhere else in this app (see this phase's own "구현 원칙"): `id`'s
+  // sequential integer nature is never itself exposed as a public handle.
+  // DB-generated (`dbgenerated`, not Prisma-client-side `@default(uuid())`)
+  // specifically so the migration's ALTER TABLE backfills every existing
+  // user with its own distinct random value in the same statement that
+  // adds the column -- Postgres evaluates a volatile DEFAULT per row for
+  // pre-existing data, unlike a client-side default which only ever
+  // applies to rows inserted after the change. Immutable in practice
+  // because no API/action in this app ever writes to it post-creation.
+  publicId        String    @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid @map("public_id")
   email           String    @unique
   name            String
-  // idx_user_nickname (UNIQUE) is added by a migration in the legacy app
-  // rather than schema.sql itself, but it's part of the table's real,
-  // current shape -- carried over here as a normal @unique.
-  nickname        String?   @unique
+  // Phase H-7: duplicate nicknames are now allowed by design (this
+  // phase's own spec) -- public identity/URLs use `publicId` above
+  // instead, so nickname no longer needs to be unique for that purpose.
+  // The old idx_user_nickname/User_nickname_key UNIQUE index is dropped
+  // in this phase's migration.
+  nickname        String?
   isAdmin         Boolean   @default(false) @map("is_admin")
   isSuspended     Boolean   @default(false) @map("is_suspended")
   suspendedUntil  DateTime? @map("suspended_until")

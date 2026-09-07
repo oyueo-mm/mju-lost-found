@@ -64,7 +64,7 @@ describe("listLostPosts / listFoundPosts", () => {
         lostAt: new Date(),
         createdAt: new Date(),
         updatedAt: new Date(),
-        user: { id: 1, nickname: "닉네임" },
+        user: { id: 1, nickname: "닉네임", publicId: "pub-1" },
       },
     ]);
     lostPost.count.mockResolvedValueOnce(1);
@@ -75,7 +75,7 @@ describe("listLostPosts / listFoundPosts", () => {
       expect.objectContaining({ orderBy: [{ createdAt: "desc" }, { id: "desc" }] }),
     );
     expect(result.items[0].status).toBe("찾는 중"); // DB enum converted back to legacy Korean value
-    expect(result.items[0].author).toEqual({ id: 1, nickname: "닉네임" });
+    expect(result.items[0].author).toEqual({ id: 1, nickname: "닉네임", publicId: "pub-1" });
   });
 
   it("lists found posts", async () => {
@@ -206,7 +206,7 @@ describe("listLostPostsByUser / listFoundPostsByUser", () => {
         lostAt: new Date(),
         createdAt: new Date(),
         updatedAt: new Date(),
-        user: { id: 7, nickname: "닉네임" },
+        user: { id: 7, nickname: "닉네임", publicId: "pub-7" },
       },
     ]);
 

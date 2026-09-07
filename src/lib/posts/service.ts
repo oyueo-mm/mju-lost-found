@@ -45,12 +45,15 @@ const FOUND_STATUS_FROM_DB: Record<PrismaFoundPostStatus, string> = {
   COMPLETED: "완료",
 };
 
-// Only ever the two fields the legacy UI treats as public identity (see
-// ui/auth.py: "nickname is the only identity shown publicly") -- never
-// email, isAdmin, isSuspended, etc, regardless of how much of `User` a
-// caller might otherwise have access to.
-export const AUTHOR_SELECT = { id: true, nickname: true } as const;
-export type Author = { id: number; nickname: string | null };
+// Only ever the fields safe to show publicly (see ui/auth.py: "nickname is
+// the only identity shown publicly") -- never email, isAdmin, isSuspended,
+// etc, regardless of how much of `User` a caller might otherwise have
+// access to. `publicId` (Phase H-7) is included alongside `id` so callers
+// can link to /profile/[publicId] without a second query -- `id` itself
+// stays for internal use (e.g. "is this the current user's own post"), it
+// is never rendered as a link target.
+export const AUTHOR_SELECT = { id: true, nickname: true, publicId: true } as const;
+export type Author = { id: number; nickname: string | null; publicId: string };
 
 export type LostPostDTO = {
   id: number;

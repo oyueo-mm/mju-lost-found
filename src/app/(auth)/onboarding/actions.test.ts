@@ -1,13 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-class FakePrismaClientKnownRequestError extends Error {
-  code: string;
-  constructor(code: string) {
-    super("mock prisma error");
-    this.code = code;
-  }
-}
-
 const requireUser = vi.fn();
 const updateMany = vi.fn();
 const redirect = vi.fn((url: string) => {
@@ -17,9 +9,6 @@ const redirect = vi.fn((url: string) => {
 vi.mock("@/lib/auth/session", () => ({ requireUser }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: { user: { updateMany } } }));
 vi.mock("next/navigation", () => ({ redirect }));
-vi.mock("@/generated/prisma/client", () => ({
-  Prisma: { PrismaClientKnownRequestError: FakePrismaClientKnownRequestError },
-}));
 
 const { setNicknameAction } = await import("./actions");
 
@@ -70,15 +59,22 @@ describe("setNicknameAction", () => {
     expect(updateMany).not.toHaveBeenCalled();
   });
 
-  it("reports a friendly error when the nickname is already taken by someone else", async () => {
+  // Phase H-7: duplicate nicknames are allowed by design now (User.nickname's
+  // old @unique constraint was dropped -- public identity is publicId
+  // instead), so there is no longer a "nickname already taken" error path
+  // to test here; a successful update always redirects home, even if
+  // another user already has the same nickname.
+  it("allows setting a nickname another user already has", async () => {
     requireUser.mockResolvedValueOnce({ id: 7, nickname: null });
-    updateMany.mockRejectedValueOnce(new FakePrismaClientKnownRequestError("P2002"));
+    updateMany.mockResolvedValueOnce({ count: 1 });
 
     const form = new FormData();
     form.set("nickname", "중복닉네임");
 
-    const result = await setNicknameAction(null, form);
-
-    expect(result).toEqual({ error: "이미 사용 중인 닉네임입니다." });
+    await expect(setNicknameAction(null, form)).rejects.toThrow("REDIRECT:/");
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 7, nickname: null },
+      data: { nickname: "중복닉네임" },
+    });
   });
 });
