@@ -5,6 +5,7 @@ import { signOut } from "@/lib/auth/auth";
 import { getUnreadNotificationCount } from "@/lib/notification/service";
 import { isAdmin } from "@/lib/moderation/service";
 import { UserIcon, ChevronRightIcon, BellIcon, ShieldIcon, LogoutIcon } from "@/components/icons";
+import { ThemeSettings } from "@/components/settings/ThemeSettings";
 import type { ReactNode } from "react";
 
 // Phase 17: "내 정보" -- the hub this phase's Navigation redesign
@@ -82,6 +83,8 @@ export default async function MePage() {
           <MenuRow href="/admin" icon={<ShieldIcon className="size-4.5 text-primary" />} label="관리자 센터" />
         </section>
       )}
+
+      <ThemeSettings />
 
       <form
         action={async () => {

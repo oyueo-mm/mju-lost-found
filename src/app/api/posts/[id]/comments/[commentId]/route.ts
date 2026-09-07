@@ -39,7 +39,6 @@ export const PATCH = withErrorHandling(
       // produced by createComment) -- handled here purely so this switch
       // stays exhaustive over the shared CommentMutationResult<T> type.
       case "parent_not_found":
-      case "reply_to_reply":
         return jsonError(404, "댓글을 찾을 수 없습니다.");
       case "forbidden":
         return jsonError(403, "본인 댓글만 수정할 수 있습니다.");
@@ -65,7 +64,6 @@ export const DELETE = withErrorHandling(
       // deleteComment never actually returns these two -- see the
       // matching comment in the PATCH handler above.
       case "parent_not_found":
-      case "reply_to_reply":
         return jsonError(404, "댓글을 찾을 수 없습니다.");
       case "forbidden":
         return jsonError(403, "본인 댓글만 삭제할 수 있습니다.");

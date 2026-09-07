@@ -158,20 +158,36 @@ describe("createComment", () => {
     expect(comment.create).not.toHaveBeenCalled();
   });
 
-  it("rejects replying to a comment that is itself already a reply", async () => {
+  // Phase H-3: replying to a reply is now allowed (unlimited depth) --
+  // this is the exact scenario the old "reply_to_reply" rejection used to
+  // block; it now succeeds the same way replying to a top-level comment
+  // already did.
+  it("allows replying to a comment that is itself already a reply (unlimited depth)", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1 });
     comment.findUnique.mockResolvedValueOnce({
       id: 51,
-      parentId: 50, // already a reply -- only one level of nesting is allowed
+      parentId: 50, // already a reply
       authorUserId: 2,
       lostPostId: 1,
       foundPostId: null,
     });
+    comment.create.mockResolvedValueOnce({
+      id: 52,
+      content: "답글의 답글",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      parentId: 51,
+      author: { id: 1, nickname: "닉네임" },
+    });
 
-    const result = await createComment(author, "lost", 1, { content: "내용", parentId: 51 });
+    const result = await createComment(author, "lost", 1, { content: "답글의 답글", parentId: 51 });
 
-    expect(result).toEqual({ kind: "reply_to_reply" });
-    expect(comment.create).not.toHaveBeenCalled();
+    expect(result.kind).toBe("ok");
+    expect(comment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ authorUserId: 1, lostPostId: 1, parentId: 51 }),
+      }),
+    );
   });
 
   it("notifies the parent comment's author when a reply is created", async () => {

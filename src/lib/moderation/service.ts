@@ -434,7 +434,13 @@ export async function applyReportAction(
         }
         await tx.user.update({
           where: { id: resolved.id },
-          data: { isSuspended: true, suspendedUntil: expiresAt },
+          // Phase H-3: suspendedByUserId also stamped here (not just the
+          // direct admin/users path) so /admin/users always shows *some*
+          // actor for a currently-suspended user regardless of which flow
+          // suspended them -- this is purely an extra field on the same
+          // update this branch already ran; the ModerationAction/Report
+          // audit trail below (adminUserId/processedByUserId) is unchanged.
+          data: { isSuspended: true, suspendedUntil: expiresAt, suspendedByUserId: admin.id },
         });
         await tx.notification.create({
           data: {

@@ -3,8 +3,10 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { listReportsForAdmin } from "@/lib/moderation/service";
+import { getAppSettings } from "@/lib/settings/service";
 import { REPORT_STATUS_LABELS, REPORT_TARGET_TYPE_LABELS } from "@/lib/report/schema";
 import { ShieldIcon } from "@/components/icons";
+import { GoogleTestModeToggle } from "@/components/admin/GoogleTestModeToggle";
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
@@ -20,7 +22,7 @@ function formatDate(date: Date): string {
 export default async function AdminDashboardPage() {
   const admin = await requireAdmin(); // redirects unless logged in, ready, and DB-flagged admin
 
-  const [pendingResult, suspendedCount, lostCount, foundCount, userCount] = await Promise.all([
+  const [pendingResult, suspendedCount, lostCount, foundCount, userCount, appSettings] = await Promise.all([
     listReportsForAdmin(admin, { status: "pending", page: 1, limit: 5 }),
     prisma.user.count({ where: { isSuspended: true } }),
     prisma.lostPost.count(),
@@ -29,6 +31,10 @@ export default async function AdminDashboardPage() {
     // -- same "every number here is a real query, never mock data" rule
     // this page's own top comment already states.
     prisma.user.count(),
+    // Phase H-3: current Google 테스트 모드 상태, for GoogleTestModeToggle
+    // below -- server-rendered so the admin always sees the real DB state
+    // on load, never a stale/optimistic default.
+    getAppSettings(),
   ]);
 
   const pending = pendingResult.kind === "ok" ? pendingResult.data : { items: [], total: 0 };
@@ -101,6 +107,12 @@ export default async function AdminDashboardPage() {
           </div>
         )}
       </section>
+
+      <GoogleTestModeToggle
+        initialEnabled={appSettings.googleTestModeEnabled}
+        updatedByNickname={appSettings.updatedByNickname}
+        updatedAt={appSettings.updatedByNickname ? appSettings.updatedAt : null}
+      />
     </div>
   );
 }

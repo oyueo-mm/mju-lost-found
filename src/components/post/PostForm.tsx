@@ -13,6 +13,17 @@ import { Button } from "@/components/ui/Button";
 const FIELD_CLASS =
   "rounded-lg border border-border bg-transparent px-3 py-2.5 text-sm text-foreground disabled:opacity-60";
 
+// Phase H-3: suggestions only -- the 위치 field stays a plain free-text
+// input (no schema/API change, no enum), these are just common real
+// locations on each campus offered as a shortcut. Keyed by campus so the
+// list follows the campus toggle above it; not exhaustive (a made-up
+// exhaustive campus map would be worse than no suggestions at all), just
+// the handful of buildings a lost/found item most often turns up at.
+const LOCATION_SUGGESTIONS: Record<string, string[]> = {
+  인문캠퍼스: ["학생회관", "중앙도서관", "종합관", "인문사회관", "경영관", "학생식당", "정문", "후문"],
+  자연캠퍼스: ["학생회관", "중앙도서관", "종합관", "공과대학", "자연과학관", "생활관(기숙사)", "학생식당", "정문"],
+};
+
 function RequiredMark() {
   return (
     <span className="text-destructive" aria-hidden="true">
@@ -81,6 +92,11 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
   // and the next, and must never be stale the way a state read inside the
   // same call that just set it would be (React batches state updates).
   const staleUploadPathRef = useRef<string | null>(null);
+  // Phase H-3: 위치 stays an uncontrolled native input (read via FormData
+  // in handleSubmit, unchanged) -- this ref only lets a suggestion chip
+  // write into it directly, the same way a user's own typing would,
+  // without turning the field into controlled state just for this.
+  const locationInputRef = useRef<HTMLInputElement>(null);
   // Phase 31: required, unlike the earlier decorative version of this
   // control -- always starts on a real value (the existing post's campus
   // in edit mode, DEFAULT_CAMPUS for a brand-new one), and the toggle
@@ -356,6 +372,7 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
             <RequiredMark />
           </span>
           <input
+            ref={locationInputRef}
             name="location"
             type="text"
             required
@@ -365,6 +382,28 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
             disabled={pending}
             className={FIELD_CLASS}
           />
+          {/* Phase H-3: shortcuts only -- clicking one fills the input
+              above with that text (still fully editable afterward), but
+              direct free-text entry works exactly as before whether or
+              not any chip is ever clicked. */}
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="추천 장소">
+            {(LOCATION_SUGGESTIONS[campus] ?? []).map((place) => (
+              <button
+                key={place}
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  if (locationInputRef.current) {
+                    locationInputRef.current.value = place;
+                    locationInputRef.current.focus();
+                  }
+                }}
+                className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
+              >
+                {place}
+              </button>
+            ))}
+          </div>
         </label>
 
         <label className="flex flex-col gap-1.5 text-sm">

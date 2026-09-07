@@ -25,18 +25,28 @@ type PostCardProps = {
 // Phase 17 redesign: image-forward vertical card (was a small 64px
 // thumbnail + text row) -- per this phase's own "사진 중심의 UI" design
 // direction, since a lost/found item's photo is the single fastest way a
-// viewer identifies whether it's theirs. Fixed 4:3 aspect ratio + object-
-// cover keeps every card in a grid the same height regardless of the
-// source photo's own aspect ratio (see post/[id]/page.tsx's own comment
-// for why the *detail* page deliberately does NOT crop -- a card grid and
-// a single full-size detail view have different needs).
+// viewer identifies whether it's theirs. Fixed aspect ratio + object-cover
+// keeps every card in a grid the same height regardless of the source
+// photo's own aspect ratio (see post/[id]/page.tsx's own comment for why
+// the *detail* page deliberately does NOT crop -- a card grid and a
+// single full-size detail view have different needs).
+//
+// Phase H-3: aspect ratio changed from 4:3 (landscape) to 4:5 (portrait-
+// leaning, same crop ratio product photo grids like Instagram use for
+// exactly this reason) -- most lost/found item photos are taken vertically
+// on a phone, and a landscape 4:3 box was cropping away a large share of
+// a portrait photo's height (top of a bag, bottom of a shoe, etc.). 4:5
+// gives the photo more vertical room without introducing letterboxing
+// (still a fixed ratio + object-cover, so the grid stays perfectly
+// uniform) -- less of the subject is lost, and the image now makes up
+// more of the card's total height instead of stopping short of it.
 export function PostCard({ post, scoreLabel = "검색 유사도" }: PostCardProps) {
   return (
     <Link
       href={`/post/${post.id}?type=${post.type}`}
       className="group flex flex-col overflow-hidden rounded-card border border-border bg-card transition-colors hover:border-foreground/30"
     >
-      <div className="relative aspect-4/3 w-full shrink-0 overflow-hidden bg-muted">
+      <div className="relative aspect-4/5 w-full shrink-0 overflow-hidden bg-muted">
         {post.imageUrl ? (
           <Image
             src={post.imageUrl}

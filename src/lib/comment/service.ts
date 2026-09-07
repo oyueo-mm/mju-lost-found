@@ -33,10 +33,6 @@ export type CommentMutationResult<T> =
   // treated identically -- from the caller's perspective there is no
   // valid parent to reply to either way).
   | { kind: "parent_not_found" }
-  // Phase C-2: parentId refers to a comment that is itself already a
-  // reply -- only one level of nesting is allowed (see this phase's own
-  // report for why).
-  | { kind: "reply_to_reply" }
   | { kind: "forbidden"; reason: "not_owner" | "suspended" | "not_admin" };
 
 const AUTHOR_SELECT = { id: true, nickname: true } as const;
@@ -94,9 +90,13 @@ export async function createComment(
     return { kind: "post_not_found" };
   }
 
-  // Phase C-2: resolved once, up front, so both the depth check below and
-  // the notification recipient (further down) read the same row -- no
-  // second query needed at notification time.
+  // Phase H-3: resolved once, up front, so the notification recipient
+  // (further down) reads the same row -- no second query needed at
+  // notification time. Unlike Phase C-2, there is no depth check anymore
+  // -- a reply's parent can itself be a reply, at any depth, since
+  // Comment.parentId already supports an arbitrary chain and onDelete:
+  // Cascade already handles a whole subtree disappearing together (see
+  // schema.prisma's own comment on that column, updated for this phase).
   let parent: { id: number; parentId: number | null; authorUserId: number } | null = null;
   if (input.parentId !== undefined) {
     const parentRow = await prisma.comment.findUnique({
@@ -108,9 +108,6 @@ export async function createComment(
     const belongsToThisPost =
       parentRow !== null && (type === "lost" ? parentRow.lostPostId === postId : parentRow.foundPostId === postId);
     if (!parentRow || !belongsToThisPost) return { kind: "parent_not_found" };
-    // parentRow.parentId !== null means parentRow is itself a reply --
-    // only one level of nesting is allowed.
-    if (parentRow.parentId !== null) return { kind: "reply_to_reply" };
     parent = parentRow;
   }
 

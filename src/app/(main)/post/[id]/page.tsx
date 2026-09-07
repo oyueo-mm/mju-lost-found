@@ -156,12 +156,19 @@ export default async function PostDetailPage({
         </div>
       )}
 
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-2">
+      {/* Phase H-3: title/status/장소/날짜/카테고리/조회수/설명 -- previously
+          three visually separate blocks (heading+badges, then a bare <p>
+          for the description with no shared container) -- now one card so
+          the reader's eye has a single, clearly-bounded "이 게시물의 핵심
+          정보" region instead of the info trailing off into plain page
+          background. No field removed or renamed, only regrouped;
+          StatusBadge/PinIcon/ClockIcon/EyeIcon usages are unchanged. */}
+      <div className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
+        <div className="flex items-start justify-between gap-3">
           <h1 className="text-xl font-semibold text-foreground">{post.title}</h1>
-          <StatusBadge status={post.status} />
+          <StatusBadge status={post.status} className="shrink-0" />
         </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
           <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
             {type === "lost" ? "분실물" : "습득물"}
           </span>
@@ -182,9 +189,10 @@ export default async function PostDetailPage({
             {post.viewCount}
           </span>
         </div>
+        <p className="whitespace-pre-wrap border-t border-border pt-4 text-sm leading-relaxed text-foreground">
+          {post.description}
+        </p>
       </div>
-
-      <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{post.description}</p>
 
       <div className="flex items-center justify-between rounded-card border border-border bg-muted/50 p-4 text-sm text-muted-foreground">
         <div className="flex flex-col gap-1">

@@ -66,8 +66,17 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Phase H-3: this app now has an explicit light/dark toggle (ThemeSettings,
+   see src/lib/theme/constants.ts), not just system preference -- so the
+   media query below must stop applying once a user has explicitly picked
+   "라이트" (data-theme="light" on <html>, set by the blocking init script
+   in layout.tsx before first paint). ":not([data-theme='light'])" is that
+   guard: the media query still drives "시스템" mode (no explicit
+   data-theme at all) exactly as before, and an explicit data-theme="dark"
+   block right after this one covers the "다크" choice on a light-preferring
+   system, which this media query alone could never reach. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #0b0d12;
     --foreground: #f1f2f4;
     --card: #14161c;
@@ -91,6 +100,162 @@
     --destructive-foreground: #2b0a0a;
     --destructive-muted: #2a1414;
   }
+}
+
+/* Same token values as the media-query block above, applied unconditionally
+   when the user has explicitly chosen "다크" regardless of what their OS
+   preference actually is. */
+:root[data-theme="dark"] {
+  --background: #0b0d12;
+  --foreground: #f1f2f4;
+  --card: #14161c;
+  --card-foreground: #f1f2f4;
+  --muted: #1c1f27;
+  --muted-foreground: #9497a1;
+  --border: #262a35;
+  --ring: #5b8ef2;
+
+  --primary: #5b8ef2;
+  --primary-foreground: #0b0d12;
+  --primary-muted: #182238;
+
+  --success: #34d399;
+  --success-foreground: #06281c;
+  --success-muted: #0e2420;
+  --warning: #fb923c;
+  --warning-foreground: #2b1503;
+  --warning-muted: #2a1d10;
+  --destructive: #f87171;
+  --destructive-foreground: #2b0a0a;
+  --destructive-muted: #2a1414;
+}
+
+/* ---------- Accent colors (Phase H-3) ----------
+   Only --primary/--primary-foreground/--primary-muted/--ring change per
+   accent -- every other token (status colors, borders, backgrounds) stays
+   the shared design-system value regardless of accent, so switching accent
+   never touches the "찾는 중"/"완료"/destructive semantics. "블루" needs no
+   rule of its own: it's already the light/dark default above. Each accent
+   gets a light rule and two dark rules (media-guarded "시스템" + explicit
+   data-theme="dark"), the same three-way split the base theme uses. */
+:root[data-accent="green"] {
+  --primary: #16a34a;
+  --primary-foreground: #ffffff;
+  --primary-muted: #eafbf0;
+  --ring: #16a34a;
+}
+:root[data-accent="purple"] {
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --primary-muted: #f2ecfe;
+  --ring: #7c3aed;
+}
+:root[data-accent="rose"] {
+  --primary: #e11d48;
+  --primary-foreground: #ffffff;
+  --primary-muted: #ffe9ee;
+  --ring: #e11d48;
+}
+:root[data-accent="amber"] {
+  --primary: #b45309;
+  --primary-foreground: #ffffff;
+  --primary-muted: #fff3e0;
+  --ring: #b45309;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-accent="green"] {
+    --primary: #4ade80;
+    --primary-foreground: #052e16;
+    --primary-muted: #0f2a1a;
+    --ring: #4ade80;
+  }
+  :root:not([data-theme="light"])[data-accent="purple"] {
+    --primary: #a78bfa;
+    --primary-foreground: #1c1033;
+    --primary-muted: #241a3d;
+    --ring: #a78bfa;
+  }
+  :root:not([data-theme="light"])[data-accent="rose"] {
+    --primary: #fb7185;
+    --primary-foreground: #2b0a14;
+    --primary-muted: #33121b;
+    --ring: #fb7185;
+  }
+  :root:not([data-theme="light"])[data-accent="amber"] {
+    --primary: #fbbf24;
+    --primary-foreground: #2b1c02;
+    --primary-muted: #34260a;
+    --ring: #fbbf24;
+  }
+}
+:root[data-theme="dark"][data-accent="green"] {
+  --primary: #4ade80;
+  --primary-foreground: #052e16;
+  --primary-muted: #0f2a1a;
+  --ring: #4ade80;
+}
+:root[data-theme="dark"][data-accent="purple"] {
+  --primary: #a78bfa;
+  --primary-foreground: #1c1033;
+  --primary-muted: #241a3d;
+  --ring: #a78bfa;
+}
+:root[data-theme="dark"][data-accent="rose"] {
+  --primary: #fb7185;
+  --primary-foreground: #2b0a14;
+  --primary-muted: #33121b;
+  --ring: #fb7185;
+}
+:root[data-theme="dark"][data-accent="amber"] {
+  --primary: #fbbf24;
+  --primary-foreground: #2b1c02;
+  --primary-muted: #34260a;
+  --ring: #fbbf24;
+}
+
+/* ---------- High contrast (Phase H-3) ----------
+   Not a "darken everything" pass -- specifically widens the gap between
+   text and its background and gives borders/buttons real edges, on top of
+   whatever accent is active. foreground/background go to the true
+   extremes (pure black/white) and muted-foreground (the app's "secondary
+   text" token, used for timestamps/metadata/placeholders everywhere) gets
+   pulled much closer to foreground than the default design allows, since
+   that token is exactly where low-contrast text usually hides. border
+   also strengthens, since several interactive controls (inputs, category
+   chips, the campus toggle) rely on border alone with no fill to read as
+   a control boundary. */
+:root[data-contrast="high"] {
+  --background: #ffffff;
+  --foreground: #000000;
+  --card: #ffffff;
+  --card-foreground: #000000;
+  --muted: #e4e4e7;
+  --muted-foreground: #27272a;
+  --border: #18181b;
+  --ring: #000000;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-contrast="high"] {
+    --background: #000000;
+    --foreground: #ffffff;
+    --card: #000000;
+    --card-foreground: #ffffff;
+    --muted: #27272a;
+    --muted-foreground: #e4e4e7;
+    --border: #f4f4f5;
+    --ring: #ffffff;
+  }
+}
+:root[data-theme="dark"][data-contrast="high"] {
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #000000;
+  --card-foreground: #ffffff;
+  --muted: #27272a;
+  --muted-foreground: #e4e4e7;
+  --border: #f4f4f5;
+  --ring: #ffffff;
 }
 
 body {

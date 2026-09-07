@@ -26,10 +26,17 @@ export type AdminUserDTO = {
   // isCurrentlySuspended() the authorization layer uses, so the list can
   // never show "정지됨" for a suspension that has already expired.
   currentlySuspended: boolean;
+  // Phase H-3: nickname of the admin who most recently suspended this
+  // user (User.suspendedByUserId, see that field's own schema comment) --
+  // null both for a never-suspended user and for a suspension that
+  // predates this column (never backfilled, see H-2's analysis).
+  suspendedByNickname: string | null;
   createdAt: Date;
 };
 
-function toAdminUserDTO(row: User): AdminUserDTO {
+type UserWithSuspendedBy = User & { suspendedBy: { nickname: string | null } | null };
+
+function toAdminUserDTO(row: UserWithSuspendedBy): AdminUserDTO {
   return {
     id: row.id,
     email: row.email,
@@ -38,6 +45,7 @@ function toAdminUserDTO(row: User): AdminUserDTO {
     isSuspended: row.isSuspended,
     suspendedUntil: row.suspendedUntil,
     currentlySuspended: isCurrentlySuspended(row),
+    suspendedByNickname: row.suspendedBy?.nickname ?? null,
     createdAt: row.createdAt,
   };
 }
@@ -81,7 +89,13 @@ export async function listUsersForAdmin(
 
   const skip = (page - 1) * limit;
   const [rows, total] = await Promise.all([
-    prisma.user.findMany({ where, orderBy: { id: "asc" }, skip, take: limit }),
+    prisma.user.findMany({
+      where,
+      orderBy: { id: "asc" },
+      skip,
+      take: limit,
+      include: { suspendedBy: { select: { nickname: true } } },
+    }),
     prisma.user.count({ where }),
   ]);
 
@@ -117,7 +131,12 @@ export async function updateUserByAdmin(
   const existing = await prisma.user.findUnique({ where: { id: targetUserId } });
   if (!existing) return { kind: "not_found" };
 
-  const data: { isAdmin?: boolean; isSuspended?: boolean; suspendedUntil?: Date | null } = (() => {
+  const data: {
+    isAdmin?: boolean;
+    isSuspended?: boolean;
+    suspendedUntil?: Date | null;
+    suspendedByUserId?: number | null;
+  } = (() => {
     switch (action) {
       case "promote":
         return { isAdmin: true };
@@ -129,9 +148,12 @@ export async function updateUserByAdmin(
           suspendedUntil: suspendDurationDays
             ? new Date(Date.now() + suspendDurationDays * 24 * 60 * 60 * 1000)
             : null,
+          // Phase H-3: same "current state only" treatment as
+          // suspendedUntil itself -- see schema.prisma's comment.
+          suspendedByUserId: admin.id,
         };
       case "unsuspend":
-        return { isSuspended: false, suspendedUntil: null };
+        return { isSuspended: false, suspendedUntil: null, suspendedByUserId: null };
     }
   })();
 
@@ -150,7 +172,11 @@ export async function updateUserByAdmin(
   if (action === "suspend") {
     const suspendDesc = suspendDurationDays ? `${suspendDurationDays}일 정지되었습니다.` : "영구 정지되었습니다.";
     const updated = await prisma.$transaction(async (tx) => {
-      const user = await tx.user.update({ where: { id: targetUserId }, data });
+      const user = await tx.user.update({
+        where: { id: targetUserId },
+        data,
+        include: { suspendedBy: { select: { nickname: true } } },
+      });
       await tx.notification.create({
         data: {
           userId: targetUserId,
@@ -166,6 +192,10 @@ export async function updateUserByAdmin(
     return { kind: "ok", data: toAdminUserDTO(updated) };
   }
 
-  const updated = await prisma.user.update({ where: { id: targetUserId }, data });
+  const updated = await prisma.user.update({
+    where: { id: targetUserId },
+    data,
+    include: { suspendedBy: { select: { nickname: true } } },
+  });
   return { kind: "ok", data: toAdminUserDTO(updated) };
 }

@@ -96,6 +96,20 @@ model User {
   isAdmin         Boolean   @default(false) @map("is_admin")
   isSuspended     Boolean   @default(false) @map("is_suspended")
   suspendedUntil  DateTime? @map("suspended_until")
+  // Phase H-3: which admin most recently suspended this user -- mirrors
+  // isSuspended/suspendedUntil's own "current state only, not a history
+  // log" shape (see H-2's analysis): cleared to null on unsuspend, the
+  // same way suspendedUntil already is. Populated by both suspend paths
+  // (direct admin/users toggle AND the report-flow's suspend_user action)
+  // so /admin/users always shows *some* actor for a currently-suspended
+  // user regardless of which path did it -- the report-flow's own
+  // ModerationAction/Report audit trail (adminUserId/processedByUserId) is
+  // completely untouched by this, this is purely an additional stamp on
+  // the same User row that flow was already updating. Never populated
+  // retroactively for suspensions that predate this column -- those stay
+  // null, permanently unknown (no source of truth exists to recover it).
+  suspendedByUserId Int?  @map("suspended_by_user_id")
+  suspendedBy       User? @relation("UserSuspendedBy", fields: [suspendedByUserId], references: [id], onDelete: Restrict)
   // Google's stable per-account identifier ("sub"), separate from email
   // (which Google account holders can in principle change) -- set on
   // first sign-in. There's only one provider (Google) and no next-auth
@@ -117,6 +131,13 @@ model User {
   moderationActions     ModerationAction[]
   notifications         Notification[]
   messageReactions      MessageReaction[]
+  // Phase H-3: the reverse side of suspendedBy above -- every user this
+  // admin has directly or via report-flow suspended (current state only,
+  // see that field's own comment). Never queried from the User side in
+  // this app today; kept only because Prisma requires the back-relation to
+  // be declared on both models for a self-relation.
+  suspendedByActions    User[]             @relation("UserSuspendedBy")
+  appSettingsUpdates    AppSettings[]
 
   @@map("User")
 }
@@ -525,4 +546,28 @@ model PostView {
 
   @@unique([postType, postId, viewerKey])
   @@map("PostView")
+}
+
+// ---------- AppSettings (Phase H-3) ----------
+
+// A single-row (id=1) global settings table -- this app's first, so kept
+// as a plain singleton rather than a generic key/value table: one real
+// setting exists today (googleTestModeEnabled), and a second one can add
+// its own column here later the same way LostPost.campus was added to an
+// existing table, without inventing a schema-less config store this
+// project has never needed anywhere else.
+model AppSettings {
+  id                    Int      @id @default(1)
+  // Phase H-3: server-side gate the NextAuth signIn callback consults for
+  // any Google account outside @mju.ac.kr (see src/lib/auth/domain.ts) --
+  // OFF by default, so a fresh/未configured row (or no row at all, see
+  // getAppSettings()) always means "mju.ac.kr only", never accidentally
+  // open. Toggled only via PATCH /api/admin/settings, which re-verifies
+  // admin status server-side regardless of what the UI shows.
+  googleTestModeEnabled Boolean  @default(false) @map("google_test_mode_enabled")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  updatedByUserId       Int?     @map("updated_by_user_id")
+  updatedBy             User?    @relation(fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@map("AppSettings")
 }

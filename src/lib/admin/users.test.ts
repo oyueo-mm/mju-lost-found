@@ -134,7 +134,11 @@ describe("updateUserByAdmin", () => {
     const result = await updateUserByAdmin(admin as never, admin.id, "promote");
 
     expect(result.kind).toBe("ok");
-    expect(user.update).toHaveBeenCalledWith({ where: { id: admin.id }, data: { isAdmin: true } });
+    expect(user.update).toHaveBeenCalledWith({
+      where: { id: admin.id },
+      data: { isAdmin: true },
+      include: { suspendedBy: { select: { nickname: true } } },
+    });
   });
 
   it("returns not_found for a nonexistent target user", async () => {
@@ -149,7 +153,11 @@ describe("updateUserByAdmin", () => {
 
     const result = await updateUserByAdmin(admin as never, 5, "promote");
 
-    expect(user.update).toHaveBeenCalledWith({ where: { id: 5 }, data: { isAdmin: true } });
+    expect(user.update).toHaveBeenCalledWith({
+      where: { id: 5 },
+      data: { isAdmin: true },
+      include: { suspendedBy: { select: { nickname: true } } },
+    });
     expect(result.kind).toBe("ok");
     if (result.kind === "ok") expect(result.data.isAdmin).toBe(true);
   });
@@ -160,7 +168,11 @@ describe("updateUserByAdmin", () => {
 
     const result = await updateUserByAdmin(admin as never, 5, "demote");
 
-    expect(user.update).toHaveBeenCalledWith({ where: { id: 5 }, data: { isAdmin: false } });
+    expect(user.update).toHaveBeenCalledWith({
+      where: { id: 5 },
+      data: { isAdmin: false },
+      include: { suspendedBy: { select: { nickname: true } } },
+    });
     expect(result.kind).toBe("ok");
   });
 
@@ -173,7 +185,8 @@ describe("updateUserByAdmin", () => {
     expect($transaction).toHaveBeenCalledTimes(1);
     expect(user.update).toHaveBeenCalledWith({
       where: { id: 5 },
-      data: { isSuspended: true, suspendedUntil: null },
+      data: { isSuspended: true, suspendedUntil: null, suspendedByUserId: admin.id },
+      include: { suspendedBy: { select: { nickname: true } } },
     });
     expect(notification.create).toHaveBeenCalledWith({
       data: {
@@ -244,6 +257,22 @@ describe("updateUserByAdmin", () => {
     );
   });
 
+  // Phase H-3
+  it("exposes suspendedByNickname on the returned DTO from the suspendedBy include", async () => {
+    user.findUnique.mockResolvedValueOnce(baseRow);
+    user.update.mockResolvedValueOnce({
+      ...baseRow,
+      isSuspended: true,
+      suspendedByUserId: admin.id,
+      suspendedBy: { nickname: "관리자닉네임" },
+    });
+
+    const result = await updateUserByAdmin(admin as never, 5, "suspend");
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.data.suspendedByNickname).toBe("관리자닉네임");
+  });
+
   it("does not create a notification (or use $transaction) for promote/demote/unsuspend", async () => {
     user.findUnique.mockResolvedValueOnce(baseRow);
     user.update.mockResolvedValueOnce({ ...baseRow, isAdmin: true });
@@ -262,7 +291,8 @@ describe("updateUserByAdmin", () => {
 
     expect(user.update).toHaveBeenCalledWith({
       where: { id: 5 },
-      data: { isSuspended: false, suspendedUntil: null },
+      data: { isSuspended: false, suspendedUntil: null, suspendedByUserId: null },
+      include: { suspendedBy: { select: { nickname: true } } },
     });
   });
 });

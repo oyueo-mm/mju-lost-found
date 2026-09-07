@@ -357,7 +357,7 @@ describe("applyReportAction", () => {
     expect(result.kind).toBe("ok");
     expect(txUser.update).toHaveBeenCalledWith({
       where: { id: 88 },
-      data: { isSuspended: true, suspendedUntil: expect.any(Date) },
+      data: { isSuspended: true, suspendedUntil: expect.any(Date), suspendedByUserId: admin.id },
     });
   });
 
@@ -375,7 +375,7 @@ describe("applyReportAction", () => {
     expect(result.kind).toBe("ok");
     expect(txUser.update).toHaveBeenCalledWith({
       where: { id: 88 },
-      data: { isSuspended: true, suspendedUntil: expect.any(Date) },
+      data: { isSuspended: true, suspendedUntil: expect.any(Date), suspendedByUserId: admin.id },
     });
   });
 
@@ -388,7 +388,7 @@ describe("applyReportAction", () => {
 
     expect(txUser.update).toHaveBeenCalledWith({
       where: { id: 88 },
-      data: { isSuspended: true, suspendedUntil: null },
+      data: { isSuspended: true, suspendedUntil: null, suspendedByUserId: admin.id },
     });
   });
 

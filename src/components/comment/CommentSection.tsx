@@ -15,9 +15,11 @@ type CommentDTO = {
   content: string;
   createdAt: Date;
   updatedAt: Date;
-  // Phase C-2: null for a top-level comment, the parent comment's id for a
-  // reply. Never points at another reply (server-enforced, one level
-  // only) -- see comment/service.ts's createComment.
+  // Phase H-3: null for a top-level comment, the parent comment's id for a
+  // reply -- a reply's own parent can now be another reply, at any depth
+  // (see comment/service.ts's createComment, which no longer rejects
+  // this). The tree is built client-side from this single flat field, no
+  // separate depth/path column needed.
   parentId: number | null;
   author: CommentAuthor;
 };
@@ -46,6 +48,42 @@ function formatRelativeTime(date: Date): string {
 }
 
 const COMMENT_MAX_LENGTH = 1000;
+// Phase H-3: the actual reply chain depth is unbounded (parentId can point
+// arbitrarily deep, see comment/service.ts), but indentation stops growing
+// past this many visual levels so a very deep thread never runs a reply off
+// the edge of a narrow/mobile viewport -- the @닉네임 tag on each reply is
+// what keeps a flattened-looking deep thread readable past this point, not
+// indentation.
+const MAX_VISUAL_INDENT_DEPTH = 4;
+const INDENT_PX_PER_DEPTH = 20;
+
+type CommentNode = CommentDTO & { children: CommentNode[] };
+
+// Builds a tree from the flat parentId list. A comment whose parentId is
+// non-null but doesn't resolve to any comment currently in `comments` --
+// its parent was deleted (or, defensively, any other reason the client's
+// state doesn't have it) -- is rendered as its own root instead of being
+// dropped, so a stale/partial client state degrades gracefully instead of
+// silently hiding real comments or crashing on a dangling reference.
+function buildCommentTree(comments: CommentDTO[]): CommentNode[] {
+  const nodesById = new Map<number, CommentNode>(comments.map((c) => [c.id, { ...c, children: [] }]));
+  const roots: CommentNode[] = [];
+  for (const node of nodesById.values()) {
+    const parent = node.parentId !== null ? nodesById.get(node.parentId) : undefined;
+    if (parent) parent.children.push(node);
+    else roots.push(node);
+  }
+  return roots;
+}
+
+// Every id in this comment's own subtree (itself included) -- used to
+// purge a deleted comment's replies from local state in one pass, mirroring
+// the server's onDelete: Cascade on Comment.parentId (see schema.prisma)
+// so the client never shows a reply whose parent it just removed locally.
+function collectSubtreeIds(node: CommentNode, into: Set<number>): void {
+  into.add(node.id);
+  for (const child of node.children) collectSubtreeIds(child, into);
+}
 
 export function CommentSection({ postType, postId, initialComments, currentUser, isAdmin }: CommentSectionProps) {
   const router = useRouter();
@@ -56,10 +94,10 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState("");
   const [pendingId, setPendingId] = useState<number | null>(null);
-  // Phase C-2: which top-level comment's reply form is open (at most one
-  // at a time), and that form's own draft/submitting state -- kept
-  // separate from newContent/submitting above so writing a reply never
-  // clobbers an in-progress top-level comment draft.
+  // Phase H-3: which comment's reply form is open (at most one at a time,
+  // now at any depth, not just top-level) -- kept separate from
+  // newContent/submitting so writing a reply never clobbers an
+  // in-progress top-level comment draft.
   const [replyingToId, setReplyingToId] = useState<number | null>(null);
   const [replyContent, setReplyContent] = useState("");
   const [replySubmitting, setReplySubmitting] = useState(false);
@@ -91,11 +129,11 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
     }
   }
 
-  // Phase C-2: same POST endpoint as a top-level comment, just with
-  // parentId set -- createComment() on the server does the actual depth
-  // enforcement, this only ever calls it with a top-level comment's own
-  // id (see the render section: the reply toggle only exists on top-level
-  // comments), so a reply-to-a-reply is never even attempted from here.
+  // Phase H-3: same POST endpoint as a top-level comment, just with
+  // parentId set -- parentId can now be any existing comment on this post
+  // (top-level or a reply), not only a top-level one; the server enforces
+  // "belongs to this post" and nothing else about depth (see
+  // comment/service.ts's createComment).
   async function handleReplySubmit(event: React.FormEvent, parentId: number) {
     event.preventDefault();
     if (replySubmitting || !replyContent.trim()) return;
@@ -157,7 +195,7 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
 
   async function handleDelete(commentId: number) {
     if (pendingId !== null) return;
-    if (!confirm("댓글을 삭제하시겠습니까?")) return;
+    if (!confirm("댓글을 삭제하시겠습니까? 이 댓글에 달린 답글도 함께 삭제됩니다.")) return;
 
     setPendingId(commentId);
     setError(null);
@@ -170,7 +208,17 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
         setError(json.error ?? "댓글을 삭제하지 못했습니다.");
         return;
       }
-      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      // Phase H-3: the server cascades the deleted comment's entire reply
+      // subtree (Comment.parentId's onDelete: Cascade) -- mirrored here so
+      // local state doesn't keep showing replies whose parent just
+      // disappeared. Computed from the tree built from *current* comments,
+      // not a stale snapshot.
+      const deletedSubtree = new Set<number>();
+      const tree = buildCommentTree(comments);
+      const deletedNode = findNodeInTree(tree, commentId);
+      if (deletedNode) collectSubtreeIds(deletedNode, deletedSubtree);
+      else deletedSubtree.add(commentId);
+      setComments((prev) => prev.filter((c) => !deletedSubtree.has(c.id)));
     } catch {
       setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
     } finally {
@@ -178,24 +226,26 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
     }
   }
 
-  // Phase C-2: comments come back from the API oldest-first and flat --
-  // grouping into "top-level + its replies" here (once, per render) keeps
-  // that single flat array/fetch/notification path on the server exactly
-  // as it was, and needs no recursion since replies can never have their
-  // own replies (server-enforced in createComment).
-  const topLevelComments = comments.filter((c) => c.parentId === null);
-  const repliesByParentId = new Map<number, CommentDTO[]>();
-  for (const c of comments) {
-    if (c.parentId === null) continue;
-    const list = repliesByParentId.get(c.parentId);
-    if (list) list.push(c);
-    else repliesByParentId.set(c.parentId, [c]);
+  function findNodeInTree(nodes: CommentNode[], id: number): CommentNode | null {
+    for (const node of nodes) {
+      if (node.id === id) return node;
+      const found = findNodeInTree(node.children, id);
+      if (found) return found;
+    }
+    return null;
   }
+
+  const commentsById = new Map(comments.map((c) => [c.id, c]));
 
   function renderCommentBody(comment: CommentDTO) {
     const isOwner = currentUser?.id === comment.author.id;
     const canDelete = isOwner || isAdmin;
     const isEditing = editingId === comment.id;
+    // Phase H-3: the @닉네임 target -- only shown when this comment is a
+    // reply AND its parent is still resolvable from current state (a
+    // dangling parentId, e.g. after a local-state edge case, just omits
+    // the tag rather than showing something wrong).
+    const replyTargetNickname = comment.parentId !== null ? (commentsById.get(comment.parentId)?.author.nickname ?? null) : null;
 
     return (
       <>
@@ -224,7 +274,17 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
           </div>
         ) : (
           <>
-            <p className="whitespace-pre-wrap text-foreground">{comment.content}</p>
+            <p className="whitespace-pre-wrap text-foreground">
+              {replyTargetNickname && (
+                <Link
+                  href={`#comment-${comment.parentId}`}
+                  className="mr-1 font-medium text-primary hover:underline"
+                >
+                  @{replyTargetNickname}
+                </Link>
+              )}
+              {comment.content}
+            </p>
             {(isOwner || canDelete || currentUser) && (
               <div className="flex flex-wrap items-center gap-3 text-xs">
                 {isOwner && (
@@ -246,12 +306,10 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
                     {pendingId === comment.id ? "삭제 중..." : "삭제"}
                   </button>
                 )}
-                {/* Phase C-2: reply toggle only ever appears on a
-                    top-level comment (comment.parentId === null) -- a
-                    reply has no toggle of its own, which is what keeps
-                    nesting capped at one level in the UI as well as the
-                    API. */}
-                {comment.parentId === null && currentUser && (
+                {/* Phase H-3: reply toggle now available at every depth --
+                    a reply can itself be replied to, unlike the old
+                    top-level-only restriction. */}
+                {currentUser && (
                   <button
                     type="button"
                     onClick={() => {
@@ -263,12 +321,6 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
                     답글
                   </button>
                 )}
-                {/* Phase C-3: applies to replies too, not just top-level
-                    comments -- unlike the 답글 toggle above, there's no
-                    depth restriction on who can be reported. Self-reports
-                    aren't hidden ahead of time here either, matching
-                    ReportButton's existing use on the post detail page
-                    (rejected server-side with a normal error instead). */}
                 {currentUser && <ReportButton targetType="comment" targetId={comment.id} buttonLabel="신고" />}
               </div>
             )}
@@ -277,6 +329,77 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
       </>
     );
   }
+
+  function renderReplyForm(comment: CommentDTO) {
+    if (replyingToId !== comment.id) return null;
+    return (
+      <form
+        onSubmit={(e) => handleReplySubmit(e, comment.id)}
+        className="flex flex-col gap-2 rounded-lg border border-border p-3"
+      >
+        {/* Phase H-3: explicit reply-target line while composing, not just
+            after the fact on the posted reply -- answers "누구에게 답글하는지"
+            at the moment of writing, not only in the result. */}
+        <span className="text-xs text-muted-foreground">
+          <span className="font-medium text-primary">@{comment.author.nickname ?? "알 수 없음"}</span>
+          님에게 답글
+        </span>
+        <textarea
+          value={replyContent}
+          onChange={(e) => setReplyContent(e.target.value)}
+          placeholder="답글을 입력하세요..."
+          maxLength={COMMENT_MAX_LENGTH}
+          rows={2}
+          disabled={replySubmitting}
+          autoFocus
+          className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground disabled:opacity-60"
+        />
+        <div className="flex gap-2">
+          <Button type="submit" size="sm" disabled={replySubmitting || !replyContent.trim()}>
+            {replySubmitting ? "작성 중..." : "답글 작성"}
+          </Button>
+          <Button type="button" variant="secondary" size="sm" onClick={() => setReplyingToId(null)}>
+            취소
+          </Button>
+        </div>
+      </form>
+    );
+  }
+
+  // Phase H-3: recursive -- unlike the old fixed one-level grouping, depth
+  // is unbounded, but visual indentation caps at MAX_VISUAL_INDENT_DEPTH
+  // (see that constant's own comment) so a very deep thread stays inside
+  // the viewport; the @닉네임 tag (renderCommentBody) is what keeps a
+  // visually-flattened deep reply still traceable to its real parent.
+  function renderCommentNode(node: CommentNode, depth: number) {
+    const indentPx = Math.min(depth, MAX_VISUAL_INDENT_DEPTH) * INDENT_PX_PER_DEPTH;
+    return (
+      <div key={node.id} className="flex flex-col gap-2" style={depth > 0 ? { marginLeft: indentPx } : undefined}>
+        {/* Phase E-4: id target for notification deep links
+            (/post/{id}?type=...#comment-{id}) -- pure native browser
+            anchor scroll, no JS added here. Preserved unchanged at every
+            depth, not just top-level. */}
+        <div
+          id={`comment-${node.id}`}
+          className={`flex flex-col gap-1 rounded-lg border p-3 text-sm ${
+            depth > 0 ? "border-l-2 border-primary/30 bg-muted/30" : "border-border"
+          }`}
+        >
+          {renderCommentBody(node)}
+        </div>
+
+        {renderReplyForm(node)}
+
+        {node.children.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {node.children.map((child) => renderCommentNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const tree = buildCommentTree(comments);
 
   return (
     <div className="flex flex-col gap-4 border-t border-border pt-6">
@@ -287,68 +410,10 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {topLevelComments.length === 0 ? (
+      {tree.length === 0 ? (
         <p className="text-sm text-muted-foreground">아직 댓글이 없어요. 첫 댓글을 남겨보세요.</p>
       ) : (
-        <div className="flex flex-col gap-3">
-          {topLevelComments.map((comment) => {
-            const replies = repliesByParentId.get(comment.id) ?? [];
-
-            return (
-              <div key={comment.id} className="flex flex-col gap-2">
-                {/* Phase E-4: id target for notification deep links
-                    (/post/{id}?type=...#comment-{id}) -- pure native
-                    browser anchor scroll, no JS added here. */}
-                <div
-                  id={`comment-${comment.id}`}
-                  className="flex flex-col gap-1 rounded-lg border border-border p-3 text-sm"
-                >
-                  {renderCommentBody(comment)}
-                </div>
-
-                {replies.length > 0 && (
-                  <div className="ml-6 flex flex-col gap-2 border-l border-border pl-3">
-                    {replies.map((reply) => (
-                      <div
-                        key={reply.id}
-                        id={`comment-${reply.id}`}
-                        className="flex flex-col gap-1 rounded-lg border border-border p-3 text-sm"
-                      >
-                        {renderCommentBody(reply)}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {replyingToId === comment.id && (
-                  <form
-                    onSubmit={(e) => handleReplySubmit(e, comment.id)}
-                    className="ml-6 flex flex-col gap-2 border-l border-border pl-3"
-                  >
-                    <textarea
-                      value={replyContent}
-                      onChange={(e) => setReplyContent(e.target.value)}
-                      placeholder="답글을 입력하세요..."
-                      maxLength={COMMENT_MAX_LENGTH}
-                      rows={2}
-                      disabled={replySubmitting}
-                      autoFocus
-                      className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground disabled:opacity-60"
-                    />
-                    <div className="flex gap-2">
-                      <Button type="submit" size="sm" disabled={replySubmitting || !replyContent.trim()}>
-                        {replySubmitting ? "작성 중..." : "답글 작성"}
-                      </Button>
-                      <Button type="button" variant="secondary" size="sm" onClick={() => setReplyingToId(null)}>
-                        취소
-                      </Button>
-                    </div>
-                  </form>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <div className="flex flex-col gap-3">{tree.map((node) => renderCommentNode(node, 0))}</div>
       )}
 
       {currentUser ? (

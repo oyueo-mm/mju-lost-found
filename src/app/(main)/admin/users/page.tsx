@@ -91,6 +91,14 @@ export default async function AdminUsersPage({
                   {u.email} · 가입일: {formatDate(u.createdAt)}
                   {u.currentlySuspended &&
                     (u.suspendedUntil ? ` · 정지 해제: ${formatDate(u.suspendedUntil)}` : " · 영구 정지")}
+                  {/* Phase H-3: shown whenever a suspending admin is on
+                      record, even if the suspension has since expired --
+                      currentlySuspended only gates the "정지됨" badge and
+                      해제일 above, not this attribution line, since "who
+                      suspended this account" stays a true historical fact
+                      either way (still cleared to null on an explicit
+                      정지 해제, matching suspendedUntil's own lifecycle). */}
+                  {u.suspendedByNickname && ` · 정지 처리자: ${u.suspendedByNickname}`}
                 </span>
               </div>
 

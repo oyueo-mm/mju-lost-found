@@ -120,19 +120,27 @@ describe("POST /api/posts/[id]/comments", () => {
     expect(res.status).toBe(404);
   });
 
-  it("returns 400 when replying to a reply", async () => {
+  // Phase H-3: replying to a reply is now allowed -- parentId can name any
+  // existing comment on this post regardless of its own depth, so a reply
+  // whose parentId itself belongs to a reply flows through exactly like
+  // any other parentId (see the "passes parentId through" test above).
+  it("passes parentId through even when it names a reply, not just a top-level comment", async () => {
     requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
-    createComment.mockResolvedValueOnce({ kind: "reply_to_reply" });
+    createComment.mockResolvedValueOnce({
+      kind: "ok",
+      data: { id: 3, content: "답글의 답글", createdAt: new Date(), updatedAt: new Date(), parentId: 2, author: sessionUser },
+    });
 
     const res = await POST(
       new NextRequest("http://localhost/api/posts/1/comments?type=lost", {
         method: "POST",
-        body: JSON.stringify({ content: "네!", parentId: 2 }),
+        body: JSON.stringify({ content: "답글의 답글", parentId: 2 }),
       }),
       params(),
     );
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(201);
+    expect(createComment).toHaveBeenCalledWith(sessionUser, "lost", 1, { content: "답글의 답글", parentId: 2 });
   });
 
   it("blocks a suspended user with 403", async () => {
