@@ -44,6 +44,7 @@ const {
   listFoundPostsByUser,
   listLostPosts,
   listLostPostsByUser,
+  listPostsByUser,
 } = await import("./service");
 
 beforeEach(() => {
@@ -240,5 +241,77 @@ describe("listLostPostsByUser / listFoundPostsByUser", () => {
   it("returns an empty array for a user with no FoundPost posts", async () => {
     foundPost.findMany.mockResolvedValueOnce([]);
     expect(await listFoundPostsByUser(7)).toEqual([]);
+  });
+});
+
+describe("listPostsByUser", () => {
+  const lostRow = (id: number, createdAt: Date) => ({
+    id,
+    title: `lost-${id}`,
+    description: "d",
+    category: "c",
+    location: "l",
+    status: "SEARCHING",
+    imageUrl: null,
+    lostAt: createdAt,
+    createdAt,
+    updatedAt: createdAt,
+    user: { id: 7, nickname: "닉네임", publicId: "pub-7" },
+  });
+  const foundRow = (id: number, createdAt: Date) => ({
+    id,
+    title: `found-${id}`,
+    description: "d",
+    category: "c",
+    location: "l",
+    status: "KEEPING",
+    imageUrl: null,
+    foundAt: createdAt,
+    createdAt,
+    updatedAt: createdAt,
+    user: { id: 7, nickname: "닉네임", publicId: "pub-7" },
+  });
+
+  it("merges LostPost + FoundPost for the given userId, newest first, paginated", async () => {
+    lostPost.findMany.mockResolvedValueOnce([lostRow(2, new Date("2026-01-03")), lostRow(1, new Date("2026-01-01"))]);
+    foundPost.findMany.mockResolvedValueOnce([foundRow(3, new Date("2026-01-02"))]);
+    lostPost.count.mockResolvedValueOnce(2);
+    foundPost.count.mockResolvedValueOnce(1);
+
+    const result = await listPostsByUser(7, { page: 1, limit: 20 });
+
+    expect(lostPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 7 } }));
+    expect(foundPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 7 } }));
+    expect(lostPost.count).toHaveBeenCalledWith({ where: { userId: 7 } });
+    expect(foundPost.count).toHaveBeenCalledWith({ where: { userId: 7 } });
+    // Newest first across both tables, not grouped by type.
+    expect(result.items.map((p) => p.id)).toEqual([2, 3, 1]);
+    expect(result.total).toBe(3);
+    expect(result.totalPages).toBe(1);
+  });
+
+  it("slices the merged, sorted result to the requested page", async () => {
+    lostPost.findMany.mockResolvedValueOnce([lostRow(2, new Date("2026-01-02")), lostRow(1, new Date("2026-01-01"))]);
+    foundPost.findMany.mockResolvedValueOnce([]);
+    lostPost.count.mockResolvedValueOnce(2);
+    foundPost.count.mockResolvedValueOnce(0);
+
+    const result = await listPostsByUser(7, { page: 2, limit: 1 });
+
+    expect(result.items.map((p) => p.id)).toEqual([1]);
+    expect(result.page).toBe(2);
+    expect(result.totalPages).toBe(2);
+  });
+
+  it("returns an empty page for a user with no posts", async () => {
+    lostPost.findMany.mockResolvedValueOnce([]);
+    foundPost.findMany.mockResolvedValueOnce([]);
+    lostPost.count.mockResolvedValueOnce(0);
+    foundPost.count.mockResolvedValueOnce(0);
+
+    const result = await listPostsByUser(7, { page: 1, limit: 20 });
+
+    expect(result.items).toEqual([]);
+    expect(result.total).toBe(0);
   });
 });

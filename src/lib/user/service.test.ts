@@ -42,7 +42,7 @@ describe("getPublicProfile", () => {
     expect(lostPostCount).not.toHaveBeenCalled();
   });
 
-  it("returns nickname/publicId/createdAt and the combined lost+found post count", async () => {
+  it("returns nickname/publicId/createdAt/userId and the combined lost+found post count", async () => {
     const createdAt = new Date("2026-01-01T00:00:00Z");
     findUnique.mockResolvedValueOnce({ id: 7, publicId: VALID_UUID, nickname: "닉네임", createdAt });
     lostPostCount.mockResolvedValueOnce(2);
@@ -50,7 +50,10 @@ describe("getPublicProfile", () => {
 
     const result = await getPublicProfile(VALID_UUID);
 
-    expect(result).toEqual({ publicId: VALID_UUID, nickname: "닉네임", createdAt, postCount: 5 });
+    // Phase H-8: userId is included for listPostsByUser() to consume
+    // server-side (see PublicProfileDTO's own comment) -- it's never
+    // rendered, but it IS part of the returned data shape now.
+    expect(result).toEqual({ publicId: VALID_UUID, nickname: "닉네임", createdAt, postCount: 5, userId: 7 });
     expect(lostPostCount).toHaveBeenCalledWith({ where: { userId: 7 } });
     expect(foundPostCount).toHaveBeenCalledWith({ where: { userId: 7 } });
   });

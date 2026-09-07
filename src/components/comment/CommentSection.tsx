@@ -35,8 +35,10 @@ type CommentSectionProps = {
 
 // Coarse, Korean-labeled relative time -- matches this phase's own mockup
 // ("2시간 전"/"1시간 전"), not a general-purpose i18n date library (no new
-// dependency for a handful of buckets).
-function formatRelativeTime(date: Date): string {
+// dependency for a handful of buckets). Exported (Phase H-8) so
+// MyCommentList (내가 쓴 댓글, /me/comments) can show the same "n분 전" style
+// timestamp instead of re-implementing this.
+export function formatRelativeTime(date: Date): string {
   const diffMs = Date.now() - date.getTime();
   const minutes = Math.floor(diffMs / 60000);
   if (minutes < 1) return "방금 전";

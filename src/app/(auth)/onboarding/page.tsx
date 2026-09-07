@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth/session";
+import { LogoMark } from "@/components/layout/Logo";
 import { NicknameForm } from "./NicknameForm";
 
 export default async function OnboardingPage() {
@@ -14,9 +15,7 @@ export default async function OnboardingPage() {
     <div className="flex min-h-full flex-1 flex-col items-center justify-center px-6 py-12">
       <div className="flex w-full max-w-sm flex-col items-center gap-7">
         <div className="flex flex-col items-center gap-2 text-center">
-          <span className="flex size-14 items-center justify-center rounded-full bg-primary text-xl font-bold text-primary-foreground">
-            M
-          </span>
+          <LogoMark size={56} />
           <h1 className="mt-1 text-xl font-semibold text-foreground">환영합니다, {user.name}님</h1>
           <p className="text-sm text-muted-foreground">
             서비스를 이용하려면 먼저 닉네임을 설정해주세요.

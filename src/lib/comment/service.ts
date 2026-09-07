@@ -146,6 +146,65 @@ export async function createComment(
   return { kind: "ok", data: toCommentDTO(row) };
 }
 
+// Phase H-8: one row per comment this user authored, newest first, for
+// "내가 쓴 댓글" on /me. Comment.lostPostId/foundPostId are onDelete: Cascade
+// (see schema.prisma) -- a comment can never outlive its post, so every
+// row returned here always resolves to a real, existing post; no filtering
+// for "orphaned" comments is needed. `parent` (one level only, see
+// Comment.parentId's own schema comment) is included so the client can
+// show "답글" context the same way CommentSection's own @닉네임 reply tag
+// already does, without a second query per row.
+export type MyCommentDTO = {
+  id: number;
+  content: string;
+  createdAt: Date;
+  parentId: number | null;
+  replyToNickname: string | null;
+  post: { id: number; type: PostType; title: string };
+};
+
+// Same flat-cap-instead-of-real-pagination trade-off as listCommentsForPost
+// above -- this phase's own spec only asks for real pagination on the
+// profile page's *post* list, not this one.
+const MY_COMMENTS_CAP = 200;
+
+export async function listCommentsByUser(userId: number): Promise<MyCommentDTO[]> {
+  const rows = await prisma.comment.findMany({
+    where: { authorUserId: userId },
+    orderBy: { createdAt: "desc" },
+    take: MY_COMMENTS_CAP,
+    include: {
+      lostPost: { select: { id: true, title: true } },
+      foundPost: { select: { id: true, title: true } },
+      parent: { select: { author: { select: { nickname: true } } } },
+    },
+  });
+
+  return rows.flatMap((row) => {
+    // Exactly one of lostPost/foundPost is non-null by construction (see
+    // schema.prisma's own comment on Comment) -- the other branch would
+    // only ever fire for data this app itself never produces, so it's
+    // dropped rather than guessed at.
+    const post = row.lostPost
+      ? { id: row.lostPost.id, type: "lost" as const, title: row.lostPost.title }
+      : row.foundPost
+        ? { id: row.foundPost.id, type: "found" as const, title: row.foundPost.title }
+        : null;
+    if (!post) return [];
+
+    return [
+      {
+        id: row.id,
+        content: row.content,
+        createdAt: row.createdAt,
+        parentId: row.parentId,
+        replyToNickname: row.parent?.author.nickname ?? null,
+        post,
+      },
+    ];
+  });
+}
+
 async function findOwnedComment(id: number) {
   return prisma.comment.findUnique({
     where: { id },

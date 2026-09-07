@@ -445,6 +445,54 @@ async function searchAllPosts({
   };
 }
 
+// Phase H-8: same "no cross-model UNION" merge as searchAllPosts() above,
+// but scoped to one user's own posts instead of search filters -- backs
+// the public profile page's "작성 게시글" section (Lost+Found combined,
+// newest first, paginated; PostCard's own 분실물/습득물 badge is what tells
+// the two apart in the merged list, same as it already does on /search).
+// Posts are hard-deleted in this app (see PublicProfileDTO.postCount's own
+// comment), so a plain `where: { userId }` already excludes anything
+// deleted -- no extra filtering needed. Same depth-cap safety reasoning as
+// searchAllPosts(): each table query only fetches enough rows to cover
+// pages 1..`page` (capped at 1000); `total`/`totalPages` still come from
+// exact COUNT queries.
+export async function listPostsByUser(userId: number, { page, limit }: Page): Promise<PagedResult<PostDTO>> {
+  const orderBy = buildOrderBy();
+  const depth = Math.min(page * limit, 1000);
+
+  const [lostRows, foundRows, lostTotal, foundTotal] = await Promise.all([
+    prisma.lostPost.findMany({
+      where: { userId },
+      orderBy,
+      take: depth,
+      include: { user: { select: AUTHOR_SELECT } },
+    }),
+    prisma.foundPost.findMany({
+      where: { userId },
+      orderBy,
+      take: depth,
+      include: { user: { select: AUTHOR_SELECT } },
+    }),
+    prisma.lostPost.count({ where: { userId } }),
+    prisma.foundPost.count({ where: { userId } }),
+  ]);
+
+  const merged = [...lostRows.map(toLostPostDTO), ...foundRows.map(toFoundPostDTO)].sort(
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+  );
+
+  const skip = (page - 1) * limit;
+  const total = lostTotal + foundTotal;
+
+  return {
+    items: merged.slice(skip, skip + limit),
+    page,
+    limit,
+    total,
+    totalPages: totalPagesFor(total, limit),
+  };
+}
+
 // Phase 21: the plain (keyword-only) dispatch -- see ./aiService.ts's own
 // searchPosts() for the AI-aware superset that also handles mode=semantic.
 // Every caller that imports searchPosts from *this* file (found/lost/

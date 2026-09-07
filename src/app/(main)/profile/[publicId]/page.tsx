@@ -1,6 +1,12 @@
 import { notFound } from "next/navigation";
 
 import { getPublicProfile } from "@/lib/user/service";
+import { listPostsByUser } from "@/lib/posts/service";
+import { DEFAULT_LIMIT, DEFAULT_PAGE } from "@/lib/posts/schema";
+import { normalizeSearchParams } from "@/lib/posts/searchParams";
+import { PostCard } from "@/components/post/PostCard";
+import { Pagination } from "@/components/search/Pagination";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { UserIcon, BoxIcon, ClockIcon } from "@/components/icons";
 
 function formatJoinDate(date: Date): string {
@@ -13,10 +19,33 @@ function formatJoinDate(date: Date): string {
 // ever returns nickname/publicId/createdAt/postCount (see its own
 // comment) -- never email/googleId/isAdmin/isSuspended, regardless of who
 // is viewing.
-export default async function ProfilePage({ params }: { params: Promise<{ publicId: string }> }) {
+export default async function ProfilePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ publicId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { publicId } = await params;
   const profile = await getPublicProfile(publicId);
   if (!profile) notFound();
+
+  // Phase H-8: same publicId->id lookup getPublicProfile() already did --
+  // resolved a second time here (not threaded through as an extra return
+  // field) so PublicProfileDTO stays exactly what it was in H-7 for every
+  // other caller. `page` only, no q/category/campus/etc -- this list is
+  // never filtered/searched, just this one user's own posts, so the full
+  // search-query schema (listQuerySchema) would be overkill here.
+  const raw = normalizeSearchParams(await searchParams);
+  const pageParam = Number(raw.page);
+  const page = Number.isInteger(pageParam) && pageParam >= 1 ? pageParam : DEFAULT_PAGE;
+
+  let posts;
+  try {
+    posts = await listPostsByUser(profile.userId, { page, limit: DEFAULT_LIMIT });
+  } catch (error) {
+    console.error("Failed to load profile posts", error);
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -43,6 +72,37 @@ export default async function ProfilePage({ params }: { params: Promise<{ public
           <span className="text-sm font-semibold text-foreground">{formatJoinDate(profile.createdAt)}</span>
           <span className="text-xs text-muted-foreground">가입일</span>
         </div>
+      </section>
+
+      {/* Phase H-8: "작성 게시글" -- Lost+Found merged, newest first,
+          reusing the exact same PostCard/Pagination this app already uses
+          on /lost /found /search (see listPostsByUser's own comment for
+          why deleted posts never appear here, and why this needs no extra
+          permission check beyond what those public list pages already
+          have). */}
+      <section className="flex flex-col gap-4">
+        <h2 className="text-sm font-semibold text-foreground">작성 게시글</h2>
+        {!posts ? (
+          <div className="rounded-card border border-destructive/30 bg-destructive-muted p-10 text-center text-sm text-destructive">
+            게시물을 불러오지 못했어요. 잠시 후 다시 시도해주세요.
+          </div>
+        ) : posts.items.length === 0 ? (
+          <EmptyState title="작성한 게시글이 없어요." />
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {posts.items.map((post) => (
+                <PostCard key={`${post.type}-${post.id}`} post={post} />
+              ))}
+            </div>
+            <Pagination
+              basePath={`/profile/${publicId}`}
+              currentSearchParams={raw}
+              page={posts.page}
+              totalPages={posts.totalPages}
+            />
+          </>
+        )}
       </section>
     </div>
   );

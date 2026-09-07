@@ -36,9 +36,8 @@ vi.mock("@/generated/prisma/client", () => ({
   NotificationType: { COMMENT_REPLY: "COMMENT_REPLY" },
 }));
 
-const { createComment, deleteComment, getCommentPostRef, listCommentsForPost, updateComment } = await import(
-  "./service"
-);
+const { createComment, deleteComment, getCommentPostRef, listCommentsByUser, listCommentsForPost, updateComment } =
+  await import("./service");
 
 const author = { id: 1, isSuspended: false, suspendedUntil: null, isAdmin: false } as unknown as User;
 const suspendedAuthor = { ...author, isSuspended: true } as unknown as User;
@@ -65,6 +64,60 @@ describe("listCommentsForPost", () => {
     await listCommentsForPost("found", 5);
 
     expect(comment.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { foundPostId: 5 } }));
+  });
+});
+
+describe("listCommentsByUser", () => {
+  it("lists this user's own comments, newest first, with post title/type and reply info", async () => {
+    comment.findMany.mockResolvedValueOnce([
+      {
+        id: 10,
+        content: "안녕하세요",
+        createdAt: new Date("2026-01-02"),
+        parentId: null,
+        lostPost: { id: 1, title: "에어팟" },
+        foundPost: null,
+        parent: null,
+      },
+      {
+        id: 9,
+        content: "저도 봤어요",
+        createdAt: new Date("2026-01-01"),
+        parentId: 5,
+        lostPost: null,
+        foundPost: { id: 2, title: "지갑" },
+        parent: { author: { nickname: "원댓글작성자" } },
+      },
+    ]);
+
+    const result = await listCommentsByUser(1);
+
+    expect(comment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { authorUserId: 1 }, orderBy: { createdAt: "desc" } }),
+    );
+    expect(result).toEqual([
+      {
+        id: 10,
+        content: "안녕하세요",
+        createdAt: new Date("2026-01-02"),
+        parentId: null,
+        replyToNickname: null,
+        post: { id: 1, type: "lost", title: "에어팟" },
+      },
+      {
+        id: 9,
+        content: "저도 봤어요",
+        createdAt: new Date("2026-01-01"),
+        parentId: 5,
+        replyToNickname: "원댓글작성자",
+        post: { id: 2, type: "found", title: "지갑" },
+      },
+    ]);
+  });
+
+  it("returns an empty list when the user has no comments", async () => {
+    comment.findMany.mockResolvedValueOnce([]);
+    expect(await listCommentsByUser(1)).toEqual([]);
   });
 });
 

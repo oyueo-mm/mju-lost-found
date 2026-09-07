@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { signIn } from "@/lib/auth/auth";
 import { getCurrentUser, sanitizeCallbackUrl, type LoginReason } from "@/lib/auth/session";
 import { isGoogleTestModeEnabled } from "@/lib/settings/service";
+import { LogoMark } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/Button";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -53,9 +54,7 @@ export default async function LoginPage({
     <div className="flex min-h-full flex-1 flex-col items-center justify-center px-6 py-12">
       <div className="flex w-full max-w-sm flex-col items-center gap-7 text-center">
         <div className="flex flex-col items-center gap-3">
-          <span className="flex size-14 items-center justify-center rounded-full bg-primary text-xl font-bold text-primary-foreground">
-            M
-          </span>
+          <LogoMark size={56} />
           <div className="flex flex-col items-center gap-1">
             <h1 className="text-xl font-semibold text-foreground">명지 스마트 분실물 센터</h1>
             <p className="text-sm text-muted-foreground">캠퍼스에서 잃어버린 물건을 빠르게 찾아드려요</p>

@@ -4,7 +4,7 @@ import { requireReadyUser } from "@/lib/auth/session";
 import { signOut } from "@/lib/auth/auth";
 import { getUnreadNotificationCount } from "@/lib/notification/service";
 import { isAdmin } from "@/lib/moderation/service";
-import { UserIcon, ChevronRightIcon, BellIcon, ShieldIcon, LogoutIcon } from "@/components/icons";
+import { UserIcon, ChevronRightIcon, BellIcon, ShieldIcon, LogoutIcon, ChatBubbleIcon } from "@/components/icons";
 import { ThemeSettings } from "@/components/settings/ThemeSettings";
 import { NicknameSettings } from "@/components/settings/NicknameSettings";
 import type { ReactNode } from "react";
@@ -69,8 +69,16 @@ export default async function MePage() {
           on a uniqueness conflict the way onboarding's initial set did. */}
       <NicknameSettings currentNickname={user.nickname ?? ""} />
 
+      {/* Phase H-8: "내 활동" -- 내가 쓴 게시글(기존 /posts/mine, 라벨만 통일) +
+          내가 쓴 댓글(신규 /me/comments). 두 페이지 모두 세션의 본인 id만 사용,
+          기존 권한/데이터는 그대로. */}
+      <p className="px-1 text-xs font-medium text-muted-foreground">내 활동</p>
       <section className="overflow-hidden rounded-card border border-border bg-card">
-        <MenuRow href="/posts/mine" icon={<UserIcon className="size-4.5" />} label="내 게시물" />
+        <MenuRow href="/posts/mine" icon={<UserIcon className="size-4.5" />} label="내가 쓴 게시글" />
+        <MenuRow href="/me/comments" icon={<ChatBubbleIcon className="size-4.5" />} label="내가 쓴 댓글" />
+      </section>
+
+      <section className="overflow-hidden rounded-card border border-border bg-card">
         <MenuRow href="/matches" icon={<ShieldIcon className="size-4.5" />} label="매칭" />
         <MenuRow
           href="/notifications"

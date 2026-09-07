@@ -5,6 +5,7 @@ import { getUnreadNotificationCount } from "@/lib/notification/service";
 import { countUnreadMessagesForUser } from "@/lib/chat/service";
 import { isAdmin } from "@/lib/moderation/service";
 import { DesktopNav } from "./DesktopNav";
+import { LogoMark } from "./Logo";
 import { BellIcon, UserIcon } from "@/components/icons";
 import { LinkButton } from "@/components/ui/Button";
 
@@ -38,9 +39,7 @@ export async function Header() {
     <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3 md:px-6">
         <Link href="/" className="flex shrink-0 items-center gap-2 font-semibold text-foreground">
-          <span className="flex size-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-            M
-          </span>
+          <LogoMark size={32} />
           <span className="hidden sm:inline">명지 스마트 분실물 센터</span>
         </Link>
 

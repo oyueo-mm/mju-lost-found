@@ -1,13 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <circle cx="32" cy="32" r="32" fill="#2f6fed" />
-  <text
-    x="32"
-    y="33"
-    text-anchor="middle"
-    dominant-baseline="central"
-    font-family="Arial, Helvetica, sans-serif"
-    font-size="34"
-    font-weight="700"
-    fill="#ffffff"
-  >M</text>
+  <!-- Phase H-8 brand mark: a location pin with a checkmark cut into it
+       (위치 + 확인/신뢰, one simple silhouette -- see LogoMark's own
+       comment for the full design rationale; this file mirrors the same
+       path geometry at 2x scale). This is a standalone static asset (a
+       browser tab/favicon renders it outside the app's own CSS, so it
+       can't read --primary custom properties the way LogoMark does) --
+       colors are hardcoded to this app's actual light/dark brand-blue
+       values, switched via a plain prefers-color-scheme media query so
+       the favicon itself still looks correct in a dark browser chrome,
+       same as every other themed surface in this app. -->
+  <style>
+    .badge { fill: #2f6fed; }
+    .glyph { fill: #ffffff; }
+    .check { stroke: #2f6fed; }
+    @media (prefers-color-scheme: dark) {
+      .badge { fill: #5b8ef2; }
+      .glyph { fill: #0b0d12; }
+      .check { stroke: #5b8ef2; }
+    }
+  </style>
+  <circle cx="32" cy="32" r="32" class="badge" />
+  <path
+    d="M32 15C24.82 15 19 20.82 19 28C19 37 32 49 32 49C32 49 45 37 45 28C45 20.82 39.18 15 32 15Z"
+    class="glyph"
+  />
+  <path
+    d="M24.4 27.2L29.4 32.6L39.2 21.6"
+    class="check"
+    stroke-width="4"
+    fill="none"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
 </svg>
