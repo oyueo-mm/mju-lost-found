@@ -26,9 +26,14 @@ export function Hero() {
         명지대학교 캠퍼스 전용 분실물 · 습득물 서비스입니다. 등록만 하면 AI가 비슷한 물건을 자동으로 찾아 연결해드립니다.
       </p>
 
-      <LinkButton href="/login" size="md" className="mt-2 px-8">
-        로그인하고 시작하기
-      </LinkButton>
+      {/* Phase K: the id is what LandingStickyCta watches to know this CTA
+          has scrolled away (and its floating copy should take over).
+          Wrapper only -- the button itself is unchanged. */}
+      <div id="landing-hero-cta" className="mt-2">
+        <LinkButton href="/login" size="md" className="px-8">
+          로그인하고 시작하기
+        </LinkButton>
+      </div>
     </section>
   );
 }

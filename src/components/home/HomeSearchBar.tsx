@@ -12,7 +12,11 @@ import { SearchIcon } from "@/components/icons";
 // -- the existing keyword-search path (searchPosts()); this component
 // never calls any search API itself and the search algorithm is
 // unchanged.
-export function HomeSearchBar() {
+// Phase K: `compact` is this same bar at the height it needs to be inside
+// the sticky strip under the Header (see StickyHomeSearch) -- tighter
+// padding and a smaller icon, nothing else. Same markup, same submit
+// behavior, same placeholder, same /search navigation.
+export function HomeSearchBar({ compact = false }: { compact?: boolean } = {}) {
   const router = useRouter();
   const [value, setValue] = useState("");
 
@@ -24,8 +28,12 @@ export function HomeSearchBar() {
 
   return (
     <form onSubmit={handleSubmit} className="w-full">
-      <div className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-3 shadow-sm transition-colors focus-within:border-primary">
-        <SearchIcon className="size-5 shrink-0 text-muted-foreground" />
+      <div
+        className={`flex items-center gap-2 rounded-full border border-border bg-card shadow-sm transition-colors focus-within:border-primary ${
+          compact ? "px-3.5 py-1.5" : "px-4 py-3"
+        }`}
+      >
+        <SearchIcon className={`shrink-0 text-muted-foreground ${compact ? "size-4" : "size-5"}`} />
         <input
           type="text"
           value={value}
@@ -37,7 +45,9 @@ export function HomeSearchBar() {
         />
         <button
           type="submit"
-          className="shrink-0 rounded-full bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+          className={`shrink-0 rounded-full bg-primary text-sm font-medium text-primary-foreground hover:opacity-90 ${
+            compact ? "px-3.5 py-1" : "px-4 py-1.5"
+          }`}
         >
           검색
         </button>

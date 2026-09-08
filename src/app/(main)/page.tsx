@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/lib/auth/session";
 import { listLostPosts, listFoundPosts } from "@/lib/posts/service";
-import { HomeSearchBar } from "@/components/home/HomeSearchBar";
+import { StickyHomeSearch } from "@/components/home/StickyHomeSearch";
+import { ScrollReveal } from "@/components/ui/ScrollReveal";
 import { CategoryShortcuts } from "@/components/home/CategoryShortcuts";
 import { LandingHero } from "@/components/home/LandingHero";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -57,8 +58,12 @@ export default async function Home() {
         <p className="text-sm text-muted-foreground md:text-base">
           비슷한 물건까지 자동으로 찾아드려요 · 캠퍼스 안에서 안전하게 주고받으세요
         </p>
+        {/* Phase K: same hero search as before, plus a compact copy that
+            slides in under the Header once this one scrolls away -- so
+            search stays reachable while browsing the rails below without
+            scrolling back up. See StickyHomeSearch. */}
         <div className="w-full max-w-xl">
-          <HomeSearchBar />
+          <StickyHomeSearch />
         </div>
         <div className="flex flex-wrap items-center justify-center gap-2">
           <LinkButton href="/lost" variant="secondary" size="sm" className="gap-1.5">
@@ -70,12 +75,15 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="flex flex-col gap-4">
+      {/* Phase K: each section below the hero fades up the first time it's
+          scrolled to (ScrollReveal -- no-op for content already on screen
+          and for prefers-reduced-motion). Contents are unchanged. */}
+      <ScrollReveal className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold text-foreground">어떤 물건을 찾고 있나요?</h2>
         <CategoryShortcuts />
-      </section>
+      </ScrollReveal>
 
-      <section className="flex flex-col gap-4">
+      <ScrollReveal className="flex flex-col gap-4">
         <SectionHeader title="최근 분실물" href="/lost" />
         {recentLost === null ? (
           <p className="text-sm text-muted-foreground">최근 분실물을 불러오지 못했습니다.</p>
@@ -88,9 +96,9 @@ export default async function Home() {
         ) : (
           <PostRail posts={recentLost.items} />
         )}
-      </section>
+      </ScrollReveal>
 
-      <section className="flex flex-col gap-4">
+      <ScrollReveal className="flex flex-col gap-4">
         <SectionHeader title="최근 습득물" href="/found" />
         {recentFound === null ? (
           <p className="text-sm text-muted-foreground">최근 습득물을 불러오지 못했습니다.</p>
@@ -103,7 +111,7 @@ export default async function Home() {
         ) : (
           <PostRail posts={recentFound.items} />
         )}
-      </section>
+      </ScrollReveal>
     </div>
   );
 }

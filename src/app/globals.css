@@ -276,3 +276,30 @@ body {
 .scroll-rail::-webkit-scrollbar {
   display: none;
 }
+
+/* Phase K: the sticky Header's own height, so anything that has to stick
+   *below* it (Home's compact search bar) can offset itself instead of
+   hard-coding a magic number that would drift the next time the Header
+   changes. Header is py-3 (24px) around a 36px control row + its 1px
+   bottom border. */
+:root {
+  --header-height: 3.8125rem;
+}
+
+/* Phase K: scroll-reveal. The hidden state is only ever applied by
+   ScrollReveal.tsx *after* mount, and only to elements still below the
+   viewport at that moment -- so the server-rendered HTML is always
+   visible (nothing disappears if JS is slow or fails) and nothing the
+   reader is already looking at animates. Movement is deliberately small
+   and short: a "this section arrived" cue, not an entrance. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-reveal] {
+    transition:
+      opacity 450ms ease-out,
+      transform 450ms ease-out;
+  }
+  [data-reveal="hidden"] {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
