@@ -6,42 +6,13 @@ import Link from "next/link";
 
 import { CAMPUSES, CATEGORIES, DEFAULT_CAMPUS } from "@/lib/posts/schema";
 import type { PostType } from "@/lib/posts/schema";
+import { getLocationSuggestions } from "@/lib/posts/campusLocations";
 import { uploadPostImage } from "@/lib/images/client";
 import { ImageUploader } from "./ImageUploader";
 import { Button } from "@/components/ui/Button";
 
 const FIELD_CLASS =
   "rounded-lg border border-border bg-transparent px-3 py-2.5 text-sm text-foreground disabled:opacity-60";
-
-// Phase H-3: suggestions only -- the 위치 field stays a plain free-text
-// input (no schema/API change, no enum), these are just common real
-// locations on each campus offered as a shortcut. Keyed by campus so the
-// list follows the campus toggle above it; not exhaustive (a made-up
-// exhaustive campus map would be worse than no suggestions at all), just
-// the handful of buildings a lost/found item most often turns up at.
-//
-// Phase H-6: the original H-3 list was written by guessing plausible
-// building names, never checked against real posts. This turn queried
-// actual production LostPost/FoundPost (campus, location) pairs: every
-// real post (11/11) is on 인문캠퍼스, and 종합관/국제관 are genuine locations
-// people actually typed there -- so those two replace 인문사회관/경영관, which
-// had zero supporting evidence. 자연캠퍼스 has literally zero real posts to
-// check against, so that list is intentionally left as only generic,
-// campus-agnostic terms (no 자연캠퍼스-specific building invented without
-// evidence) -- see the H-6 report's own note on this asymmetry.
-//
-// Phase I section 5: this data itself is unchanged (re-checked against the
-// same evidence H-6 already gathered -- there is still nothing new to add
-// or remove without inventing a building name). Only *how* it's offered
-// changed: the always-visible chip row below the input was replaced by a
-// popover toggle (see the 위치 label's own comment further down) that
-// lists every campus's buildings under its own heading, so a user can see
-// how 인문캠퍼스/자연캠퍼스 differ instead of only ever seeing whichever one
-// their current campus toggle happens to be on.
-const LOCATION_SUGGESTIONS: Record<string, string[]> = {
-  인문캠퍼스: ["종합관", "국제관", "학생회관", "중앙도서관", "학생식당", "정문", "후문"],
-  자연캠퍼스: ["학생회관", "중앙도서관", "공과대학", "자연과학관", "생활관(기숙사)", "학생식당", "정문"],
-};
 
 function RequiredMark() {
   return (
@@ -440,14 +411,16 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
             위치
             <RequiredMark />
           </span>
-          {/* Phase I section 5: replaces the old always-visible chip row
-              below the input with a dropdown/popover toggle next to it --
-              same underlying LOCATION_SUGGESTIONS data and "click fills the
-              input, still fully editable either way" behavior, just not
-              permanently taking up vertical space. Free-text entry is
-              untouched: the input itself is unchanged (same name/required/
-              maxLength/ref), so typing directly still works exactly as
-              before whether or not the popover is ever opened. */}
+          {/* Phase P-2: the popover now follows the `campus` toggle above
+              (getLocationSuggestions(campus)) instead of always listing
+              every campus's buildings under its own heading -- switching
+              캠퍼스 immediately changes what this shows, since campus is
+              plain React state read fresh on every render, no extra effect
+              needed. Free-text entry is untouched: the input itself is
+              unchanged (same name/required/maxLength/ref), so typing
+              directly still works exactly as before whether or not the
+              popover is ever opened, and an already-typed value is never
+              cleared by a campus change. */}
           <div ref={locationMenuRef} className="relative flex gap-2">
             <input
               ref={locationInputRef}
@@ -466,7 +439,7 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
               onClick={() => setLocationMenuOpen((open) => !open)}
               aria-haspopup="menu"
               aria-expanded={locationMenuOpen}
-              aria-label="추천 장소 목록 열기"
+              aria-label={`${campus} 추천 장소 목록 열기`}
               className="shrink-0 rounded-lg border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
             >
               추천 장소
@@ -477,29 +450,25 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
                 role="menu"
                 className="absolute top-full right-0 z-10 mt-1 max-h-80 w-64 overflow-y-auto rounded-card border border-border bg-card p-3 shadow-lg"
               >
-                {CAMPUSES.map((c) => (
-                  <div key={c} className="mb-3 flex flex-col gap-1.5 last:mb-0">
-                    <span className="text-xs font-semibold text-foreground">{c}</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(LOCATION_SUGGESTIONS[c] ?? []).map((place) => (
-                        <button
-                          key={place}
-                          type="button"
-                          onClick={() => {
-                            if (locationInputRef.current) {
-                              locationInputRef.current.value = place;
-                              locationInputRef.current.focus();
-                            }
-                            setLocationMenuOpen(false);
-                          }}
-                          className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-                        >
-                          {place}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                <span className="mb-1.5 block text-xs font-semibold text-foreground">{campus}</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {getLocationSuggestions(campus).map((place) => (
+                    <button
+                      key={place}
+                      type="button"
+                      onClick={() => {
+                        if (locationInputRef.current) {
+                          locationInputRef.current.value = place;
+                          locationInputRef.current.focus();
+                        }
+                        setLocationMenuOpen(false);
+                      }}
+                      className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                    >
+                      {place}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
