@@ -1,33 +1,11 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getSupabaseAdminClient as getAdminClient } from "@/lib/supabase/adminClient";
 
 import { POST_IMAGES_BUCKET } from "./config";
 
-// Server-only -- SUPABASE_SERVICE_ROLE_KEY bypasses Row Level Security
-// entirely, so this module must never be imported from a "use client"
-// file or any code that ends up in the browser bundle. The browser-facing
-// counterpart is src/lib/images/supabaseBrowser.ts, which only ever holds
-// the public anon key.
-
-if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
-  // Same "warn but don't crash at import time" pattern as src/lib/db/prisma.ts
-  // -- lets a DATABASE_URL/SUPABASE-less build or test run still import this
-  // module; the real failure surfaces lazily on first actual use instead.
-  console.warn(
-    "[supabase-storage] SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL is not set. " +
-      "Image upload/delete will fail until both are configured (see .env.example).",
-  );
-}
-
-let _admin: SupabaseClient | null = null;
-function getAdminClient(): SupabaseClient {
-  if (_admin) return _admin;
-  _admin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-    process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
-    { auth: { persistSession: false } },
-  );
-  return _admin;
-}
+// Server-only -- see src/lib/supabase/adminClient.ts (where the service-
+// role client singleton itself now lives, shared with the new chat
+// Realtime broadcaster) for why this must never be imported from a "use
+// client" file. This file keeps its own Storage-specific wrappers.
 
 // Mints a one-time, path-scoped upload credential (valid ~2 hours per
 // Supabase's own default) -- the actual file bytes never pass through this

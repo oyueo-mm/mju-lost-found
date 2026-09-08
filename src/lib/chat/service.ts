@@ -4,6 +4,7 @@ import { NotificationType, Prisma, type User } from "@/generated/prisma/client";
 import type { PostType } from "@/lib/posts/schema";
 import { parseChatImagePathname } from "@/lib/images/pathname";
 import { publicUrlFor } from "@/lib/images/supabaseAdmin";
+import { broadcastChatEvent } from "./realtimeAdmin";
 import { MESSAGE_PAGE_SIZE } from "./schema";
 
 // Same placeholder text as the legacy HIDDEN_MESSAGE_PLACEHOLDER --
@@ -95,7 +96,13 @@ export type MessageDTO = {
   content: string;
   imageUrl: string | null;
   createdAt: Date;
-  readAt: Date | null;
+  // Phase N: replaces the old per-message `readAt: Date | null` -- whether
+  // the *other* participant has read this message, derived from their own
+  // ChatRead cursor (message.id <= their lastReadMessageId), not a
+  // per-message timestamp anymore. Only meaningful (and only ever
+  // rendered) for a message where isMine is true -- see ChatRead's own
+  // schema.prisma comment for why the cursor model replaced readAt.
+  readByCounterpart: boolean;
   isMine: boolean;
   replyTo: MessageReplyPreview | null;
   reactions: ReactionSummary[];
@@ -401,6 +408,29 @@ export async function listMessages(
   const hasMore = rows.length > MESSAGE_PAGE_SIZE;
   const page = rows.slice(0, MESSAGE_PAGE_SIZE).reverse(); // oldest-first for display
 
+  // Phase N: one lookup for the *other* participant's read cursor (never
+  // the requester's own -- see MessageDTO.readByCounterpart's own
+  // comment), reused for every message on this page rather than a
+  // per-message query. A room only ever has two participants, so "the
+  // other one" is just whichever id in the set isn't requesterId.
+  // Wrapped defensively (unlike every other ChatRead access in this file):
+  // this is the one call on the *read* path, reachable the instant this
+  // code ships, before the ChatRead migration is necessarily live in every
+  // environment (this phase's own spec: migration not applied yet) --
+  // falling back to "nothing read yet" degrades to an under-informative
+  // read indicator, never a broken message list.
+  const counterpartId = [...participantIds].find((id) => id !== requesterId) ?? requesterId;
+  let counterpartLastRead = 0;
+  try {
+    const counterpartRead = await prisma.chatRead.findUnique({
+      where: { chatRoomId_userId: { chatRoomId, userId: counterpartId } },
+      select: { lastReadMessageId: true },
+    });
+    counterpartLastRead = counterpartRead?.lastReadMessageId ?? 0;
+  } catch (error) {
+    console.error("Failed to read chat read-cursor:", error);
+  }
+
   // Phase D-4: one batched query for every message on this page (never
   // one query per message) -- grouped in memory afterward, same "avoid
   // N+1" reasoning as everywhere else in this app that resolves a
@@ -430,7 +460,7 @@ export async function listMessages(
     // is replaced).
     imageUrl: m.hiddenAt ? null : m.imageUrl,
     createdAt: m.createdAt,
-    readAt: m.readAt,
+    readByCounterpart: m.id <= counterpartLastRead,
     isMine: m.senderUserId === requesterId,
     replyTo: toReplyPreview(m.replyToMessage),
     // Reactions are metadata about the message, not its content -- shown
@@ -443,24 +473,50 @@ export async function listMessages(
   return { kind: "ok", data: { items, hasMore } };
 }
 
-// Marks the *other* participant's unread messages as read by requesterId
-// -- never the requester's own messages. Mirrors legacy
-// mark_messages_as_read(); DB-level bulk update, not a fetch-then-loop.
-export async function markMessagesAsRead(
+// Phase N: replaces markMessagesAsRead()'s bulk-UPDATE-every-unread-
+// message approach with a single upsert of requesterId's own read cursor
+// in this room, advanced to the room's current latest message id -- see
+// ChatRead's own schema.prisma comment for the full reasoning. Called
+// from the exact same call site markMessagesAsRead() used to be (GET
+// /api/chat/[id]/messages, "viewing the room marks it read"), so the
+// *behavior* (when reading counts as "read") is unchanged, only how it's
+// stored. A room with no messages yet is a no-op -- nothing to point the
+// cursor at, and no ChatRead row is written (see that model's own comment
+// on why lastReadMessageId's nullability isn't actually exercised by this
+// function).
+export async function markChatRoomRead(
   chatRoomId: number,
   requesterId: number,
-): Promise<ChatMutationResult<{ count: number }>> {
+): Promise<ChatMutationResult<{ lastReadMessageId: number | null }>> {
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
   const participantIds = participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
   if (!participantIds.has(requesterId)) return { kind: "forbidden" };
 
-  const { count } = await prisma.message.updateMany({
-    where: { chatRoomId, senderUserId: { not: requesterId }, readAt: null },
-    data: { readAt: new Date() },
+  const latest = await prisma.message.findFirst({
+    where: { chatRoomId },
+    orderBy: { id: "desc" },
+    select: { id: true },
   });
-  return { kind: "ok", data: { count } };
+  if (!latest) return { kind: "ok", data: { lastReadMessageId: null } };
+
+  const read = await prisma.chatRead.upsert({
+    where: { chatRoomId_userId: { chatRoomId, userId: requesterId } },
+    create: { chatRoomId, userId: requesterId, lastReadMessageId: latest.id },
+    update: { lastReadMessageId: latest.id },
+  });
+
+  // Best-effort, after the write already committed -- see
+  // realtimeAdmin.ts's own comment on why this payload is safe to send on
+  // an otherwise-unauthenticated channel (just two numeric ids, never
+  // message content).
+  void broadcastChatEvent(chatRoomId, {
+    event: "read",
+    payload: { userId: requesterId, lastReadMessageId: read.lastReadMessageId! },
+  });
+
+  return { kind: "ok", data: { lastReadMessageId: read.lastReadMessageId } };
 }
 
 // Marks requesterId's own "message"-type Notifications tied to this room
@@ -599,6 +655,14 @@ export async function sendMessage(
     return created;
   });
 
+  // Phase N: best-effort, after the transaction already committed -- see
+  // realtimeAdmin.ts's own comment. The other participant's (and, subject
+  // to the harmless self-echo noted in ChatThread.tsx, the sender's own)
+  // subscribed client re-fetches the real content through the existing
+  // authorized GET endpoint; this push only ever carries the new
+  // message's bare id.
+  void broadcastChatEvent(chatRoomId, { event: "message", payload: { messageId: message.id } });
+
   return {
     kind: "ok",
     data: {
@@ -608,7 +672,8 @@ export async function sendMessage(
       content: message.content,
       imageUrl: message.imageUrl,
       createdAt: message.createdAt,
-      readAt: message.readAt,
+      // Freshly created -- the counterpart hasn't had a chance to read it yet.
+      readByCounterpart: false,
       isMine: true,
       replyTo: toReplyPreview(replyTarget),
       reactions: [], // a message can't already have reactions the moment it's created
@@ -667,6 +732,16 @@ export async function toggleMessageReaction(
     where: { messageId },
     select: { emoji: true, userId: true },
   });
+
+  // Phase N: best-effort, after the write already committed -- see
+  // realtimeAdmin.ts's own comment. Deliberately just the message id, not
+  // the reaction summary itself: reactedByMe is relative to whoever's
+  // asking (see ReactionSummary's own comment), so a summary computed for
+  // *this* requester couldn't be reused as-is by the other participant's
+  // client anyway -- it re-fetches through the existing GET endpoint,
+  // same as a "message" event's client-side handling.
+  void broadcastChatEvent(chatRoomId, { event: "reaction", payload: { messageId } });
+
   return { kind: "ok", data: { messageId, reactions: summarizeReactions(rows, requester.id) } };
 }
 
@@ -689,13 +764,18 @@ export async function getMessage(messageId: number): Promise<{ id: number; chatR
 // Phase 17: chat tab's unread badge (Navigation). Reuses exactly the same
 // room-scoping WHERE clause listChatRoomsForUser() uses (only
 // `select: { id: true }` instead of the full detail shape) to find every
-// room this user participates in, then counts messages in those rooms
-// that are someone else's (senderUserId != requesterId, otherwise your
-// own sent messages would count as "unread") and not yet read
-// (readAt: null). A hidden message (Report/ModerationAction) is still
-// counted -- the notification badge signals "something happened here",
-// not "there's readable new content"; opening the room is what actually
-// clears it via markMessagesAsRead().
+// room this user participates in. A hidden message (Report/
+// ModerationAction) is still counted -- the notification badge signals
+// "something happened here", not "there's readable new content"; opening
+// the room is what actually clears it via markChatRoomRead().
+//
+// Phase N: the unread threshold is now requesterId's own ChatRead cursor,
+// which varies per room -- Prisma's query builder has no way to express
+// "join each message against a different threshold row per room" in one
+// call, so this is a single raw query (LEFT JOIN so a room with no
+// ChatRead row yet -- never opened -- correctly treats every message in
+// it as unread via COALESCE(..., 0)) rather than either N+1 per-room
+// queries or a second round trip to fetch every cursor first.
 export async function countUnreadMessagesForUser(requesterId: number): Promise<number> {
   const rooms = await prisma.chatRoom.findMany({
     where: {
@@ -710,11 +790,13 @@ export async function countUnreadMessagesForUser(requesterId: number): Promise<n
   const roomIds = rooms.map((r) => r.id);
   if (roomIds.length === 0) return 0;
 
-  return prisma.message.count({
-    where: {
-      chatRoomId: { in: roomIds },
-      senderUserId: { not: requesterId },
-      readAt: null,
-    },
-  });
+  const rows = await prisma.$queryRaw<{ count: bigint }[]>`
+    SELECT COUNT(*)::bigint AS count
+    FROM "Message" m
+    LEFT JOIN "ChatRead" cr ON cr.chat_room_id = m.chat_room_id AND cr.user_id = ${requesterId}
+    WHERE m.chat_room_id = ANY(${roomIds})
+      AND m.sender_user_id != ${requesterId}
+      AND m.id > COALESCE(cr.last_read_message_id, 0)
+  `;
+  return Number(rows[0]?.count ?? 0);
 }

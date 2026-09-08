@@ -5,7 +5,7 @@ import { jsonError } from "@/lib/posts/response";
 
 const requireUserForApi = vi.fn();
 const listMessages = vi.fn();
-const markMessagesAsRead = vi.fn();
+const markChatRoomRead = vi.fn();
 const markMessageNotificationsReadForChatRoom = vi.fn();
 const sendMessage = vi.fn();
 const toggleMessageReaction = vi.fn();
@@ -17,7 +17,7 @@ vi.mock("@/lib/chat/http", async () => {
 });
 vi.mock("@/lib/chat/service", () => ({
   listMessages,
-  markMessagesAsRead,
+  markChatRoomRead,
   markMessageNotificationsReadForChatRoom,
   sendMessage,
   toggleMessageReaction,
@@ -30,7 +30,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
-  markMessagesAsRead.mockResolvedValue({ kind: "ok", data: { count: 0 } });
+  markChatRoomRead.mockResolvedValue({ kind: "ok", data: { lastReadMessageId: null } });
   markMessageNotificationsReadForChatRoom.mockResolvedValue({ kind: "ok", data: { count: 0 } });
 });
 
@@ -51,7 +51,7 @@ describe("GET /api/chat/[id]/messages", () => {
     const res = await GET(new NextRequest("http://localhost/api/chat/1/messages"), params("1"));
 
     expect(res.status).toBe(403);
-    expect(markMessagesAsRead).not.toHaveBeenCalled();
+    expect(markChatRoomRead).not.toHaveBeenCalled();
   });
 
   it("returns messages and marks them read for an authorized participant", async () => {
@@ -64,14 +64,14 @@ describe("GET /api/chat/[id]/messages", () => {
     expect(res.status).toBe(200);
     expect(json.data).toEqual([{ id: 1 }]);
     expect(json.pagination).toEqual({ hasMore: false });
-    expect(markMessagesAsRead).toHaveBeenCalledWith(1, sessionUser.id);
+    expect(markChatRoomRead).toHaveBeenCalledWith(1, sessionUser.id);
     expect(markMessageNotificationsReadForChatRoom).toHaveBeenCalledWith(1, sessionUser.id);
   });
 
   it("still returns messages even if marking read fails", async () => {
     requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
     listMessages.mockResolvedValueOnce({ kind: "ok", data: { items: [], hasMore: false } });
-    markMessagesAsRead.mockRejectedValueOnce(new Error("db error"));
+    markChatRoomRead.mockRejectedValueOnce(new Error("db error"));
 
     const res = await GET(new NextRequest("http://localhost/api/chat/1/messages"), params("1"));
 

@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
 import { uploadChatImage, validateImageFile } from "@/lib/images/client";
+import { formatAbsoluteTime, formatRelativeTime } from "@/lib/time/relativeTime";
 import { MessageActionMenu } from "@/components/chat/MessageActionMenu";
+import { useChatRoomRealtime } from "@/components/chat/useChatRoomRealtime";
 
 // Phase D-3: mirrors chat/service.ts's MessageReplyPreview -- no
 // createdAt/etc, just enough to render an inline quote (sender + a short
@@ -28,21 +30,22 @@ type MessageItem = {
   content: string;
   imageUrl: string | null;
   createdAt: string;
-  readAt: string | null;
+  // Phase N: replaces the old `readAt: string | null` -- see chat/
+  // service.ts's MessageDTO.readByCounterpart for the full reasoning.
+  // Only meaningful for a message where isMine is true; combined at
+  // render time with otherUserLastReadId (live updates from realtime
+  // "read" events) via isReadByCounterpart() below.
+  readByCounterpart: boolean;
   isMine: boolean;
   replyTo: ReplyPreview | null;
   reactions: ReactionSummary[];
 };
 
-function formatTime(iso: string): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "short", timeStyle: "short" }).format(new Date(iso));
-}
-
 // All message fetching/sending happens via our own server API (never a
 // direct DB/AI call from this Client Component) -- see Phase 10 spec
 // section 16. `isMine` comes pre-computed from the server (relative to
 // the authenticated session), never derived from anything client-side.
-export function ChatThread({ chatRoomId }: { chatRoomId: number }) {
+export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; currentUserId: number }) {
   const [messages, setMessages] = useState<MessageItem[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +61,14 @@ export function ChatThread({ chatRoomId }: { chatRoomId: number }) {
   // MessageActionMenu's own "no server round-trip for a client action"
   // design).
   const [replyingTo, setReplyingTo] = useState<ReplyPreview | null>(null);
+  // Phase N: the counterpart's read cursor, updated live from realtime
+  // "read" broadcasts -- null means "no live update received yet this
+  // session", in which case each message's own server-computed
+  // readByCounterpart (accurate as of the last fetch) is all that's used;
+  // see isReadByCounterpart() below. Never regresses (see the realtime
+  // handler below), same one-way-forward guarantee markChatRoomRead()
+  // itself has server-side.
+  const [otherUserLastReadId, setOtherUserLastReadId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -94,6 +105,50 @@ export function ChatThread({ chatRoomId }: { chatRoomId: number }) {
       cancelled = true;
     };
   }, [chatRoomId]);
+
+  // Phase N: shared by both realtime handlers below ("message" and
+  // "reaction" broadcasts carry only a bare id -- see realtimeAdmin.ts's
+  // own comment on why -- so both just mean "go re-fetch"). Re-fetches
+  // the latest page through the exact same authorized GET endpoint the
+  // initial load already uses (this is what actually enforces
+  // participant-only access to real message content; the realtime
+  // channel itself grants none), then upserts by id into local state:
+  // a not-yet-seen id is appended, an already-seen id is replaced with
+  // the fresh copy (picking up e.g. a changed reaction summary). This
+  // fetch also re-triggers the server's own "viewing marks read" side
+  // effect (markChatRoomRead), same as it already did on every manual
+  // page load -- appropriate here too, since receiving a live update
+  // means the room is actively open.
+  const syncLatest = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/chat/${chatRoomId}/messages`);
+      if (!res.ok) return;
+      const json = await res.json();
+      setMessages((prev) => {
+        const byId = new Map((prev ?? []).map((m) => [m.id, m]));
+        for (const m of json.data as MessageItem[]) byId.set(m.id, m);
+        return [...byId.values()].sort((a, b) => a.id - b.id);
+      });
+      setHasMore(json.pagination.hasMore);
+    } catch {
+      // Silent -- a missed realtime-triggered refresh isn't worth surfacing
+      // as an error banner; the next natural fetch (pagination, a future
+      // event) catches up regardless.
+    }
+  }, [chatRoomId]);
+
+  useChatRoomRealtime(chatRoomId, {
+    onMessage: syncLatest,
+    onReaction: syncLatest,
+    onRead: (payload) => {
+      // Ignore my own read-cursor advancing -- this event exists so the
+      // *other* participant's client can show "읽음" on messages I sent,
+      // never to tell me anything about my own messages (see
+      // otherUserLastReadId's own comment).
+      if (payload.userId === currentUserId) return;
+      setOtherUserLastReadId((prev) => Math.max(prev ?? 0, payload.lastReadMessageId ?? 0));
+    },
+  });
 
   useEffect(() => {
     return () => {
@@ -273,6 +328,14 @@ export function ChatThread({ chatRoomId }: { chatRoomId: number }) {
     handleReactionChange(messageId, json.data.reactions);
   }
 
+  // Phase N: the server-computed flag (accurate as of the last fetch) is
+  // the baseline; a live "read" broadcast received since then can only
+  // ever push otherUserLastReadId forward, never backward, so `||` here
+  // is safe -- once true, never flips back to false for this message.
+  function isReadByCounterpart(m: MessageItem): boolean {
+    return m.readByCounterpart || (otherUserLastReadId !== null && m.id <= otherUserLastReadId);
+  }
+
   return (
     // min-h-0 on both this root and the message list below is what makes
     // the compose bar actually stay put as messages accumulate: a flex
@@ -395,9 +458,12 @@ export function ChatThread({ chatRoomId }: { chatRoomId: number }) {
                   ))}
                 </div>
               )}
-              <span className="mt-0.5 text-xs text-muted-foreground">
-                {formatTime(m.createdAt)}
-                {m.isMine ? ` · ${m.readAt ? "읽음" : "안 읽음"}` : ""}
+              {/* title: the exact date/time on hover/long-press -- this
+                  phase's own "필요한 경우 오래된 메시지는 정확한 날짜/시간을
+                  확인할 수 있게 한다". */}
+              <span className="mt-0.5 text-xs text-muted-foreground" title={formatAbsoluteTime(new Date(m.createdAt))}>
+                {formatRelativeTime(new Date(m.createdAt))}
+                {m.isMine ? ` · ${isReadByCounterpart(m) ? "읽음" : "안 읽음"}` : ""}
               </span>
             </div>
           ))

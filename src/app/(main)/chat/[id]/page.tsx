@@ -101,7 +101,7 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
         ))}
       </div>
 
-      <ChatThread chatRoomId={room.id} />
+      <ChatThread chatRoomId={room.id} currentUserId={user.id} />
     </div>
   );
 }

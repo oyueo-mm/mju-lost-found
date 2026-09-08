@@ -4,8 +4,8 @@ import { chatMutationResultToResponse, jsonError, requireUserForApi, withErrorHa
 import { listMessagesQuerySchema, sendMessageSchema, toggleReactionSchema } from "@/lib/chat/schema";
 import {
   listMessages,
+  markChatRoomRead,
   markMessageNotificationsReadForChatRoom,
-  markMessagesAsRead,
   sendMessage,
   toggleMessageReaction,
 } from "@/lib/chat/service";
@@ -36,7 +36,7 @@ export const GET = withErrorHandling(
     }
 
     try {
-      await markMessagesAsRead(id, auth.user.id);
+      await markChatRoomRead(id, auth.user.id);
       await markMessageNotificationsReadForChatRoom(id, auth.user.id);
     } catch (error) {
       console.error("Failed to mark chat room read on view:", error);

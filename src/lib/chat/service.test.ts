@@ -10,13 +10,16 @@ class FakePrismaClientKnownRequestError extends Error {
 }
 
 const chatRoom = { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() };
-const message = { findMany: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), count: vi.fn() };
+const message = { findMany: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn(), count: vi.fn() };
 const userTable = { findUnique: vi.fn() };
 const notification = { updateMany: vi.fn() };
 const lostPostTable = { findUnique: vi.fn() };
 const foundPostTable = { findUnique: vi.fn() };
 // Phase D-4
 const messageReaction = { deleteMany: vi.fn(), create: vi.fn(), findMany: vi.fn() };
+// Phase N
+const chatRead = { findUnique: vi.fn(), upsert: vi.fn() };
+const $queryRaw = vi.fn();
 const txMessageCreate = vi.fn();
 const txNotificationCreate = vi.fn();
 const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
@@ -32,11 +35,13 @@ vi.mock("@/lib/db/prisma", () => ({
     chatRoom,
     message,
     messageReaction,
+    chatRead,
     user: userTable,
     notification,
     lostPost: lostPostTable,
     foundPost: foundPostTable,
     $transaction,
+    $queryRaw,
   },
 }));
 vi.mock("@/generated/prisma/client", () => ({
@@ -54,6 +59,13 @@ const parseChatImagePathname = vi.fn();
 const publicUrlFor = vi.fn();
 vi.mock("@/lib/images/pathname", () => ({ parseChatImagePathname }));
 vi.mock("@/lib/images/supabaseAdmin", () => ({ publicUrlFor }));
+// Phase N: every write path (sendMessage/toggleMessageReaction/
+// markChatRoomRead) fires a best-effort realtime broadcast -- mocked
+// wholesale here (same convention as every other collaborator in this
+// file) so these tests never attempt a real network call; a few targeted
+// tests below assert it was actually invoked with the right payload.
+const broadcastChatEvent = vi.fn();
+vi.mock("@/lib/chat/realtimeAdmin", () => ({ broadcastChatEvent }));
 
 const {
   countUnreadMessagesForUser,
@@ -63,8 +75,8 @@ const {
   getOrCreateDirectChatRoom,
   listChatRoomsForUser,
   listMessages,
+  markChatRoomRead,
   markMessageNotificationsReadForChatRoom,
-  markMessagesAsRead,
   sendMessage,
   toggleMessageReaction,
 } = await import("./service");
@@ -119,6 +131,12 @@ beforeEach(() => {
   // undefined. Tests that actually care about reactions override this
   // with their own mockResolvedValueOnce.
   messageReaction.findMany.mockResolvedValue([]);
+  // Phase N: listMessages() always looks up the counterpart's read cursor
+  // -- default to "never read anything" (no ChatRead row yet) for the
+  // same "pre-existing tests don't need their own irrelevant mock" reason
+  // as messageReaction.findMany above. Tests that actually care about
+  // readByCounterpart override this with their own mockResolvedValueOnce.
+  chatRead.findUnique.mockResolvedValue(null);
 });
 
 // Phase 10: mirrors legacy get_or_create_direct_chat_room()'s exact
@@ -378,19 +396,31 @@ describe("countUnreadMessagesForUser", () => {
     const count = await countUnreadMessagesForUser(lostOwner);
 
     expect(count).toBe(0);
-    expect(message.count).not.toHaveBeenCalled();
+    expect($queryRaw).not.toHaveBeenCalled();
   });
 
-  it("counts unread messages across the user's rooms, excluding the user's own messages", async () => {
+  // Phase N: the threshold is now requesterId's own ChatRead cursor (a
+  // LEFT JOIN, since a never-opened room has no ChatRead row yet -- see
+  // countUnreadMessagesForUser's own comment), so this is a single raw
+  // query rather than a plain prisma.message.count() with one fixed
+  // readAt: null condition.
+  it("counts unread messages across the user's rooms via the cursor-aware raw query", async () => {
     chatRoom.findMany.mockResolvedValueOnce([{ id: 1 }, { id: 2 }]);
-    message.count.mockResolvedValueOnce(3);
+    $queryRaw.mockResolvedValueOnce([{ count: BigInt(3) }]);
 
     const count = await countUnreadMessagesForUser(lostOwner);
 
     expect(count).toBe(3);
-    expect(message.count).toHaveBeenCalledWith({
-      where: { chatRoomId: { in: [1, 2] }, senderUserId: { not: lostOwner }, readAt: null },
-    });
+    expect($queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 0 when the raw query yields no rows", async () => {
+    chatRoom.findMany.mockResolvedValueOnce([{ id: 1 }]);
+    $queryRaw.mockResolvedValueOnce([]);
+
+    const count = await countUnreadMessagesForUser(lostOwner);
+
+    expect(count).toBe(0);
   });
 });
 
@@ -433,6 +463,63 @@ describe("listMessages", () => {
 
     expect(result.kind).toBe("ok");
     if (result.kind === "ok") expect(result.data.items[0].isMine).toBe(true);
+  });
+
+  // Phase N
+  it("computes readByCounterpart from the *other* participant's cursor, never the requester's own", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findMany.mockResolvedValueOnce([
+      { id: 1, senderUserId: lostOwner, content: "c1", createdAt: new Date(), readAt: null, hiddenAt: null, sender: { nickname: "n" } },
+      { id: 2, senderUserId: lostOwner, content: "c2", createdAt: new Date(), readAt: null, hiddenAt: null, sender: { nickname: "n" } },
+    ]);
+    chatRead.findUnique.mockResolvedValueOnce({ lastReadMessageId: 1 });
+
+    const result = await listMessages(100, lostOwner);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") return;
+    expect(chatRead.findUnique).toHaveBeenCalledWith({
+      where: { chatRoomId_userId: { chatRoomId: 100, userId: foundOwner } },
+      select: { lastReadMessageId: true },
+    });
+    const byId = new Map(result.data.items.map((m) => [m.id, m.readByCounterpart]));
+    expect(byId.get(1)).toBe(true); // id 1 <= cursor 1
+    expect(byId.get(2)).toBe(false); // id 2 > cursor 1
+  });
+
+  it("treats a missing ChatRead row (room never opened by the counterpart) as fully unread", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findMany.mockResolvedValueOnce([
+      { id: 1, senderUserId: lostOwner, content: "c1", createdAt: new Date(), readAt: null, hiddenAt: null, sender: { nickname: "n" } },
+    ]);
+    chatRead.findUnique.mockResolvedValueOnce(null);
+
+    const result = await listMessages(100, lostOwner);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.data.items[0].readByCounterpart).toBe(false);
+  });
+
+  // Phase N: verified for real against the live (not-yet-migrated)
+  // production DB during this phase's own implementation -- the ChatRead
+  // table genuinely doesn't exist there yet (migration deliberately not
+  // applied this phase), and listMessages() must keep working regardless,
+  // same "never let a missing/broken piece take down the whole feature"
+  // rule the read-marking calls in the API route already followed.
+  it("degrades to readByCounterpart: false for everyone, without throwing, if the ChatRead lookup itself fails", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findMany.mockResolvedValueOnce([
+      { id: 1, senderUserId: lostOwner, content: "c1", createdAt: new Date(), readAt: null, hiddenAt: null, sender: { nickname: "n" } },
+    ]);
+    chatRead.findUnique.mockRejectedValueOnce(new Error('The table "public.ChatRead" does not exist'));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await listMessages(100, lostOwner);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.data.items[0].readByCounterpart).toBe(false);
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   it("masks hidden message content", async () => {
@@ -595,26 +682,55 @@ describe("listMessages", () => {
   });
 });
 
-describe("markMessagesAsRead", () => {
+// Phase N: replaces the old markMessagesAsRead (bulk-UPDATE-every-
+// unread-message) with a single upsert of the requester's own read
+// cursor, advanced to the room's current latest message id.
+describe("markChatRoomRead", () => {
   it("rejects a non-participant", async () => {
     chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
 
-    const result = await markMessagesAsRead(100, stranger);
+    const result = await markChatRoomRead(100, stranger);
 
     expect(result).toEqual({ kind: "forbidden" });
-    expect(message.updateMany).not.toHaveBeenCalled();
+    expect(chatRead.upsert).not.toHaveBeenCalled();
   });
 
-  it("only marks the other participant's messages, never the requester's own", async () => {
+  it("is a no-op (no ChatRead row written) when the room has no messages yet", async () => {
     chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
-    message.updateMany.mockResolvedValueOnce({ count: 2 });
+    message.findFirst.mockResolvedValueOnce(null);
 
-    const result = await markMessagesAsRead(100, lostOwner);
+    const result = await markChatRoomRead(100, lostOwner);
 
-    expect(result).toEqual({ kind: "ok", data: { count: 2 } });
-    expect(message.updateMany).toHaveBeenCalledWith({
-      where: { chatRoomId: 100, senderUserId: { not: lostOwner }, readAt: null },
-      data: { readAt: expect.any(Date) },
+    expect(result).toEqual({ kind: "ok", data: { lastReadMessageId: null } });
+    expect(chatRead.upsert).not.toHaveBeenCalled();
+    expect(broadcastChatEvent).not.toHaveBeenCalled();
+  });
+
+  it("advances the requester's own cursor to the room's latest message id", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findFirst.mockResolvedValueOnce({ id: 42 });
+    chatRead.upsert.mockResolvedValueOnce({ lastReadMessageId: 42 });
+
+    const result = await markChatRoomRead(100, lostOwner);
+
+    expect(result).toEqual({ kind: "ok", data: { lastReadMessageId: 42 } });
+    expect(chatRead.upsert).toHaveBeenCalledWith({
+      where: { chatRoomId_userId: { chatRoomId: 100, userId: lostOwner } },
+      create: { chatRoomId: 100, userId: lostOwner, lastReadMessageId: 42 },
+      update: { lastReadMessageId: 42 },
+    });
+  });
+
+  it("broadcasts a content-free 'read' event with the requester's id and new cursor", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findFirst.mockResolvedValueOnce({ id: 42 });
+    chatRead.upsert.mockResolvedValueOnce({ lastReadMessageId: 42 });
+
+    await markChatRoomRead(100, lostOwner);
+
+    expect(broadcastChatEvent).toHaveBeenCalledWith(100, {
+      event: "read",
+      payload: { userId: lostOwner, lastReadMessageId: 42 },
     });
   });
 });
@@ -719,6 +835,23 @@ describe("sendMessage", () => {
     expect(txNotificationCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ userId: foundOwner, relatedId: 1 }) }),
     );
+  });
+
+  // Phase N
+  it("broadcasts a content-free 'message' event with the new message's bare id", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    txMessageCreate.mockResolvedValueOnce({
+      id: 7,
+      senderUserId: lostOwner,
+      content: "안녕하세요",
+      createdAt: new Date(),
+      readAt: null,
+      sender: { nickname: "닉네임" },
+    });
+
+    await sendMessage(100, sender, "안녕하세요");
+
+    expect(broadcastChatEvent).toHaveBeenCalledWith(100, { event: "message", payload: { messageId: 7 } });
   });
 
   // Defensive: getOrCreateDirectChatRoom() rejects self-chat at creation
@@ -1074,6 +1207,18 @@ describe("toggleMessageReaction", () => {
       kind: "ok",
       data: { messageId: 1, reactions: [{ emoji: "👍", count: 1, reactedByMe: true }] },
     });
+  });
+
+  // Phase N
+  it("broadcasts a content-free 'reaction' event with just the message id", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 100 });
+    messageReaction.deleteMany.mockResolvedValueOnce({ count: 0 });
+    messageReaction.findMany.mockResolvedValueOnce([{ emoji: "👍", userId: lostOwner }]);
+
+    await toggleMessageReaction(100, 1, "👍", sender);
+
+    expect(broadcastChatEvent).toHaveBeenCalledWith(100, { event: "reaction", payload: { messageId: 1 } });
   });
 
   it("removes the reaction when the requester already picked this emoji (toggle off)", async () => {

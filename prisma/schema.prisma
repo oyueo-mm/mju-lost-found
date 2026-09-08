@@ -155,6 +155,9 @@ model User {
   initiatedChatRooms    ChatRoom[]         @relation("ChatRoomInitiator")
   sentMessages          Message[]          @relation("MessageSender")
   hiddenMessages        Message[]          @relation("MessageHiddenBy")
+  // Phase N: this user's own read cursor in each room they're part of --
+  // see ChatRead's own comment.
+  chatReads             ChatRead[]
   reportsFiled          Report[]           @relation("ReportReporter")
   reportsProcessed      Report[]           @relation("ReportProcessedBy")
   moderationActions     ModerationAction[]
@@ -329,7 +332,8 @@ model ChatRoom {
   initiator            User?      @relation("ChatRoomInitiator", fields: [initiatorUserId], references: [id], onDelete: Restrict)
   createdAt            DateTime   @default(now()) @map("created_at")
 
-  messages Message[]
+  messages  Message[]
+  chatReads ChatRead[]
 
   // The legacy SQLite indexes use `WHERE direct_lost_post_id IS NOT NULL`
   // partial indexes. Unlike MySQL (which can't express those at all),
@@ -356,6 +360,12 @@ model Message {
   sender           User      @relation("MessageSender", fields: [senderUserId], references: [id], onDelete: Restrict)
   content          String    @db.Text
   createdAt        DateTime  @default(now()) @map("created_at")
+  // Phase N: superseded by the per-(room,user) cursor in ChatRead below --
+  // this per-message column is no longer written to (chat/service.ts no
+  // longer has any bulk-UPDATE-many-messages read path) or read for
+  // display, but is kept in the schema unchanged rather than dropped, per
+  // this phase's own "기존 ChatRoom/Message 구조를 최대한 유지" instruction.
+  // Historical rows keep whatever value they already had.
   readAt           DateTime? @map("read_at")
   hiddenAt         DateTime? @map("hidden_at")
   hiddenByUserId   Int?      @map("hidden_by_user_id")
@@ -390,6 +400,34 @@ model Message {
   @@index([chatRoomId, createdAt(sort: Desc), id(sort: Desc)], map: "idx_message_chat_room_created_id")
   @@index([replyToMessageId], map: "idx_message_reply_to")
   @@map("Message")
+}
+
+// ---------- ChatRead (Phase N) ----------
+
+// One row per (chatRoom, user) -- a cursor ("read up through this message
+// id"), never one row per message. This is the explicit design this
+// phase's own spec asks for ("메시지마다 별도의 read row를 만드는 방식은
+// 사용하지 않는다... lastReadMessageId 또는 이에 준하는 cursor 방식으로
+// 설계한다"), replacing the old bulk-UPDATE-every-unread-message approach
+// (Message.readAt, see that field's own comment) with a single small
+// upsert per "mark this room read" call. lastReadMessageId is nullable
+// only for the brief moment between a room's creation and its first
+// message ever existing -- see chat/service.ts::markChatRoomRead(), which
+// is a no-op (no row written) until there's at least one message to point
+// at, so this column is never written as literally NULL by that function;
+// it's nullable purely so the column type itself doesn't force a bogus
+// sentinel value (e.g. 0) into existence.
+model ChatRead {
+  id                Int      @id @default(autoincrement())
+  chatRoomId        Int      @map("chat_room_id")
+  chatRoom          ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  userId            Int      @map("user_id")
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadMessageId Int?     @map("last_read_message_id")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([chatRoomId, userId])
+  @@map("ChatRead")
 }
 
 // ---------- MessageReaction (Phase D-4) ----------
