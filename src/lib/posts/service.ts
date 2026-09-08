@@ -328,7 +328,7 @@ export async function deleteLostPost(
   if (existing.userId !== userId && !options?.asAdmin) return { kind: "forbidden", reason: "not_owner" };
 
   // A plain delete -- the ON DELETE CASCADE already declared on
-  // Match/ChatRoom/Message's relations (see schema.prisma) is what keeps
+  // ChatRoom/Message's relations (see schema.prisma) is what keeps
   // them consistent, the same way delete_lost_post() in the legacy app
   // never manually cleans up related rows either.
   await prisma.lostPost.delete({ where: { id } });

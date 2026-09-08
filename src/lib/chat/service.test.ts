@@ -9,7 +9,6 @@ class FakePrismaClientKnownRequestError extends Error {
   }
 }
 
-const match = { findUnique: vi.fn() };
 const chatRoom = { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() };
 const message = { findMany: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), count: vi.fn() };
 const userTable = { findUnique: vi.fn() };
@@ -24,9 +23,12 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
   fn({ message: { create: txMessageCreate }, notification: { create: txNotificationCreate } }),
 );
 
+// Phase J-2: no `match` key at all on the mocked prisma object -- if any
+// chat code path still touched prisma.match, it would throw "Cannot read
+// properties of undefined", proving the Match domain is genuinely gone
+// from this service.
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
-    match,
     chatRoom,
     message,
     messageReaction,
@@ -58,7 +60,6 @@ const {
   getChatRoomForUser,
   getChatRoomParticipantIds,
   getMessage,
-  getOrCreateChatRoomForMatch,
   getOrCreateDirectChatRoom,
   listChatRoomsForUser,
   listMessages,
@@ -76,32 +77,29 @@ function postRef(overrides: Partial<Record<string, unknown>> = {}) {
   return { id: 1, userId: lostOwner, title: "지갑 분실", ...overrides };
 }
 
-function roomWithMatch(overrides: Partial<Record<string, unknown>> = {}) {
+// The stock room for message-level tests: LostPost id=1's owner
+// (lostOwner) and foundOwner are its two participants. Phase J-2: this
+// used to be a Match-based room; it's a direct room now (the only shape
+// left), with the exact same two participants so every message/reaction/
+// read-state test below keeps asserting on the same ids as before.
+function roomForOwners(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 100,
-    matchId: 10,
-    initiatorUserId: null,
+    initiatorUserId: foundOwner,
     createdAt: new Date("2026-01-01"),
-    match: {
-      id: 10,
-      lostPost: postRef({ id: 1, userId: lostOwner, title: "지갑 분실" }),
-      foundPost: postRef({ id: 2, userId: foundOwner, title: "지갑 습득" }),
-    },
-    directLostPost: null,
+    directLostPost: postRef({ id: 1, userId: lostOwner, title: "지갑 분실" }),
     directFoundPost: null,
     ...overrides,
   };
 }
 
-// Phase 10: a direct (non-Match) room -- `stranger` (the viewer) messaged
-// LostPost id=1's owner (lostOwner) directly.
+// Phase 10: a direct room -- `stranger` (the viewer) messaged LostPost
+// id=1's owner (lostOwner) directly.
 function roomDirect(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 200,
-    matchId: null,
     initiatorUserId: stranger,
     createdAt: new Date("2026-01-01"),
-    match: null,
     directLostPost: postRef({ id: 1, userId: lostOwner, title: "지갑 분실" }),
     directFoundPost: null,
     ...overrides,
@@ -121,79 +119,6 @@ beforeEach(() => {
   // undefined. Tests that actually care about reactions override this
   // with their own mockResolvedValueOnce.
   messageReaction.findMany.mockResolvedValue([]);
-});
-
-describe("getOrCreateChatRoomForMatch", () => {
-  it("returns match_not_found for a nonexistent match", async () => {
-    match.findUnique.mockResolvedValueOnce(null);
-
-    const result = await getOrCreateChatRoomForMatch(999, lostOwner);
-
-    expect(result).toEqual({ kind: "match_not_found" });
-    expect(chatRoom.create).not.toHaveBeenCalled();
-  });
-
-  it("rejects a requester who owns neither side of the match", async () => {
-    match.findUnique.mockResolvedValueOnce({
-      id: 10,
-      lostPost: postRef({ userId: lostOwner }),
-      foundPost: postRef({ userId: foundOwner }),
-    });
-
-    const result = await getOrCreateChatRoomForMatch(10, stranger);
-
-    expect(result).toEqual({ kind: "forbidden" });
-    expect(chatRoom.create).not.toHaveBeenCalled();
-  });
-
-  it("returns the existing room instead of creating a duplicate (idempotent)", async () => {
-    match.findUnique.mockResolvedValueOnce({
-      id: 10,
-      lostPost: postRef({ userId: lostOwner }),
-      foundPost: postRef({ userId: foundOwner }),
-    });
-    chatRoom.findUnique.mockResolvedValueOnce({ id: 100 }); // existing room found by matchId
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch()); // findChatRoomWithMatch(100)
-
-    const result = await getOrCreateChatRoomForMatch(10, lostOwner);
-
-    expect(result.kind).toBe("ok");
-    if (result.kind === "ok") expect(result.data.id).toBe(100);
-    expect(chatRoom.create).not.toHaveBeenCalled();
-  });
-
-  it("creates a new room when none exists yet", async () => {
-    match.findUnique.mockResolvedValueOnce({
-      id: 10,
-      lostPost: postRef({ userId: lostOwner }),
-      foundPost: postRef({ userId: foundOwner }),
-    });
-    chatRoom.findUnique.mockResolvedValueOnce(null); // no existing room
-    chatRoom.create.mockResolvedValueOnce({ id: 100 });
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch()); // findChatRoomWithMatch(100)
-
-    const result = await getOrCreateChatRoomForMatch(10, foundOwner);
-
-    expect(result.kind).toBe("ok");
-    expect(chatRoom.create).toHaveBeenCalledWith({ data: { matchId: 10 }, select: { id: true } });
-  });
-
-  it("resolves a concurrent duplicate-creation race by returning the winning room", async () => {
-    match.findUnique.mockResolvedValueOnce({
-      id: 10,
-      lostPost: postRef({ userId: lostOwner }),
-      foundPost: postRef({ userId: foundOwner }),
-    });
-    chatRoom.findUnique.mockResolvedValueOnce(null); // no existing room seen at first
-    chatRoom.create.mockRejectedValueOnce(new FakePrismaClientKnownRequestError("P2002"));
-    chatRoom.findUnique.mockResolvedValueOnce({ id: 100 }); // the other request's winner
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch()); // findChatRoomWithMatch(100)
-
-    const result = await getOrCreateChatRoomForMatch(10, lostOwner);
-
-    expect(result.kind).toBe("ok");
-    if (result.kind === "ok") expect(result.data.id).toBe(100);
-  });
 });
 
 // Phase 10: mirrors legacy get_or_create_direct_chat_room()'s exact
@@ -330,7 +255,7 @@ describe("getChatRoomForUser", () => {
   });
 
   it("rejects a user who isn't a participant (A's room ID known by B)", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
 
     const result = await getChatRoomForUser(100, stranger);
 
@@ -338,7 +263,7 @@ describe("getChatRoomForUser", () => {
   });
 
   it("returns the room for an actual participant", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
 
     const result = await getChatRoomForUser(100, lostOwner);
 
@@ -391,8 +316,8 @@ describe("getChatRoomParticipantIds", () => {
     expect(await getChatRoomParticipantIds(999)).toBeNull();
   });
 
-  it("returns both participants of a Match room", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+  it("returns both participants of a room the post's owner initiated against another owner", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
 
     const ids = await getChatRoomParticipantIds(100);
 
@@ -409,31 +334,18 @@ describe("getChatRoomParticipantIds", () => {
 });
 
 describe("listChatRoomsForUser", () => {
-  // Phase 10: the user's match rooms and direct rooms are two separate
-  // queries (merged afterward), so both calls need their own mock return.
-  it("scopes the match-room query to rooms the user participates in via a Match", async () => {
-    chatRoom.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+  // Phase J-2: one query now (the Match-room query went with the Match
+  // domain) -- rooms are scoped to "the user is the initiator, or owns the
+  // post the room is about".
+  it("scopes the room query to rooms where the user is the initiator or the post's owner", async () => {
+    chatRoom.findMany.mockResolvedValueOnce([]);
 
     await listChatRoomsForUser(lostOwner);
 
-    expect(chatRoom.findMany).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        where: { match: { OR: [{ lostPost: { userId: lostOwner } }, { foundPost: { userId: lostOwner } }] } },
-      }),
-    );
-  });
-
-  it("scopes the direct-room query to rooms where the user is the initiator or the post's owner", async () => {
-    chatRoom.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
-
-    await listChatRoomsForUser(lostOwner);
-
-    expect(chatRoom.findMany).toHaveBeenNthCalledWith(
-      2,
+    expect(chatRoom.findMany).toHaveBeenCalledTimes(1);
+    expect(chatRoom.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          matchId: null,
           OR: [
             { initiatorUserId: lostOwner },
             { directLostPost: { userId: lostOwner } },
@@ -444,22 +356,24 @@ describe("listChatRoomsForUser", () => {
     );
   });
 
-  it("includes both match and direct rooms in the returned list", async () => {
-    chatRoom.findMany
-      .mockResolvedValueOnce([{ ...roomWithMatch(), messages: [] }])
-      .mockResolvedValueOnce([{ ...roomDirect(), messages: [] }]);
+  it("returns every room the user participates in", async () => {
+    chatRoom.findMany.mockResolvedValueOnce([
+      { ...roomForOwners(), messages: [] },
+      { ...roomDirect(), messages: [] },
+    ]);
 
     const results = await listChatRoomsForUser(lostOwner);
 
     expect(results).toHaveLength(2);
-    expect(results.map((r) => r.roomType).sort()).toEqual(["direct", "match"]);
+    expect(results.map((r) => r.roomType)).toEqual(["direct", "direct"]);
+    expect(results.map((r) => r.id).sort()).toEqual([100, 200]);
   });
 });
 
 // Phase 17: Navigation's chat-unread badge.
 describe("countUnreadMessagesForUser", () => {
   it("returns 0 without querying messages when the user has no rooms at all", async () => {
-    chatRoom.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    chatRoom.findMany.mockResolvedValueOnce([]);
 
     const count = await countUnreadMessagesForUser(lostOwner);
 
@@ -467,8 +381,8 @@ describe("countUnreadMessagesForUser", () => {
     expect(message.count).not.toHaveBeenCalled();
   });
 
-  it("counts unread messages across both match and direct rooms, excluding the user's own messages", async () => {
-    chatRoom.findMany.mockResolvedValueOnce([{ id: 1 }]).mockResolvedValueOnce([{ id: 2 }]);
+  it("counts unread messages across the user's rooms, excluding the user's own messages", async () => {
+    chatRoom.findMany.mockResolvedValueOnce([{ id: 1 }, { id: 2 }]);
     message.count.mockResolvedValueOnce(3);
 
     const count = await countUnreadMessagesForUser(lostOwner);
@@ -487,7 +401,7 @@ describe("listMessages", () => {
   });
 
   it("rejects a non-participant (A's room ID known by B)", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
 
     const result = await listMessages(100, stranger);
 
@@ -496,7 +410,7 @@ describe("listMessages", () => {
   });
 
   it("returns messages oldest-first even though the DB query orders newest-first", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findMany.mockResolvedValueOnce([
       { id: 3, senderUserId: lostOwner, content: "c3", createdAt: new Date(), readAt: null, hiddenAt: null, sender: { nickname: "n" } },
       { id: 2, senderUserId: foundOwner, content: "c2", createdAt: new Date(), readAt: null, hiddenAt: null, sender: { nickname: "n" } },
@@ -510,7 +424,7 @@ describe("listMessages", () => {
   });
 
   it("marks isMine relative to the requester", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findMany.mockResolvedValueOnce([
       { id: 1, senderUserId: lostOwner, content: "c1", createdAt: new Date(), readAt: null, hiddenAt: null, sender: { nickname: "n" } },
     ]);
@@ -522,7 +436,7 @@ describe("listMessages", () => {
   });
 
   it("masks hidden message content", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findMany.mockResolvedValueOnce([
       { id: 1, senderUserId: foundOwner, content: "real content", createdAt: new Date(), readAt: null, hiddenAt: new Date(), sender: { nickname: "n" } },
     ]);
@@ -535,7 +449,7 @@ describe("listMessages", () => {
 
   // Phase 28-3
   it("passes an image message's imageUrl through unmasked", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findMany.mockResolvedValueOnce([
       {
         id: 1,
@@ -556,7 +470,7 @@ describe("listMessages", () => {
   });
 
   it("masks a hidden message's image too, not just its text", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findMany.mockResolvedValueOnce([
       {
         id: 1,
@@ -578,7 +492,7 @@ describe("listMessages", () => {
 
   // Phase D-3
   it("includes a masked preview of the replied-to message when it's hidden", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findMany.mockResolvedValueOnce([
       {
         id: 2,
@@ -613,7 +527,7 @@ describe("listMessages", () => {
 
   // Phase D-4
   it("groups reaction rows into one summary per distinct emoji, marking which are the requester's own", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findMany.mockResolvedValueOnce([
       { id: 1, senderUserId: lostOwner, content: "c1", createdAt: new Date(), readAt: null, hiddenAt: null, sender: { nickname: "n" } },
     ]);
@@ -635,7 +549,7 @@ describe("listMessages", () => {
   });
 
   it("returns an empty reactions array for a message nobody reacted to", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findMany.mockResolvedValueOnce([
       { id: 1, senderUserId: lostOwner, content: "c1", createdAt: new Date(), readAt: null, hiddenAt: null, sender: { nickname: "n" } },
     ]);
@@ -648,7 +562,7 @@ describe("listMessages", () => {
   });
 
   it("reports hasMore via the limit+1 lookahead", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     const rows = Array.from({ length: 51 }, (_, i) => ({
       id: i + 1,
       senderUserId: lostOwner,
@@ -670,7 +584,7 @@ describe("listMessages", () => {
   });
 
   it("passes the `before` cursor through as an id filter", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findMany.mockResolvedValueOnce([]);
 
     await listMessages(100, lostOwner, 50);
@@ -683,7 +597,7 @@ describe("listMessages", () => {
 
 describe("markMessagesAsRead", () => {
   it("rejects a non-participant", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
 
     const result = await markMessagesAsRead(100, stranger);
 
@@ -692,7 +606,7 @@ describe("markMessagesAsRead", () => {
   });
 
   it("only marks the other participant's messages, never the requester's own", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.updateMany.mockResolvedValueOnce({ count: 2 });
 
     const result = await markMessagesAsRead(100, lostOwner);
@@ -707,7 +621,7 @@ describe("markMessagesAsRead", () => {
 
 describe("markMessageNotificationsReadForChatRoom", () => {
   it("rejects a non-participant", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
 
     const result = await markMessageNotificationsReadForChatRoom(100, stranger);
 
@@ -715,7 +629,7 @@ describe("markMessageNotificationsReadForChatRoom", () => {
   });
 
   it("scopes the update to the requester's own message-type notifications for this room's messages", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findMany.mockResolvedValueOnce([{ id: 1 }, { id: 2 }]);
     notification.updateMany.mockResolvedValueOnce({ count: 1 });
 
@@ -742,7 +656,7 @@ describe("sendMessage", () => {
   });
 
   it("rejects a non-participant (A's room ID known by B)", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     const strangerUser = { ...sender, id: stranger } as unknown as User;
 
     const result = await sendMessage(100, strangerUser, "안녕");
@@ -752,7 +666,7 @@ describe("sendMessage", () => {
   });
 
   it("rejects a suspended participant", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     const suspended = { ...sender, isSuspended: true } as unknown as User;
 
     const result = await sendMessage(100, suspended, "안녕");
@@ -762,7 +676,7 @@ describe("sendMessage", () => {
   });
 
   it("rejects a blank/whitespace-only message", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
 
     const result = await sendMessage(100, sender, "   ");
 
@@ -771,7 +685,7 @@ describe("sendMessage", () => {
   });
 
   it("sets the sender to the authenticated user, never a caller-supplied id", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     txMessageCreate.mockResolvedValueOnce({
       id: 1,
       senderUserId: lostOwner,
@@ -790,7 +704,7 @@ describe("sendMessage", () => {
   });
 
   it("notifies the other participant, not the sender", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     txMessageCreate.mockResolvedValueOnce({
       id: 1,
       senderUserId: lostOwner,
@@ -807,14 +721,15 @@ describe("sendMessage", () => {
     );
   });
 
-  it("sends no notification for a self-match (same user owns both sides)", async () => {
+  // Defensive: getOrCreateDirectChatRoom() rejects self-chat at creation
+  // time, so a room whose initiator is also the post's owner shouldn't
+  // exist -- if one somehow did, sendMessage must simply not notify
+  // anyone rather than notifying the sender about their own message.
+  it("sends no notification when the sender is the room's only participant", async () => {
     chatRoom.findUnique.mockResolvedValueOnce(
-      roomWithMatch({
-        match: {
-          id: 10,
-          lostPost: postRef({ userId: lostOwner }),
-          foundPost: postRef({ userId: lostOwner }),
-        },
+      roomForOwners({
+        initiatorUserId: lostOwner,
+        directLostPost: postRef({ id: 1, userId: lostOwner }),
       }),
     );
     txMessageCreate.mockResolvedValueOnce({
@@ -832,7 +747,7 @@ describe("sendMessage", () => {
   });
 
   it("propagates a transaction failure instead of reporting a false success", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     $transaction.mockRejectedValueOnce(new Error("connection lost"));
 
     await expect(sendMessage(100, sender, "안녕하세요")).rejects.toThrow("connection lost");
@@ -843,7 +758,7 @@ describe("sendMessage", () => {
   // against the chat room it's actually being sent to.
   describe("image messages", () => {
     it("rejects an imagePath that doesn't parse as a valid chat image pathname", async () => {
-      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
       parseChatImagePathname.mockReturnValueOnce(null);
 
       const result = await sendMessage(100, sender, "", "not-a-real-path.jpg");
@@ -853,7 +768,7 @@ describe("sendMessage", () => {
     });
 
     it("rejects an imagePath that names a different chat room (never trusts the client)", async () => {
-      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
       parseChatImagePathname.mockReturnValueOnce({ chatRoomId: 999 });
 
       const result = await sendMessage(100, sender, "", "chat/999/y.jpg");
@@ -863,7 +778,7 @@ describe("sendMessage", () => {
     });
 
     it("sends an image-only message (empty content is allowed when an image is attached)", async () => {
-      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
       parseChatImagePathname.mockReturnValueOnce({ chatRoomId: 100 });
       txMessageCreate.mockResolvedValueOnce({
         id: 1,
@@ -892,7 +807,7 @@ describe("sendMessage", () => {
     });
 
     it("sends text + image together", async () => {
-      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
       parseChatImagePathname.mockReturnValueOnce({ chatRoomId: 100 });
       txMessageCreate.mockResolvedValueOnce({
         id: 1,
@@ -917,7 +832,7 @@ describe("sendMessage", () => {
     });
 
     it("still rejects an empty message when there's no image either", async () => {
-      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
 
       const result = await sendMessage(100, sender, "   ", undefined);
 
@@ -929,7 +844,7 @@ describe("sendMessage", () => {
   // Phase D-3
   describe("replies", () => {
     it("creates a reply and echoes back a preview of the message it replies to", async () => {
-      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
       message.findUnique.mockResolvedValueOnce({
         id: 5,
         chatRoomId: 100,
@@ -965,7 +880,7 @@ describe("sendMessage", () => {
     });
 
     it("rejects a replyToMessageId that doesn't exist", async () => {
-      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
       message.findUnique.mockResolvedValueOnce(null);
 
       const result = await sendMessage(100, sender, "네 맞아요", undefined, 999);
@@ -979,7 +894,7 @@ describe("sendMessage", () => {
     // the new message is actually being sent to -- never whatever the
     // client implies by calling this chatRoomId's own endpoint.
     it("rejects a replyToMessageId belonging to a different chat room", async () => {
-      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
       message.findUnique.mockResolvedValueOnce({
         id: 5,
         chatRoomId: 999,
@@ -996,7 +911,7 @@ describe("sendMessage", () => {
     });
 
     it("allows replying to an already-hidden message, with its preview masked the same way listMessages() masks it", async () => {
-      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
       message.findUnique.mockResolvedValueOnce({
         id: 5,
         chatRoomId: 100,
@@ -1029,7 +944,7 @@ describe("sendMessage", () => {
     });
 
     it("a non-reply message has no replyTo (unchanged from before this phase)", async () => {
-      chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+      chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
       txMessageCreate.mockResolvedValueOnce({
         id: 1,
         senderUserId: lostOwner,
@@ -1047,9 +962,9 @@ describe("sendMessage", () => {
     });
   });
 
-  // Phase 10: direct-room participants send/receive exactly like a
-  // Match room's participants -- same funnel (participantIdsOf), so a
-  // third party is rejected the same way too.
+  // Phase 10: a room started by a non-owner viewer (the initiator) rather
+  // than by two post owners -- same funnel (participantIdsOf), so a third
+  // party is rejected the same way too.
   describe("direct rooms", () => {
     const initiator = { id: stranger, nickname: "방문자", isSuspended: false, suspendedUntil: null } as unknown as User;
 
@@ -1114,7 +1029,7 @@ describe("toggleMessageReaction", () => {
   });
 
   it("rejects a non-participant (A's room ID known by B)", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     const strangerUser = { ...sender, id: stranger } as unknown as User;
 
     const result = await toggleMessageReaction(100, 1, "👍", strangerUser);
@@ -1127,7 +1042,7 @@ describe("toggleMessageReaction", () => {
   // own replyToMessageId check -- a messageId that's real but belongs to
   // a different room is rejected the same way a nonexistent one is.
   it("rejects a messageId that doesn't exist", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findUnique.mockResolvedValueOnce(null);
 
     const result = await toggleMessageReaction(100, 999, "👍", sender);
@@ -1136,7 +1051,7 @@ describe("toggleMessageReaction", () => {
   });
 
   it("rejects a messageId belonging to a different chat room", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findUnique.mockResolvedValueOnce({ chatRoomId: 999 });
 
     const result = await toggleMessageReaction(100, 1, "👍", sender);
@@ -1145,7 +1060,7 @@ describe("toggleMessageReaction", () => {
   });
 
   it("adds a reaction when the requester hasn't picked this emoji yet (delete finds nothing)", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findUnique.mockResolvedValueOnce({ chatRoomId: 100 });
     messageReaction.deleteMany.mockResolvedValueOnce({ count: 0 });
     messageReaction.findMany.mockResolvedValueOnce([{ emoji: "👍", userId: lostOwner }]);
@@ -1162,7 +1077,7 @@ describe("toggleMessageReaction", () => {
   });
 
   it("removes the reaction when the requester already picked this emoji (toggle off)", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findUnique.mockResolvedValueOnce({ chatRoomId: 100 });
     messageReaction.deleteMany.mockResolvedValueOnce({ count: 1 });
     messageReaction.findMany.mockResolvedValueOnce([]);
@@ -1177,7 +1092,7 @@ describe("toggleMessageReaction", () => {
   });
 
   it("lets several different participants react to the same message with different emoji", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findUnique.mockResolvedValueOnce({ chatRoomId: 100 });
     messageReaction.deleteMany.mockResolvedValueOnce({ count: 0 });
     messageReaction.findMany.mockResolvedValueOnce([
@@ -1200,7 +1115,7 @@ describe("toggleMessageReaction", () => {
   });
 
   it("converts a concurrent UNIQUE violation (double-click race) into a successful add", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findUnique.mockResolvedValueOnce({ chatRoomId: 100 });
     messageReaction.deleteMany.mockResolvedValueOnce({ count: 0 });
     messageReaction.create.mockRejectedValueOnce(new FakePrismaClientKnownRequestError("P2002"));
@@ -1212,7 +1127,7 @@ describe("toggleMessageReaction", () => {
   });
 
   it("rethrows a non-P2002 error from the INSERT", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findUnique.mockResolvedValueOnce({ chatRoomId: 100 });
     messageReaction.deleteMany.mockResolvedValueOnce({ count: 0 });
     messageReaction.create.mockRejectedValueOnce(new Error("db down"));
@@ -1225,7 +1140,7 @@ describe("toggleMessageReaction", () => {
   // toggleMessageReaction), same "hidden never blocks an action" policy
   // reply/report already follow.
   it("allows reacting to an already-hidden message (reactions are metadata, not content)", async () => {
-    chatRoom.findUnique.mockResolvedValueOnce(roomWithMatch());
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findUnique.mockResolvedValueOnce({ chatRoomId: 100 });
     messageReaction.deleteMany.mockResolvedValueOnce({ count: 0 });
     messageReaction.findMany.mockResolvedValueOnce([{ emoji: "👍", userId: lostOwner }]);

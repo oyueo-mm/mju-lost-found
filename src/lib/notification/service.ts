@@ -2,11 +2,11 @@ import { prisma } from "@/lib/db/prisma";
 import type { NotificationType as PrismaNotificationType } from "@/generated/prisma/client";
 
 // This module only ever reads/updates Notification rows -- it never
-// creates one and never imports @/lib/match/service (or any other domain
-// service) to do so. Creation stays exactly where Phase 7 put it (inside
-// createMatch()'s own transaction); see this file's module comment intent
-// in the Phase 9 report for why that boundary matters (no domain needs to
-// import another just to fire a notification).
+// creates one and never imports another domain's service to do so.
+// Creation stays inside the transaction of whichever domain caused it
+// (chat's sendMessage, moderation's applyReportAction, ...); see this
+// file's module comment intent in the Phase 9 report for why that boundary
+// matters (no domain needs to import another just to fire a notification).
 
 // Prisma's generated enum values are the ASCII identifiers (MATCH,
 // MESSAGE, ...) -- @map only renames the DB column value, not what the

@@ -1,5 +1,4 @@
 import { getChatRoomForUser, getMessage } from "@/lib/chat/service";
-import { getOwnedPostRefForMatch } from "@/lib/match/service";
 import { getCommentPostRef } from "@/lib/comment/service";
 import { getReportTargetRef } from "@/lib/report/service";
 import { resolveMessageTarget, resolvePostTarget } from "@/lib/report/targets";
@@ -7,8 +6,8 @@ import { resolveMessageTarget, resolvePostTarget } from "@/lib/report/targets";
 // Resolves a notification's relatedType/relatedId into a link to navigate
 // to, when there's something to link to. Kept out of
 // src/lib/notification/service.ts on purpose (Phase 9 spec section 16):
-// that service has no dependency on the match/chat/comment/report
-// domains, and this function needs all of them -- so it lives here, one
+// that service has no dependency on the chat/comment/report domains, and
+// this function needs all of them -- so it lives here, one
 // level up, imported by the page. Split into its own module (rather than
 // inlined in page.tsx) so it can be unit-tested directly, same convention
 // as this app's other route-local logic (see (auth)/onboarding/
@@ -33,11 +32,11 @@ export async function resolveHref(
 ): Promise<string | null> {
   if (relatedId === null) return null;
 
-  if (relatedType === "match") {
-    const ref = await getOwnedPostRefForMatch(relatedId, userId);
-    return ref ? `/post/${ref.id}?type=${ref.type}` : null;
-  }
-
+  // Phase J-2: relatedType "match" (NotificationType.MATCH) is no longer
+  // produced -- the Match domain is gone. Historical rows can still exist,
+  // and fall through to the final `return null` below: the notification
+  // still renders, it just carries no link, same as any other
+  // no-longer-resolvable target.
   if (relatedType === "message") {
     // Phase 11: relatedId here is a Message id (see chat/service.ts's
     // sendMessage(), never a ChatRoom id) -- resolve it to the room, then

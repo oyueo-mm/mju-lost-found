@@ -14,6 +14,10 @@ const deleteFoundPost = vi.fn();
 // the real ~99MB SigLIP model or issuing a real $executeRaw here, same
 // convention as this project's other embedding-adjacent route tests.
 const embedPostImageBestEffort = vi.fn();
+// Phase J-2: PUT also clears this post's cached AI recommendation ranking
+// once its image embedding changes -- mocked here for the same reason
+// (no real prisma call in a route unit test).
+const invalidateRecommendationCache = vi.fn();
 
 // See route.test.ts for why this is a full mock rather than importActual.
 vi.mock("@/lib/posts/http", async () => {
@@ -31,6 +35,7 @@ vi.mock("@/lib/posts/aiService", () => ({
   updateFoundPost,
 }));
 vi.mock("@/lib/ai/postEmbedding", () => ({ embedPostImageBestEffort }));
+vi.mock("@/lib/recommendation/service", () => ({ invalidateRecommendationCache }));
 
 const { GET, PATCH, PUT, DELETE } = await import("./route");
 
@@ -194,6 +199,7 @@ describe("PUT /api/posts/[id] (internal: recompute image embedding)", () => {
     expect(res.status).toBe(200);
     expect(json.data.embedded).toBe(true);
     expect(embedPostImageBestEffort).toHaveBeenCalledWith("lost", 1, "https://x/y.jpg");
+    expect(invalidateRecommendationCache).toHaveBeenCalledWith("lost", 1);
   });
 
   it("does nothing (but still succeeds) when the post has no image", async () => {
@@ -206,6 +212,7 @@ describe("PUT /api/posts/[id] (internal: recompute image embedding)", () => {
     expect(res.status).toBe(200);
     expect(json.data.embedded).toBe(false);
     expect(embedPostImageBestEffort).not.toHaveBeenCalled();
+    expect(invalidateRecommendationCache).not.toHaveBeenCalled();
   });
 });
 

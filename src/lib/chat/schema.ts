@@ -12,22 +12,19 @@ export const MESSAGE_PAGE_SIZE = 50;
 // sane upper limit regardless of what the column allows.
 export const MAX_MESSAGE_LENGTH = 2000;
 
-// POST /api/chat accepts either shape: a Match-based room (mirrors legacy
-// get_or_create_chat_room) or a Phase 10 "direct" room -- a viewer
-// messaging a post's author straight from the board, no Match required
-// (mirrors legacy get_or_create_direct_chat_room). postType/postId reuse
-// posts/schema.ts's own postTypeSchema rather than redeclaring "lost"/
-// "found" here.
-export const createMatchChatRoomSchema = z.object({
-  matchId: z.coerce.number().int().positive("matchId가 올바르지 않습니다."),
-});
-
+// POST /api/chat -- a Phase 10 "direct" room: a viewer messaging a post's
+// author straight from the board (mirrors legacy
+// get_or_create_direct_chat_room). postType/postId reuse posts/schema.ts's
+// own postTypeSchema rather than redeclaring "lost"/"found" here.
+//
+// Phase J-2: this used to be a union with a Match-based `{ matchId }`
+// shape; the Match domain is gone, so only the direct shape remains.
 export const createDirectChatRoomSchema = z.object({
   postType: postTypeSchema,
   postId: z.coerce.number().int().positive("postId가 올바르지 않습니다."),
 });
 
-export const createChatRoomSchema = z.union([createMatchChatRoomSchema, createDirectChatRoomSchema]);
+export const createChatRoomSchema = createDirectChatRoomSchema;
 
 // Phase 28-3: `content` alone used to always be required (min(1)); an
 // image-only message has nothing to put there, so it's now optional at

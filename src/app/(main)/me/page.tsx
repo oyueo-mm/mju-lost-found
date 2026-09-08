@@ -11,13 +11,14 @@ import { CopyPublicId } from "@/components/settings/CopyPublicId";
 import type { ReactNode } from "react";
 
 // Phase 17: "내 정보" -- the hub this phase's Navigation redesign
-// consolidates every personal-account feature into (내 게시물/매칭/알림/
+// consolidates every personal-account feature into (내 게시물/알림/
 // 관리자/로그아웃), matching the exact structure this phase's own spec
 // lays out (section 6-5/7). None of the linked pages were rebuilt or
-// moved -- /posts/mine, /matches, /notifications, /admin/reports all keep
-// their existing routes/behavior unchanged; this page only adds a single
-// front door to them plus a profile summary and sign-out, none of which
-// existed as a combined page before.
+// moved -- /posts/mine, /notifications, /admin/reports all keep their
+// existing routes/behavior unchanged; this page only adds a single front
+// door to them plus a profile summary and sign-out, none of which existed
+// as a combined page before. Phase J-2 dropped the 매칭 row along with the
+// Match domain (/matches no longer exists).
 function MenuRow({ href, icon, label, meta }: { href: string; icon: ReactNode; label: string; meta?: ReactNode }) {
   return (
     <Link
@@ -90,7 +91,6 @@ export default async function MePage() {
       </section>
 
       <section className="overflow-hidden rounded-card border border-border bg-card">
-        <MenuRow href="/matches" icon={<ShieldIcon className="size-4.5" />} label="매칭" />
         <MenuRow
           href="/notifications"
           icon={<BellIcon className="size-4.5" />}

@@ -51,7 +51,7 @@ export async function listPostsForAdmin(
 // Deletes any post regardless of who owns it -- the one thing this module
 // adds on top of the reused deleteLostPost/deleteFoundPost, which by
 // themselves only ever allow an owner to delete their own post. Cascade
-// behavior (Comment/Match/ChatRoom/Message) and Storage image cleanup are
+// behavior (Comment/ChatRoom/Message) and Storage image cleanup are
 // exactly what those functions already do; nothing about that is
 // duplicated or altered here.
 export async function deletePostForAdmin(

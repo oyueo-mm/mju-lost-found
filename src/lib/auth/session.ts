@@ -99,8 +99,9 @@ export async function requireReadyUser(reason?: LoginReason, callbackUrl?: strin
 // nickname set, AND not currently suspended" in one call, instead of
 // repeating requireReadyUser() + isCurrentlySuspended() at every call site.
 // This does NOT replace the existing per-mutation checks in
-// posts/match/chat's service functions (createLostPost, createMatch,
-// sendMessage, ...) -- those intentionally return a typed "forbidden"
+// posts/chat's service functions (createLostPost,
+// getOrCreateDirectChatRoom, sendMessage, ...) -- those intentionally
+// return a typed "forbidden"
 // result so their callers (API routes) can respond with a 403 JSON error
 // the same way the legacy app's PermissionDeniedError does, which a
 // redirect-based gate can't express for a fetch() caller. Use this only

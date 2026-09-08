@@ -58,11 +58,7 @@ export default async function ChatListPage() {
                     </span>
                   )}
                 </div>
-                <span className="truncate text-xs text-muted-foreground">
-                  {room.roomType === "match"
-                    ? `${room.lostPost.title} ↔ ${room.foundPost.title}`
-                    : room.post.title}
-                </span>
+                <span className="truncate text-xs text-muted-foreground">{room.post.title}</span>
                 <p className="truncate text-muted-foreground">
                   {room.lastMessage ? room.lastMessage.content : "아직 주고받은 메시지가 없어요."}
                 </p>

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const getOwnedPostRefForMatch = vi.fn();
 const getMessage = vi.fn();
 const getChatRoomForUser = vi.fn();
 const getCommentPostRef = vi.fn();
@@ -8,7 +7,6 @@ const getReportTargetRef = vi.fn();
 const resolveMessageTarget = vi.fn();
 const resolvePostTarget = vi.fn();
 
-vi.mock("@/lib/match/service", () => ({ getOwnedPostRefForMatch }));
 vi.mock("@/lib/chat/service", () => ({ getMessage, getChatRoomForUser }));
 vi.mock("@/lib/comment/service", () => ({ getCommentPostRef }));
 vi.mock("@/lib/report/service", () => ({ getReportTargetRef }));
@@ -20,18 +18,11 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("resolveHref -- match notifications", () => {
-  it("links to the owned post for a match notification", async () => {
-    getOwnedPostRefForMatch.mockResolvedValueOnce({ id: 5, type: "lost" });
-
-    const href = await resolveHref(1, "match", "match", 10);
-
-    expect(href).toBe("/post/5?type=lost");
-    expect(getOwnedPostRefForMatch).toHaveBeenCalledWith(10, 1);
-  });
-
-  it("returns null when the match no longer involves this user", async () => {
-    getOwnedPostRefForMatch.mockResolvedValueOnce(null);
+// Phase J-2: the Match domain is gone, so no new relatedType="match"
+// notification is ever created -- but historical rows can still exist and
+// must still render (just without a link) rather than breaking the page.
+describe("resolveHref -- legacy match notifications", () => {
+  it("returns null for a historical match notification instead of throwing", async () => {
     expect(await resolveHref(1, "match", "match", 10)).toBeNull();
   });
 });
@@ -51,9 +42,9 @@ describe("resolveHref -- message notifications", () => {
     expect(getChatRoomForUser).toHaveBeenCalledWith(200, 1);
   });
 
-  it("links to the chat room for a Match-chat message notification", async () => {
+  it("links to the chat room for a message notification in another room", async () => {
     getMessage.mockResolvedValueOnce({ id: 101, chatRoomId: 300 });
-    getChatRoomForUser.mockResolvedValueOnce({ kind: "ok", data: { id: 300, roomType: "match" } });
+    getChatRoomForUser.mockResolvedValueOnce({ kind: "ok", data: { id: 300, roomType: "direct" } });
 
     const href = await resolveHref(1, "message", "message", 101);
 
@@ -234,9 +225,9 @@ describe("resolveHref -- report-cluster notifications", () => {
 
 describe("resolveHref -- other cases", () => {
   it("returns null for a null relatedId regardless of type", async () => {
-    expect(await resolveHref(1, "match", "match", null)).toBeNull();
+    expect(await resolveHref(1, "comment_reply", "comment", null)).toBeNull();
     expect(await resolveHref(1, "message", "message", null)).toBeNull();
-    expect(getOwnedPostRefForMatch).not.toHaveBeenCalled();
+    expect(getCommentPostRef).not.toHaveBeenCalled();
     expect(getMessage).not.toHaveBeenCalled();
   });
 

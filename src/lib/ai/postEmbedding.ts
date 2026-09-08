@@ -16,7 +16,7 @@ export const EMBEDDING_INPUT_FIELDS = ["title", "description", "category", "loca
 // see docs/AI_MATCHING_ARCHITECTURE.md's "Option B" discussion (consistency
 // vs. UX vs. serverless retry-ability) for why. A post whose embedding
 // generation fails here still exists and is fully usable; it just doesn't
-// show up in AI match candidates yet (src/lib/match/candidates.ts's
+// show up in AI recommendations yet (src/lib/recommendation/service.ts's
 // EmbeddingNotAvailableError path) until the next successful edit, or a
 // backfill run, regenerates it.
 export async function embedPostBestEffort(

@@ -6,8 +6,8 @@ import type { PostType } from "@/lib/posts/schema";
 // Real pgvector search -- replaces the brute-force "fetch up to 50 most
 // recent candidates, re-embed every one of them in Node on every request,
 // sort in JS" approach (the old src/lib/ai/matching.ts::rankCandidates()
-// path, still used by src/lib/match/candidates.ts's CANDIDATE_POOL_SIZE=50
-// heuristic prior to this module). Every LostPost/FoundPost with a stored
+// path, bounded by a hardcoded 50-candidate pool prior to this module).
+// Every LostPost/FoundPost with a stored
 // embedding is a real candidate now, not just the most recent 50 -- see
 // docs/AI_MATCHING_ARCHITECTURE.md section 7 for why that pool cap was
 // silently dropping real matches as the tables grew, not just being slow.
@@ -65,10 +65,10 @@ export async function findSimilarPosts(
   // The CTE's cross join (`FROM candidates, source`) silently produces
   // zero rows both when the source post has no embedding yet *and* when
   // it has one but genuinely no candidates exist -- those two cases need
-  // different handling by the caller (ai_unavailable vs. a plain empty
-  // result, see src/lib/match/candidates.ts), so they're disambiguated
-  // with one extra, cheap primary-key lookup rather than guessing from
-  // row count.
+  // different handling by the caller ("this post can't be ranked yet" vs.
+  // a plain empty result, see src/lib/recommendation/service.ts), so
+  // they're disambiguated with one extra, cheap primary-key lookup rather
+  // than guessing from row count.
   if (rows.length === 0 && !(await hasEmbedding(sourceType, sourcePostId))) {
     throw new EmbeddingNotAvailableError(sourceType, sourcePostId);
   }
@@ -204,12 +204,11 @@ export async function saveImageEmbedding(
 // other lost-AirPods posts). Mirrors findSimilarPosts()'s CTE shape
 // exactly, with imageEmbedding in place of embedding -- but unlike that
 // function, a missing *source* imageEmbedding is not disambiguated from
-// "no candidates" with a thrown error: the caller (the post detail page)
-// already knows whether this post has an image at all before ever calling
-// this, and simply doesn't render the "이 사진과 비슷한 게시물" section
-// when the result is empty (see src/app/(main)/post/[id]/page.tsx) --
-// there is no separate "AI 매칭 사용 불가" UI state to feed here the way
-// src/lib/match/candidates.ts needs EmbeddingNotAvailableError for.
+// "no candidates" with a thrown error -- most posts simply have no image,
+// which is not an error state. The caller
+// (src/lib/recommendation/service.ts) treats an empty image ranking as
+// "this signal contributed nothing" and falls back to the text ranking
+// alone, so it needs no EmbeddingNotAvailableError equivalent here.
 export async function findSimilarPostsByImage(
   sourceType: PostType,
   sourcePostId: number,

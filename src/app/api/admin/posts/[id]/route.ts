@@ -8,7 +8,7 @@ import { postTypeSchema } from "@/lib/posts/schema";
 // DELETE /api/admin/posts/[id]?type=lost|found -- admin-only, deletes any
 // post regardless of who owns it. Reuses deleteLostPost/deleteFoundPost
 // (posts/service.ts) via deletePostForAdmin's `{ asAdmin: true }` -- same
-// DB delete, same cascade (Comment/Match/ChatRoom/Message), same Storage
+// DB delete, same cascade (Comment/ChatRoom/Message), same Storage
 // image cleanup those functions already do for a normal owner-initiated
 // delete; nothing about that is reimplemented here.
 export const DELETE = withErrorHandling(

@@ -121,13 +121,12 @@ export function PostCard({ post, scoreLabel = "검색 유사도" }: PostCardProp
             {post.viewCount}
           </span>
         </div>
-        {/* Phase 12/15-2: only present on a similarity-ranked result (text
-            search or image similarity) -- a plain keyword-search/list
-            result never carries `score`, so this never shows up outside
-            those contexts. Never labeled "AI 유사도" like MatchPanel's
-            confirmed-match score, so it's never mistaken for a matching
-            confirmation -- this is only ever a search/candidate ranking
-            hint (see scoreLabel's own comment above). */}
+        {/* Phase 12/15-2: only present on a similarity-ranked result (search
+            results, or the post detail page's AI recommendations) -- a plain
+            keyword-search/list result never carries `score`, so this never
+            shows up outside those contexts. Always labeled by the caller
+            ("검색 유사도"/"추천도", see scoreLabel above) so it reads as a
+            ranking hint, never as a confirmed same-item claim. */}
         {typeof post.score === "number" && (
           <span className="mt-0.5 w-fit rounded-full bg-primary-muted px-2 py-0.5 text-[11px] font-medium text-primary">
             {scoreLabel} {Math.round(post.score * 100)}%

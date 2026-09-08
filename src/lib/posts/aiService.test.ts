@@ -47,8 +47,6 @@ const embedPostBestEffort = vi.fn();
 // fast unit-test suite, same convention as postEmbedding's own tests.
 const embed = vi.fn();
 const findPostsBySemanticQuery = vi.fn();
-// Phase 15-2: image similarity's own collaborator, mocked the same way.
-const findSimilarPostsByImage = vi.fn();
 // Phase 32: image search's own collaborators, mocked the same way.
 const imageEmbed = vi.fn();
 const findPostsByImageQuery = vi.fn();
@@ -70,24 +68,16 @@ vi.mock("@/lib/ai/postEmbedding", () => ({
 }));
 vi.mock("@/lib/ai/embedding", () => ({ getEmbeddingProvider: () => ({ embed }) }));
 vi.mock("@/lib/ai/imageEmbedding", () => ({ getImageEmbeddingProvider: () => ({ embed: imageEmbed }) }));
-vi.mock("@/lib/ai/vectorSearch", () => ({ findPostsBySemanticQuery, findSimilarPostsByImage, findPostsByImageQuery }));
+vi.mock("@/lib/ai/vectorSearch", () => ({ findPostsBySemanticQuery, findPostsByImageQuery }));
 
 // Phase 21: this module (aiService.ts) is what actually houses
-// createLostPost/updateLostPost/createFoundPost/updateFoundPost,
-// searchPosts (the AI-aware superset), and findSimilarPostsByImageForDisplay
-// after the posts/service.ts split -- see that file's own comment. Its
-// searchPosts() delegates non-semantic dispatch to the real (unmocked)
-// ./service module, so this test file exercises that delegation
-// end-to-end rather than mocking it away.
-const {
-  createFoundPost,
-  createLostPost,
-  updateFoundPost,
-  updateLostPost,
-  searchPosts,
-  searchPostsByImage,
-  findSimilarPostsByImageForDisplay,
-} = await import("./aiService");
+// createLostPost/updateLostPost/createFoundPost/updateFoundPost, and
+// searchPosts (the AI-aware superset) after the posts/service.ts split --
+// see that file's own comment. Its searchPosts() delegates non-semantic
+// dispatch to the real (unmocked) ./service module, so this test file
+// exercises that delegation end-to-end rather than mocking it away.
+const { createFoundPost, createLostPost, updateFoundPost, updateLostPost, searchPosts, searchPostsByImage } =
+  await import("./aiService");
 
 // A minimal stand-in for the Prisma User type -- these tests only exercise
 // aiService.ts's own logic (author id, suspension check), never Prisma
@@ -586,74 +576,6 @@ describe("searchPosts -- semantic hard-negative tie-breaker (Phase 13-2)", () =>
     expect(result.items.map((p) => p.id)).toEqual([2, 1]);
     expect(result.items[0].score).toBeCloseTo(0.7);
     expect(result.items[1].score).toBeCloseTo(0.6);
-  });
-});
-
-// Phase 15-2: image similarity search's post-detail-page counterpart to
-// searchPostsSemantic() above.
-describe("findSimilarPostsByImageForDisplay", () => {
-  it("searches the opposite board -- Lost source -> Found candidates", async () => {
-    findSimilarPostsByImage.mockResolvedValueOnce([{ id: 1, score: 0.9 }]);
-    foundPost.findMany.mockResolvedValueOnce([row({ id: 1, title: "습득물", foundAt: new Date("2026-01-01") })]);
-
-    const result = await findSimilarPostsByImageForDisplay("lost", 5);
-
-    expect(findSimilarPostsByImage).toHaveBeenCalledWith("lost", 5, 10);
-    expect(foundPost.findMany).toHaveBeenCalled();
-    expect(lostPost.findMany).not.toHaveBeenCalled();
-    expect(result.map((p) => p.type)).toEqual(["found"]);
-  });
-
-  it("searches the opposite board -- Found source -> Lost candidates", async () => {
-    findSimilarPostsByImage.mockResolvedValueOnce([{ id: 1, score: 0.9 }]);
-    lostPost.findMany.mockResolvedValueOnce([row({ id: 1 })]);
-
-    const result = await findSimilarPostsByImageForDisplay("found", 5);
-
-    expect(findSimilarPostsByImage).toHaveBeenCalledWith("found", 5, 10);
-    expect(lostPost.findMany).toHaveBeenCalled();
-    expect(foundPost.findMany).not.toHaveBeenCalled();
-    expect(result.map((p) => p.type)).toEqual(["lost"]);
-  });
-
-  it("returns an empty array without querying rows when there are no candidates", async () => {
-    findSimilarPostsByImage.mockResolvedValueOnce([]);
-
-    const result = await findSimilarPostsByImageForDisplay("lost", 5);
-
-    expect(result).toEqual([]);
-    expect(foundPost.findMany).not.toHaveBeenCalled();
-  });
-
-  it("re-orders results to match the similarity ranking and attaches score, capped at the display limit", async () => {
-    findSimilarPostsByImage.mockResolvedValueOnce([
-      { id: 3, score: 0.95 },
-      { id: 1, score: 0.8 },
-      { id: 2, score: 0.5 },
-    ]);
-    // Deliberately out of ranked order, to prove re-sorting happens.
-    foundPost.findMany.mockResolvedValueOnce([
-      row({ id: 1, title: "found-1", foundAt: new Date("2026-01-01") }),
-      row({ id: 2, title: "found-2", foundAt: new Date("2026-01-01") }),
-      row({ id: 3, title: "found-3", foundAt: new Date("2026-01-01") }),
-    ]);
-
-    const result = await findSimilarPostsByImageForDisplay("lost", 5);
-
-    expect(result.map((p) => p.id)).toEqual([3, 1, 2]);
-    expect(result[0].score).toBeCloseTo(0.95);
-  });
-
-  it("drops a candidate whose row was deleted between the vector search and the fetch", async () => {
-    findSimilarPostsByImage.mockResolvedValueOnce([
-      { id: 1, score: 0.9 },
-      { id: 2, score: 0.8 },
-    ]);
-    foundPost.findMany.mockResolvedValueOnce([row({ id: 1, foundAt: new Date("2026-01-01") })]); // id 2 missing
-
-    const result = await findSimilarPostsByImageForDisplay("lost", 5);
-
-    expect(result.map((p) => p.id)).toEqual([1]);
   });
 });
 

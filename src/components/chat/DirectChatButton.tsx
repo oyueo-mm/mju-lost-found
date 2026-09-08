@@ -11,8 +11,8 @@ type DirectChatButtonProps = {
 };
 
 // Client-side port of legacy pages/1,2's "💬 작성자와 채팅하기" button --
-// no Match required, unlike MatchPanel's "채팅하기" (which only appears
-// for a confirmed Match). Only ever rendered for a logged-in, non-owner
+// the single way a chat ever starts (Phase J-2 removed the Match-mediated
+// alternative). Only ever rendered for a logged-in, non-owner
 // viewer (see /post/[id]/page.tsx) -- POST /api/chat -> getOrCreateDirectChatRoom
 // re-checks ownership/suspension itself regardless, this is just the UI
 // entry point. Idempotent: clicking it again for the same post just

@@ -11,6 +11,7 @@ import { postTypeSchema, updateFoundPostSchema, updateLostPostSchema } from "@/l
 import { deleteFoundPost, deleteLostPost, getFoundPost, getLostPost } from "@/lib/posts/service";
 import { updateFoundPost, updateLostPost } from "@/lib/posts/aiService";
 import { embedPostImageBestEffort } from "@/lib/ai/postEmbedding";
+import { invalidateRecommendationCache } from "@/lib/recommendation/service";
 
 // PATCH conditionally triggers embedPostBestEffort() -- real ONNX Runtime
 // inference (@huggingface/transformers, a native addon) that cannot run on
@@ -111,6 +112,13 @@ export const PUT = withErrorHandling(
 
     if (post.imageUrl) {
       await embedPostImageBestEffort(parsedParams.type, parsedParams.id, post.imageUrl);
+      // Phase J-2: AI recommendations now combine this post's image
+      // embedding with its text one (src/lib/recommendation/service.ts), so
+      // a recomputed image embedding invalidates the cached ranking the
+      // same way a recomputed text embedding already does in aiService.ts.
+      // Before this phase the cache was text-only, so this trigger had
+      // nothing to invalidate.
+      await invalidateRecommendationCache(parsedParams.type, parsedParams.id);
     }
     return jsonOk({ embedded: Boolean(post.imageUrl) });
   },

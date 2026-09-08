@@ -5,7 +5,8 @@ import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { EMBEDDING_INPUT_FIELDS, embedPostBestEffort } from "@/lib/ai/postEmbedding";
 import { getEmbeddingProvider } from "@/lib/ai/embedding";
 import { getImageEmbeddingProvider } from "@/lib/ai/imageEmbedding";
-import { findPostsByImageQuery, findPostsBySemanticQuery, findSimilarPostsByImage } from "@/lib/ai/vectorSearch";
+import { findPostsByImageQuery, findPostsBySemanticQuery } from "@/lib/ai/vectorSearch";
+import { invalidateRecommendationCache } from "@/lib/recommendation/service";
 import type { User } from "@/generated/prisma/client";
 import type {
   CreateFoundPostInput,
@@ -43,15 +44,6 @@ import {
 // merely having it reachable from the same *file* (even behind a lazy
 // `import()`) was enough to bloat every one of those routes' Vercel
 // function bundle before this split.
-
-// Phase 23: a post's own embedding changing means its cached match
-// candidates (src/lib/match/candidates.ts) may no longer reflect it --
-// delete rather than recompute here, since this module has no reason to
-// eagerly re-run a pgvector search the owner may never look at again;
-// the next "매칭 후보 찾기" click recomputes fresh instead.
-async function invalidateMatchCandidateCache(sourceType: PostType, sourcePostId: number): Promise<void> {
-  await prisma.matchCandidateCache.deleteMany({ where: { sourceType, sourcePostId } });
-}
 
 // ---------- Mutations (create/update trigger embedPostBestEffort) ----------
 
@@ -117,15 +109,15 @@ export async function updateLostPost(
   // the same after() callback, in the same relative order they already
   // ran in (embed, then invalidate) -- keeping them together (rather than
   // only deferring embedPostBestEffort) avoids a new race where the stale
-  // MatchCandidateCache row is cleared *before* the new embedding is
-  // actually saved, which could let a candidate search that lands in that
-  // gap recompute against the old vector and re-cache it. See
+  // recommendation-cache row is cleared *before* the new embedding is
+  // actually saved, which could let a recommendation lookup that lands in
+  // that gap recompute against the old vector and re-cache it. See
   // createLostPost's own comment for why after() (not a bare
   // fire-and-forget promise) is what makes this safe on Vercel.
   if (EMBEDDING_INPUT_FIELDS.some((field) => field in rest)) {
     after(async () => {
       await embedPostBestEffort("lost", row.id, row);
-      await invalidateMatchCandidateCache("lost", row.id);
+      await invalidateRecommendationCache("lost", row.id);
     });
   }
   return { kind: "ok", data: toLostPostDTO(row) };
@@ -177,7 +169,7 @@ export async function updateFoundPost(
   if (EMBEDDING_INPUT_FIELDS.some((field) => field in rest)) {
     after(async () => {
       await embedPostBestEffort("found", row.id, row);
-      await invalidateMatchCandidateCache("found", row.id);
+      await invalidateRecommendationCache("found", row.id);
     });
   }
   return { kind: "ok", data: toFoundPostDTO(row) };
@@ -185,10 +177,10 @@ export async function updateFoundPost(
 
 // ---------- Semantic search (Phase 12) ----------
 
-// Matches legacy ai/search.py::DEFAULT_TOP_K exactly -- this app's one
-// other free-text-query ranking function (the AI-candidate list per post,
-// src/lib/match/candidates.ts) uses a different constant (TOP_K = 5) for a
-// different purpose (candidate *suggestions* for one specific post, not a
+// Matches legacy ai/search.py::DEFAULT_TOP_K exactly -- the app's other
+// ranking entry point (per-post AI recommendations,
+// src/lib/recommendation/service.ts) uses a different constant (TOP_K = 5)
+// for a different purpose (suggestions for one specific post, not a
 // general search box), so the two aren't unified into one shared value.
 const SEMANTIC_SEARCH_TOP_K = 10;
 
@@ -304,64 +296,6 @@ export async function searchPosts({
   return searchPostsKeywordOnly({ type, q, ...params });
 }
 
-// ---------- Image similarity search (Phase 15-2) ----------
-
-// Matches SEMANTIC_SEARCH_TOP_K's precedent (Phase 12): the AI-ranking
-// list this feeds is a capped top-K recommendation, not a paginated "all
-// matching results" set -- there is no pagination UI for it at all (see
-// the post detail page), only a fixed small card grid, so a separate,
-// smaller display cap is applied on top of it.
-const IMAGE_SIMILARITY_TOP_K = 10;
-// How many cards actually render on the post detail page -- kept well
-// below IMAGE_SIMILARITY_TOP_K so "이 사진과 비슷한 게시물" stays a compact
-// strip, not a second full results page, regardless of how many candidates
-// exist.
-const IMAGE_SIMILARITY_DISPLAY_LIMIT = 6;
-
-// Post-detail-page counterpart to searchPostsSemantic() above: given a
-// post that already has an image (and, best-effort, an imageEmbedding --
-// see embedPostImageBestEffort()), finds visually similar posts on the
-// *other* board (Lost's image -> Found candidates, Found's image -> Lost
-// candidates; see findSimilarPostsByImage()'s own comment for why never
-// the same board) and returns them as fully-hydrated DTOs with `score` set
-// to the image-similarity value. Returns an empty array -- never throws --
-// when the source post has no imageEmbedding yet or there are no
-// candidates; the caller (post/[id]/page.tsx) treats both the same way:
-// simply don't render the section, matching this phase's explicit "이미지
-// embedding이 아직 생성되지 않은 경우에도 빈 AI 섹션을 표시하지 않는다"
-// requirement.
-export async function findSimilarPostsByImageForDisplay(
-  sourceType: PostType,
-  sourcePostId: number,
-): Promise<PostDTO[]> {
-  const targetType: PostType = sourceType === "lost" ? "found" : "lost";
-  const ranked = await findSimilarPostsByImage(sourceType, sourcePostId, IMAGE_SIMILARITY_TOP_K);
-  if (ranked.length === 0) return [];
-
-  const scoreById = new Map(ranked.map((r) => [r.id, r.score]));
-  const ids = ranked.map((r) => r.id);
-  const rows =
-    targetType === "lost"
-      ? await prisma.lostPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT } } })
-      : await prisma.foundPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT } } });
-  const rowById = new Map(rows.map((row) => [row.id, row]));
-
-  // Re-order to match the similarity ranking (findMany({id:{in}}) doesn't
-  // preserve it) and drop any id whose row vanished between the two
-  // queries -- same reasoning as searchPostsSemantic() above.
-  return ids
-    .map((id) => rowById.get(id))
-    .filter((row): row is NonNullable<typeof row> => row !== undefined)
-    .map((row) => {
-      const dto =
-        targetType === "lost"
-          ? toLostPostDTO(row as Parameters<typeof toLostPostDTO>[0])
-          : toFoundPostDTO(row as Parameters<typeof toFoundPostDTO>[0]);
-      return { ...dto, score: scoreById.get(row.id) };
-    })
-    .slice(0, IMAGE_SIMILARITY_DISPLAY_LIMIT);
-}
-
 // ---------- Image search (Phase 32) ----------
 
 // Same precedent as SEMANTIC_SEARCH_TOP_K/IMAGE_SIMILARITY_TOP_K above --
@@ -370,14 +304,14 @@ export async function findSimilarPostsByImageForDisplay(
 const IMAGE_SEARCH_TOP_K = 10;
 
 // mode=image's counterpart to searchPostsSemantic() above -- the query is
-// an uploaded photo (never a stored post's own image, unlike
-// findSimilarPostsByImageForDisplay), embedded on the fly and ranked
-// against `targetType`'s own imageEmbedding column via findPostsByImageQuery
-// (searches the board the caller picked, never the cross-board "AirPods
-// lost -> AirPods found" convention findSimilarPostsByImage/
-// findPostsByImageForDisplay use for the post-detail-page feature -- those
-// two features solve different problems and deliberately stay separate).
-// No lexical tie-breaker here (that's specific to text titles, see
+// an uploaded photo (never a stored post's own image), embedded on the fly
+// and ranked against `targetType`'s own imageEmbedding column via
+// findPostsByImageQuery (searches the board the caller picked, never the
+// cross-board "AirPods lost -> AirPods found" convention
+// findSimilarPostsByImage() and src/lib/recommendation/service.ts use for
+// the post-detail-page AI recommendation feature -- those two features
+// solve different problems and deliberately stay separate). No lexical
+// tie-breaker here (that's specific to text titles, see
 // searchPostsSemantic's own comment) -- pure cosine ranking.
 export async function searchPostsByImage(
   targetType: PostType,

@@ -25,14 +25,15 @@ export const ADMIN_NAV_ITEM: { key: NavKey; href: string; label: string } = {
 };
 
 // "내 정보" is a hub over several pre-existing routes (/posts/mine,
-// /matches, /notifications) that live outside /me itself -- they weren't
-// moved (this phase reorganizes navigation, not URLs), so the 내 정보 탭
-// must still highlight while any of them is open. "/admin" is
-// deliberately NOT in this list any more (Phase 31): it has its own tab
-// now (ADMIN_NAV_ITEM), and isNavActive's generic prefix-match branch
-// below already highlights that tab correctly -- leaving "/admin" here
-// too would highlight both tabs at once.
-const ME_ASSOCIATED_PREFIXES = ["/me", "/posts/mine", "/matches", "/notifications"];
+// /notifications) that live outside /me itself -- they weren't moved
+// (this phase reorganizes navigation, not URLs), so the 내 정보 탭 must
+// still highlight while any of them is open. ("/matches" was in this list
+// until Phase J-2 removed the Match domain along with that route.)
+// "/admin" is deliberately NOT in this list any more (Phase 31): it has
+// its own tab now (ADMIN_NAV_ITEM), and isNavActive's generic prefix-match
+// branch below already highlights that tab correctly -- leaving "/admin"
+// here too would highlight both tabs at once.
+const ME_ASSOCIATED_PREFIXES = ["/me", "/posts/mine", "/notifications"];
 
 // A tab is "active" for its own path and anything nested under it (e.g.
 // /lost/new highlights 분실물) -- except "홈", which only matches the

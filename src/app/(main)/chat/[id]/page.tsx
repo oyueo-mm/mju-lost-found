@@ -31,20 +31,16 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
 
   const room = result.data;
 
-  // Phase H-6: a "match" room always has both sides (분실물+습득물), a
-  // "direct" room always has exactly one post -- same discriminated-union
-  // shape resolveDetailDTO() in chat/service.ts already returns, just
-  // normalized here into one array so the chip strip below doesn't need
-  // its own roomType branch. `type` per ref is what makes each link land
-  // on the correct board (/post/[id] requires it, LostPost/FoundPost ids
-  // are independent sequences -- see post/[id]/page.tsx's own comment).
-  const postRefs =
-    room.roomType === "match"
-      ? [
-          { key: "lost", id: room.lostPost.id, type: "lost" as const, title: room.lostPost.title, imageUrl: room.lostPost.imageUrl },
-          { key: "found", id: room.foundPost.id, type: "found" as const, title: room.foundPost.title, imageUrl: room.foundPost.imageUrl },
-        ]
-      : [{ key: "post", id: room.post.id, type: room.post.type, title: room.post.title, imageUrl: room.post.imageUrl }];
+  // Phase H-6: every room is about exactly one post -- kept as a
+  // one-element array (rather than collapsed into a bare object) so the
+  // chip strip below renders unchanged. Phase J-2: a "match" room used to
+  // have two sides here (분실물+습득물); that shape went with the Match
+  // domain. `type` per ref is what makes the link land on the correct
+  // board (/post/[id] requires it, LostPost/FoundPost ids are independent
+  // sequences -- see post/[id]/page.tsx's own comment).
+  const postRefs = [
+    { key: "post", id: room.post.id, type: room.post.type, title: room.post.title, imageUrl: room.post.imageUrl },
+  ];
 
   return (
     // h-[70dvh], not h-[70vh]: `dvh` (dynamic viewport height) tracks the
@@ -81,10 +77,10 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      {/* Phase H-6 section 8: 게시글 -> 채팅 방향은 DirectChatButton/MatchPanel
-          이 이미 처리하므로, 여기서는 채팅 -> 게시글 방향만 추가한다. 썸네일 +
-          제목 + "게시글 보기"를 한 칩으로 묶어 클릭 시 정확히 해당 게시글
-          상세로 이동한다 (match 방은 두 개, direct 방은 한 개). */}
+      {/* Phase H-6 section 8: 게시글 -> 채팅 방향은 DirectChatButton이 이미
+          처리하므로, 여기서는 채팅 -> 게시글 방향만 추가한다. 썸네일 + 제목 +
+          "게시글 보기"를 한 칩으로 묶어 클릭 시 정확히 해당 게시글 상세로
+          이동한다. */}
       <div className="flex flex-wrap gap-2 border-b border-border pb-3">
         {postRefs.map((ref) => (
           <Link

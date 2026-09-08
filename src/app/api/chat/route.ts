@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { chatMutationResultToResponse, jsonError, requireUserForApi, withErrorHandling } from "@/lib/chat/http";
 import { createChatRoomSchema } from "@/lib/chat/schema";
-import { getOrCreateChatRoomForMatch, getOrCreateDirectChatRoom, listChatRoomsForUser } from "@/lib/chat/service";
+import { getOrCreateDirectChatRoom, listChatRoomsForUser } from "@/lib/chat/service";
 
-// GET /api/chat -- every chat room (Match-based or direct, Phase 10) the
-// current user participates in.
+// GET /api/chat -- every chat room the current user participates in.
 export const GET = withErrorHandling(async () => {
   const auth = await requireUserForApi();
   if ("response" in auth) return auth.response;
@@ -14,12 +13,10 @@ export const GET = withErrorHandling(async () => {
   return NextResponse.json({ data: rooms });
 });
 
-// POST /api/chat -- get-or-create a chat room, either shape:
-//   { matchId }                -- the single ChatRoom for a Match.
-//   { postType, postId }       -- Phase 10: a direct room with that post's
-//                                  author, no Match required.
-// Both are idempotent: calling either twice returns the same room, never
-// a duplicate (see getOrCreateChatRoomForMatch/getOrCreateDirectChatRoom).
+// POST /api/chat -- get-or-create the direct chat room between the caller
+// and a post's author: { postType, postId }. Idempotent: calling it twice
+// returns the same room, never a duplicate (see getOrCreateDirectChatRoom).
+// Phase J-2: the Match-based `{ matchId }` shape went with the Match domain.
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const auth = await requireUserForApi();
   if ("response" in auth) return auth.response;
@@ -36,9 +33,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
   }
 
-  const result =
-    "matchId" in parsed.data
-      ? await getOrCreateChatRoomForMatch(parsed.data.matchId, auth.user.id)
-      : await getOrCreateDirectChatRoom(parsed.data.postType, parsed.data.postId, auth.user);
+  const result = await getOrCreateDirectChatRoom(parsed.data.postType, parsed.data.postId, auth.user);
   return chatMutationResultToResponse(result, 201);
 });

@@ -222,7 +222,6 @@ model LostPost {
   // migration, same as any other additive column in this schema.
   viewCount   Int             @default(0) @map("view_count")
 
-  matches          Match[]
   comments         Comment[]
   directChatRooms  ChatRoom[] @relation("ChatRoomDirectLostPost")
 
@@ -254,7 +253,6 @@ model FoundPost {
   // See LostPost.viewCount's comment -- identical shape/reasoning.
   viewCount   Int              @default(0) @map("view_count")
 
-  matches          Match[]
   comments         Comment[]
   directChatRooms  ChatRoom[] @relation("ChatRoomDirectFoundPost")
 
@@ -262,45 +260,29 @@ model FoundPost {
   @@map("FoundPost")
 }
 
-// ---------- Match ----------
+// ---------- MatchCandidateCache (Phase 23; repurposed Phase J-2) ----------
 
-model Match {
-  id           Int       @id @default(autoincrement())
-  lostPostId   Int       @map("lost_post_id")
-  lostPost     LostPost  @relation(fields: [lostPostId], references: [id], onDelete: Cascade)
-  foundPostId  Int       @map("found_post_id")
-  foundPost    FoundPost @relation(fields: [foundPostId], references: [id], onDelete: Cascade)
-  score        Float
-  createdAt    DateTime  @default(now()) @map("created_at")
-
-  chatRoom ChatRoom?
-
-  @@unique([lostPostId, foundPostId])
-  @@index([lostPostId], map: "idx_match_lost_post_id")
-  @@index([foundPostId], map: "idx_match_found_post_id")
-  @@map("Match")
-}
-
-// ---------- MatchCandidateCache (Phase 23) ----------
-
-// Match itself means "user-confirmed pairing" (see the comment on
-// listMyMatchesSummary() in src/lib/match/service.ts -- a Match row's
-// mere existence already means confirmed, there is no pending state) --
-// so raw AI-ranked candidates (never confirmed, never owned by anyone)
-// must not be stored there. This is a separate, disposable cache: one row
-// per source post, holding whatever findMatchCandidates() last computed,
-// so a second "매칭 후보 찾기" click can reuse it instead of re-running
-// real ONNX inference + a pgvector scan every time. sourceType is a plain
-// string (not an FK-backed enum) for the same reason Report.targetType/
-// Notification.relatedType are -- see those models' own comments; there is
-// no PostType enum at the DB level, only the app-level "lost"|"found"
-// union. Invalidated (deleted) by src/lib/posts/aiService.ts whenever the
-// source post's own embedding is recomputed, since a changed embedding can
-// change what its candidates should be; a *new* post appearing on the
-// opposite board does not invalidate an existing cache row -- accepted as
-// a known staleness trade-off (see this phase's report) rather than
-// building a full invalidation system for a "recommend, not authoritative"
-// feature.
+// Phase J-2: the Match domain (user-confirmed pairing, "매칭하기") was
+// removed entirely -- this table's name is a holdover (renaming it would
+// be a migration with no functional benefit) but its shape is now the AI
+// *recommendation* cache instead: one row per source post, holding
+// whatever src/lib/recommendation/service.ts's findPostRecommendations()
+// last computed (a combined text+image ranking, {id, score}[] -- never
+// the display-hydrated post rows themselves, which are always re-fetched
+// fresh on read so a stale cache entry can never show an outdated title/
+// status/deleted post, only an outdated *ranking*), so a second post-
+// detail-page view doesn't re-run a pgvector scan every time. sourceType
+// is a plain string (not an FK-backed enum) for the same reason
+// Report.targetType/Notification.relatedType are -- see those models' own
+// comments; there is no PostType enum at the DB level, only the app-level
+// "lost"|"found" union. Invalidated (deleted) by src/lib/posts/aiService.ts
+// whenever the source post's own text embedding is recomputed, and by the
+// image-embedding trigger route whenever its image embedding is
+// recomputed; a *new* post appearing on the opposite board does not
+// invalidate an existing cache row -- accepted as a known staleness
+// trade-off (same one the original Match-candidate cache already
+// accepted) rather than building a full invalidation system for a
+// "recommend, not authoritative" feature.
 model MatchCandidateCache {
   id           Int      @id @default(autoincrement())
   sourceType   String   @map("source_type")
@@ -314,36 +296,22 @@ model MatchCandidateCache {
 
 // ---------- ChatRoom ----------
 
-// A ChatRoom is either Match-based (matchId set -- the AI-match -> confirm
-// -> chat flow) OR "direct" (matchId NULL, the two directXxxPostId /
-// initiatorUserId columns set instead -- a viewer messaging a post's
-// author straight from the board, no Match required). Exactly one of the
-// two shapes applies per row, enforced by application code, not a DB
-// constraint -- same convention the legacy schema uses everywhere else
-// (e.g. LostPost.category isn't constrained either).
-//
-// Multiple-cascade-path check: LostPost/FoundPost can each reach ChatRoom
-// by two different routes -- directly via directLostPostId/
-// directFoundPostId, and indirectly via Match.lostPostId/foundPostId ->
-// ChatRoom.matchId. This is a converging ("diamond") cascade, not a cycle
-// back to LostPost/FoundPost itself: a delete only ever travels outward
-// (LostPost/FoundPost -> Match/ChatRoom -> Message), never back to its own
-// origin table. PostgreSQL has no InnoDB-style restriction against this
-// shape (unlike MySQL, which was the concern this comment originally
-// tracked) -- multiple independent FK paths converging on the same target
-// row are fine as long as they don't form an actual cycle, which this
-// doesn't. Per row only one of the two routes is ever populated, so in
-// practice a given ChatRoom is only ever deleted by one of them. Verified
-// via `prisma migrate diff --from-empty --to-schema-datamodel` (generates
-// the CREATE TABLE/FK SQL without needing a live DB) in Phase 3 -- see the
-// Phase 3 report. If `prisma db push`/`migrate dev` against a real
-// Supabase instance ever rejects this shape anyway, the fallback is to
-// drop CASCADE on the two direct_* FKs and delete those rooms explicitly
-// in application code instead.
+// Phase J-2: ChatRoom used to be either Match-based (matchId set) or
+// "direct" (matchId NULL, the directXxxPostId/initiatorUserId columns set
+// instead). The Match domain was removed entirely (production had zero
+// Match-based rooms at removal time -- see that phase's report), so every
+// ChatRoom row is now direct: a viewer messaging a post's author straight
+// from the board, no confirmation step required. The matchId column and
+// its FK to the (now-deleted) Match table were dropped by migration
+// 20260918000000_remove_match. directLostPostId/directFoundPostId stay
+// mutually-exclusive-nullable as before -- that pair was never about
+// Match, it's "which board this direct room's post belongs to", still
+// exactly one of the two per row, enforced by application code
+// (chat/service.ts's getOrCreateDirectChatRoom), not a DB constraint --
+// same convention the legacy schema uses everywhere else (e.g.
+// LostPost.category isn't constrained either).
 model ChatRoom {
   id                   Int        @id @default(autoincrement())
-  matchId              Int?       @unique @map("match_id")
-  match                Match?     @relation(fields: [matchId], references: [id], onDelete: Cascade)
   directLostPostId     Int?       @map("direct_lost_post_id")
   directLostPost       LostPost?  @relation("ChatRoomDirectLostPost", fields: [directLostPostId], references: [id], onDelete: Cascade)
   directFoundPostId    Int?       @map("direct_found_post_id")
@@ -360,11 +328,10 @@ model ChatRoom {
   // and this plain composite unique constraint already reproduces the exact
   // same behavior on any standard-SQL database (Postgres included) via NULL
   // semantics: a row is only compared for uniqueness when *every* column in
-  // the constraint is non-null, so a row with a NULL directLostPostId/
-  // directFoundPostId -- i.e. every Match-based room, and initiatorUserId
-  // is NULL there too -- never collides with anything. No raw-SQL migration
-  // needed for this; only reach for one if a future change makes this
-  // column pair non-null outside the "direct room" case.
+  // the constraint is non-null, so a row with a NULL directLostPostId (a
+  // direct-found room) never collides with the directFoundPostId
+  // constraint, and vice versa. No raw-SQL migration needed for this; only
+  // reach for one if a future change makes this column pair non-null.
   @@unique([directLostPostId, initiatorUserId], map: "idx_chatroom_direct_lost_unique")
   @@unique([directFoundPostId, initiatorUserId], map: "idx_chatroom_direct_found_unique")
   @@map("ChatRoom")

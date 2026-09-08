@@ -11,8 +11,7 @@ import { PostManageMenu } from "@/components/post/PostManageMenu";
 import { ViewTracker } from "@/components/post/ViewTracker";
 import { SimilarPostsSection } from "@/components/post/SimilarPostsSection";
 import { DirectChatButton } from "@/components/chat/DirectChatButton";
-import { listMatchesForPost } from "@/lib/match/service";
-import { MatchPanel } from "@/components/match/MatchPanel";
+import { findPostRecommendations } from "@/lib/recommendation/service";
 import { CommentSection } from "@/components/comment/CommentSection";
 import { encodePostTargetId } from "@/lib/report/targets";
 import { ReportButton } from "@/components/report/ReportButton";
@@ -63,16 +62,13 @@ export default async function PostDetailPage({
 
   // Phase 23: plain Prisma reads (comments, view count already on `post`)
   // -- neither is AI work, so both stay in this page's normal server
-  // render rather than being deferred like matching candidates are (see
-  // MatchPanel's own comment for why *that* one specifically moved behind
-  // a button click).
+  // render.
   //
-  // Phase 24-2-2: comments and (owner-only) match data don't depend on
-  // each other -- only on `post`/`isOwner`, both already resolved above --
-  // so their two DB round trips run concurrently instead of one after the
-  // other. Each keeps its own try/catch exactly as before (a comments
-  // failure still can't affect match-loading and vice versa); only the
-  // *waiting* is now shared.
+  // Phase 24-2-2: comments and recommendations don't depend on each other
+  // -- only on `post`, already resolved above -- so their DB round trips
+  // run concurrently instead of one after the other. Each keeps its own
+  // try/catch (a comments failure still can't affect recommendations and
+  // vice versa); only the *waiting* is shared.
   async function loadComments(): Promise<Awaited<ReturnType<typeof listCommentsForPost>>> {
     try {
       return await listCommentsForPost(type, post!.id);
@@ -82,38 +78,30 @@ export default async function PostDetailPage({
     }
   }
 
-  // Match UI only ever needs to appear on a post the viewer owns (see
-  // MatchPanel's comment) -- so existing-match data is only fetched at
-  // all when isOwner, and a failure here shows a small inline notice
-  // rather than breaking the rest of the (already-successful) page. AI
-  // candidates are fetched client-side by MatchPanel itself (GET
-  // /api/posts/[id]/matches/candidates), not here.
-  async function loadMatchPanelData(): Promise<{
-    matchPanelData: {
-      matches: { id: number; counterpart: { id: number; title: string; imageUrl: string | null } }[];
-    } | null;
-    matchLoadError: boolean;
+  // Phase J-2: replaces the removed owner-only MatchPanel. Recommendations
+  // are computed from this post's *own* stored text/image embeddings
+  // (src/lib/recommendation/service.ts), so nothing here runs a model at
+  // request time -- just a cached pgvector ranking plus one row fetch,
+  // cheap enough to stay in the normal server render rather than being
+  // deferred behind a click the way Match candidates were. Public: every
+  // viewer (logged in or not, owner or not) gets the same list, matching
+  // how this page's similar-posts section already behaved. A failure shows
+  // a small inline notice instead of breaking the rest of the page.
+  async function loadRecommendations(): Promise<{
+    recommendations: Awaited<ReturnType<typeof findPostRecommendations>>;
+    recommendationsFailed: boolean;
   }> {
-    if (!isOwner) return { matchPanelData: null, matchLoadError: false };
     try {
-      const matchResult = await listMatchesForPost(type, post!.id, currentUser!.id);
-      const matches =
-        matchResult.kind === "ok"
-          ? matchResult.data.map((m) => ({
-              id: m.id,
-              counterpart: type === "lost" ? m.foundPost : m.lostPost,
-            }))
-          : [];
-      return { matchPanelData: { matches }, matchLoadError: false };
+      return { recommendations: await findPostRecommendations(type, post!.id), recommendationsFailed: false };
     } catch (error) {
-      console.error("Failed to load match data", error);
-      return { matchPanelData: null, matchLoadError: true };
+      console.error("Failed to load recommendations", error);
+      return { recommendations: [], recommendationsFailed: true };
     }
   }
 
-  const [comments, { matchPanelData, matchLoadError }] = await Promise.all([
+  const [comments, { recommendations, recommendationsFailed }] = await Promise.all([
     loadComments(),
-    loadMatchPanelData(),
+    loadRecommendations(),
   ]);
 
   return (
@@ -260,25 +248,18 @@ export default async function PostDetailPage({
           </Link>
         ))}
 
-      {isOwner &&
-        (matchLoadError ? (
-          <div className="rounded-card border border-destructive/30 bg-destructive-muted p-4 text-sm text-destructive">
-            매칭 정보를 불러오는 중 문제가 발생했습니다.
-          </div>
-        ) : (
-          matchPanelData && (
-            <MatchPanel postType={type} postId={post.id} initialMatches={matchPanelData.matches} />
-          )
-        ))}
-
-      {/* Phase I section 9: replaces ImageSimilaritySection -- unlike that
-          component (only shown when the post itself had an image, since it
-          searched using *this post's own* photo automatically), this is
-          always rendered: both modes now take fresh user input (typed
-          text or a picked photo), neither depends on this post having an
-          image at all. See SimilarPostsSection's own comment for how each
-          mode reuses the exact existing search endpoints/AI logic. */}
-      <SimilarPostsSection sourceType={type} />
+      {/* Phase J-2: one automatic "AI 추천" section replaces both the
+          owner-only MatchPanel (매칭 후보 찾기 -> 매칭하기) and Phase I's
+          manual search widget (자연어로/이미지로 찾기). Nothing to pick or
+          type: the recommendations are derived from this post's own
+          embeddings server-side above and are the same for every viewer.
+          Board-wide search (키워드/AI 의미/이미지) is unchanged and still
+          lives on /lost, /found and /search. */}
+      <SimilarPostsSection
+        sourceType={type}
+        recommendations={recommendations}
+        loadFailed={recommendationsFailed}
+      />
 
       <CommentSection
         postType={type}
