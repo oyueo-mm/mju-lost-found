@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/session";
 import { listUsersForAdmin } from "@/lib/admin/users";
 import { UserActionButtons } from "@/components/admin/UserActionButtons";
+import { AuthorLink } from "@/components/user/AuthorLink";
 import { ShieldIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
@@ -45,11 +46,16 @@ export default async function AdminUsersPage({
       </div>
 
       <form action="/admin/users" className="flex gap-2">
+        {/* Phase L: same single search box now also accepts a public ID --
+            listUsersForAdmin() only ever tries an exact publicId match
+            when q is actually UUID-shaped (see that function's own
+            comment), so a plain email/nickname query behaves exactly as
+            before. */}
         <input
           type="text"
           name="q"
           defaultValue={q}
-          placeholder="이메일 또는 닉네임 검색"
+          placeholder="이메일, 닉네임 또는 public ID 검색"
           className="w-full max-w-xs rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
         />
         <button
@@ -75,7 +81,16 @@ export default async function AdminUsersPage({
             >
               <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-foreground">{u.nickname ?? "(닉네임 없음)"}</span>
+                  {/* Phase L: same AuthorLink -> /profile/[publicId] every
+                      other "who wrote this" display in the app already
+                      uses (PostCard, post detail, comments, chat header) --
+                      clicking the nickname here goes to their public
+                      profile, same behavior, no new link component. */}
+                  <AuthorLink
+                    nickname={u.nickname}
+                    publicId={u.publicId}
+                    className="font-medium text-foreground hover:underline"
+                  />
                   {u.isAdmin && (
                     <span className="rounded-full bg-primary-muted px-2 py-0.5 text-[11px] font-medium text-primary">
                       관리자
@@ -88,7 +103,7 @@ export default async function AdminUsersPage({
                   )}
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {u.email} · 가입일: {formatDate(u.createdAt)}
+                  {u.email} · public ID: {u.publicId} · 가입일: {formatDate(u.createdAt)}
                   {u.currentlySuspended &&
                     (u.suspendedUntil ? ` · 정지 해제: ${formatDate(u.suspendedUntil)}` : " · 영구 정지")}
                   {/* Phase H-3: shown whenever a suspending admin is on

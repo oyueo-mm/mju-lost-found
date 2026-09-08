@@ -38,6 +38,7 @@ const baseRow = {
   id: 5,
   email: "target@mju.ac.kr",
   nickname: "대상유저",
+  publicId: "11111111-2222-3333-4444-555555555555",
   isAdmin: false,
   isSuspended: false,
   suspendedUntil: null,
@@ -111,6 +112,48 @@ describe("listUsersForAdmin", () => {
         },
       }),
     );
+  });
+
+  // Phase L
+  it("also matches an exact publicId when q is UUID-shaped", async () => {
+    user.findMany.mockResolvedValueOnce([]);
+    user.count.mockResolvedValueOnce(0);
+    const uuid = "11111111-2222-3333-4444-555555555555";
+
+    await listUsersForAdmin(admin as never, { q: uuid, page: 1, limit: 20 });
+
+    expect(user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          OR: [
+            { email: { contains: uuid, mode: "insensitive" } },
+            { nickname: { contains: uuid, mode: "insensitive" } },
+            { publicId: uuid },
+          ],
+        },
+      }),
+    );
+  });
+
+  it("never passes a non-UUID q through to a publicId filter (would raise a raw Postgres uuid-parse error)", async () => {
+    user.findMany.mockResolvedValueOnce([]);
+    user.count.mockResolvedValueOnce(0);
+
+    await listUsersForAdmin(admin as never, { q: "not-a-real-uuid", page: 1, limit: 20 });
+
+    const call = user.findMany.mock.calls[0][0];
+    expect(call.where.OR).toHaveLength(2);
+    expect(call.where.OR.some((c: object) => "publicId" in c)).toBe(false);
+  });
+
+  it("includes publicId on every returned row", async () => {
+    user.findMany.mockResolvedValueOnce([baseRow]);
+    user.count.mockResolvedValueOnce(1);
+
+    const result = await listUsersForAdmin(admin as never, { page: 1, limit: 20 });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.data.items[0].publicId).toBe(baseRow.publicId);
   });
 });
 

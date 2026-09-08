@@ -22,6 +22,7 @@ const NOTIFICATION_TYPE_FROM_DB: Record<PrismaNotificationType, string> = {
   MESSAGE_HIDDEN: "message_hidden",
   USER_SUSPENDED: "user_suspended",
   COMMENT_REPLY: "comment_reply",
+  ANNOUNCEMENT: "announcement",
 };
 
 // Same Korean labels as the legacy pages/8_알림.py's TYPE_LABELS.
@@ -33,6 +34,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   message_hidden: "메시지 숨김 제재",
   user_suspended: "계정 정지",
   comment_reply: "새 답글",
+  announcement: "공지사항",
 };
 
 export type NotificationDTO = {

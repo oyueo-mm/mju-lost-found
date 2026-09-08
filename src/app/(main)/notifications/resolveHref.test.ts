@@ -6,11 +6,13 @@ const getCommentPostRef = vi.fn();
 const getReportTargetRef = vi.fn();
 const resolveMessageTarget = vi.fn();
 const resolvePostTarget = vi.fn();
+const getAnnouncement = vi.fn();
 
 vi.mock("@/lib/chat/service", () => ({ getMessage, getChatRoomForUser }));
 vi.mock("@/lib/comment/service", () => ({ getCommentPostRef }));
 vi.mock("@/lib/report/service", () => ({ getReportTargetRef }));
 vi.mock("@/lib/report/targets", () => ({ resolveMessageTarget, resolvePostTarget }));
+vi.mock("@/lib/announcement/service", () => ({ getAnnouncement }));
 
 const { resolveHref } = await import("./resolveHref");
 
@@ -24,6 +26,24 @@ beforeEach(() => {
 describe("resolveHref -- legacy match notifications", () => {
   it("returns null for a historical match notification instead of throwing", async () => {
     expect(await resolveHref(1, "match", "match", 10)).toBeNull();
+  });
+});
+
+// Phase M
+describe("resolveHref -- announcement notifications", () => {
+  it("links to the announcement detail page", async () => {
+    getAnnouncement.mockResolvedValueOnce({ id: 42, title: "t", content: "c" });
+
+    const href = await resolveHref(1, "announcement", "announcement", 42);
+
+    expect(href).toBe("/announcements/42");
+    expect(getAnnouncement).toHaveBeenCalledWith(42);
+  });
+
+  it("returns null (no crash) when the announcement was since deleted", async () => {
+    getAnnouncement.mockResolvedValueOnce(null);
+
+    expect(await resolveHref(1, "announcement", "announcement", 42)).toBeNull();
   });
 });
 

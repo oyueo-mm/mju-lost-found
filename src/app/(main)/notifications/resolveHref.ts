@@ -2,6 +2,7 @@ import { getChatRoomForUser, getMessage } from "@/lib/chat/service";
 import { getCommentPostRef } from "@/lib/comment/service";
 import { getReportTargetRef } from "@/lib/report/service";
 import { resolveMessageTarget, resolvePostTarget } from "@/lib/report/targets";
+import { getAnnouncement } from "@/lib/announcement/service";
 
 // Resolves a notification's relatedType/relatedId into a link to navigate
 // to, when there's something to link to. Kept out of
@@ -37,6 +38,19 @@ export async function resolveHref(
   // and fall through to the final `return null` below: the notification
   // still renders, it just carries no link, same as any other
   // no-longer-resolvable target.
+
+  // Phase M: relatedId is the Announcement's own id. No ownership/
+  // membership check needed the way message/report links require --
+  // getAnnouncement() is a public read (see that function's own comment),
+  // same posture as resolvePostTarget's post links below. Returns null
+  // (no crash, notification still renders) if the announcement was since
+  // deleted -- same graceful-degradation precedent as the "match" case
+  // just above.
+  if (relatedType === "announcement") {
+    const announcement = await getAnnouncement(relatedId);
+    return announcement ? `/announcements/${announcement.id}` : null;
+  }
+
   if (relatedType === "message") {
     // Phase 11: relatedId here is a Message id (see chat/service.ts's
     // sendMessage(), never a ChatRoom id) -- resolve it to the room, then

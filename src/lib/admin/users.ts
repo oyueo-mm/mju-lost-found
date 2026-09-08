@@ -7,6 +7,7 @@ import {
 } from "@/generated/prisma/client";
 import { isAdmin } from "@/lib/moderation/service";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
+import { UUID_PATTERN } from "@/lib/user/service";
 import type { AdminUserAction } from "./schema";
 
 // Phase 28-1: reuses the exact same User.isAdmin/isSuspended columns and
@@ -20,6 +21,12 @@ export type AdminUserDTO = {
   id: number;
   email: string;
   nickname: string | null;
+  // Phase L: shown in the admin list and used to link out to this user's
+  // public profile (/profile/[publicId]) -- the same identifier already
+  // shown on the user's own /me page and used everywhere else this app
+  // links to a profile (see AuthorLink). Never the internal numeric `id`
+  // above, which stays admin-only/never rendered.
+  publicId: string;
   isAdmin: boolean;
   isSuspended: boolean;
   suspendedUntil: Date | null;
@@ -46,6 +53,7 @@ function toAdminUserDTO(row: UserWithSuspendedBy): AdminUserDTO {
     id: row.id,
     email: row.email,
     nickname: row.nickname,
+    publicId: row.publicId,
     isAdmin: row.isAdmin,
     isSuspended: row.isSuspended,
     suspendedUntil: row.suspendedUntil,
@@ -87,11 +95,22 @@ export async function listUsersForAdmin(
 ): Promise<AdminUserMutationResult<PagedAdminUsers>> {
   if (!isAdmin(admin)) return { kind: "forbidden" };
 
+  // Phase L: publicId search -- User.publicId is a native Postgres `uuid`
+  // column (see schema.prisma), which has no LIKE/contains support the way
+  // a text column does (Prisma's UuidFilter only exposes equals/in/not,
+  // not contains -- verified against the generated client types), so this
+  // is an exact match, only ever attempted when `q` actually looks like a
+  // UUID (same guard getPublicProfile() uses, reused via UUID_PATTERN --
+  // feeding a non-UUID string straight into a `uuid` column filter raises
+  // a raw Postgres error instead of just matching nothing). A query that
+  // isn't UUID-shaped keeps searching only email/nickname, exactly as
+  // before.
   const where = q
     ? {
         OR: [
           { email: { contains: q, mode: "insensitive" as const } },
           { nickname: { contains: q, mode: "insensitive" as const } },
+          ...(UUID_PATTERN.test(q) ? [{ publicId: q }] : []),
         ],
       }
     : {};

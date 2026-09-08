@@ -81,6 +81,11 @@ enum NotificationType {
   MESSAGE_HIDDEN   @map("message_hidden")
   USER_SUSPENDED   @map("user_suspended")
   COMMENT_REPLY    @map("comment_reply")
+  // Phase M: fanned out to every user (one Notification row each) when an
+  // admin creates an Announcement -- see announcement/service.ts. relatedType
+  // is "announcement", relatedId is Announcement.id, same polymorphic
+  // no-FK shape every other NotificationType here already uses.
+  ANNOUNCEMENT     @map("announcement")
 }
 
 // ---------- User ----------
@@ -167,6 +172,10 @@ model User {
   // SuspensionAppeal's own comment for the full shape.
   suspensionAppeals         SuspensionAppeal[] @relation("SuspensionAppealUser")
   suspensionAppealsReviewed SuspensionAppeal[] @relation("SuspensionAppealReviewedBy")
+  // Phase M: announcements this admin has authored -- see Announcement's
+  // own comment. Only one FK path between the two models, so (like
+  // appSettingsUpdates above) this needs no explicit relation name.
+  announcementsCreated      Announcement[]
 
   @@map("User")
 }
@@ -571,12 +580,15 @@ model Comment {
 // ---------- PostView (Phase 23) ----------
 
 // A dedup ledger, not a page-view analytics table: one row per (post,
-// viewer), overwritten (not appended) on every subsequent view -- see
-// src/lib/posts/views.ts for the actual "skip increment if viewedAt is
-// recent" window logic. viewerKey is "u:<User.id>" for a signed-in viewer
-// or "a:<anonymous cookie id>" for a logged-out one (this app's read
-// paths are intentionally public/no-auth-required -- see posts/service.ts
-// -- so view counting must work without a User row to key on). No FK to
+// viewer), written once and never updated again -- its mere existence is
+// what src/lib/posts/views.ts checks before ever incrementing
+// LostPost/FoundPost.viewCount, so a given viewer can push that count up
+// by at most 1 for a given post, ever (Phase L; a Phase 23-31 predecessor
+// of this table used a 30-minute re-count window instead, since removed).
+// viewerKey is "u:<User.id>" for a signed-in viewer or
+// "a:<anonymous cookie id>" for a logged-out one (this app's read paths
+// are intentionally public/no-auth-required -- see posts/service.ts -- so
+// view counting must work without a User row to key on). No FK to
 // LostPost/FoundPost (same polymorphic postType/postId convention as
 // Report.targetId) -- a row surviving after its post is deleted is inert
 // bookkeeping, never read back for anything once the post is gone.
@@ -613,4 +625,40 @@ model AppSettings {
   updatedBy             User?    @relation(fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
   @@map("AppSettings")
+}
+
+// ---------- Announcement (Phase M) ----------
+
+// Admin-authored announcements. Kept deliberately minimal -- title,
+// content, timestamps, and who wrote it -- with no status/pinned/audience
+// field, since this phase's own spec asks for exactly that ("필요한 최소
+// 구조로 구현한다") and nothing here reads as needing more yet.
+// createdByUserId is nullable (same onDelete: SetNull pattern as
+// AppSettings.updatedBy above, not ModerationAction.adminUserId's stricter
+// Restrict) since authorship here is informational, not a security audit
+// trail -- an admin's account being deleted later should never be blocked
+// by an announcement they once wrote.
+//
+// Reaching regular users: announcement/service.ts's createAnnouncement()
+// fans this out into one Notification row per existing user (type
+// ANNOUNCEMENT, relatedType "announcement", relatedId this row's id) inside
+// the same transaction as the insert below -- this table itself is never
+// queried by the regular-user-facing notifications list/page, only by the
+// admin management page and by the single-announcement detail page a
+// notification's resolved href points at. Editing an announcement does
+// NOT rewrite already-sent notifications' title/content (those stay a
+// snapshot of what the announcement said at send time) -- the detail page
+// linked from the notification always shows the current, up-to-date row
+// regardless, so nothing is ever silently stale for a reader who clicks
+// through.
+model Announcement {
+  id              Int      @id @default(autoincrement())
+  title           String   @db.Text
+  content         String   @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdByUserId Int?     @map("created_by_user_id")
+  createdBy       User?    @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@map("Announcement")
 }

@@ -15,7 +15,9 @@ import { AlertIcon, BellIcon, ChatBubbleIcon, ChatIcon, HandboxIcon, ShieldIcon 
 // of content) -- typeLabel and title already carry the exact distinction,
 // the icon only needs to place it in the right category at a glance.
 // BellIcon is the fallback for any type this map doesn't (yet) know
-// about, so a future NotificationType never renders with no icon at all.
+// about, so a future NotificationType never renders with no icon at all --
+// "announcement" (Phase M) deliberately relies on exactly that fallback
+// rather than adding a dedicated icon just for this.
 const TYPE_ICONS: Record<string, ComponentType<{ className?: string }>> = {
   message: ChatIcon,
   comment_reply: ChatBubbleIcon,

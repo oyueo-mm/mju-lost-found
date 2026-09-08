@@ -9,11 +9,6 @@ import type { PostType } from "./schema";
 
 const ANON_COOKIE_NAME = "anon_uid";
 const ANON_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year -- long-lived viewer identity, not a session cookie
-// How long a repeat view from the *same* viewer is ignored for -- covers
-// exactly the "새로고침 / 뒤로 갔다 다시 들어오기" repeat-view pattern this
-// phase's spec calls out, without needing per-viewer history beyond the
-// single most recent timestamp.
-const VIEW_DEDUP_WINDOW_MS = 30 * 60 * 1000;
 
 // Logged-in viewers are keyed by their real User.id (stable across
 // devices/browsers); logged-out viewers get a long-lived random cookie
@@ -46,40 +41,47 @@ async function resolveViewerKey(): Promise<string> {
 // (the count updates on the *next* load, not the current one -- this is a
 // deliberate trade-off so recording a view never triggers a page refetch
 // of the page the viewer is already looking at).
+//
+// Phase L: a given viewerKey now counts at most once per post, ever --
+// no time window (the previous 30-minute dedup window let the same viewer
+// re-trigger the count after it lapsed, which this phase's spec explicitly
+// rules out: "동일 게시글에 최대 1회만 증가"). The PostView row's mere
+// existence for (postType, postId, viewerKey) is now the only signal
+// needed, so this reads as a plain existence check followed by a plain
+// insert -- no upsert, no viewedAt comparison.
 export async function recordPostViewAction(type: PostType, postId: number): Promise<void> {
   try {
     const viewerKey = await resolveViewerKey();
-    const now = new Date();
 
     const existing = await prisma.postView.findUnique({
       where: { postType_postId_viewerKey: { postType: type, postId, viewerKey } },
     });
-    if (existing && now.getTime() - existing.viewedAt.getTime() < VIEW_DEDUP_WINDOW_MS) {
-      return;
-    }
+    if (existing) return;
 
     await prisma.$transaction([
-      prisma.postView.upsert({
-        where: { postType_postId_viewerKey: { postType: type, postId, viewerKey } },
-        create: { postType: type, postId, viewerKey, viewedAt: now },
-        update: { viewedAt: now },
-      }),
-      // `{ increment: 1 }` compiles to `SET view_count = view_count + 1`
-      // at the DB level -- never a read-then-write in application code --
-      // so two genuinely concurrent viewers (different viewerKeys) never
-      // lose an increment to a race. The one race this doesn't close (the
-      // *same* viewer firing this twice within the same instant, before
-      // either request's SELECT above sees the other's not-yet-committed
-      // upsert) is an accepted trade-off for a view counter, not a
-      // correctness requirement this phase asks for -- see this phase's
-      // report.
+      // `create` (not `upsert`) is what makes the one race this can't
+      // observe from a single SELECT -- the same viewer firing this twice
+      // at the same instant, before either request's SELECT above sees the
+      // other's not-yet-committed row -- fail safely instead of double-
+      // counting: the loser's create() hits the unique constraint on
+      // (postType, postId, viewerKey), the whole transaction array rolls
+      // back together (Prisma's array form is one transaction), and the
+      // catch below just logs it. The increment on the winning transaction
+      // still lands exactly once.
+      prisma.postView.create({ data: { postType: type, postId, viewerKey } }),
+      // `{ increment: 1 }` compiles to `SET view_count = view_count + 1` at
+      // the DB level -- never a read-then-write in application code -- so
+      // two genuinely concurrent *different* viewers never lose an
+      // increment to a race either.
       type === "lost"
         ? prisma.lostPost.update({ where: { id: postId }, data: { viewCount: { increment: 1 } } })
         : prisma.foundPost.update({ where: { id: postId }, data: { viewCount: { increment: 1 } } }),
     ]);
   } catch (error) {
-    // Most likely cause: the post was deleted between page load and this
-    // background call firing. Never surfaced to the viewer either way.
+    // Two expected causes, both silent by design: the post was deleted
+    // between page load and this background call firing, or the same
+    // viewer's own duplicate create() lost the unique-constraint race
+    // above. Never surfaced to the viewer either way.
     console.error("Failed to record post view", error);
   }
 }

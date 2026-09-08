@@ -8,7 +8,11 @@ import { prisma } from "@/lib/db/prisma";
 // into a Prisma `where: { publicId }` on that column raises a raw
 // "invalid input syntax for type uuid" DB error instead of a clean
 // not-found, so this is a pure input-shape guard, not a business rule.
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Exported (Phase L) so admin/users.ts can apply the exact same guard
+// before searching User.publicId -- that column is the same native `uuid`
+// type, so it needs the same "reject before it ever reaches Postgres"
+// treatment, not a second copy of this pattern.
+export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type PublicProfileDTO = {
   publicId: string;

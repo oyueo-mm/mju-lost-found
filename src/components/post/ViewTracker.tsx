@@ -10,8 +10,8 @@ import type { PostType } from "@/lib/posts/schema";
 // during render), so a slow/failed view-count write can never delay or
 // break the page the viewer came to read. `useRef` guards against
 // React 19 Strict Mode's dev-only double-invoke firing this twice locally
-// (recordPostViewAction's own dedup window would absorb that anyway, but
-// this avoids the redundant call entirely).
+// (recordPostViewAction's own one-per-viewer-per-post dedup would absorb
+// that anyway, but this avoids the redundant call entirely).
 export function ViewTracker({ type, postId }: { type: PostType; postId: number }) {
   const firedRef = useRef(false);
 
