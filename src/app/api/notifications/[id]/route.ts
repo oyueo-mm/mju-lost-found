@@ -1,11 +1,18 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-import { jsonError, jsonOk, requireUserForApi, withErrorHandling } from "@/lib/posts/http";
-import { deleteNotification, markNotificationAsRead } from "@/lib/notification/service";
+import { jsonError, requireUserForApi, withErrorHandling } from "@/lib/posts/http";
+import { deleteNotification, getUnreadNotificationCount, markNotificationAsRead } from "@/lib/notification/service";
 
 // PATCH /api/notifications/[id] -- marks one notification read. Ownership
 // is re-checked against the DB (see markNotificationAsRead); knowing
 // another user's notification id is not enough to touch it.
+//
+// Phase P-3: also returns this user's fresh unreadNotificationCount
+// alongside the updated notification -- NotificationItem.tsx dispatches it
+// to the header bell badge directly, the same fix already applied to
+// chat's unread badge (see ChatThread.tsx's own comment on why
+// router.refresh() alone wasn't a reliable signal for a same-URL shared-
+// layout update).
 export const PATCH = withErrorHandling(
   async (_request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const auth = await requireUserForApi();
@@ -19,8 +26,10 @@ export const PATCH = withErrorHandling(
 
     const result = await markNotificationAsRead(id, auth.user.id);
     switch (result.kind) {
-      case "ok":
-        return jsonOk(result.data);
+      case "ok": {
+        const unreadNotificationCount = await getUnreadNotificationCount(auth.user.id);
+        return NextResponse.json({ data: result.data, unreadNotificationCount });
+      }
       case "not_found":
         return jsonError(404, "알림을 찾을 수 없습니다.");
       case "forbidden":
@@ -47,8 +56,12 @@ export const DELETE = withErrorHandling(
 
     const result = await deleteNotification(id, auth.user.id);
     switch (result.kind) {
-      case "ok":
-        return jsonOk(result.data);
+      case "ok": {
+        // Phase P-3: deleting an unread notification also lowers the
+        // count -- same fresh-count-in-response fix as PATCH above.
+        const unreadNotificationCount = await getUnreadNotificationCount(auth.user.id);
+        return NextResponse.json({ data: result.data, unreadNotificationCount });
+      }
       case "not_found":
         return jsonError(404, "알림을 찾을 수 없습니다.");
       case "forbidden":

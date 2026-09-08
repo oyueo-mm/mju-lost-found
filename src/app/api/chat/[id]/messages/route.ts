@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { chatMutationResultToResponse, jsonError, requireUserForApi, withErrorHandling } from "@/lib/chat/http";
 import { listMessagesQuerySchema, sendMessageSchema, toggleReactionSchema } from "@/lib/chat/schema";
 import {
+  countUnreadMessagesForUser,
   listMessages,
   markChatRoomRead,
   markMessageNotificationsReadForChatRoom,
@@ -35,9 +36,18 @@ export const GET = withErrorHandling(
       return chatMutationResultToResponse(result);
     }
 
+    // Phase P-3: unreadChatCount is this user's fresh total across every
+    // room (not just this one) right after the read above -- included here
+    // so the caller (ChatThread) can push the header/BottomNav badge to
+    // the correct value immediately, without waiting on a full page
+    // navigation. See ChatThread.tsx's own comment on why router.refresh()
+    // alone wasn't a reliable enough signal for a same-URL shared-layout
+    // update in this app.
+    let unreadChatCount: number | undefined;
     try {
       await markChatRoomRead(id, auth.user.id);
       await markMessageNotificationsReadForChatRoom(id, auth.user.id);
+      unreadChatCount = await countUnreadMessagesForUser(auth.user.id);
     } catch (error) {
       console.error("Failed to mark chat room read on view:", error);
     }
@@ -45,6 +55,7 @@ export const GET = withErrorHandling(
     return NextResponse.json({
       data: result.data.items,
       pagination: { hasMore: result.data.hasMore },
+      unreadChatCount,
     });
   },
 );

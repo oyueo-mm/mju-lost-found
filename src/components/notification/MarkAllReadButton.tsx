@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { dispatchNotificationUnreadCount } from "@/components/notification/notificationUnreadEvent";
+
 export function MarkAllReadButton({ disabled }: { disabled: boolean }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -14,10 +16,18 @@ export function MarkAllReadButton({ disabled }: { disabled: boolean }) {
     setError(null);
     try {
       const res = await fetch("/api/notifications/read-all", { method: "POST" });
+      const json = await res.json().catch(() => null);
       if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        setError(json.error ?? "처리하지 못했습니다.");
+        setError(json?.error ?? "처리하지 못했습니다.");
         return;
+      }
+      // Phase P-3: pushes the header bell badge to 0 immediately -- same
+      // fresh-count-push fix as NotificationItem.tsx's own handleClick/
+      // handleDelete (router.refresh() below still keeps this page's own
+      // heading/list in sync, but doesn't reliably reach the shared
+      // layout's badge on its own -- see that file's comment).
+      if (typeof json?.unreadNotificationCount === "number") {
+        dispatchNotificationUnreadCount(json.unreadNotificationCount);
       }
       router.refresh();
     } catch {

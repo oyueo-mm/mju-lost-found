@@ -5,8 +5,9 @@ import { getUnreadNotificationCount } from "@/lib/notification/service";
 import { countUnreadMessagesForUser } from "@/lib/chat/service";
 import { isAdmin } from "@/lib/moderation/service";
 import { DesktopNav } from "./DesktopNav";
+import { NotificationBell } from "./NotificationBell";
 import { LogoMark } from "./Logo";
-import { BellIcon, UserIcon } from "@/components/icons";
+import { UserIcon } from "@/components/icons";
 import { LinkButton } from "@/components/ui/Button";
 
 // A Server Component, not a client one: the current user is read here and
@@ -48,18 +49,7 @@ export async function Header() {
         <div className="flex shrink-0 items-center gap-1.5">
           {user ? (
             <>
-              <Link
-                href="/notifications"
-                aria-label={`알림${unreadNotifications > 0 ? ` (읽지 않음 ${unreadNotifications}개)` : ""}`}
-                className="relative flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <BellIcon className="size-5" />
-                {unreadNotifications > 0 && (
-                  <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground">
-                    {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                  </span>
-                )}
-              </Link>
+              <NotificationBell unreadCount={unreadNotifications} />
               <Link
                 href="/me"
                 className="flex items-center gap-2 rounded-full py-1 pr-3 pl-1 text-sm font-medium text-foreground hover:bg-muted"

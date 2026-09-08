@@ -7,6 +7,7 @@ const requireUserForApi = vi.fn();
 const listMessages = vi.fn();
 const markChatRoomRead = vi.fn();
 const markMessageNotificationsReadForChatRoom = vi.fn();
+const countUnreadMessagesForUser = vi.fn();
 const sendMessage = vi.fn();
 const toggleMessageReaction = vi.fn();
 
@@ -19,6 +20,7 @@ vi.mock("@/lib/chat/service", () => ({
   listMessages,
   markChatRoomRead,
   markMessageNotificationsReadForChatRoom,
+  countUnreadMessagesForUser,
   sendMessage,
   toggleMessageReaction,
 }));
@@ -32,6 +34,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   markChatRoomRead.mockResolvedValue({ kind: "ok", data: { lastReadMessageId: null } });
   markMessageNotificationsReadForChatRoom.mockResolvedValue({ kind: "ok", data: { count: 0 } });
+  countUnreadMessagesForUser.mockResolvedValue(0);
 });
 
 describe("GET /api/chat/[id]/messages", () => {
@@ -68,14 +71,36 @@ describe("GET /api/chat/[id]/messages", () => {
     expect(markMessageNotificationsReadForChatRoom).toHaveBeenCalledWith(1, sessionUser.id);
   });
 
-  it("still returns messages even if marking read fails", async () => {
+  // Phase P-3: the client (ChatThread.tsx) uses this field to push the
+  // header/BottomNav badge to the correct value immediately, since
+  // router.refresh() alone was confirmed (real browser testing) not to
+  // reliably update that shared layout on the same /chat/[id] URL. This
+  // is this *authenticated caller's own* total across every room -- see
+  // countUnreadMessagesForUser's own scoping -- computed fresh right after
+  // the read above, never a value the client could have supplied itself.
+  it("includes this user's fresh total unread chat count, computed after marking this room read", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    listMessages.mockResolvedValueOnce({ kind: "ok", data: { items: [{ id: 1 }], hasMore: false } });
+    countUnreadMessagesForUser.mockResolvedValueOnce(2);
+
+    const res = await GET(new NextRequest("http://localhost/api/chat/1/messages"), params("1"));
+    const json = await res.json();
+
+    expect(json.unreadChatCount).toBe(2);
+    expect(countUnreadMessagesForUser).toHaveBeenCalledWith(sessionUser.id);
+  });
+
+  it("still returns messages even if marking read fails, with unreadChatCount omitted", async () => {
     requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
     listMessages.mockResolvedValueOnce({ kind: "ok", data: { items: [], hasMore: false } });
     markChatRoomRead.mockRejectedValueOnce(new Error("db error"));
 
     const res = await GET(new NextRequest("http://localhost/api/chat/1/messages"), params("1"));
+    const json = await res.json();
 
     expect(res.status).toBe(200);
+    expect(json.unreadChatCount).toBeUndefined();
+    expect(countUnreadMessagesForUser).not.toHaveBeenCalled();
   });
 
   it("passes the before cursor through", async () => {

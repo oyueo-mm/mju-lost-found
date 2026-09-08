@@ -7,6 +7,7 @@ import { uploadChatImage, validateImageFile } from "@/lib/images/client";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/time/relativeTime";
 import { MessageActionMenu } from "@/components/chat/MessageActionMenu";
 import { useChatRoomRealtime } from "@/components/chat/useChatRoomRealtime";
+import { dispatchChatUnreadCount } from "@/components/layout/chatUnreadEvent";
 
 // Phase D-3: mirrors chat/service.ts's MessageReplyPreview -- no
 // createdAt/etc, just enough to render an inline quote (sender + a short
@@ -95,6 +96,19 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
         }
         setMessages(json.data);
         setHasMore(json.pagination.hasMore);
+        // Phase P-3: this GET call already marks the room read server-side
+        // and now returns this user's fresh total unread count alongside
+        // the messages (see the route's own comment) -- dispatched here so
+        // the header/BottomNav badge (Server Component data, computed once
+        // per layout render -- see Header.tsx) updates immediately.
+        // router.refresh() was tried first (the same pattern
+        // NotificationItem.tsx/MarkAllReadButton use) but real browser
+        // testing showed it does not reliably update this shared layout's
+        // badge while staying on the same /chat/[id] URL -- only an actual
+        // page reload picked it up. This event sidesteps that: the exact
+        // number the server just computed for this user, pushed straight
+        // to the two components that render it, no cache-timing guesswork.
+        if (typeof json.unreadChatCount === "number") dispatchChatUnreadCount(json.unreadChatCount);
       } catch {
         if (!cancelled) setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
       }
@@ -130,6 +144,11 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
         return [...byId.values()].sort((a, b) => a.id - b.id);
       });
       setHasMore(json.pagination.hasMore);
+      // Phase P-3: same reasoning as loadInitial()'s own event dispatch
+      // above -- a realtime-triggered re-fetch marks the room read too
+      // (this is the "현재 채팅방을 보고 있음 -> 자동으로 읽음 처리" case), so
+      // the badge needs the same fresh count pushed to it immediately.
+      if (typeof json.unreadChatCount === "number") dispatchChatUnreadCount(json.unreadChatCount);
     } catch {
       // Silent -- a missed realtime-triggered refresh isn't worth surfacing
       // as an error banner; the next natural fetch (pagination, a future

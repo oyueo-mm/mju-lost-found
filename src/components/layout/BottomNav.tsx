@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { ADMIN_NAV_ITEM, NAV_ITEMS, isNavActive } from "./NavLinks";
+import { onChatUnreadCount } from "./chatUnreadEvent";
 import { HomeIcon, BoxIcon, HandboxIcon, ChatIcon, UserIcon, ShieldIcon } from "@/components/icons";
 
 const ICONS = {
@@ -19,9 +21,28 @@ const ICONS = {
 // horizontal nav takes over there, see that component). A client
 // component only for usePathname()'s active-tab highlighting; the unread
 // chat count is computed server-side (Header's own data fetch) and passed
-// down as a plain prop, so this never queries anything itself.
+// down as a plain prop -- this never queries anything itself.
+//
+// Phase P-3: that server prop is only fresh as of the last full
+// navigation/reload, so it's mirrored into local state and kept current
+// in between by listening for chatUnreadEvent's CustomEvent -- ChatThread
+// dispatches the server's own fresh count right after marking a room read.
+// See chatUnreadEvent.ts's own comment for why (router.refresh() alone
+// wasn't reliable for this same-URL shared-layout case).
 export function BottomNav({ unreadChatCount, isAdmin = false }: { unreadChatCount: number; isAdmin?: boolean }) {
   const pathname = usePathname();
+  const [prevUnreadChatCount, setPrevUnreadChatCount] = useState(unreadChatCount);
+  const [liveUnreadChatCount, setLiveUnreadChatCount] = useState(unreadChatCount);
+  // "Adjusting state when a prop changes" during render (not inside an
+  // effect -- see https://react.dev/learn/you-might-not-need-an-effect)
+  // -- resyncs whenever a real navigation/reload gives this component a
+  // new server-computed prop, keeping it as the baseline of truth; the
+  // event subscription below only ever nudges it forward in between.
+  if (unreadChatCount !== prevUnreadChatCount) {
+    setPrevUnreadChatCount(unreadChatCount);
+    setLiveUnreadChatCount(unreadChatCount);
+  }
+  useEffect(() => onChatUnreadCount(setLiveUnreadChatCount), []);
   // Phase 31: appended, never a permanent member of NAV_ITEMS -- see
   // ADMIN_NAV_ITEM's own comment in NavLinks.ts for why.
   const items = isAdmin ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
@@ -36,7 +57,7 @@ export function BottomNav({ unreadChatCount, isAdmin = false }: { unreadChatCoun
         {items.map((item) => {
           const Icon = ICONS[item.key];
           const active = isNavActive(item.key, item.href, pathname);
-          const badge = item.key === "chat" && unreadChatCount > 0 ? unreadChatCount : null;
+          const badge = item.key === "chat" && liveUnreadChatCount > 0 ? liveUnreadChatCount : null;
           return (
             <li key={item.key} className="flex-1">
               <Link

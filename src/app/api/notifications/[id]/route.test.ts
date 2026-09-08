@@ -6,12 +6,17 @@ import { jsonError } from "@/lib/posts/response";
 const requireUserForApi = vi.fn();
 const markNotificationAsRead = vi.fn();
 const deleteNotification = vi.fn();
+const getUnreadNotificationCount = vi.fn();
 
 vi.mock("@/lib/posts/http", async () => {
   const response = await import("@/lib/posts/response");
   return { ...response, requireUserForApi };
 });
-vi.mock("@/lib/notification/service", () => ({ markNotificationAsRead, deleteNotification }));
+vi.mock("@/lib/notification/service", () => ({
+  markNotificationAsRead,
+  deleteNotification,
+  getUnreadNotificationCount,
+}));
 
 const { DELETE, PATCH } = await import("./route");
 
@@ -20,6 +25,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getUnreadNotificationCount.mockResolvedValue(0);
 });
 
 describe("PATCH /api/notifications/[id]", () => {
@@ -60,6 +66,21 @@ describe("PATCH /api/notifications/[id]", () => {
     expect(res.status).toBe(200);
     expect(json.data.isRead).toBe(true);
     expect(markNotificationAsRead).toHaveBeenCalledWith(1, sessionUser.id);
+  });
+
+  // Phase P-3: NotificationItem.tsx dispatches this to the header bell
+  // badge directly (see that component's own comment) -- router.refresh()
+  // alone wasn't a reliable signal for that same-URL shared-layout update.
+  it("includes this user's fresh unreadNotificationCount after marking read", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    markNotificationAsRead.mockResolvedValueOnce({ kind: "ok", data: { id: 1, isRead: true } });
+    getUnreadNotificationCount.mockResolvedValueOnce(3);
+
+    const res = await PATCH(new NextRequest("http://localhost/api/notifications/1", { method: "PATCH" }), params("1"));
+    const json = await res.json();
+
+    expect(json.unreadNotificationCount).toBe(3);
+    expect(getUnreadNotificationCount).toHaveBeenCalledWith(sessionUser.id);
   });
 });
 
@@ -114,5 +135,19 @@ describe("DELETE /api/notifications/[id]", () => {
     expect(res.status).toBe(200);
     expect(json.data.id).toBe(1);
     expect(deleteNotification).toHaveBeenCalledWith(1, sessionUser.id);
+  });
+
+  it("includes this user's fresh unreadNotificationCount after deleting", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    deleteNotification.mockResolvedValueOnce({ kind: "ok", data: { id: 1 } });
+    getUnreadNotificationCount.mockResolvedValueOnce(1);
+
+    const res = await DELETE(
+      new NextRequest("http://localhost/api/notifications/1", { method: "DELETE" }),
+      params("1"),
+    );
+    const json = await res.json();
+
+    expect(json.unreadNotificationCount).toBe(1);
   });
 });

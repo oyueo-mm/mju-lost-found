@@ -3,6 +3,7 @@
 import { useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
 
+import { dispatchNotificationUnreadCount } from "@/components/notification/notificationUnreadEvent";
 import { AlertIcon, BellIcon, ChatBubbleIcon, ChatIcon, HandboxIcon, ShieldIcon } from "@/components/icons";
 
 // Phase E-2: one icon per NotificationType's lowercase string (see
@@ -74,6 +75,16 @@ export function NotificationItem({
         const res = await fetch(`/api/notifications/${id}`, { method: "PATCH" });
         if (res.ok) {
           setIsRead(true);
+          const json = await res.json().catch(() => null);
+          // Phase P-3: pushes the header bell badge to the fresh count
+          // immediately -- router.refresh() below still keeps this page's
+          // own "읽지 않은 알림 N개" heading/pagination in sync, but real
+          // browser testing showed it alone doesn't reliably update the
+          // shared layout's bell badge (same issue ChatThread.tsx's own
+          // comment describes for the chat badge).
+          if (typeof json?.unreadNotificationCount === "number") {
+            dispatchNotificationUnreadCount(json.unreadNotificationCount);
+          }
           router.refresh();
         }
       } catch {
@@ -103,12 +114,17 @@ export function NotificationItem({
     setDeleteError(null);
     try {
       const res = await fetch(`/api/notifications/${id}`, { method: "DELETE" });
+      const json = await res.json().catch(() => null);
       if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        setDeleteError(json.error ?? "삭제하지 못했습니다.");
+        setDeleteError(json?.error ?? "삭제하지 못했습니다.");
         return;
       }
       setRemoved(true);
+      // Phase P-3: same fresh-count push as handleClick above -- deleting
+      // an unread notification lowers the count too.
+      if (typeof json?.unreadNotificationCount === "number") {
+        dispatchNotificationUnreadCount(json.unreadNotificationCount);
+      }
       router.refresh();
     } catch {
       setDeleteError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
