@@ -91,6 +91,12 @@ export default async function AdminUsersPage({
                     publicId={u.publicId}
                     className="font-medium text-foreground hover:underline"
                   />
+                  {/* Phase P-1: opens the admin-only detail view (계정/접속/
+                      활동/제재 정보) -- distinct from the public-profile
+                      link AuthorLink above already provides. */}
+                  <Link href={`/admin/users/${u.id}`} className="text-xs text-primary hover:underline">
+                    상세보기
+                  </Link>
                   {u.isAdmin && (
                     <span className="rounded-full bg-primary-muted px-2 py-0.5 text-[11px] font-medium text-primary">
                       관리자

@@ -8,6 +8,7 @@ import {
 import { isAdmin } from "@/lib/moderation/service";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { UUID_PATTERN } from "@/lib/user/service";
+import { listCommentsByUser, type MyCommentDTO } from "@/lib/comment/service";
 import type { AdminUserAction } from "./schema";
 
 // Phase 28-1: reuses the exact same User.isAdmin/isSuspended columns and
@@ -60,6 +61,94 @@ function toAdminUserDTO(row: UserWithSuspendedBy): AdminUserDTO {
     currentlySuspended: isCurrentlySuspended(row),
     suspendedByNickname: row.suspendedBy?.nickname ?? null,
     createdAt: row.createdAt,
+  };
+}
+
+// Phase P-1: admin-only detail view (/admin/users/[id]) -- everything here
+// is either already stored on User (never derived/guessed) or a plain count
+// over an existing relation. No new "학과/전공" field: this app's User model
+// has no such column, and Google's OAuth scope this app requests (default
+// profile+email, see auth/auth.ts) never returns one either, so nothing here
+// invents one. Deliberately grouped to mirror the UI's own section headers
+// (기본 정보/계정 정보/접속 정보/활동 정보/제재·신고 정보) rather than one flat
+// object, so the page component doesn't have to re-derive the grouping.
+export type AdminUserDetailDTO = {
+  user: AdminUserDTO;
+  // Google profile display name (User.name) -- distinct from the
+  // user-editable `nickname` shown everywhere else in the app. Admin-only
+  // context, so shown here as a secondary identity signal, never surfaced
+  // on the public profile.
+  name: string;
+  googleLinked: boolean;
+  // Phase P-1: real "last completed sign-in" (see User.lastLoginAt's own
+  // schema comment) -- null for a user who predates this column. Never a
+  // computed/derived "currently online" value -- see this file's own
+  // comment on why that's deliberately NOT shown: a valid-but-idle session
+  // would falsely read as online, and this app's JWT sessions carry no
+  // server-side presence/heartbeat signal to distinguish the two (see
+  // auth/auth.ts's own comment on the JWT strategy). Implementing real
+  // presence would need either a heartbeat endpoint hit on every page view
+  // or a Realtime presence channel outside chat's existing per-room one --
+  // both a bigger change than this phase's "최소 변경" scope, so this phase
+  // reports lastLoginAt only and leaves presence for a dedicated phase.
+  lastLoginAt: Date | null;
+  lostPostCount: number;
+  foundPostCount: number;
+  commentCount: number;
+  // Phase P-1 follow-up: the actual comments this user wrote, not just a
+  // count -- reuses listCommentsByUser() unchanged (the exact same query
+  // /me/comments already runs), just called with the *target* user's id
+  // instead of the caller's own. That function has no "self only"
+  // restriction (it's a plain userId parameter), so no new query/DTO shape
+  // was needed here.
+  comments: MyCommentDTO[];
+  // Reports filed BY this user (as reporter), vs reports filed AGAINST this
+  // user directly (Report.targetType === USER, targetId === this user's id
+  // -- see report/targets.ts's resolveUserTarget, no sign-encoding needed
+  // for this target type). Deliberately excludes reports against this
+  // user's individual posts/comments/messages (a much larger, separate
+  // query) -- that detail already lives on the reported post/comment itself
+  // via /admin/reports, not duplicated here.
+  reportsFiledCount: number;
+  reportsAgainstCount: number;
+};
+
+export async function getUserDetailForAdmin(
+  admin: User,
+  targetUserId: number,
+): Promise<AdminUserMutationResult<AdminUserDetailDTO>> {
+  if (!isAdmin(admin)) return { kind: "forbidden" };
+
+  const row = await prisma.user.findUnique({
+    where: { id: targetUserId },
+    include: { suspendedBy: { select: { nickname: true } } },
+  });
+  if (!row) return { kind: "not_found" };
+
+  const [lostPostCount, foundPostCount, commentCount, reportsFiledCount, reportsAgainstCount, comments] =
+    await Promise.all([
+      prisma.lostPost.count({ where: { userId: targetUserId } }),
+      prisma.foundPost.count({ where: { userId: targetUserId } }),
+      prisma.comment.count({ where: { authorUserId: targetUserId } }),
+      prisma.report.count({ where: { reporterUserId: targetUserId } }),
+      prisma.report.count({ where: { targetType: ReportTargetType.USER, targetId: targetUserId } }),
+      listCommentsByUser(targetUserId),
+    ]);
+
+  return {
+    kind: "ok",
+    data: {
+      user: toAdminUserDTO(row),
+      name: row.name,
+      googleLinked: row.googleId !== null,
+      lastLoginAt: row.lastLoginAt,
+      lostPostCount,
+      foundPostCount,
+      commentCount,
+      reportsFiledCount,
+      reportsAgainstCount,
+      comments,
+    },
   };
 }
 

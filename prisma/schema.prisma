@@ -146,6 +146,17 @@ model User {
   // via /me yet -- always allowed, same as every existing user before this
   // migration.
   nicknameChangeAvailableAt DateTime? @map("nickname_change_available_at")
+  // Phase P-1: distinct from createdAt (account creation, once) -- set every
+  // time this user actually completes a Google sign-in (auth/user.ts's
+  // resolveOrCreateUser, called from the jwt callback's `account`-present
+  // branch, i.e. real login exchanges only, never a plain JWT-cookie
+  // refresh). Null for a user who has never triggered that upsert path
+  // (shouldn't happen in practice -- account creation and first login are
+  // the same event here -- but nullable rather than defaulted to `now()`
+  // so a data anomaly reads as "unknown", never a fabricated timestamp).
+  // Deliberately NOT a "currently online" signal -- see admin/users.ts's
+  // getUserDetailForAdmin for why presence isn't derived from this alone.
+  lastLoginAt     DateTime? @map("last_login_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 

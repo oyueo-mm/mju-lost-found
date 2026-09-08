@@ -10,16 +10,23 @@ export async function resolveOrCreateUser(params: {
   name: string | null;
   googleId: string;
 }) {
+  // Phase P-1: this upsert only ever runs from the jwt callback's
+  // `account`-present branch -- i.e. a real Google sign-in exchange, never
+  // a plain JWT-cookie refresh on a later request -- so `now()` here is a
+  // true "last login" timestamp, not merely "session still valid" (see
+  // User.lastLoginAt's own schema comment).
   return prisma.user.upsert({
     where: { email: params.email },
     update: {
       googleId: params.googleId,
       name: params.name ?? undefined,
+      lastLoginAt: new Date(),
     },
     create: {
       email: params.email,
       name: params.name ?? params.email.split("@")[0],
       googleId: params.googleId,
+      lastLoginAt: new Date(),
     },
   });
 }

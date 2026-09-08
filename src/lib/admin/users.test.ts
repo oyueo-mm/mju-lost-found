@@ -13,8 +13,16 @@ const notification = { create: vi.fn() };
 // to the tx object alongside user/notification, same shape.
 const moderationAction = { create: vi.fn() };
 const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn({ user, notification, moderationAction }));
+// Phase P-1: getUserDetailForAdmin's own count queries -- separate spies
+// per table, same convention as the rest of this mock.
+const lostPost = { count: vi.fn() };
+const foundPost = { count: vi.fn() };
+const comment = { count: vi.fn(), findMany: vi.fn() };
+const report = { count: vi.fn() };
 
-vi.mock("@/lib/db/prisma", () => ({ prisma: { user, notification, moderationAction, $transaction } }));
+vi.mock("@/lib/db/prisma", () => ({
+  prisma: { user, notification, moderationAction, lostPost, foundPost, comment, report, $transaction },
+}));
 // isAdmin() is a one-line `return user.isAdmin` in moderation/service.ts,
 // but that module also pulls in report/service.ts and report/targets.ts --
 // mocked wholesale here (same convention other route/service tests in this
@@ -29,7 +37,7 @@ vi.mock("@/generated/prisma/client", () => ({
   ReportTargetType: { USER: "USER" },
 }));
 
-const { listUsersForAdmin, updateUserByAdmin } = await import("./users");
+const { listUsersForAdmin, updateUserByAdmin, getUserDetailForAdmin } = await import("./users");
 
 const admin = { id: 1, isAdmin: true };
 const nonAdmin = { id: 2, isAdmin: false };
@@ -414,6 +422,106 @@ describe("updateUserByAdmin", () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  describe("getUserDetailForAdmin", () => {
+    it("rejects a non-admin caller", async () => {
+      const result = await getUserDetailForAdmin(nonAdmin as never, 5);
+      expect(result).toEqual({ kind: "forbidden" });
+      expect(user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it("returns not_found for a missing target user", async () => {
+      user.findUnique.mockResolvedValueOnce(null);
+
+      const result = await getUserDetailForAdmin(admin as never, 999);
+
+      expect(result).toEqual({ kind: "not_found" });
+    });
+
+    it("returns grouped detail info, including counts and lastLoginAt, for a real target user", async () => {
+      user.findUnique.mockResolvedValueOnce({
+        ...baseRow,
+        name: "홍길동",
+        googleId: "google-sub-5",
+        lastLoginAt: new Date("2026-02-01T00:00:00.000Z"),
+      });
+      lostPost.count.mockResolvedValueOnce(2);
+      foundPost.count.mockResolvedValueOnce(1);
+      comment.count.mockResolvedValueOnce(4);
+      report.count.mockResolvedValueOnce(3); // reportsFiledCount
+      report.count.mockResolvedValueOnce(1); // reportsAgainstCount
+      comment.findMany.mockResolvedValueOnce([]);
+
+      const result = await getUserDetailForAdmin(admin as never, 5);
+
+      expect(result.kind).toBe("ok");
+      if (result.kind !== "ok") return;
+      expect(result.data).toEqual(
+        expect.objectContaining({
+          name: "홍길동",
+          googleLinked: true,
+          lastLoginAt: new Date("2026-02-01T00:00:00.000Z"),
+          lostPostCount: 2,
+          foundPostCount: 1,
+          commentCount: 4,
+          reportsFiledCount: 3,
+          reportsAgainstCount: 1,
+        }),
+      );
+      expect(result.data.user.id).toBe(5);
+      // Reports-against-this-user query targets the user directly (no
+      // sign-encoding, unlike a post target) -- see report/targets.ts's
+      // resolveUserTarget.
+      expect(report.count).toHaveBeenNthCalledWith(2, { where: { targetType: "USER", targetId: 5 } });
+    });
+
+    it("reports googleLinked as false when the user never linked a Google account", async () => {
+      user.findUnique.mockResolvedValueOnce({ ...baseRow, name: "홍길동", googleId: null, lastLoginAt: null });
+      lostPost.count.mockResolvedValueOnce(0);
+      foundPost.count.mockResolvedValueOnce(0);
+      comment.count.mockResolvedValueOnce(0);
+      report.count.mockResolvedValueOnce(0);
+      report.count.mockResolvedValueOnce(0);
+      comment.findMany.mockResolvedValueOnce([]);
+
+      const result = await getUserDetailForAdmin(admin as never, 5);
+
+      expect(result.kind).toBe("ok");
+      if (result.kind !== "ok") return;
+      expect(result.data.googleLinked).toBe(false);
+      expect(result.data.lastLoginAt).toBeNull();
+    });
+
+    it("includes the target user's own comments (via listCommentsByUser), not just a count", async () => {
+      user.findUnique.mockResolvedValueOnce({ ...baseRow, name: "홍길동", googleId: "google-sub-5", lastLoginAt: null });
+      lostPost.count.mockResolvedValueOnce(0);
+      foundPost.count.mockResolvedValueOnce(0);
+      comment.count.mockResolvedValueOnce(1);
+      report.count.mockResolvedValueOnce(0);
+      report.count.mockResolvedValueOnce(0);
+      comment.findMany.mockResolvedValueOnce([
+        {
+          id: 42,
+          content: "댓글 내용",
+          createdAt: new Date("2026-02-01T00:00:00.000Z"),
+          parentId: null,
+          lostPost: { id: 7, title: "지갑 찾아요" },
+          foundPost: null,
+          parent: null,
+        },
+      ]);
+
+      const result = await getUserDetailForAdmin(admin as never, 5);
+
+      expect(result.kind).toBe("ok");
+      if (result.kind !== "ok") return;
+      expect(result.data.comments).toEqual([
+        expect.objectContaining({ id: 42, content: "댓글 내용", post: { id: 7, type: "lost", title: "지갑 찾아요" } }),
+      ]);
+      // listCommentsByUser queries by the *target* user's id, not the admin's.
+      expect(comment.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { authorUserId: 5 } }));
     });
   });
 });

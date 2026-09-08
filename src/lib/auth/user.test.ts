@@ -62,4 +62,24 @@ describe("resolveOrCreateUser", () => {
       }),
     );
   });
+
+  // Phase P-1: this function is only ever called from the jwt callback's
+  // `account`-present branch (a real sign-in exchange), so stamping
+  // lastLoginAt here is a true "last login", not "session still valid".
+  it("stamps lastLoginAt on both the create and update branches", async () => {
+    upsert.mockResolvedValueOnce({ id: 1, email: "existing@mju.ac.kr" });
+
+    await resolveOrCreateUser({
+      email: "existing@mju.ac.kr",
+      name: "Existing User",
+      googleId: "google-sub-1",
+    });
+
+    expect(upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ lastLoginAt: expect.any(Date) }),
+        create: expect.objectContaining({ lastLoginAt: expect.any(Date) }),
+      }),
+    );
+  });
 });
