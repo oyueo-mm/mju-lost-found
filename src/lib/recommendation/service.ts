@@ -72,19 +72,48 @@ export async function invalidateRecommendationCache(sourceType: PostType, source
   await prisma.matchCandidateCache.deleteMany({ where: { sourceType, sourcePostId } });
 }
 
-// Phase J-2 section 6: combines a candidate's text score and image score by
-// plain unweighted average when both are present, or uses whichever single
-// score is present otherwise -- "존재하는 신호만 사용" (no candidate is
-// penalized for a signal it never had a chance to have, e.g. a post with no
-// image), and no new tunable weight is introduced (an unweighted average of
-// however many signals exist isn't a parameter to tune).
-function combineRankings(text: VectorSearchResult[], image: VectorSearchResult[]): RankedCandidate[] {
-  const scoresById = new Map<number, number[]>();
-  for (const r of text) scoresById.set(r.id, [...(scoresById.get(r.id) ?? []), r.score]);
-  for (const r of image) scoresById.set(r.id, [...(scoresById.get(r.id) ?? []), r.score]);
+// Phase O-3 found that text and image cosine similarity sit on different
+// absolute scales (image's baseline runs consistently higher and narrower
+// than text's, regardless of actual relevance -- see docs/AI recommendation
+// quality analysis), so a plain average of the two raw scores structurally
+// favors any candidate that happens to have an image, independent of how
+// relevant it actually is. Min-max normalizing each signal across the
+// current candidate union before averaging removes that scale bias without
+// introducing a hand-picked weight (Phase O-4 constraint).
+function minMaxNormalize(scoresById: Map<number, number>): Map<number, number> {
+  const values = [...scoresById.values()];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  // All candidates tied on this signal -- it carries no discriminating
+  // information for this ranking, so it shouldn't drag anyone down (an
+  // arbitrary 0 would look like "worst possible", which isn't true here).
+  // Treating every candidate as equally maximal keeps the signal neutral.
+  if (max === min) return new Map([...scoresById.keys()].map((id) => [id, 1]));
+  return new Map([...scoresById.entries()].map(([id, score]) => [id, (score - min) / (max - min)]));
+}
 
-  return [...scoresById.entries()]
-    .map(([id, scores]) => ({ id, score: scores.reduce((sum, s) => sum + s, 0) / scores.length }))
+// Phase J-2 section 6 / Phase O-4: combines a candidate's text score and
+// image score by averaging their normalized values when both are present,
+// or uses whichever single (raw) score is present otherwise -- "존재하는
+// 신호만 사용" (no candidate is penalized for a signal it never had a chance
+// to have, e.g. a post with no image). Normalization runs over the final
+// candidate union (both signals' pooled ids), not each signal's own
+// independent ranking, so a candidate's normalized score reflects how it
+// compares to the other candidates actually being ranked alongside it here.
+function combineRankings(text: VectorSearchResult[], image: VectorSearchResult[]): RankedCandidate[] {
+  const textById = new Map(text.map((r) => [r.id, r.score]));
+  const imageById = new Map(image.map((r) => [r.id, r.score]));
+  const normalizedText = textById.size > 0 ? minMaxNormalize(textById) : textById;
+  const normalizedImage = imageById.size > 0 ? minMaxNormalize(imageById) : imageById;
+
+  const allIds = new Set([...textById.keys(), ...imageById.keys()]);
+  return [...allIds]
+    .map((id) => {
+      const scores = [normalizedText.get(id), normalizedImage.get(id)].filter(
+        (s): s is number => s !== undefined,
+      );
+      return { id, score: scores.reduce((sum, s) => sum + s, 0) / scores.length };
+    })
     .sort((a, b) => b.score - a.score || a.id - b.id);
 }
 
