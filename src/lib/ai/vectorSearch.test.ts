@@ -85,6 +85,34 @@ describe("findSimilarPosts", () => {
 
     await expect(findSimilarPosts("lost", 1, 5)).rejects.toThrow(EmbeddingNotAvailableError);
   });
+
+  // Phase O-2: a completed/closed post is a real answer already, not a
+  // useful recommendation -- excluded from the candidate query itself
+  // (never a post-hoc JS filter, same reasoning as the NULL-embedding
+  // exclusion above).
+  it("excludes completed FoundPost candidates when the source is a LostPost", async () => {
+    $queryRaw
+      .mockResolvedValueOnce([]) // main search: no rows
+      .mockResolvedValueOnce([{ present: true }]); // hasEmbedding check: source has one, so this is a real (filtered) empty result
+
+    await findSimilarPosts("lost", 1, 5);
+
+    const [call] = $queryRaw.mock.calls[0];
+    const sqlText = (call as TemplateStringsArray).join("?");
+    expect(sqlText).toContain(`fp.status != '완료'::"FoundPostStatus"`);
+  });
+
+  it("excludes found (matched) LostPost candidates when the source is a FoundPost", async () => {
+    $queryRaw
+      .mockResolvedValueOnce([]) // main search: no rows
+      .mockResolvedValueOnce([{ present: true }]); // hasEmbedding check: source has one, so this is a real (filtered) empty result
+
+    await findSimilarPosts("found", 3, 5);
+
+    const [call] = $queryRaw.mock.calls[0];
+    const sqlText = (call as TemplateStringsArray).join("?");
+    expect(sqlText).toContain(`lp.status != '찾음'::"LostPostStatus"`);
+  });
 });
 
 // Phase 12: free-text semantic search. Unlike findSimilarPosts()'s
@@ -394,6 +422,28 @@ describe("findSimilarPostsByImage", () => {
 
     const [call] = $queryRaw.mock.calls;
     expect(boundValues(call)).toEqual([1, 4]);
+  });
+
+  // Phase O-2: same completed/closed exclusion as findSimilarPosts() above,
+  // applied to the image-similarity candidate query too.
+  it("excludes completed FoundPost candidates when the source is a LostPost", async () => {
+    $queryRaw.mockResolvedValueOnce([]);
+
+    await findSimilarPostsByImage("lost", 1, 10);
+
+    const [call] = $queryRaw.mock.calls;
+    const sqlText = (call[0] as TemplateStringsArray).join("?");
+    expect(sqlText).toContain(`fp.status != '완료'::"FoundPostStatus"`);
+  });
+
+  it("excludes found (matched) LostPost candidates when the source is a FoundPost", async () => {
+    $queryRaw.mockResolvedValueOnce([]);
+
+    await findSimilarPostsByImage("found", 3, 10);
+
+    const [call] = $queryRaw.mock.calls;
+    const sqlText = (call[0] as TemplateStringsArray).join("?");
+    expect(sqlText).toContain(`lp.status != '찾음'::"LostPostStatus"`);
   });
 });
 

@@ -48,6 +48,7 @@ export async function findSimilarPosts(
           SELECT fp.id AS id, 1 - (fp.embedding <=> source.embedding) AS similarity
           FROM "FoundPost" fp, source
           WHERE fp.embedding IS NOT NULL AND source.embedding IS NOT NULL
+            AND fp.status != '완료'::"FoundPostStatus"
           ORDER BY fp.embedding <=> source.embedding
           LIMIT ${topK}
         `
@@ -58,6 +59,7 @@ export async function findSimilarPosts(
           SELECT lp.id AS id, 1 - (lp.embedding <=> source.embedding) AS similarity
           FROM "LostPost" lp, source
           WHERE lp.embedding IS NOT NULL AND source.embedding IS NOT NULL
+            AND lp.status != '찾음'::"LostPostStatus"
           ORDER BY lp.embedding <=> source.embedding
           LIMIT ${topK}
         `;
@@ -223,6 +225,7 @@ export async function findSimilarPostsByImage(
           SELECT fp.id AS id, 1 - (fp."imageEmbedding" <=> source."imageEmbedding") AS similarity
           FROM "FoundPost" fp, source
           WHERE fp."imageEmbedding" IS NOT NULL AND source."imageEmbedding" IS NOT NULL
+            AND fp.status != '완료'::"FoundPostStatus"
           ORDER BY fp."imageEmbedding" <=> source."imageEmbedding"
           LIMIT ${topK}
         `
@@ -233,6 +236,7 @@ export async function findSimilarPostsByImage(
           SELECT lp.id AS id, 1 - (lp."imageEmbedding" <=> source."imageEmbedding") AS similarity
           FROM "LostPost" lp, source
           WHERE lp."imageEmbedding" IS NOT NULL AND source."imageEmbedding" IS NOT NULL
+            AND lp.status != '찾음'::"LostPostStatus"
           ORDER BY lp."imageEmbedding" <=> source."imageEmbedding"
           LIMIT ${topK}
         `;
