@@ -3,7 +3,7 @@ import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { NotificationType, Prisma, type User } from "@/generated/prisma/client";
 import type { PostType } from "@/lib/posts/schema";
 import { parseChatImagePathname } from "@/lib/images/pathname";
-import { publicUrlFor } from "@/lib/images/supabaseAdmin";
+import { deleteObjectSafely, publicUrlFor } from "@/lib/images/supabaseAdmin";
 import { broadcastChatEvent } from "./realtimeAdmin";
 import { MESSAGE_PAGE_SIZE } from "./schema";
 
@@ -872,7 +872,7 @@ export async function deleteMessage(
 
   const existing = await prisma.message.findUnique({
     where: { id: messageId },
-    select: { chatRoomId: true, senderUserId: true, hiddenAt: true },
+    select: { chatRoomId: true, senderUserId: true, hiddenAt: true, imageUrl: true },
   });
   if (!existing || existing.chatRoomId !== chatRoomId) return { kind: "invalid_message" };
   if (existing.senderUserId !== requester.id && !requester.isAdmin) {
@@ -884,10 +884,36 @@ export async function deleteMessage(
   // never an error, matching toggleMessageReaction's own "recover, don't
   // reject" handling of a redundant action.
   if (!existing.hiddenAt) {
+    // Phase 10B: `hiddenByUserId === senderUserId` (i.e. the sender is
+    // deleting their own message, whether or not they happen to also be
+    // an admin) is the same self-delete disambiguation maskedContent()
+    // already uses to pick the "삭제된 메시지입니다." placeholder over the
+    // admin-hidden one. Only that case purges the Storage image: an admin
+    // deleting *someone else's* message (this same bypass path) or the
+    // separate moderation/service.ts HIDE_MESSAGE flow both leave
+    // `hiddenByUserId !== senderUserId`, and their images are
+    // deliberately preserved -- the reported photo may still be needed as
+    // evidence for a later review, the same reason Report/ModerationAction
+    // rows themselves are never purged (see Phase 10A's retention policy).
+    const isSelfDelete = existing.senderUserId === requester.id;
+    const imageToDelete = isSelfDelete ? existing.imageUrl : null;
+
+    // DB write first, Storage cleanup after -- same order/reasoning as
+    // posts/service.ts's deleteLostPost: the message is already hidden in
+    // the DB either way, so a Storage failure here is only logged (see
+    // deleteObjectSafely's own try/catch), never surfaced as a failed
+    // delete or left inconsistent with what's displayed (imageUrl: null
+    // and hiddenAt together are what MessageDTO/hasImage already key off).
     await prisma.message.update({
       where: { id: messageId },
-      data: { hiddenAt: new Date(), hiddenByUserId: requester.id, hiddenReason: null },
+      data: {
+        hiddenAt: new Date(),
+        hiddenByUserId: requester.id,
+        hiddenReason: null,
+        ...(imageToDelete ? { imageUrl: null } : {}),
+      },
     });
+    if (imageToDelete) await deleteObjectSafely(imageToDelete);
     void broadcastChatEvent(chatRoomId, { event: "message", payload: { messageId } });
   }
 

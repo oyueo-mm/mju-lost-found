@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { Header } from "@/components/layout/Header";
+import { Footer } from "@/components/layout/Footer";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
@@ -38,10 +39,13 @@ export default async function MainLayout({ children }: { children: React.ReactNo
   return (
     <div className="flex flex-1 flex-col">
       <Header />
-      {/* pb-20: clears BottomNav's fixed height on mobile so the last bit
-          of page content is never hidden underneath it; md:pb-0 removes
-          that reservation once BottomNav itself is hidden (md:hidden). */}
-      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 pb-20 md:px-6 md:py-10 md:pb-10">{children}</main>
+      {/* Phase 9: BottomNav-clearance padding (pb-20/no-pb on md+) moved
+          off this <main> and onto Footer below, now that Footer -- not
+          this <main> -- is the last element in the page flow that a fully
+          scrolled page can leave sitting under the fixed BottomNav. Plain
+          py-6/md:py-10 here is just this page's own content padding. */}
+      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 md:px-6 md:py-10">{children}</main>
+      <Footer />
       <BottomNav unreadChatCount={unreadChat} isAdmin={Boolean(user && isAdmin(user))} />
     </div>
   );

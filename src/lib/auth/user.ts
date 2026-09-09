@@ -52,3 +52,57 @@ export async function recordPrivacyConsent(userId: number) {
   });
   return prisma.user.findUniqueOrThrow({ where: { id: userId } });
 }
+
+// Phase 10: account withdrawal -- deliberately NOT prisma.user.delete().
+// Almost every FK from another table to User is onDelete: Restrict (see
+// schema.prisma: LostPost/FoundPost.user, Comment.author, Message.sender,
+// Report.reporter/processedBy, ModerationAction.adminUser,
+// SuspensionAppeal.user/reviewedBy, ...) specifically so a real User row
+// can never be hard-deleted out from under content other people still
+// see (another user's chat thread, a report history, a moderation
+// record) -- a hard delete would either throw on the very first FK it
+// hits, or (if those constraints were loosened) silently cascade real
+// data away from other users, which this phase's own spec explicitly
+// forbids. Instead this anonymizes the row in place: the account becomes
+// permanently unusable (see session.ts's getCurrentUser, which now treats
+// any user with deletedAt set as logged-out) and personally-identifying
+// fields are scrubbed, while every row that references this user's id
+// (their own posts/comments/messages, and anyone else's reports/
+// moderation actions naming them) keeps working exactly as before --
+// those rows just render this user's new anonymized name/nickname, the
+// same "author no longer available" treatment AuthorLink already gives a
+// null nickname elsewhere, just spelled out explicitly here instead.
+//
+// email/googleId are freed (not merely blanked) so the same real person
+// signing in again later with the same Google account is treated as a
+// brand-new user by resolveOrCreateUser()'s own email-based upsert above
+// -- a fresh row, fresh onboarding, fresh consent, no link back to the
+// withdrawn account's history.
+//
+// Idempotent via the same "only if still unset" updateMany guard
+// recordPrivacyConsent() above uses -- a second call (double-submit, or
+// hitting the API directly again) matches zero rows and leaves the
+// already-withdrawn row untouched.
+export async function withdrawUser(userId: number) {
+  return prisma.$transaction(async (tx) => {
+    const { count } = await tx.user.updateMany({
+      where: { id: userId, deletedAt: null },
+      data: {
+        deletedAt: new Date(),
+        email: `deleted-user-${userId}@withdrawn.invalid`,
+        name: "탈퇴한 사용자",
+        nickname: "탈퇴한 사용자",
+        googleId: null,
+        isAdmin: false,
+      },
+    });
+    if (count > 0) {
+      // Notifications are private to this user alone -- nobody else's
+      // data references them, unlike everything else this function
+      // deliberately leaves in place. No policy change to
+      // posts/comments/chat: those are untouched.
+      await tx.notification.deleteMany({ where: { userId } });
+    }
+    return tx.user.findUniqueOrThrow({ where: { id: userId } });
+  });
+}

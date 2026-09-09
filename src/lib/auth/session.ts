@@ -12,6 +12,18 @@ import type { User } from "@/generated/prisma/client";
 // read from client-controlled state). Returns null for both "not logged
 // in" and "session points at a User that no longer exists".
 //
+// Phase 10: also returns null for a withdrawn account (User.deletedAt
+// set) -- withdrawal never deletes the row itself (see auth/user.ts's
+// withdrawUser for why), so a still-valid session cookie from before
+// withdrawal would otherwise keep resolving to a real row here. This one
+// check is what makes withdrawal actually take effect everywhere in the
+// app: every existing call site (requireUser, requireReadyUser,
+// requireUserForApi, (main)/layout.tsx, ...) already treats a null return
+// as "not signed in" with zero changes needed on their part -- a withdrawn
+// account is now indistinguishable from a logged-out visitor anywhere in
+// the app, without a new "withdrawn" state to thread through each of them
+// individually.
+//
 // Phase 24-2-1: wrapped in React's cache() purely as a request-scoped
 // memoization -- this function was being called independently from
 // (main)/layout.tsx, Header.tsx, and the page itself (post/[id]/page.tsx
@@ -26,7 +38,13 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return null;
-  return prisma.user.findUnique({ where: { id: Number(userId) } });
+  const user = await prisma.user.findUnique({ where: { id: Number(userId) } });
+  // Truthy check (not `!== null`) so a mocked/partial User object that
+  // simply omits this field (every pre-Phase-10 caller/test) is treated
+  // as active, same as a real row's actual `null` -- only an *actual*
+  // Date value blocks.
+  if (user?.deletedAt) return null;
+  return user;
 });
 
 // Phase 14: which one-line explanation /login shows above the Google

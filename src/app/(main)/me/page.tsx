@@ -133,6 +133,17 @@ export default async function MePage() {
           로그아웃
         </button>
       </form>
+
+      {/* Phase 10: small, quiet text link -- not a MenuRow, not styled to
+          draw the eye the way the rest of this page's menu sections are.
+          The actual confirmation (checkbox + destructive button) lives on
+          the page this links to, not here. */}
+      <Link
+        href="/me/withdraw"
+        className="text-center text-xs text-muted-foreground underline hover:text-destructive"
+      >
+        회원 탈퇴
+      </Link>
     </div>
   );
 }

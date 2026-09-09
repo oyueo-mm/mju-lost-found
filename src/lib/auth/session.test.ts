@@ -38,6 +38,22 @@ describe("getCurrentUser", () => {
     expect(findUnique).toHaveBeenCalledWith({ where: { id: 42 } });
     expect(user).toEqual({ id: 42, nickname: "실제닉네임", isAdmin: false });
   });
+
+  // Phase 10: a withdrawn account's row still exists (withdrawUser never
+  // deletes it, see auth/user.ts's own comment on why), so a still-valid
+  // session cookie from before withdrawal would otherwise keep resolving
+  // to a real row here -- this is the one check that actually makes
+  // withdrawal take effect, treating that row exactly like "not signed
+  // in" for every existing caller (requireUser, requireReadyUser,
+  // requireUserForApi, ...) with no changes needed on their part.
+  it("returns null for a withdrawn account even though its row still exists", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "42" } });
+    findUnique.mockResolvedValueOnce({ id: 42, nickname: "탈퇴한 사용자", deletedAt: new Date() });
+
+    const user = await getCurrentUser();
+
+    expect(user).toBeNull();
+  });
 });
 
 describe("requireUser", () => {

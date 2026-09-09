@@ -64,8 +64,10 @@ vi.mock("@/lib/auth/suspension", () => ({
 // path looks like without depending on the real regex.
 const parseChatImagePathname = vi.fn();
 const publicUrlFor = vi.fn();
+// Phase 10B: deleteMessage()'s own self-delete image cleanup.
+const deleteObjectSafely = vi.fn();
 vi.mock("@/lib/images/pathname", () => ({ parseChatImagePathname }));
-vi.mock("@/lib/images/supabaseAdmin", () => ({ publicUrlFor }));
+vi.mock("@/lib/images/supabaseAdmin", () => ({ publicUrlFor, deleteObjectSafely }));
 // Phase N: every write path (sendMessage/toggleMessageReaction/
 // markChatRoomRead) fires a best-effort realtime broadcast -- mocked
 // wholesale here (same convention as every other collaborator in this
@@ -1501,6 +1503,80 @@ describe("deleteMessage", () => {
     expect(result).toEqual({ kind: "ok", data: { messageId: 1 } });
     expect(message.update).not.toHaveBeenCalled();
     expect(broadcastChatEvent).not.toHaveBeenCalled();
+  });
+
+  // Phase 10B: self-delete purges the actual Storage object, not just the
+  // display -- see Phase 10A's retention policy (a self-deleted photo has
+  // no remaining reason to stay in Storage, unlike an admin-hidden one).
+  describe("self-delete image cleanup (Phase 10B)", () => {
+    it("deletes the Storage object and nulls imageUrl when the sender deletes their own message with an image", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+      message.findUnique.mockResolvedValueOnce({
+        chatRoomId: 100,
+        senderUserId: lostOwner,
+        hiddenAt: null,
+        imageUrl: "https://storage.example/post-images/chat/100/photo.jpg",
+      });
+      message.update.mockResolvedValueOnce({});
+
+      const result = await deleteMessage(100, 1, sender);
+
+      expect(result).toEqual({ kind: "ok", data: { messageId: 1 } });
+      expect(message.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: {
+          hiddenAt: expect.any(Date),
+          hiddenByUserId: lostOwner,
+          hiddenReason: null,
+          imageUrl: null,
+        },
+      });
+      expect(deleteObjectSafely).toHaveBeenCalledWith("https://storage.example/post-images/chat/100/photo.jpg");
+    });
+
+    it("does not touch Storage for a self-deleted message with no image", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+      message.findUnique.mockResolvedValueOnce({
+        chatRoomId: 100,
+        senderUserId: lostOwner,
+        hiddenAt: null,
+        imageUrl: null,
+      });
+      message.update.mockResolvedValueOnce({});
+
+      await deleteMessage(100, 1, sender);
+
+      expect(deleteObjectSafely).not.toHaveBeenCalled();
+      expect(message.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { hiddenAt: expect.any(Date), hiddenByUserId: lostOwner, hiddenReason: null },
+      });
+    });
+
+    // The admin-bypass path in this same function is still an admin
+    // acting on someone else's message (hiddenByUserId !== senderUserId),
+    // exactly like the separate moderation/service.ts HIDE_MESSAGE flow --
+    // both preserve the image as potential evidence, per Phase 10A.
+    it("preserves the image when an admin deletes another participant's message", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+      message.findUnique.mockResolvedValueOnce({
+        chatRoomId: 100,
+        senderUserId: foundOwner,
+        hiddenAt: null,
+        imageUrl: "https://storage.example/post-images/chat/100/photo.jpg",
+      });
+      message.update.mockResolvedValueOnce({});
+
+      const admin = { ...sender, id: 77, isAdmin: true } as unknown as User;
+      const result = await deleteMessage(100, 1, admin);
+
+      expect(result).toEqual({ kind: "ok", data: { messageId: 1 } });
+      expect(deleteObjectSafely).not.toHaveBeenCalled();
+      expect(message.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { hiddenAt: expect.any(Date), hiddenByUserId: 77, hiddenReason: null },
+      });
+    });
   });
 });
 
