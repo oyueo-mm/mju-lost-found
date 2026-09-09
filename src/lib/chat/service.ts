@@ -354,6 +354,70 @@ export async function getChatRoomForUser(
   return { kind: "ok", data: dto };
 }
 
+export type AdminChatMessageDTO = {
+  id: number;
+  senderUserId: number;
+  senderNickname: string | null;
+  content: string;
+  imageUrl: string | null;
+  isDeleted: boolean;
+  createdAt: Date;
+};
+
+export type AdminChatRoomDTO = {
+  id: number;
+  post: { id: number; type: PostType; title: string };
+  participants: { id: number; nickname: string | null; publicId: string | null }[];
+  messages: AdminChatMessageDTO[];
+};
+
+// Phase 11-1: admin-only, read-only room view for /admin/reports/[id]'s
+// "채팅방으로 이동" link (Phase 11 audit's P0 finding -- a message-target
+// report had no way to see the reported message's surrounding context).
+// Deliberately NOT a variant of getChatRoomForUser above -- that
+// function's participant-only gate is untouched (this phase's own "일반
+// 사용자의 채팅 권한을 변경하지 않는다"), and resolveDetailDTO's
+// "counterpart relative to requesterId" shape has no meaning for a third
+// party who isn't a participant at all. This lists both participants
+// plainly instead, and every message with its own sender attached --
+// deliberately no reply preview/reaction/read-receipt data, since none of
+// that is meaningful for a non-participant and this link only exists to
+// give an admin surrounding context, not a feature-complete chat client
+// (no compose/reply/react/edit/delete capability is exposed here).
+// Performs no authorization itself -- same convention as getMessage()'s
+// own comment -- the caller (the admin page) gates with requireAdmin().
+export async function getChatRoomForAdmin(chatRoomId: number): Promise<AdminChatRoomDTO | null> {
+  const room = await findChatRoomRow(chatRoomId);
+  if (!room) return null;
+  const participantIds = participantIdsOf(room);
+  const directPost = room.directLostPost ?? room.directFoundPost;
+  if (!participantIds || !directPost) return null;
+
+  const [participants, rows] = await Promise.all([
+    Promise.all([...participantIds].map((id) => resolveCounterpart(id))),
+    prisma.message.findMany({
+      where: { chatRoomId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      include: { sender: { select: { nickname: true } } },
+    }),
+  ]);
+
+  return {
+    id: room.id,
+    post: { id: directPost.id, type: room.directLostPost ? "lost" : "found", title: directPost.title },
+    participants,
+    messages: rows.map((m) => ({
+      id: m.id,
+      senderUserId: m.senderUserId,
+      senderNickname: m.sender.nickname,
+      content: maskedContent(m),
+      imageUrl: m.hiddenAt ? null : m.imageUrl,
+      isDeleted: Boolean(m.hiddenAt),
+      createdAt: m.createdAt,
+    })),
+  };
+}
+
 // Every ChatRoom the user participates in -- as the initiator, or as the
 // current author of the post the room is about -- most-recently-active
 // first, mirroring legacy list_chat_rooms_by_user(). Phase J-2: this used

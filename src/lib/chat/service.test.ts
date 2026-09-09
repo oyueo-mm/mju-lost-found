@@ -80,6 +80,7 @@ const {
   countUnreadMessagesForUser,
   deleteMessage,
   editMessage,
+  getChatRoomForAdmin,
   getChatRoomForUser,
   getChatRoomParticipantIds,
   getMessage,
@@ -332,6 +333,85 @@ describe("getChatRoomForUser", () => {
     const result = await getChatRoomForUser(200, 12345);
 
     expect(result).toEqual({ kind: "forbidden" });
+  });
+});
+
+// Phase 11-1: admin-only read view, deliberately not gated by
+// participantIds (unlike getChatRoomForUser above, which this test suite
+// never touches) -- a non-participant admin can read any room.
+describe("getChatRoomForAdmin", () => {
+  it("returns null for a nonexistent room", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(null);
+    expect(await getChatRoomForAdmin(999)).toBeNull();
+  });
+
+  it("returns both participants and every message, for a non-participant admin", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    userTable.findUnique
+      .mockResolvedValueOnce({ id: lostOwner, nickname: "분실자", publicId: "pub-1" })
+      .mockResolvedValueOnce({ id: foundOwner, nickname: "습득자", publicId: "pub-2" });
+    message.findMany.mockResolvedValueOnce([
+      {
+        id: 1,
+        senderUserId: lostOwner,
+        content: "안녕하세요",
+        imageUrl: null,
+        hiddenAt: null,
+        hiddenByUserId: null,
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+        sender: { nickname: "분실자" },
+      },
+    ]);
+
+    const room = await getChatRoomForAdmin(100);
+
+    expect(room).not.toBeNull();
+    expect(room?.post).toEqual({ id: 1, type: "lost", title: "지갑 분실" });
+    expect(room?.participants).toEqual([
+      { id: lostOwner, nickname: "분실자", publicId: "pub-1" },
+      { id: foundOwner, nickname: "습득자", publicId: "pub-2" },
+    ]);
+    expect(room?.messages).toEqual([
+      {
+        id: 1,
+        senderUserId: lostOwner,
+        senderNickname: "분실자",
+        content: "안녕하세요",
+        imageUrl: null,
+        isDeleted: false,
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+      },
+    ]);
+  });
+
+  // Same masking rule every other read path in this file already follows
+  // -- a self-deleted or admin-hidden message's real content never
+  // reaches this DTO either, even for an admin browsing for context.
+  it("masks a hidden message's content the same way listMessages does", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    userTable.findUnique
+      .mockResolvedValueOnce({ id: lostOwner, nickname: "분실자", publicId: "pub-1" })
+      .mockResolvedValueOnce({ id: foundOwner, nickname: "습득자", publicId: "pub-2" });
+    message.findMany.mockResolvedValueOnce([
+      {
+        id: 2,
+        senderUserId: lostOwner,
+        content: "삭제될 내용",
+        imageUrl: "https://storage.example/post-images/chat/100/photo.jpg",
+        hiddenAt: new Date("2026-01-02T00:00:00Z"),
+        hiddenByUserId: lostOwner,
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+        sender: { nickname: "분실자" },
+      },
+    ]);
+
+    const room = await getChatRoomForAdmin(100);
+
+    expect(room?.messages[0]).toMatchObject({
+      content: "삭제된 메시지입니다.",
+      imageUrl: null,
+      isDeleted: true,
+    });
   });
 });
 

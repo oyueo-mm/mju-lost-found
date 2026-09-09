@@ -127,8 +127,40 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
         </Section>
 
         <Section title="활동 정보">
-          <Field label="분실물 게시글" value={`${lostPostCount}건`} />
-          <Field label="습득물 게시글" value={`${foundPostCount}건`} />
+          {/* Phase 11-1: reuses /admin/posts' existing author(닉네임) 필터
+              그대로 -- 새 게시글 관리 화면을 만들지 않는다. 닉네임이 아직
+              없는 사용자(온보딩 전)는 필터링할 값이 없어 링크 없이 개수만
+              표시한다. */}
+          <Field
+            label="분실물 게시글"
+            value={
+              user.nickname ? (
+                <Link
+                  href={`/admin/posts?type=lost&author=${encodeURIComponent(user.nickname)}`}
+                  className="underline hover:text-primary"
+                >
+                  {lostPostCount}건 보기
+                </Link>
+              ) : (
+                `${lostPostCount}건`
+              )
+            }
+          />
+          <Field
+            label="습득물 게시글"
+            value={
+              user.nickname ? (
+                <Link
+                  href={`/admin/posts?type=found&author=${encodeURIComponent(user.nickname)}`}
+                  className="underline hover:text-primary"
+                >
+                  {foundPostCount}건 보기
+                </Link>
+              ) : (
+                `${foundPostCount}건`
+              )
+            }
+          />
           <Field label="댓글" value={`${commentCount}건`} />
         </Section>
 

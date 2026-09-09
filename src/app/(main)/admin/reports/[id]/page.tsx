@@ -89,6 +89,12 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
               작성자: {report.targetInfo.senderNickname ?? "알 수 없음"} · 작성일:{" "}
               {formatDate(report.targetInfo.createdAt)}
             </span>
+            <Link
+              href={`/admin/chat/${report.targetInfo.chatRoomId}?report=${report.id}`}
+              className="text-xs font-medium text-primary hover:opacity-80"
+            >
+              채팅방으로 이동
+            </Link>
           </div>
         ) : report.targetInfo.kind === "comment" ? (
           <div className="flex flex-col gap-1 text-sm">
