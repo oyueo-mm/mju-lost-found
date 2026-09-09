@@ -141,12 +141,16 @@ describe("GET /api/posts -- mode=semantic (Phase 12)", () => {
     );
   });
 
-  it("rejects mode=semantic combined with type=all", async () => {
-    const res = await GET(
-      new NextRequest("http://localhost/api/posts?type=all&mode=semantic&q=지갑"),
-    );
-    expect(res.status).toBe(400);
-    expect(searchPosts).not.toHaveBeenCalled();
+  // Phase 11-2: previously rejected -- see listQuerySchema's own
+  // superRefine comment for why type=all is now valid for mode=semantic
+  // too (both boards' scores are already on a comparable scale).
+  it("dispatches mode=semantic with type=all through to the service layer", async () => {
+    searchPosts.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 0, totalPages: 1 });
+
+    const res = await GET(new NextRequest("http://localhost/api/posts?type=all&mode=semantic&q=지갑"));
+
+    expect(res.status).toBe(200);
+    expect(searchPosts).toHaveBeenCalledWith(expect.objectContaining({ type: "all", mode: "semantic", q: "지갑" }));
   });
 
   it("rejects mode=semantic with no q", async () => {

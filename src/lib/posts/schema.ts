@@ -136,21 +136,21 @@ export const listQuerySchema = z
       }
     }
 
-    // Phase 12: semantic search always ranks within one board's embedding
-    // column (LostPost.embedding or FoundPost.embedding) -- there is no
-    // cross-table pgvector UNION, and merging two independently-ranked
-    // similarity lists (as type=all's keyword path does for createdAt)
-    // would require re-scoring against a shared scale that doesn't exist
-    // here. Same "reject the ambiguous combination outright" policy as
-    // status+type=all just above, not a new pattern.
+    // Phase 11-2: type=all + mode=semantic is now allowed -- both boards'
+    // embedding columns come from the exact same model applied to the
+    // exact same buildEmbeddingText() shape (see LostPost.embedding's own
+    // schema.prisma comment: "identical shape/reasoning" as
+    // FoundPost.embedding), so their cosine-similarity scores already
+    // live on the same 0-1 scale (see vectorSearch.ts's normalizeScore).
+    // There's no cross-table pgvector UNION, but aiService.ts's
+    // searchPostsSemanticAll() doesn't need one -- it ranks each board
+    // independently (same query vector) and merges by that already-
+    // comparable score, the same way type=all's keyword path merges by
+    // createdAt. status+type=all above stays rejected (LostPost/FoundPost
+    // don't share a status vocabulary at all, so there's no equivalent
+    // "already comparable" scale to merge on) -- this is a narrower,
+    // deliberate exception, not a general softening of that rule.
     if (data.mode === "semantic") {
-      if (data.type === "all") {
-        ctx.addIssue({
-          code: "custom",
-          path: ["mode"],
-          message: "AI 의미 검색은 게시판(분실물/습득물)을 선택한 경우에만 사용할 수 있습니다.",
-        });
-      }
       if (!data.q || data.q.trim() === "") {
         ctx.addIssue({ code: "custom", path: ["q"], message: "AI 의미 검색은 검색어가 필요합니다." });
       }

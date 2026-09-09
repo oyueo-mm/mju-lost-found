@@ -28,9 +28,10 @@ export default async function SearchPage({
   // See searchApiClient.ts's comment (also linked from lost/found's pages)
   // -- semantic mode fetches /api/posts instead of calling searchPosts()
   // in-process, since only /api/posts's function bundle carries the
-  // embedding model on Vercel. `raw.type` is guaranteed to be "lost" or
-  // "found" (never absent/"all") whenever mode="semantic" successfully
-  // parsed -- listQuerySchema's superRefine already rejects semantic+all.
+  // embedding model on Vercel. `raw.type` can be "lost", "found", or
+  // (Phase 11-2) "all" -- aiService.ts's searchPosts() merges both
+  // boards' semantic results itself when it's "all", so this page doesn't
+  // need to know or care which case it is.
   let results;
   try {
     results = mode === "semantic" ? await fetchPostsFromApi(raw) : await searchPosts(query);

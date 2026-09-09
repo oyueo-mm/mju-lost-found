@@ -9,7 +9,7 @@ import { isAdmin } from "@/lib/moderation/service";
 import { listCommentsForPost } from "@/lib/comment/service";
 import { PostManageMenu } from "@/components/post/PostManageMenu";
 import { ViewTracker } from "@/components/post/ViewTracker";
-import { SimilarPostsSection } from "@/components/post/SimilarPostsSection";
+import { PendingRecommendations } from "@/components/post/PendingRecommendations";
 import { DirectChatButton } from "@/components/chat/DirectChatButton";
 import { findPostRecommendations } from "@/lib/recommendation/service";
 import { CommentSection } from "@/components/comment/CommentSection";
@@ -34,10 +34,16 @@ export default async function PostDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ type?: string }>;
+  searchParams: Promise<{ type?: string; created?: string }>;
 }) {
   const { id: idParam } = await params;
-  const { type: typeParam } = await searchParams;
+  const { type: typeParam, created } = await searchParams;
+  // Phase 11-2: set only by PostForm's own post-creation redirect (never
+  // by an edit, and never by anyone just sharing/revisiting this URL --
+  // there's nothing sensitive gated by it, it only turns on the "게시글이
+  // 등록되었습니다" banner and PendingRecommendations' polling below, both
+  // purely cosmetic).
+  const justCreated = created === "1";
 
   // LostPost/FoundPost ids are independent sequences (see schema.prisma),
   // so the same numeric id can exist in both tables -- `type` is required
@@ -113,6 +119,11 @@ export default async function PostDetailPage({
   return (
     <div className="flex flex-col gap-6">
       <ViewTracker type={type} postId={post.id} />
+      {justCreated && (
+        <p className="rounded-card bg-success-muted px-4 py-2.5 text-sm font-medium text-success">
+          게시글이 등록되었습니다.
+        </p>
+      )}
       {post.imageUrl ? (
         // Phase H-3's `width/height` hint + `h-auto w-auto` pattern never
         // upscales past the source photo's own pixel resolution (that's
@@ -260,11 +271,22 @@ export default async function PostDetailPage({
           type: the recommendations are derived from this post's own
           embeddings server-side above and are the same for every viewer.
           Board-wide search (키워드/AI 의미/이미지) is unchanged and still
-          lives on /lost, /found and /search. */}
-      <SimilarPostsSection
+          lives on /lost, /found and /search.
+          Phase 11-2: wrapped in PendingRecommendations instead of
+          rendering SimilarPostsSection directly -- when justCreated,
+          this post's embedding may still be computing in the background
+          (see aiService.ts's createLostPost/createFoundPost), so this
+          polls a few times for results instead of just showing an empty
+          state that only fills in on some later, unrelated visit. Every
+          other visit (justCreated=false) behaves exactly as before: no
+          polling, plain static render of whatever the server already
+          computed above. */}
+      <PendingRecommendations
         sourceType={type}
-        recommendations={recommendations}
-        loadFailed={recommendationsFailed}
+        sourceId={post.id}
+        initialRecommendations={recommendations}
+        initialFailed={recommendationsFailed}
+        pollForResults={justCreated}
       />
 
       <CommentSection

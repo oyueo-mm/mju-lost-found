@@ -154,9 +154,15 @@ describe("listQuerySchema -- mode (Phase 12)", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects mode=semantic combined with type=all", () => {
+  // Phase 11-2: previously rejected -- both boards' embedding scores live
+  // on the same comparable scale (same model, same normalizeScore), so
+  // aiService.ts now merges them instead of the schema rejecting the
+  // combination outright. status+type=all (tested above) is unaffected --
+  // LostPost/FoundPost don't share a status vocabulary at all, so that
+  // rejection is unrelated and still applies.
+  it("accepts mode=semantic combined with type=all", () => {
     const result = listQuerySchema.safeParse({ type: "all", mode: "semantic", q: "지갑" });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it("rejects mode=semantic with no q", () => {

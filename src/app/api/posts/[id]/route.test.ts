@@ -35,7 +35,8 @@ vi.mock("@/lib/posts/aiService", () => ({
   updateFoundPost,
 }));
 vi.mock("@/lib/ai/postEmbedding", () => ({ embedPostImageBestEffort }));
-vi.mock("@/lib/recommendation/service", () => ({ invalidateRecommendationCache }));
+const findPostRecommendations = vi.fn();
+vi.mock("@/lib/recommendation/service", () => ({ invalidateRecommendationCache, findPostRecommendations }));
 
 const { GET, PATCH, PUT, DELETE } = await import("./route");
 
@@ -71,6 +72,53 @@ describe("GET /api/posts/[id]", () => {
 
     expect(res.status).toBe(200);
     expect(json.data.id).toBe(1);
+    expect(findPostRecommendations).not.toHaveBeenCalled();
+  });
+
+  // Phase 11-2: PendingRecommendations.tsx polls this same route with
+  // ?include=recommendations instead of a new dedicated route.
+  describe("?include=recommendations", () => {
+    it("attaches recommendations to the post response", async () => {
+      getLostPost.mockResolvedValueOnce({ id: 1, type: "lost", title: "t" });
+      findPostRecommendations.mockResolvedValueOnce([{ id: 2, type: "found", title: "찾았어요" }]);
+
+      const res = await GET(
+        new NextRequest("http://localhost/api/posts/1?type=lost&include=recommendations"),
+        params("1"),
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(findPostRecommendations).toHaveBeenCalledWith("lost", 1);
+      expect(json.data.recommendations).toEqual([{ id: 2, type: "found", title: "찾았어요" }]);
+    });
+
+    it("still returns the post (with an empty recommendations list) when recommendations fail to load", async () => {
+      getLostPost.mockResolvedValueOnce({ id: 1, type: "lost", title: "t" });
+      findPostRecommendations.mockRejectedValueOnce(new Error("db down"));
+
+      const res = await GET(
+        new NextRequest("http://localhost/api/posts/1?type=lost&include=recommendations"),
+        params("1"),
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json.data.id).toBe(1);
+      expect(json.data.recommendations).toEqual([]);
+    });
+
+    it("returns 404 (never reaching findPostRecommendations) for a nonexistent post", async () => {
+      getLostPost.mockResolvedValueOnce(null);
+
+      const res = await GET(
+        new NextRequest("http://localhost/api/posts/999?type=lost&include=recommendations"),
+        params("999"),
+      );
+
+      expect(res.status).toBe(404);
+      expect(findPostRecommendations).not.toHaveBeenCalled();
+    });
   });
 });
 

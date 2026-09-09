@@ -11,7 +11,7 @@ import { postTypeSchema, updateFoundPostSchema, updateLostPostSchema } from "@/l
 import { deleteFoundPost, deleteLostPost, getFoundPost, getLostPost } from "@/lib/posts/service";
 import { updateFoundPost, updateLostPost } from "@/lib/posts/aiService";
 import { embedPostImageBestEffort } from "@/lib/ai/postEmbedding";
-import { invalidateRecommendationCache } from "@/lib/recommendation/service";
+import { findPostRecommendations, invalidateRecommendationCache } from "@/lib/recommendation/service";
 
 // PATCH conditionally triggers embedPostBestEffort() -- real ONNX Runtime
 // inference (@huggingface/transformers, a native addon) that cannot run on
@@ -41,6 +41,29 @@ export const GET = withErrorHandling(
     const post =
       parsed.type === "lost" ? await getLostPost(parsed.id) : await getFoundPost(parsed.id);
     if (!post) return jsonError(404, "게시물을 찾을 수 없습니다.");
+
+    // Phase 11-2: piggybacks on this existing route instead of adding a
+    // new one -- this file's PATCH handler already imports aiService.ts
+    // (updateLostPost/updateFoundPost), so its function bundle already
+    // carries the AI dependency chain findPostRecommendations() itself
+    // doesn't need but this route's neighbors do; adding this here costs
+    // nothing extra on Vercel's Hobby 12-function cap. Only computed when
+    // asked for (post/[id]/page.tsx's own server render still calls
+    // findPostRecommendations() directly, not through this route) -- used
+    // by PendingRecommendations.tsx to poll for a freshly-created post's
+    // recommendations once its embedding (deferred via after(), see
+    // aiService.ts's createLostPost/createFoundPost) finishes computing.
+    // Best-effort: a failure here degrades to "recommendations omitted",
+    // never a failed post fetch.
+    if (request.nextUrl.searchParams.get("include") === "recommendations") {
+      try {
+        const recommendations = await findPostRecommendations(parsed.type, parsed.id);
+        return jsonOk({ ...post, recommendations });
+      } catch (error) {
+        console.error("Failed to load recommendations for GET /api/posts/[id]:", error);
+        return jsonOk({ ...post, recommendations: [] });
+      }
+    }
     return jsonOk(post);
   },
 );

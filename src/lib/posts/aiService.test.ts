@@ -659,6 +659,111 @@ describe("searchPosts -- mode=semantic (Phase 12)", () => {
   });
 });
 
+function foundRow(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 1,
+    title: "지갑을 찾았어요",
+    description: "검은색 가죽 지갑",
+    category: "지갑",
+    location: "학생회관",
+    status: "KEEPING",
+    imageUrl: null,
+    foundAt: new Date("2026-01-01"),
+    createdAt: new Date("2026-01-01"),
+    updatedAt: new Date("2026-01-01"),
+    user: { id: 2, nickname: "닉네임2" },
+    ...overrides,
+  };
+}
+
+// Phase 11-2: type=all's semantic path -- ranks LostPost and FoundPost
+// independently (same query vector) and merges by score, since both
+// boards' cosine-similarity scores already live on the same 0-1 scale
+// (same model, same normalizeScore -- see aiService.ts's own comment on
+// why this merge is exact, not an approximation).
+describe("searchPosts -- mode=semantic, type=all (Phase 11-2)", () => {
+  it("queries both boards with the same embedding and merges by score", async () => {
+    embed.mockResolvedValueOnce([0.1, 0.2]);
+    findPostsBySemanticQuery.mockImplementation(async (type: string) =>
+      type === "lost" ? [{ id: 1, score: 0.4 }] : [{ id: 1, score: 0.9 }],
+    );
+    lostPost.findMany.mockResolvedValueOnce([row({ id: 1, title: "지갑 분실" })]);
+    foundPost.findMany.mockResolvedValueOnce([foundRow({ id: 1, title: "지갑 습득" })]);
+
+    const result = await searchPosts({ type: "all", mode: "semantic", q: "분실물찾아요", page: 1, limit: 20 });
+
+    expect(findPostsBySemanticQuery).toHaveBeenCalledWith("lost", [0.1, 0.2], 10, expect.any(Object));
+    expect(findPostsBySemanticQuery).toHaveBeenCalledWith("found", [0.1, 0.2], 10, expect.any(Object));
+    // Higher-scoring found post ranks first even though it was queried
+    // second -- proves this is a real score merge, not concatenation.
+    expect(result.items.map((p) => `${p.type}-${p.id}`)).toEqual(["found-1", "lost-1"]);
+    expect(result.total).toBe(2);
+  });
+
+  it("returns just the found results when lost has none, not an error", async () => {
+    embed.mockResolvedValueOnce([0.1]);
+    findPostsBySemanticQuery.mockImplementation(async (type: string) =>
+      type === "lost" ? [] : [{ id: 5, score: 0.7 }],
+    );
+    foundPost.findMany.mockResolvedValueOnce([foundRow({ id: 5 })]);
+
+    const result = await searchPosts({ type: "all", mode: "semantic", q: "지갑", page: 1, limit: 20 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].type).toBe("found");
+    expect(lostPost.findMany).not.toHaveBeenCalled();
+  });
+
+  it("returns an empty page when neither board has a match", async () => {
+    embed.mockResolvedValueOnce([0.1]);
+    findPostsBySemanticQuery.mockResolvedValue([]);
+
+    const result = await searchPosts({ type: "all", mode: "semantic", q: "존재하지않는물건", page: 1, limit: 20 });
+
+    expect(result).toEqual({ items: [], page: 1, limit: 20, total: 0, totalPages: 1 });
+  });
+
+  // One board's own vector-search query can fail independently (e.g. a
+  // transient DB error) without sinking a result the other board could
+  // still legitimately return.
+  it("still returns the other board's results when one board's query rejects", async () => {
+    embed.mockResolvedValueOnce([0.1]);
+    findPostsBySemanticQuery.mockImplementation(async (type: string) => {
+      if (type === "lost") throw new Error("db blip");
+      return [{ id: 9, score: 0.6 }];
+    });
+    foundPost.findMany.mockResolvedValueOnce([foundRow({ id: 9 })]);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await searchPosts({ type: "all", mode: "semantic", q: "지갑", page: 1, limit: 20 });
+
+    expect(result.items.map((p) => p.type)).toEqual(["found"]);
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("rethrows when both boards' queries reject", async () => {
+    embed.mockResolvedValueOnce([0.1]);
+    findPostsBySemanticQuery.mockRejectedValue(new Error("db down"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      searchPosts({ type: "all", mode: "semantic", q: "지갑", page: 1, limit: 20 }),
+    ).rejects.toThrow("db down");
+
+    consoleError.mockRestore();
+  });
+
+  it("propagates an embedding provider failure before either board is even queried", async () => {
+    embed.mockRejectedValueOnce(new Error("model unavailable"));
+
+    await expect(
+      searchPosts({ type: "all", mode: "semantic", q: "지갑", page: 1, limit: 20 }),
+    ).rejects.toThrow("model unavailable");
+    expect(findPostsBySemanticQuery).not.toHaveBeenCalled();
+  });
+});
+
 // Phase 13-2: a real, reproduced hard-negative failure from Phase 13-1's
 // real-DB evaluation (real ONNX model + real Supabase pgvector, not
 // hypothetical) -- "카드지갑 분실" (a wallet post whose *description*

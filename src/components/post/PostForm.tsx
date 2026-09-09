@@ -260,7 +260,12 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
         return;
       }
 
-      router.push(`/post/${id}?type=${type}`);
+      // Phase 11-2: `created=1` only on an actual creation (postId is the
+      // component's own prop, undefined in create mode, set in edit mode)
+      // -- see post/[id]/page.tsx's own comment on what this turns on
+      // (the "게시글이 등록되었습니다" banner + PendingRecommendations
+      // polling), both purely cosmetic and both skipped on an edit.
+      router.push(`/post/${id}?type=${type}${postId === undefined ? "&created=1" : ""}`);
       router.refresh();
     } catch {
       setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
@@ -287,7 +292,7 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
       return;
     }
 
-    router.push(`/post/${savedPostId}?type=${type}`);
+    router.push(`/post/${savedPostId}?type=${type}${postId === undefined ? "&created=1" : ""}`);
     router.refresh();
   }
 

@@ -213,30 +213,21 @@ function queryTokens(query: string): string[] {
     .filter((token) => token.length >= 2);
 }
 
-// mode=semantic's counterpart to listLostPosts()/listFoundPosts() --
-// type is narrowed to PostType (never "all") by listQuerySchema's
-// superRefine before this is ever called (see searchPosts() below), so
-// there is exactly one board's embedding column to rank against; no
-// cross-table UNION or in-memory re-merge like ./service's searchAllPosts
-// needs.
-//
-// Deliberately top-K only, not a true DB-wide paginated count (§14 of
-// docs/AI_SEMANTIC_SEARCH_DESIGN.md: "top-K 기반으로 동작한다", no
-// threshold): `total`/`totalPages` reflect the top-K result set itself,
-// not every embedded post that resembles the query even faintly. Page 2+
-// of a semantic search simply has no more results past the K best
-// matches, which is the intended behavior, not a bug.
-async function searchPostsSemantic(
+// Shared by searchPostsSemantic() (single board) and
+// searchPostsSemanticAll() (Phase 11-2, both boards merged) -- ranks one
+// board's embedding column against an already-embedded query vector and
+// hydrates the matching rows into scored DTOs. Returns an unsorted,
+// unpaginated array; both callers own their own sort/slice, since
+// searchPostsSemanticAll's sort has to happen *after* concatenating both
+// boards' candidates, not per-board.
+async function rankSemanticCandidates(
   type: PostType,
+  queryVector: number[],
   query: string,
-  { page, limit, ...filters }: ListParams,
-): Promise<PagedResult<PostDTO>> {
-  const vector = await getEmbeddingProvider().embed(query);
-  const ranked = await findPostsBySemanticQuery(type, vector, SEMANTIC_SEARCH_TOP_K, filters);
-
-  if (ranked.length === 0) {
-    return { items: [], page, limit, total: 0, totalPages: 1 };
-  }
+  filters: Omit<ListParams, "page" | "limit">,
+): Promise<(PostDTO & { score: number })[]> {
+  const ranked = await findPostsBySemanticQuery(type, queryVector, SEMANTIC_SEARCH_TOP_K, filters);
+  if (ranked.length === 0) return [];
 
   const scoreById = new Map(ranked.map((r) => [r.id, r.score]));
   const ids = ranked.map((r) => r.id);
@@ -259,7 +250,7 @@ async function searchPostsSemantic(
   // itself (rather than only to an internal sort key) keeps the displayed
   // "검색 유사도" percentage consistent with the actual result order.
   const tokens = queryTokens(query);
-  const items: PostDTO[] = ids
+  return ids
     .map((id) => rowById.get(id))
     .filter((row): row is NonNullable<typeof row> => row !== undefined)
     .map((row) => {
@@ -268,8 +259,78 @@ async function searchPostsSemantic(
       const titleMatchesQuery = tokens.some((token) => row.title.includes(token));
       const score = titleMatchesQuery ? Math.min(1, baseScore + LEXICAL_TITLE_MATCH_BONUS) : baseScore;
       return { ...dto, score };
-    })
-    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.id - b.id);
+    });
+}
+
+// mode=semantic's counterpart to listLostPosts()/listFoundPosts() -- one
+// board's embedding column, ranked and paginated within that board's own
+// top-K (§14 of docs/AI_SEMANTIC_SEARCH_DESIGN.md: "top-K 기반으로 동작한다",
+// no threshold, so `total`/`totalPages` reflect the top-K result set
+// itself, not every embedded post that resembles the query even faintly --
+// page 2+ simply has no more results past the K best matches, which is
+// the intended behavior, not a bug).
+async function searchPostsSemantic(
+  type: PostType,
+  query: string,
+  { page, limit, ...filters }: ListParams,
+): Promise<PagedResult<PostDTO>> {
+  const vector = await getEmbeddingProvider().embed(query);
+  const items = (await rankSemanticCandidates(type, vector, query, filters)).sort(
+    (a, b) => (b.score ?? 0) - (a.score ?? 0) || a.id - b.id,
+  );
+
+  const total = items.length;
+  const skip = (page - 1) * limit;
+  return { items: items.slice(skip, skip + limit), page, limit, total, totalPages: totalPagesFor(total, limit) };
+}
+
+// Phase 11-2: type=all's semantic counterpart -- ranks LostPost and
+// FoundPost independently (one embedding query vector, shared between
+// both) and merges by score, not by simple concatenation. This is exact,
+// not an approximation: since both boards are each capped at their own
+// top-`SEMANTIC_SEARCH_TOP_K`, and the true combined top-K can only ever
+// contain posts that are *also* within their own board's top-K (a post
+// ranked K+1st or worse on its own board cannot be in a combined top-K
+// that's no larger than K), fetching each board's own top-K first and
+// merging afterward always yields the correct combined ranking -- no
+// cross-table pgvector UNION needed, matching this schema's own
+// documented reason for not having one (see listQuerySchema's superRefine
+// comment on this same combination). Same top-K-only pagination semantics
+// as searchPostsSemantic() above, just over the merged set.
+//
+// Promise.allSettled (not Promise.all) so one board's own query failing
+// doesn't sink a result the other board could still legitimately return
+// -- "한쪽 결과 없음" (empty) and "한쪽 검색 실패" (rejected) are kept
+// distinct on purpose: an empty board contributes nothing and the other
+// board's real results still come back; a *failed* board is logged and
+// still degrades to the other board's results rather than a full 500,
+// unless both fail, in which case there is genuinely nothing to show and
+// the original error is rethrown -- the same "surface a real failure,
+// don't paper over total failure" rule embedPostBestEffort()'s own
+// "best-effort" comments describe for a different (write-path) case.
+async function searchPostsSemanticAll(
+  query: string,
+  { page, limit, ...filters }: ListParams,
+): Promise<PagedResult<PostDTO>> {
+  const vector = await getEmbeddingProvider().embed(query);
+  const [lostResult, foundResult] = await Promise.allSettled([
+    rankSemanticCandidates("lost", vector, query, filters),
+    rankSemanticCandidates("found", vector, query, filters),
+  ]);
+
+  if (lostResult.status === "rejected") {
+    console.error("Semantic search failed for lost posts (type=all):", lostResult.reason);
+  }
+  if (foundResult.status === "rejected") {
+    console.error("Semantic search failed for found posts (type=all):", foundResult.reason);
+  }
+  if (lostResult.status === "rejected" && foundResult.status === "rejected") {
+    throw lostResult.reason;
+  }
+
+  const lostItems = lostResult.status === "fulfilled" ? lostResult.value : [];
+  const foundItems = foundResult.status === "fulfilled" ? foundResult.value : [];
+  const items = [...lostItems, ...foundItems].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.id - b.id);
 
   const total = items.length;
   const skip = (page - 1) * limit;
@@ -280,9 +341,10 @@ async function searchPostsSemantic(
 // entry point /api/posts's GET handler calls (which is also what
 // found/lost/search's pages fetch when mode=semantic, via a server-side
 // HTTP request rather than an in-process call -- see searchApiClient.ts).
-// listQuerySchema's superRefine already guarantees mode=semantic never
-// coexists with type=all and always carries a non-empty q, so no
-// re-validation happens here.
+// listQuerySchema's superRefine already guarantees mode=semantic always
+// carries a non-empty q, so no re-validation happens here. type=all is
+// now valid for mode=semantic too (Phase 11-2) -- routed to
+// searchPostsSemanticAll() instead of being rejected upstream.
 export async function searchPosts({
   type,
   mode = "keyword",
@@ -291,7 +353,8 @@ export async function searchPosts({
 }: ListParams & { type: PostListType; mode?: SearchMode }): Promise<PagedResult<PostDTO>> {
   if (mode === "semantic") {
     // q is guaranteed non-empty here by listQuerySchema's superRefine.
-    return searchPostsSemantic(type as PostType, q as string, params);
+    if (type === "all") return searchPostsSemanticAll(q as string, params);
+    return searchPostsSemantic(type, q as string, params);
   }
   return searchPostsKeywordOnly({ type, q, ...params });
 }

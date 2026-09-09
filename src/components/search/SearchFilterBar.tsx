@@ -78,21 +78,18 @@ export function SearchFilterBar({
   );
 
   // mode/type need to be tracked as component state (not left as plain
-  // uncontrolled defaultValue selects like the rest of this form) only
-  // because these two specific fields interact: mode=semantic is
-  // rejected by listQuerySchema whenever type=all (see its superRefine --
-  // there's no single pgvector column spanning both LostPost and
-  // FoundPost, so a "search everything" semantic query has nothing valid
-  // to rank against). Catching that combination here, before it ever
-  // reaches the server, avoids a submit that silently comes back with the
-  // wrong results instead of an explanation.
+  // uncontrolled defaultValue selects like the rest of this form) because
+  // ImageSearchPanel (mode=image) needs the current `type` as a live
+  // value, not just at submit time -- image search never navigates (see
+  // handleSubmit's own comment), so it has no other way to read the
+  // selected board. mode=semantic + type=all used to need this same
+  // tracking to block the combination client-side; Phase 11-2 removed
+  // that restriction (see listQuerySchema's superRefine -- both boards'
+  // embedding scores are already on the same comparable scale, so the
+  // server now merges them instead of rejecting the combination), so
+  // semantic no longer reads `type` for anything.
   const [mode, setMode] = useState<LocalMode>((searchParams.get("mode") as SearchMode | null) ?? "keyword");
   const [type, setType] = useState<PostListType>((searchParams.get("type") as PostListType | null) ?? "all");
-  // Only meaningful when showTypeFilter is true (/search) -- everywhere
-  // else (/lost, /found) `type` is fixed server-side to one board and
-  // never rendered as a selector at all, so this can never actually be
-  // true there regardless of this component's own `type` state.
-  const semanticBlockedByType = showTypeFilter && mode === "semantic" && type === "all";
   // Phase 33: the board image search actually targets -- /search's own
   // type <select> when present, otherwise the page's fixed board
   // (/lost -> "lost", /found -> "found"). Never "all" once fixedType is
@@ -105,7 +102,7 @@ export function SearchFilterBar({
     // Phase 32: image mode never navigates -- ImageSearchPanel (rendered
     // below in place of the usual query/filter fields) has its own submit
     // button and does its own client-side fetch instead.
-    if (semanticBlockedByType || mode === "image") return;
+    if (mode === "image") return;
 
     const formData = new FormData(event.currentTarget);
     const params = new URLSearchParams();
@@ -188,12 +185,6 @@ export function SearchFilterBar({
             className="w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
           />
 
-          {semanticBlockedByType && (
-            <p className="text-xs text-warning">
-              AI 의미 검색은 분실물 또는 습득물 게시판을 선택한 경우에만 사용할 수 있습니다.
-            </p>
-          )}
-
           <div className="flex flex-wrap gap-3">
             {showTypeFilter && (
               <select
@@ -271,7 +262,6 @@ export function SearchFilterBar({
 
             <button
               type="submit"
-              disabled={semanticBlockedByType}
               className="ml-auto rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
             >
               검색
