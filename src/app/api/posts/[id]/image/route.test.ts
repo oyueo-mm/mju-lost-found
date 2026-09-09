@@ -6,6 +6,9 @@ import { jsonError } from "@/lib/posts/response";
 const requireUserForApi = vi.fn();
 const setPostImage = vi.fn();
 const clearPostImage = vi.fn();
+const attachPostImages = vi.fn();
+const deletePostImage = vi.fn();
+const reorderPostImages = vi.fn();
 // Phase 15-2: this route triggers image-embedding computation via a real
 // internal HTTP request (see its own comment for why -- Vercel
 // function-bundle-size reasons) rather than importing anything
@@ -46,13 +49,19 @@ vi.mock("@/lib/posts/http", async () => {
   const response = await import("@/lib/posts/response");
   return { ...response, requireUserForApi };
 });
-vi.mock("@/lib/images/service", () => ({ setPostImage, clearPostImage }));
+vi.mock("@/lib/images/service", () => ({
+  setPostImage,
+  clearPostImage,
+  attachPostImages,
+  deletePostImage,
+  reorderPostImages,
+}));
 vi.mock("next/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("next/server")>();
   return { ...actual, after };
 });
 
-const { POST, DELETE } = await import("./route");
+const { POST, DELETE, PATCH } = await import("./route");
 
 const sessionUser = { id: 1, nickname: "닉네임" };
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -259,5 +268,182 @@ describe("DELETE /api/posts/[id]/image", () => {
 
     expect(res.status).toBe(200);
     expect(json.data.imageUrl).toBeNull();
+  });
+
+  // Phase 11-4 Integration: individual-image delete moved here from its own
+  // route file (originally .../images/[imageId]/route.ts, Phase 11-4C) --
+  // see this file's own top comment for why (the 12-Serverless-Function
+  // cap). `?imageId=` picks deletePostImage() over clearPostImage(); no
+  // `imageId` still means "clear everything" (tested above, unchanged).
+  describe("with ?imageId= (individual image delete)", () => {
+    it("rejects a non-numeric imageId", async () => {
+      requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+
+      const res = await DELETE(
+        new NextRequest("http://localhost/api/posts/1/image?type=lost&imageId=abc", { method: "DELETE" }),
+        params("1"),
+      );
+
+      expect(res.status).toBe(400);
+      expect(deletePostImage).not.toHaveBeenCalled();
+    });
+
+    it("returns 404 when the image doesn't exist on this post", async () => {
+      requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+      deletePostImage.mockResolvedValueOnce({ kind: "not_found" });
+
+      const res = await DELETE(
+        new NextRequest("http://localhost/api/posts/1/image?type=lost&imageId=10", { method: "DELETE" }),
+        params("1"),
+      );
+
+      expect(res.status).toBe(404);
+    });
+
+    it("deletes the image for the owner and returns the resulting imageUrl", async () => {
+      requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+      deletePostImage.mockResolvedValueOnce({ kind: "ok", data: { imageUrl: "https://x/second.jpg" } });
+
+      const res = await DELETE(
+        new NextRequest("http://localhost/api/posts/1/image?type=lost&imageId=10", { method: "DELETE" }),
+        params("1"),
+      );
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(deletePostImage).toHaveBeenCalledWith("lost", 1, sessionUser.id, 10);
+      expect(clearPostImage).not.toHaveBeenCalled();
+      expect(json.data.imageUrl).toBe("https://x/second.jpg");
+    });
+
+    it("registers the deferred internal image-embedding trigger only after a successful delete", async () => {
+      requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+      deletePostImage.mockResolvedValueOnce({ kind: "ok", data: { imageUrl: null } });
+
+      await DELETE(
+        new NextRequest("http://localhost/api/posts/1/image?type=lost&imageId=10", {
+          method: "DELETE",
+          headers: { cookie: "authjs.session-token=abc123" },
+        }),
+        params("1"),
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      await flushAfterCallbacks();
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://localhost/api/posts/1?type=lost",
+        expect.objectContaining({ method: "PUT", headers: { cookie: "authjs.session-token=abc123" } }),
+      );
+    });
+  });
+});
+
+// Phase 11-4 Integration: reorder moved here from its own route file
+// (originally PATCH .../images/route.ts, Phase 11-4D) -- see this file's
+// own top comment for why.
+describe("PATCH /api/posts/[id]/image (reorder)", () => {
+  it("rejects an unauthenticated request", async () => {
+    requireUserForApi.mockResolvedValueOnce({ response: jsonError(401, "로그인이 필요합니다.") });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/posts/1/image?type=lost", {
+        method: "PATCH",
+        body: JSON.stringify({ imageIds: [10, 11] }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(401);
+    expect(reorderPostImages).not.toHaveBeenCalled();
+  });
+
+  it("rejects a body without imageIds", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/posts/1/image?type=lost", {
+        method: "PATCH",
+        body: JSON.stringify({}),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(400);
+    expect(reorderPostImages).not.toHaveBeenCalled();
+  });
+
+  it("rejects an order that doesn't match the post's current image set", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    reorderPostImages.mockResolvedValueOnce({ kind: "invalid_order" });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/posts/1/image?type=lost", {
+        method: "PATCH",
+        body: JSON.stringify({ imageIds: [10, 11] }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("reorders for the owner and returns the resulting images/imageUrl", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    reorderPostImages.mockResolvedValueOnce({
+      kind: "ok",
+      data: {
+        images: [{ id: 11, imageUrl: "https://x/b.jpg", displayOrder: 0, isPrimary: true }],
+        imageUrl: "https://x/b.jpg",
+      },
+    });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/posts/1/image?type=lost", {
+        method: "PATCH",
+        body: JSON.stringify({ imageIds: [11] }),
+      }),
+      params("1"),
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(reorderPostImages).toHaveBeenCalledWith("lost", 1, sessionUser.id, [11]);
+    expect(json.data.imageUrl).toBe("https://x/b.jpg");
+  });
+
+  it("registers the deferred internal image-embedding trigger only after a successful reorder", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    reorderPostImages.mockResolvedValueOnce({ kind: "ok", data: { images: [], imageUrl: "https://x/b.jpg" } });
+
+    await PATCH(
+      new NextRequest("http://localhost/api/posts/1/image?type=lost", {
+        method: "PATCH",
+        headers: { cookie: "authjs.session-token=abc123" },
+        body: JSON.stringify({ imageIds: [11] }),
+      }),
+      params("1"),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await flushAfterCallbacks();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost/api/posts/1?type=lost",
+      expect.objectContaining({ method: "PUT", headers: { cookie: "authjs.session-token=abc123" } }),
+    );
+  });
+
+  it("does not register the embedding trigger for a failed reorder", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    reorderPostImages.mockResolvedValueOnce({ kind: "invalid_order" });
+
+    await PATCH(
+      new NextRequest("http://localhost/api/posts/1/image?type=lost", {
+        method: "PATCH",
+        body: JSON.stringify({ imageIds: [11] }),
+      }),
+      params("1"),
+    );
+
+    expect(after).not.toHaveBeenCalled();
   });
 });

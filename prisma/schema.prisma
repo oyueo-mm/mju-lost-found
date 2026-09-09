@@ -281,6 +281,15 @@ model LostPost {
 
   comments         Comment[]
   directChatRooms  ChatRoom[] @relation("ChatRoomDirectLostPost")
+  // Phase 11-4B: `imageUrl`/`embedding`/`imageEmbedding` above are kept
+  // exactly as-is (never removed) -- they now serve as a denormalized
+  // "primary image" cache, synced from whichever PostImage row has
+  // isPrimary=true, so every existing reader of this post's single image
+  // (PostCard, chat's own PostRef select, notifications, search/
+  // recommendation hydration) keeps working with zero changes. This
+  // relation is additive only; nothing in this phase actually writes to
+  // it from the upload/edit flow yet (see PostImage's own comment).
+  images           PostImage[]
 
   @@index([userId], map: "idx_lostpost_user_id")
   @@map("LostPost")
@@ -314,9 +323,61 @@ model FoundPost {
 
   comments         Comment[]
   directChatRooms  ChatRoom[] @relation("ChatRoomDirectFoundPost")
+  // See LostPost.images's own comment -- identical shape/reasoning.
+  images           PostImage[]
 
   @@index([userId], map: "idx_foundpost_user_id")
   @@map("FoundPost")
+}
+
+// ---------- PostImage (Phase 11-4B) ----------
+
+// One row per image, ordered within a post. Same "exactly one of two
+// nullable direct-post FKs" shape as Comment's lostPostId/foundPostId
+// (see that model's own comment) -- chosen for the same reason: LostPost
+// and FoundPost are independent tables with independent id sequences, so
+// a real FK (rather than a polymorphic postType/postId pair with no DB-
+// level reference) is what lets deleting a LostPost/FoundPost cascade-
+// delete its own images at the DB level, with no orphan rows possible.
+// "Exactly one set" is enforced two ways here (stronger than Comment's,
+// which relies on application code alone -- see comment/service.ts):
+// application code (the not-yet-written upload flow, Phase 11-4C) is
+// still expected to never set both/neither, but this table also carries
+// a real CHECK constraint (see this phase's own migration.sql) since it's
+// a brand-new table with no existing rows/behavior to stay compatible
+// with -- unlike Comment, adding one here costs nothing.
+//
+// Deliberately does NOT have its own imageEmbedding column yet -- Phase
+// 11-4E decides whether/how to add one. LostPost.imageEmbedding/
+// FoundPost.imageEmbedding (the *post's* single image-embedding column)
+// are untouched by this phase and keep meaning exactly what they already
+// do: the embedding of that post's current primary image.
+//
+// isPrimary is enforced as "at most one true row per post" via two
+// partial unique indexes in the migration (Postgres-only syntax with no
+// direct Prisma schema DSL equivalent, same reason this schema's other
+// hand-written migrations since Phase 23 exist) -- not expressible as a
+// `@@unique` here, so it isn't declared as one; the real constraint lives
+// in migration.sql, not this file.
+model PostImage {
+  id           Int        @id @default(autoincrement())
+  lostPostId   Int?       @map("lost_post_id")
+  lostPost     LostPost?  @relation(fields: [lostPostId], references: [id], onDelete: Cascade)
+  foundPostId  Int?       @map("found_post_id")
+  foundPost    FoundPost? @relation(fields: [foundPostId], references: [id], onDelete: Cascade)
+  imageUrl     String     @db.Text @map("image_url")
+  // 0-based, unique within a post (not DB-enforced -- same "ordering is
+  // an application-code invariant, not a uniqueness constraint" approach
+  // ordinary list-ordering columns take elsewhere in this app; a gap or a
+  // duplicate here is just a display-order hint, never something a query
+  // depends on for correctness).
+  displayOrder Int        @default(0) @map("display_order")
+  isPrimary    Boolean    @default(false) @map("is_primary")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@index([lostPostId, displayOrder], map: "idx_postimage_lost_order")
+  @@index([foundPostId, displayOrder], map: "idx_postimage_found_order")
+  @@map("PostImage")
 }
 
 // ---------- MatchCandidateCache (Phase 23; repurposed Phase J-2) ----------

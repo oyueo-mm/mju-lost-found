@@ -15,6 +15,14 @@ export type AllowedImageContentType = (typeof ALLOWED_IMAGE_CONTENT_TYPES)[numbe
 
 export const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
+// Phase 11-4C: server-side cap on how many PostImage rows one post may
+// have -- re-checked against a fresh DB count at attach time (see
+// src/lib/images/service.ts::attachPostImages), never trusted from the
+// client's own request shape alone. Also used by attachImageSchema's own
+// `paths` array length check below, so an obviously-too-large request is
+// rejected before even reaching the DB.
+export const MAX_IMAGES_PER_POST = 5;
+
 const EXTENSION_BY_CONTENT_TYPE: Record<AllowedImageContentType, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",

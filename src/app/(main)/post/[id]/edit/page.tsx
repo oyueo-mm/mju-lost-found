@@ -65,7 +65,10 @@ export default async function EditPostPage({
           // PostForm's own dateUnknown toggle is what decides, from this,
           // whether to seed the date input as unknown or pre-filled.
           dateValue: dateValue ? toDateTimeLocalValue(dateValue) : null,
-          imageUrl: post.imageUrl,
+          // getLostPost/getFoundPost always include this (ordered by
+          // displayOrder) -- defaulting to [] only satisfies the type for
+          // PostDTO's other, list-producing callers, which never reach here.
+          images: (post.images ?? []).map((img) => ({ id: img.id, imageUrl: img.imageUrl })),
         }}
       />
     </div>

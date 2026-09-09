@@ -55,6 +55,17 @@ const FOUND_STATUS_FROM_DB: Record<PrismaFoundPostStatus, string> = {
 export const AUTHOR_SELECT = { id: true, nickname: true, publicId: true } as const;
 export type Author = { id: number; nickname: string | null; publicId: string };
 
+// Phase 11-4D: only ever set by getLostPost/getFoundPost (a single-post
+// detail-page fetch) -- listLostPosts/listFoundPosts/searchAllPosts/etc.
+// never include it (their rows are plain Prisma results with no `images`
+// key at all, not an empty array), on purpose: PostCard keeps reading
+// `imageUrl` alone (see PostCard.tsx's own Phase 11-4D note), so adding a
+// PostImage query to every list-producing function would be a new N+1
+// query this phase's own spec explicitly says not to introduce. Ordered by
+// displayOrder ascending -- index 0 is always the primary image, matching
+// PostImage's own invariant (see schema.prisma).
+export type PostImageSummary = { id: number; imageUrl: string; displayOrder: number; isPrimary: boolean };
+
 export type LostPostDTO = {
   id: number;
   type: "lost";
@@ -84,6 +95,9 @@ export type LostPostDTO = {
   // vs "이미지 유사도", see PostCard's scoreLabel prop), never this field
   // itself.
   score?: number;
+  // Phase 11-4D: see PostImageSummary's own comment -- only present on
+  // getLostPost's result.
+  images?: PostImageSummary[];
 };
 
 export type FoundPostDTO = {
@@ -102,6 +116,9 @@ export type FoundPostDTO = {
   author: Author;
   viewCount: number;
   score?: number;
+  // Phase 11-4D: see PostImageSummary's own comment -- only present on
+  // getFoundPost's result.
+  images?: PostImageSummary[];
 };
 
 export type PostDTO = LostPostDTO | FoundPostDTO;
@@ -245,6 +262,12 @@ export function toLostPostDTO(row: {
   updatedAt: Date;
   viewCount: number;
   user: Author;
+  // Phase 11-4D: only getLostPost's own query actually includes this
+  // relation (see that function) -- every list-producing row this same
+  // converter is reused for simply has no `images` key at all, which
+  // `...rest` below passes through as `undefined`, matching
+  // LostPostDTO.images's own optional-ness.
+  images?: PostImageSummary[];
 }): LostPostDTO {
   const { user, status, ...rest } = row;
   return { type: "lost", ...rest, status: LOST_STATUS_FROM_DB[status], author: user };
@@ -264,6 +287,7 @@ export function toFoundPostDTO(row: {
   updatedAt: Date;
   viewCount: number;
   user: Author;
+  images?: PostImageSummary[];
 }): FoundPostDTO {
   const { user, status, ...rest } = row;
   return { type: "found", ...rest, status: FOUND_STATUS_FROM_DB[status], author: user };
@@ -307,10 +331,23 @@ export async function listLostPostsByUser(userId: number): Promise<LostPostDTO[]
   return rows.map(toLostPostDTO);
 }
 
+// Phase 11-4D: the only LostPostDTO-producing function that includes the
+// `images` relation -- a single extra query (Prisma's own `include`
+// strategy for a 1:N relation, a WHERE lost_post_id IN (id) fetch keyed off
+// the one row already being read), not one query per post, since this only
+// ever fetches exactly one post at a time. Ordered by displayOrder so the
+// caller (post/[id]/page.tsx, post/[id]/edit/page.tsx) never has to sort it
+// itself.
 export async function getLostPost(id: number): Promise<LostPostDTO | null> {
   const row = await prisma.lostPost.findUnique({
     where: { id },
-    include: { user: { select: AUTHOR_SELECT } },
+    include: {
+      user: { select: AUTHOR_SELECT },
+      images: {
+        orderBy: { displayOrder: "asc" },
+        select: { id: true, imageUrl: true, displayOrder: true, isPrimary: true },
+      },
+    },
   });
   return row ? toLostPostDTO(row) : null;
 }
@@ -329,15 +366,28 @@ export async function deleteLostPost(
   if (!existing) return { kind: "not_found" };
   if (existing.userId !== userId && !options?.asAdmin) return { kind: "forbidden", reason: "not_owner" };
 
+  // Phase 11-4C: read every PostImage row's URL *before* deleting the
+  // post -- their DB rows themselves already disappear via the ON DELETE
+  // CASCADE declared on PostImage.lostPost (see schema.prisma), but that
+  // cascade never touches Storage, so their own objects would otherwise
+  // become permanent orphans.
+  const images = await prisma.postImage.findMany({ where: { lostPostId: id }, select: { imageUrl: true } });
+
   // A plain delete -- the ON DELETE CASCADE already declared on
   // ChatRoom/Message's relations (see schema.prisma) is what keeps
   // them consistent, the same way delete_lost_post() in the legacy app
   // never manually cleans up related rows either.
   await prisma.lostPost.delete({ where: { id } });
+
   // Best-effort: the post is already gone from the DB either way, a
   // Storage cleanup failure here is only logged, never surfaced as a
-  // failed delete.
-  if (existing.imageUrl) await deleteObjectSafely(existing.imageUrl);
+  // failed delete. Deduped (Set) since existing.imageUrl is normally the
+  // same object as the post's own primary PostImage row.
+  const urlsToDelete = new Set<string>();
+  if (existing.imageUrl) urlsToDelete.add(existing.imageUrl);
+  for (const image of images) urlsToDelete.add(image.imageUrl);
+  await Promise.all([...urlsToDelete].map((url) => deleteObjectSafely(url)));
+
   return { kind: "ok", data: { id } };
 }
 
@@ -374,10 +424,17 @@ export async function listFoundPostsByUser(userId: number): Promise<FoundPostDTO
   return rows.map(toFoundPostDTO);
 }
 
+// See getLostPost's own comment -- identical shape/reasoning.
 export async function getFoundPost(id: number): Promise<FoundPostDTO | null> {
   const row = await prisma.foundPost.findUnique({
     where: { id },
-    include: { user: { select: AUTHOR_SELECT } },
+    include: {
+      user: { select: AUTHOR_SELECT },
+      images: {
+        orderBy: { displayOrder: "asc" },
+        select: { id: true, imageUrl: true, displayOrder: true, isPrimary: true },
+      },
+    },
   });
   return row ? toFoundPostDTO(row) : null;
 }
@@ -392,8 +449,16 @@ export async function deleteFoundPost(
   if (!existing) return { kind: "not_found" };
   if (existing.userId !== userId && !options?.asAdmin) return { kind: "forbidden", reason: "not_owner" };
 
+  // See deleteLostPost's own comment -- identical shape/reasoning.
+  const images = await prisma.postImage.findMany({ where: { foundPostId: id }, select: { imageUrl: true } });
+
   await prisma.foundPost.delete({ where: { id } });
-  if (existing.imageUrl) await deleteObjectSafely(existing.imageUrl);
+
+  const urlsToDelete = new Set<string>();
+  if (existing.imageUrl) urlsToDelete.add(existing.imageUrl);
+  for (const image of images) urlsToDelete.add(image.imageUrl);
+  await Promise.all([...urlsToDelete].map((url) => deleteObjectSafely(url)));
+
   return { kind: "ok", data: { id } };
 }
 

@@ -8,6 +8,7 @@ import { FOUND_STATUSES, LOST_STATUSES, postTypeSchema } from "@/lib/posts/schem
 import { isAdmin } from "@/lib/moderation/service";
 import { listCommentsForPost } from "@/lib/comment/service";
 import { PostManageMenu } from "@/components/post/PostManageMenu";
+import { PostImageGallery } from "@/components/post/PostImageGallery";
 import { ViewTracker } from "@/components/post/ViewTracker";
 import { PendingRecommendations } from "@/components/post/PendingRecommendations";
 import { DirectChatButton } from "@/components/chat/DirectChatButton";
@@ -124,7 +125,16 @@ export default async function PostDetailPage({
           게시글이 등록되었습니다.
         </p>
       )}
-      {post.imageUrl ? (
+      {/* Phase 11-4D: post.images (ordered by displayOrder, see
+          getLostPost/getFoundPost) is what decides which of the three
+          states renders -- post.imageUrl (the primary-image cache) still
+          agrees with post.images[0] by construction (see PostImage's own
+          sync invariant), so the 2+ case is the only one that changed
+          behavior here; 0 and 1 render exactly the same markup this page
+          already had before this phase. */}
+      {(post.images?.length ?? 0) >= 2 ? (
+        <PostImageGallery images={post.images!} title={post.title} />
+      ) : post.imageUrl ? (
         // Phase H-3's `width/height` hint + `h-auto w-auto` pattern never
         // upscales past the source photo's own pixel resolution (that's
         // what `h-auto w-auto` is *for* -- it makes Next.js size the <img>

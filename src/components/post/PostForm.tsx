@@ -8,7 +8,14 @@ import { CAMPUSES, CATEGORIES, DEFAULT_CAMPUS } from "@/lib/posts/schema";
 import type { PostType } from "@/lib/posts/schema";
 import { getLocationSuggestions } from "@/lib/posts/campusLocations";
 import { uploadPostImage } from "@/lib/images/client";
-import { ImageUploader } from "./ImageUploader";
+import { MAX_IMAGES_PER_POST } from "@/lib/images/config";
+import {
+  formatPartialUploadFailureMessage,
+  resolveFinalImageIds,
+  selectNewImages,
+  type GalleryItem,
+} from "@/lib/images/galleryState";
+import { PostImageManager } from "./PostImageManager";
 import { Button } from "@/components/ui/Button";
 
 const FIELD_CLASS =
@@ -33,7 +40,11 @@ type PostFormValues = {
   location: string | null;
   campus: string;
   dateValue: string | null; // <input type="datetime-local"> value, or null if unknown
-  imageUrl: string | null;
+  // Phase 11-4D: replaces the old single `imageUrl` -- an existing post's
+  // current PostImage rows, already ordered by displayOrder (index 0 is
+  // primary) by getLostPost/getFoundPost. Empty array for a post with no
+  // image, same as before (never a broken-image placeholder).
+  images: { id: number; imageUrl: string }[];
 };
 
 type PostFormProps = {
@@ -88,23 +99,40 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [removeExisting, setRemoveExisting] = useState(false);
+  // Phase 11-4D: replaces selectedFile/removeExisting -- one ordered list
+  // covering both the post's surviving existing images (edit mode) and any
+  // new files picked in this session, array order == displayOrder, index 0
+  // == primary. See src/lib/images/galleryState.ts's own comment for the
+  // full design (why existing-image deletion is immediate but new-file
+  // upload/attach/reorder are deferred to submit).
+  const [items, setItems] = useState<GalleryItem[]>(
+    () => initialValues?.images.map((img) => ({ kind: "existing" as const, id: img.id, url: img.imageUrl })) ?? [],
+  );
+  // Set only by the up/down reorder buttons -- lets applyImageChanges skip
+  // the reorder API call entirely on the (very common) unmodified-order
+  // submit, instead of unconditionally re-sending the current order every
+  // time regardless of whether it changed.
+  const [reordered, setReordered] = useState(false);
+  // In-flight indicator for one existing image's own immediate DELETE
+  // call -- PostImageManager disables just that item's controls while set,
+  // not the whole gallery.
+  const [deletingExistingId, setDeletingExistingId] = useState<number | null>(null);
+  // Mirrors `items` for the unmount-cleanup effect further down, which
+  // must read the *latest* items (not the empty array from this
+  // component's very first render) without re-running on every items
+  // change -- see that effect's own comment. Synced in its own effect
+  // (never written during render -- React refs must only be read/written
+  // from an effect or event handler, never render itself).
+  const itemsRef = useRef(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
   // Phase G-2: set only once the post row itself is confirmed saved (right
-  // before applyImageChange runs) -- lets the error banner below offer a
+  // before applyImageChanges runs) -- lets the error banner below offer a
   // concrete "다시 시도"/게시물로 이동 action instead of just prose, since at
   // that point the post already exists at a real id/url regardless of
   // whether the image step succeeds.
   const [savedPostId, setSavedPostId] = useState<number | null>(null);
-  // Phase G-4: names a Storage object from an *earlier* upload attempt
-  // that finished uploading but never got attached (this same attach call
-  // failed last time, see applyImageChange below) -- sent along with the
-  // next attempt's request so the server can clean it up too (see
-  // setPostImage's own re-validation of this). A ref, not state: it's only
-  // ever read by applyImageChange itself, synchronously between one call
-  // and the next, and must never be stale the way a state read inside the
-  // same call that just set it would be (React batches state updates).
-  const staleUploadPathRef = useRef<string | null>(null);
   // Phase H-3: 위치 stays an uncontrolled native input (read via FormData
   // in handleSubmit, unchanged) -- this ref only lets a suggestion chip
   // write into it directly, the same way a user's own typing would,
@@ -144,57 +172,173 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [locationMenuOpen]);
 
-  async function applyImageChange(id: number): Promise<string | null> {
-    if (selectedFile) {
-      let uploaded: { path: string };
-      try {
-        uploaded = await uploadPostImage(type, id, selectedFile);
-      } catch {
-        return "이미지 업로드에 실패했습니다.";
+  // Revokes every remaining "new" item's blob: preview URL on unmount --
+  // reads itemsRef (kept in sync every render above) rather than `items`
+  // itself, since a cleanup-only effect with `[]` deps must not re-run (and
+  // so must not close over a stale, possibly-empty `items`) every time the
+  // gallery changes; it only needs the *latest* value once, at the one
+  // point it actually runs (true unmount).
+  useEffect(() => {
+    return () => {
+      for (const item of itemsRef.current) {
+        if (item.kind === "new") URL.revokeObjectURL(item.previewUrl);
       }
+    };
+  }, []);
 
-      // Whatever this ref still holds is an orphan from an earlier failed
-      // attempt (nothing else clears it except a successful attach below)
-      // -- ask the server to sweep it up together with this attempt.
-      const previousAttemptPath = staleUploadPathRef.current ?? undefined;
-      // This attempt's own path becomes the new "stale" candidate the
-      // moment it exists, in case *this* attach call also fails and a
-      // further retry follows -- set before the attach call, not after,
-      // since the file is already sitting in Storage regardless of how
-      // the attach call below turns out.
-      staleUploadPathRef.current = uploaded.path;
+  function handleFilesSelected(files: File[]) {
+    setError(null);
+    const { accepted, rejectedForCount, validationError } = selectNewImages(files, items.length);
 
-      try {
-        const res = await fetch(`/api/posts/${id}/image?type=${type}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...uploaded, previousAttemptPath }),
-        });
-        if (!res.ok) {
-          const json = await res.json().catch(() => ({}));
-          return json.error ?? "이미지를 게시물에 연결하지 못했습니다.";
-        }
-      } catch {
-        return "이미지 업로드에 실패했습니다.";
-      }
-      // Attached successfully -- this path is now the post's real image,
-      // not an orphan, and any previous attempt was just cleaned up
-      // server-side too.
-      staleUploadPathRef.current = null;
-      return null;
+    if (accepted.length > 0) {
+      setItems((prev) => [
+        ...prev,
+        ...accepted.map((file) => ({
+          kind: "new" as const,
+          localId: crypto.randomUUID(),
+          file,
+          previewUrl: URL.createObjectURL(file),
+        })),
+      ]);
     }
 
-    if (removeExisting) {
-      const res = await fetch(`/api/posts/${id}/image?type=${type}`, {
-        method: "DELETE",
-      });
+    if (rejectedForCount > 0) {
+      setError(`최대 ${MAX_IMAGES_PER_POST}장까지 등록할 수 있어요. ${rejectedForCount}장은 추가되지 않았습니다.`);
+    } else if (validationError) {
+      setError(validationError);
+    }
+  }
+
+  function handleRemoveNewImage(localId: string) {
+    setItems((prev) => {
+      const target = prev.find((item) => item.kind === "new" && item.localId === localId);
+      if (target?.kind === "new") URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((item) => !(item.kind === "new" && item.localId === localId));
+    });
+  }
+
+  // Phase 11-4D section 9: an *existing* image's delete uses the real
+  // per-image endpoint immediately (unlike a newly-picked file, which is
+  // just removed from local preview state) -- this always has a real,
+  // already-saved post to call it against, since existing items only ever
+  // come from initialValues.images (edit mode). Never sends a bare DELETE
+  // /api/posts/[id]/image (that clears every image the post has, not just
+  // this one) -- `imageId` is what picks the individual-delete behavior
+  // instead (see that route's own comment for why this is a query param
+  // rather than a separate /images/[imageId] route -- the Hobby plan's
+  // 12-Serverless-Function cap, hit by a real Preview deploy).
+  async function handleDeleteExistingImage(imageId: number) {
+    if (postId === undefined) return;
+    setError(null);
+    setDeletingExistingId(imageId);
+    try {
+      const res = await fetch(`/api/posts/${postId}/image?type=${type}&imageId=${imageId}`, { method: "DELETE" });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        return json.error ?? "이미지를 삭제하지 못했습니다.";
+        setError(json.error ?? "이미지를 삭제하지 못했습니다.");
+        return;
       }
+      setItems((prev) => prev.filter((item) => !(item.kind === "existing" && item.id === imageId)));
+    } catch {
+      setError("이미지를 삭제하지 못했습니다.");
+    } finally {
+      setDeletingExistingId(null);
+    }
+  }
+
+  function handleMoveItem(index: number, direction: -1 | 1) {
+    setItems((prev) => {
+      const target = index + direction;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+    setReordered(true);
+  }
+
+  // Phase 11-4D: runs the whole deferred image step against the
+  // already-saved post -- uploads every not-yet-attached "new" item
+  // (parallel, partial-failure-tolerant per this phase's own spec section
+  // 11), attaches whichever of those succeeded in one batched call (the
+  // Phase 11-4C `paths` shape), converts each newly-attached item to
+  // "existing" in place (so a retry after a partial failure never
+  // re-uploads an already-succeeded file), and finally -- only if the user
+  // actually touched reorder -- persists the gallery's current order via
+  // the reorder endpoint. Existing-image deletion already happened
+  // immediately (handleDeleteExistingImage above), so there's nothing left
+  // to do for those here.
+  async function applyImageChanges(id: number): Promise<string | null> {
+    const newItems = items.filter((item): item is Extract<GalleryItem, { kind: "new" }> => item.kind === "new");
+    const attachedByLocalId = new Map<string, { id: number; imageUrl: string }>();
+    let uploadFailedCount = 0;
+
+    if (newItems.length > 0) {
+      const uploadResults = await Promise.allSettled(
+        newItems.map(async (item) => ({ localId: item.localId, ...(await uploadPostImage(type, id, item.file)) })),
+      );
+
+      const succeeded: { localId: string; path: string }[] = [];
+      for (const result of uploadResults) {
+        if (result.status === "fulfilled") succeeded.push(result.value);
+        else uploadFailedCount++;
+      }
+
+      if (succeeded.length > 0) {
+        try {
+          const res = await fetch(`/api/posts/${id}/image?type=${type}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ paths: succeeded.map((s) => s.path) }),
+          });
+          if (!res.ok) {
+            const json = await res.json().catch(() => ({}));
+            return json.error ?? "이미지를 게시물에 연결하지 못했습니다.";
+          }
+          const json = await res.json();
+          const createdImages: { id: number; imageUrl: string }[] = json.data.images;
+          succeeded.forEach((s, i) => attachedByLocalId.set(s.localId, createdImages[i]));
+        } catch {
+          return "이미지를 게시물에 연결하지 못했습니다.";
+        }
+      }
+
+      setItems((prev) =>
+        prev.map((item) => {
+          if (item.kind !== "new") return item;
+          const attached = attachedByLocalId.get(item.localId);
+          if (!attached) return item;
+          URL.revokeObjectURL(item.previewUrl);
+          return { kind: "existing" as const, id: attached.id, url: attached.imageUrl };
+        }),
+      );
     }
 
-    return null;
+    if (reordered) {
+      const finalIds = resolveFinalImageIds(items, attachedByLocalId);
+      if (finalIds.length >= 2) {
+        try {
+          // Same endpoint as attach/delete above -- see .../image/route.ts's
+          // own comment for why reorder is PATCH here instead of a
+          // separate /images route (the Hobby plan's 12-Serverless-Function
+          // cap, hit by a real Preview deploy).
+          const res = await fetch(`/api/posts/${id}/image?type=${type}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageIds: finalIds }),
+          });
+          if (!res.ok) {
+            const json = await res.json().catch(() => ({}));
+            return json.error ?? "이미지 순서를 저장하지 못했습니다.";
+          }
+        } catch {
+          return "이미지 순서를 저장하지 못했습니다.";
+        }
+      }
+      setReordered(false);
+    }
+
+    return formatPartialUploadFailureMessage(newItems.length, uploadFailedCount);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -249,7 +393,7 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
       const id = postId ?? json.data.id;
       setSavedPostId(id);
 
-      const imageError = await applyImageChange(id);
+      const imageError = await applyImageChanges(id);
       if (imageError) {
         // The post itself was already saved successfully -- only the
         // image step failed, so this isn't treated as a full failure.
@@ -274,18 +418,21 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
   }
 
   // Phase G-2: re-runs just the image step against the already-saved post
-  // (savedPostId), reusing whatever file/removal choice is still selected
-  // in the form -- no need to resubmit title/description/etc, which are
-  // already saved. On success, proceeds exactly like a normal submit
-  // (navigate to the post); on failure, the same error banner + retry stays
-  // up so the user can try again or leave via the link below without losing
-  // their place.
+  // (savedPostId), reusing whatever's still left in `items` -- no need to
+  // resubmit title/description/etc, which are already saved. Phase 11-4D:
+  // any "new" item that already got uploaded+attached on a previous attempt
+  // was already converted to "existing" in place (see applyImageChanges),
+  // so a retry only re-uploads the files that actually failed last time --
+  // never a Storage object that's already sitting on the post. On success,
+  // proceeds exactly like a normal submit (navigate to the post); on
+  // failure, the same error banner + retry stays up so the user can try
+  // again or leave via the link below without losing their place.
   async function handleRetryImage() {
     if (savedPostId === null) return;
     setPending(true);
     setError(null);
 
-    const imageError = await applyImageChange(savedPostId);
+    const imageError = await applyImageChanges(savedPostId);
     if (imageError) {
       setError(imageError);
       setPending(false);
@@ -309,7 +456,7 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
           // one-sentence-of-prose banner with the two things the user
           // actually needs: what to do right now (재시도, reusing the same
           // file already selected below) and where to go instead if they'd
-          // rather not (게시물 페이지로 이동, where ImageUploader is
+          // rather not (게시물 페이지로 이동, where PostImageManager is
           // available again on the edit form).
           <div className="flex flex-col gap-2 rounded-card border border-destructive/30 bg-destructive-muted px-4 py-3 text-sm text-destructive">
             <p>게시물은 정상적으로 저장되었습니다. 다만 {error}</p>
@@ -549,11 +696,14 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
         <h2 className="text-sm font-semibold text-foreground">
           사진 <span className="font-normal text-muted-foreground">(선택)</span>
         </h2>
-        <ImageUploader
-          existingImageUrl={initialValues?.imageUrl ?? null}
+        <PostImageManager
+          items={items}
           disabled={pending}
-          onFileSelected={setSelectedFile}
-          onRemoveExisting={setRemoveExisting}
+          deletingExistingId={deletingExistingId}
+          onFilesSelected={handleFilesSelected}
+          onRemoveNew={handleRemoveNewImage}
+          onDeleteExisting={handleDeleteExistingImage}
+          onMove={handleMoveItem}
         />
       </section>
 

@@ -17,9 +17,15 @@ const foundPost = {
   delete: vi.fn(),
 };
 
+// Phase 11-4C: deleteLostPost/deleteFoundPost now also read (and best-effort
+// clean up the Storage objects for) every PostImage row a post has, ahead
+// of the CASCADE-deleted DB rows -- see this describe block's own new
+// tests below.
+const postImage = { findMany: vi.fn() };
+
 const deleteObjectSafely = vi.fn();
 
-vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost, postImage } }));
 vi.mock("@/generated/prisma/client", () => ({
   LostPostStatus: { SEARCHING: "SEARCHING", FOUND: "FOUND" },
   FoundPostStatus: { KEEPING: "KEEPING", COMPLETED: "COMPLETED" },
@@ -50,6 +56,7 @@ const {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  postImage.findMany.mockResolvedValue([]);
 });
 
 describe("listLostPosts / listFoundPosts", () => {
@@ -78,6 +85,20 @@ describe("listLostPosts / listFoundPosts", () => {
     );
     expect(result.items[0].status).toBe("찾는 중"); // DB enum converted back to legacy Korean value
     expect(result.items[0].author).toEqual({ id: 1, nickname: "닉네임", publicId: "pub-1" });
+  });
+
+  // Phase 11-4D: listing must not query PostImage at all (see
+  // getLostPost's own comment on why *that* function is the only one that
+  // does) -- PostCard still reads plain `imageUrl`, so adding this here
+  // would be exactly the N+1 query this phase's spec says not to add.
+  it("does not include the PostImage relation (no N+1)", async () => {
+    lostPost.findMany.mockResolvedValueOnce([]);
+    lostPost.count.mockResolvedValueOnce(0);
+
+    await listLostPosts({ page: 1, limit: 20 });
+
+    const call = lostPost.findMany.mock.calls[0][0];
+    expect(call.include).not.toHaveProperty("images");
   });
 
   it("lists found posts", async () => {
@@ -125,6 +146,44 @@ describe("getLostPost", () => {
   it("returns null for a nonexistent post", async () => {
     lostPost.findUnique.mockResolvedValueOnce(null);
     expect(await getLostPost(999)).toBeNull();
+  });
+
+  // Phase 11-4D: this is the one PostDTO-producing query that includes the
+  // PostImage relation (see this function's own comment for why the others
+  // don't) -- ordered by displayOrder so the detail/edit pages never have
+  // to sort it themselves.
+  it("includes PostImage rows ordered by displayOrder, and passes them through to the DTO", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({
+      id: 1,
+      title: "t",
+      description: "d",
+      category: "c",
+      location: "l",
+      status: "SEARCHING",
+      imageUrl: "https://x/b.jpg",
+      lostAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임", publicId: "pub-1" },
+      images: [
+        { id: 11, imageUrl: "https://x/b.jpg", displayOrder: 0, isPrimary: true },
+        { id: 12, imageUrl: "https://x/c.jpg", displayOrder: 1, isPrimary: false },
+      ],
+    });
+
+    const post = await getLostPost(1);
+
+    expect(lostPost.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          images: expect.objectContaining({ orderBy: { displayOrder: "asc" } }),
+        }),
+      }),
+    );
+    expect(post?.images).toEqual([
+      { id: 11, imageUrl: "https://x/b.jpg", displayOrder: 0, isPrimary: true },
+      { id: 12, imageUrl: "https://x/c.jpg", displayOrder: 1, isPrimary: false },
+    ]);
   });
 });
 
@@ -185,6 +244,39 @@ describe("deleteLostPost / deleteFoundPost", () => {
 
     expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
     expect(foundPost.delete).not.toHaveBeenCalled();
+  });
+
+  // Phase 11-4C: PostImage rows themselves already cascade-delete via the
+  // FK (see schema.prisma) -- this only covers the Storage side, which the
+  // cascade never touches.
+  it("cleans up every PostImage row's Storage object on delete, not just the imageUrl cache", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x/cover.jpg" });
+    lostPost.delete.mockResolvedValueOnce({});
+    postImage.findMany.mockResolvedValueOnce([
+      { imageUrl: "https://x/cover.jpg" },
+      { imageUrl: "https://x/second.jpg" },
+      { imageUrl: "https://x/third.jpg" },
+    ]);
+
+    await deleteLostPost(1, 1);
+
+    expect(postImage.findMany).toHaveBeenCalledWith({ where: { lostPostId: 1 }, select: { imageUrl: true } });
+    expect(deleteObjectSafely).toHaveBeenCalledWith("https://x/cover.jpg");
+    expect(deleteObjectSafely).toHaveBeenCalledWith("https://x/second.jpg");
+    expect(deleteObjectSafely).toHaveBeenCalledWith("https://x/third.jpg");
+    // cover.jpg is both the imageUrl cache and one of the PostImage rows --
+    // deduped, so it's only ever deleted once.
+    expect(deleteObjectSafely).toHaveBeenCalledTimes(3);
+  });
+
+  it("is a no-op Storage-wise when the post never had any images", async () => {
+    foundPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
+    foundPost.delete.mockResolvedValueOnce({});
+    postImage.findMany.mockResolvedValueOnce([]);
+
+    await deleteFoundPost(1, 1);
+
+    expect(deleteObjectSafely).not.toHaveBeenCalled();
   });
 });
 

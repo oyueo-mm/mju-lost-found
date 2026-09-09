@@ -186,6 +186,32 @@ export function AlertIcon(props: IconProps) {
   );
 }
 
+// Phase 11-4D: PostImageManager's own reorder-up/reorder-down/delete
+// controls -- same 24x24/1.75px-stroke language as every icon above.
+export function ChevronUpIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="m5 15 7-7 7 7" />
+    </svg>
+  );
+}
+
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="m5 9 7 7 7-7" />
+    </svg>
+  );
+}
+
+export function XIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="m6 6 12 12M18 6 6 18" />
+    </svg>
+  );
+}
+
 // Phase H-6: the "⋯" trigger for PostManageMenu -- three filled dots, no
 // stroke (unlike every icon above), since a thin 1.75px outline circle
 // this small reads as barely visible at typical button sizes.
