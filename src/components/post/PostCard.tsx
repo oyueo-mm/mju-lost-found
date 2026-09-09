@@ -21,6 +21,19 @@ type PostCardProps = {
   // photo looks visually similar). Defaulting to the original Phase 12
   // wording keeps every existing call site (search results) unchanged.
   scoreLabel?: string;
+  // Phase 11-3: search/image-search's `score` is a direct, stable rescale
+  // of raw cosine similarity (aiService.ts's searchPostsSemantic ->
+  // normalizeScore, `(cosine+1)/2`) -- comparable across different
+  // searches, so showing it as a percentage is meaningful there. AI
+  // recommendation's `score` (SimilarPostsSection) goes through one more
+  // step first (recommendation/service.ts's minMaxNormalize): rescaled
+  // *again*, relative only to that one post's own small candidate pool
+  // (top 5) -- the best candidate in that pool is ~100% almost by
+  // construction, regardless of how similar it actually is in absolute
+  // terms. Showing "XX%" there reads as a confidence/accuracy claim the
+  // number doesn't support. Only SimilarPostsSection passes false; every
+  // other existing caller (search, image search) is unaffected.
+  showPercentage?: boolean;
 };
 
 // Phase 17 redesign: image-forward vertical card (was a small 64px
@@ -66,7 +79,7 @@ type PostCardProps = {
 // to their profile instead. `group`/`group-hover` (image zoom on hover)
 // still work unchanged -- :hover is based on the pointer being over the
 // element's box, independent of which descendant is topmost for clicks.
-export function PostCard({ post, scoreLabel = "검색 유사도" }: PostCardProps) {
+export function PostCard({ post, scoreLabel = "검색 유사도", showPercentage = true }: PostCardProps) {
   return (
     // Phase P-4: `transition` (not `transition-colors`) so border-color,
     // box-shadow, and the small hover lift below all animate off the same
@@ -133,11 +146,16 @@ export function PostCard({ post, scoreLabel = "검색 유사도" }: PostCardProp
             results, or the post detail page's AI recommendations) -- a plain
             keyword-search/list result never carries `score`, so this never
             shows up outside those contexts. Always labeled by the caller
-            ("검색 유사도"/"추천도", see scoreLabel above) so it reads as a
-            ranking hint, never as a confirmed same-item claim. */}
+            ("검색 유사도"/"이미지 유사도"/"AI 추천", see scoreLabel above).
+            Phase 11-3: the percentage itself is only shown when
+            showPercentage is true (search/image search, whose score is a
+            stable rescale of raw cosine similarity) -- recommendation's
+            score is a candidate-pool-relative rank, not a similarity
+            percentage (see showPercentage's own comment above), so it
+            shows only the label there, no number. */}
         {typeof post.score === "number" && (
           <span className="mt-0.5 w-fit rounded-full bg-primary-muted px-2 py-0.5 text-[11px] font-medium text-primary">
-            {scoreLabel} {Math.round(post.score * 100)}%
+            {showPercentage ? `${scoreLabel} ${Math.round(post.score * 100)}%` : scoreLabel}
           </span>
         )}
       </div>

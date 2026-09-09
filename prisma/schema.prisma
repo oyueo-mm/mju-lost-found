@@ -394,6 +394,17 @@ model ChatRoom {
   // reach for one if a future change makes this column pair non-null.
   @@unique([directLostPostId, initiatorUserId], map: "idx_chatroom_direct_lost_unique")
   @@unique([directFoundPostId, initiatorUserId], map: "idx_chatroom_direct_found_unique")
+  // Phase 11-3: initiatorUserId only appears as the *second* column of the
+  // two composite unique constraints above, which Postgres can't use for a
+  // `WHERE initiatorUserId = X` lookup on its own (a composite B-tree index
+  // only serves equality lookups on its leading column(s)). Both
+  // listChatRoomsForUser() and countUnreadMessagesForUser() in
+  // chat/service.ts filter with `OR: [{ initiatorUserId: requesterId },
+  // ...]` -- and countUnreadMessagesForUser() runs on literally every
+  // authenticated page load ((main)/layout.tsx's own unread-badge count),
+  // the hottest read path in this app, so this was a real gap, not a
+  // speculative one.
+  @@index([initiatorUserId], map: "idx_chatroom_initiator_user_id")
   @@map("ChatRoom")
 }
 
@@ -583,6 +594,21 @@ model ModerationAction {
   createdAt    DateTime             @default(now()) @map("created_at")
   expiresAt    DateTime?            @map("expires_at")
 
+  // Phase 11-3: this table previously had no index at all besides the
+  // reportId unique -- added only after confirming both of these are real,
+  // already-existing query shapes (not speculative):
+  // moderation/service.ts's listSuspensionActionsForAdmin() does
+  // `where: { actionType: SUSPEND_USER }, orderBy: { createdAt: "desc" }`
+  // on /admin/sanctions (paginated admin list -- grows over time, same
+  // reasoning Phase 11 audit flagged this table for).
+  @@index([actionType, createdAt], map: "idx_moderation_action_type_created")
+  // getLatestSuspensionRecord() does
+  // `where: { actionType: SUSPEND_USER, targetType: "USER", targetId }` --
+  // hit on every visit to /suspended by a currently-suspended user.
+  // actionType is low-cardinality (4 values) and a given target already
+  // has very few rows once narrowed by (targetType, targetId), so it isn't
+  // included as a third column.
+  @@index([targetType, targetId], map: "idx_moderation_action_target")
   @@map("ModerationAction")
 }
 

@@ -67,10 +67,16 @@ export function SimilarPostsSection({
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {recommendations.map((post) => (
-            // score는 텍스트/이미지 신호를 합친 값이라 "검색 유사도"도
-            // "이미지 유사도"도 아니다 -- 어느 신호가 기여했든 정확한 하나의
-            // 이름으로 "추천도"를 쓴다 (PostCard의 scoreLabel 주석 참고).
-            <PostCard key={`${post.type}-${post.id}`} post={post} scoreLabel="추천도" />
+            // Phase 11-3: this score is a min-max-normalized rank within
+            // this one post's own small candidate pool (top 5), not a
+            // stable similarity percentage the way search's score is --
+            // showing it as "XX%" read as a confidence/accuracy claim it
+            // doesn't support (the top pick is ~100% almost by
+            // construction, see recommendation/service.ts's
+            // minMaxNormalize). showPercentage=false keeps the badge
+            // (existing visual language) but drops the number -- just the
+            // "AI 추천" label, matching this section's own heading.
+            <PostCard key={`${post.type}-${post.id}`} post={post} scoreLabel="AI 추천" showPercentage={false} />
           ))}
         </div>
       )}
