@@ -35,5 +35,7 @@ export function chatMutationResultToResponse<T>(
       return jsonError(400, "답장할 메시지를 확인할 수 없습니다.");
     case "invalid_reaction":
       return jsonError(400, "반응을 남길 메시지를 확인할 수 없습니다.");
+    case "invalid_message":
+      return jsonError(400, "메시지를 확인할 수 없습니다.");
   }
 }

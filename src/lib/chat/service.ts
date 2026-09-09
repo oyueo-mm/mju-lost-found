@@ -52,7 +52,10 @@ export type ChatMutationResult<T> =
   // *this* chat room -- see toggleMessageReaction()'s own comment. Same
   // shape as invalid_reply for the same reason (never trust a client-
   // supplied messageId/chatRoomId pairing).
-  | { kind: "invalid_reaction" };
+  | { kind: "invalid_reaction" }
+  // Phase P-6: same "wrong room or doesn't exist" shape as invalid_reply/
+  // invalid_reaction, for editMessage/deleteMessage's own messageId.
+  | { kind: "invalid_message" };
 
 // Phase J-2: only one room shape is left (the Match variant went with the
 // Match domain), but `roomType` is kept on the DTO so every existing
@@ -96,6 +99,16 @@ export type MessageDTO = {
   content: string;
   imageUrl: string | null;
   createdAt: Date;
+  // Phase P-6: null means never edited -- see schema.prisma's own comment
+  // on Message.editedAt. Never set on a hidden/deleted message's masked
+  // display (there's nothing meaningful to call "edited" once its real
+  // content is hidden).
+  editedAt: Date | null;
+  // Phase P-6: true once hiddenAt is set (self-delete or admin hide) --
+  // exposed as a plain boolean (never hiddenAt/hiddenByUserId themselves)
+  // so the client can gate 수정/삭제/복사 without needing to know *who*
+  // hid it or reconstruct that from the masked content string.
+  isDeleted: boolean;
   // Phase N: replaces the old per-message `readAt: Date | null` -- whether
   // the *other* participant has read this message, derived from their own
   // ChatRead cursor (message.id <= their lastReadMessageId), not a
@@ -110,6 +123,16 @@ export type MessageDTO = {
 
 const POST_REF_SELECT = { id: true, userId: true, title: true, imageUrl: true } as const;
 
+// Phase P-6: hiddenByUserId === senderUserId means the sender deleted
+// their own message (see schema.prisma's own comment on Message.hiddenAt)
+// -- shown as "삭제된 메시지입니다.", distinct from an admin-hidden message.
+const SELF_DELETED_MESSAGE_PLACEHOLDER = "삭제된 메시지입니다.";
+
+function maskedContent(raw: { content: string; hiddenAt: Date | null; hiddenByUserId: number | null; senderUserId: number }): string {
+  if (!raw.hiddenAt) return raw.content;
+  return raw.hiddenByUserId === raw.senderUserId ? SELF_DELETED_MESSAGE_PLACEHOLDER : HIDDEN_MESSAGE_PLACEHOLDER;
+}
+
 // Phase D-3: shared by listMessages/sendMessage so both build the exact
 // same reply-preview shape from the exact same raw shape (whatever a
 // `replyToMessage: { select: MESSAGE_REPLY_SELECT }` include returns).
@@ -118,6 +141,10 @@ const MESSAGE_REPLY_SELECT = {
   content: true,
   imageUrl: true,
   hiddenAt: true,
+  // Phase P-6: needed by maskedContent() to tell a self-delete apart from
+  // an admin hide, same as the top-level message list below.
+  hiddenByUserId: true,
+  senderUserId: true,
   sender: { select: { nickname: true } },
 } as const;
 
@@ -126,6 +153,8 @@ type RawReplyTarget = {
   content: string;
   imageUrl: string | null;
   hiddenAt: Date | null;
+  hiddenByUserId: number | null;
+  senderUserId: number;
   sender: { nickname: string | null };
 };
 
@@ -134,7 +163,7 @@ function toReplyPreview(raw: RawReplyTarget | null): MessageReplyPreview | null 
   return {
     id: raw.id,
     senderNickname: raw.sender.nickname,
-    content: raw.hiddenAt ? HIDDEN_MESSAGE_PLACEHOLDER : raw.content,
+    content: maskedContent(raw),
     hasImage: raw.hiddenAt ? false : Boolean(raw.imageUrl),
   };
 }
@@ -453,13 +482,18 @@ export async function listMessages(
     id: m.id,
     senderUserId: m.senderUserId,
     senderNickname: m.sender.nickname,
-    content: m.hiddenAt ? HIDDEN_MESSAGE_PLACEHOLDER : m.content,
+    content: maskedContent(m),
     // A hidden message's image is masked too -- same "real content never
     // altered, only masked for display" rule as `content` above (an admin
     // hiding a message shouldn't leave its photo visible while its text
     // is replaced).
     imageUrl: m.hiddenAt ? null : m.imageUrl,
     createdAt: m.createdAt,
+    // A hidden/deleted message never shows an "edited" mark -- its real
+    // content is masked either way, so "was it edited before being
+    // deleted" isn't meaningful to surface.
+    editedAt: m.hiddenAt ? null : m.editedAt,
+    isDeleted: Boolean(m.hiddenAt),
     readByCounterpart: m.id <= counterpartLastRead,
     isMine: m.senderUserId === requesterId,
     replyTo: toReplyPreview(m.replyToMessage),
@@ -672,6 +706,8 @@ export async function sendMessage(
       content: message.content,
       imageUrl: message.imageUrl,
       createdAt: message.createdAt,
+      editedAt: null, // freshly created -- never edited yet
+      isDeleted: false,
       // Freshly created -- the counterpart hasn't had a chance to read it yet.
       readByCounterpart: false,
       isMine: true,
@@ -743,6 +779,119 @@ export async function toggleMessageReaction(
   void broadcastChatEvent(chatRoomId, { event: "reaction", payload: { messageId } });
 
   return { kind: "ok", data: { messageId, reactions: summarizeReactions(rows, requester.id) } };
+}
+
+// Phase P-6: edits the sender's own message text -- strictly self-only,
+// no admin override (unlike deleteMessage below): admins moderate by
+// hiding content, never by rewriting someone else's words. Re-validates
+// room membership and the (messageId, chatRoomId) pairing the same way
+// every other per-message mutation here does (toggleMessageReaction,
+// sendMessage's replyToMessageId). A hidden/deleted message can't be
+// edited -- there's nothing left to edit once its content is masked.
+export async function editMessage(
+  chatRoomId: number,
+  messageId: number,
+  requesterId: number,
+  content: string,
+): Promise<ChatMutationResult<MessageDTO>> {
+  const room = await findChatRoomRow(chatRoomId);
+  if (!room) return { kind: "not_found" };
+  const participantIds = participantIdsOf(room);
+  if (!participantIds) return { kind: "not_found" };
+  if (!participantIds.has(requesterId)) return { kind: "forbidden" };
+
+  const existing = await prisma.message.findUnique({ where: { id: messageId } });
+  if (!existing || existing.chatRoomId !== chatRoomId) return { kind: "invalid_message" };
+  if (existing.hiddenAt) return { kind: "invalid_message" };
+  if (existing.senderUserId !== requesterId) return { kind: "forbidden" };
+
+  const trimmed = content.trim();
+  if (!trimmed) return { kind: "invalid_content" };
+
+  const updated = await prisma.message.update({
+    where: { id: messageId },
+    data: { content: trimmed, editedAt: new Date() },
+    include: { sender: { select: { nickname: true } }, replyToMessage: { select: MESSAGE_REPLY_SELECT } },
+  });
+
+  // Phase P-6: reuses the exact same "message" broadcast event sendMessage
+  // already uses (never a new event type) -- ChatThread.tsx's syncLatest()
+  // already re-fetches-and-upserts-by-id on that event, which is exactly
+  // "replace this id's row with its fresh copy" -- the correct behavior
+  // for an edit too, with zero changes needed to useChatRoomRealtime.ts.
+  void broadcastChatEvent(chatRoomId, { event: "message", payload: { messageId } });
+
+  const reactionRows = await prisma.messageReaction.findMany({
+    where: { messageId },
+    select: { emoji: true, userId: true },
+  });
+
+  return {
+    kind: "ok",
+    data: {
+      id: updated.id,
+      senderUserId: updated.senderUserId,
+      senderNickname: updated.sender.nickname,
+      content: updated.content,
+      imageUrl: updated.imageUrl,
+      createdAt: updated.createdAt,
+      editedAt: updated.editedAt,
+      isDeleted: false, // editMessage already rejects editing a hidden/deleted message above
+      readByCounterpart: false, // caller (the sender themselves) re-fetches the real list right after
+      isMine: true,
+      replyTo: toReplyPreview(updated.replyToMessage),
+      reactions: summarizeReactions(reactionRows, requesterId),
+    },
+  };
+}
+
+// Phase P-6: soft-deletes ("삭제") the sender's own message, reusing the
+// existing hidden_at/hidden_by_user_id columns admin moderation already
+// uses (see schema.prisma's own comment) rather than a new column or a
+// hard DELETE -- no new deletion policy, just a second way to reach the
+// same existing state. Also allows an admin to delete any message
+// directly, mirroring posts/service.ts's deleteLostPost/deleteFoundPost's
+// own `asAdmin` bypass precedent (existing admin capability, not a new
+// one) -- this is separate from, and doesn't change, the existing report
+// -> HIDE_MESSAGE moderation flow.
+export async function deleteMessage(
+  chatRoomId: number,
+  messageId: number,
+  requester: User,
+): Promise<ChatMutationResult<{ messageId: number }>> {
+  const room = await findChatRoomRow(chatRoomId);
+  if (!room) return { kind: "not_found" };
+  const participantIds = participantIdsOf(room);
+  if (!participantIds) return { kind: "not_found" };
+  // An admin bypasses the membership gate too -- same as the report ->
+  // HIDE_MESSAGE flow, which never required the processing admin to be a
+  // participant of the room either. Ordinary (non-admin) callers must
+  // still be a participant, checked here same as every other per-message
+  // mutation in this file.
+  if (!participantIds.has(requester.id) && !requester.isAdmin) return { kind: "forbidden" };
+
+  const existing = await prisma.message.findUnique({
+    where: { id: messageId },
+    select: { chatRoomId: true, senderUserId: true, hiddenAt: true },
+  });
+  if (!existing || existing.chatRoomId !== chatRoomId) return { kind: "invalid_message" };
+  if (existing.senderUserId !== requester.id && !requester.isAdmin) {
+    return { kind: "forbidden" };
+  }
+
+  // Idempotent: a message that's already hidden (whether by this same
+  // action, a previous one, or admin moderation) simply stays hidden --
+  // never an error, matching toggleMessageReaction's own "recover, don't
+  // reject" handling of a redundant action.
+  if (!existing.hiddenAt) {
+    await prisma.message.update({
+      where: { id: messageId },
+      data: { hiddenAt: new Date(), hiddenByUserId: requester.id, hiddenReason: null },
+    });
+    void broadcastChatEvent(chatRoomId, { event: "message", payload: { messageId } });
+  }
+
+  return { kind: "ok", data: { messageId } };
 }
 
 // Phase 11: resolves a "message"-type Notification's relatedId (a Message

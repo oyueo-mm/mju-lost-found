@@ -74,3 +74,26 @@ export const toggleReactionSchema = z.object({
   messageId: z.coerce.number().int().positive("messageId가 올바르지 않습니다."),
   emoji: z.enum(ALLOWED_REACTION_EMOJIS),
 });
+
+// Phase P-6: PATCH /api/chat/[id]/messages { messageId, content } -- edits
+// the sender's own message text. Same route/file as the reaction PATCH
+// above (see that schema's own comment on why); the two request bodies
+// are told apart by shape (`emoji` vs `content`) in the route handler
+// itself, never a new endpoint. Image-only messages have nothing to edit
+// via this -- `content` is required non-empty here, matching the compose
+// bar's own text input (an edit never turns a message image-only, and
+// never removes its image -- see chat/service.ts::editMessage).
+export const editMessageSchema = z.object({
+  messageId: z.coerce.number().int().positive("messageId가 올바르지 않습니다."),
+  content: z.string().trim().min(1, "메시지를 입력해주세요.").max(MAX_MESSAGE_LENGTH, "메시지가 너무 깁니다."),
+});
+
+// Phase P-6: DELETE /api/chat/[id]/messages?messageId= -- soft-deletes
+// (hides) the sender's own message, reusing Message.hiddenAt/
+// hiddenByUserId (see schema.prisma's own comment) rather than a new
+// column. A query param, not a body, matching this app's other DELETE
+// endpoints that need one extra identifier (e.g. /api/posts/[id]/image's
+// `?type=`).
+export const deleteMessageQuerySchema = z.object({
+  messageId: z.coerce.number().int().positive("messageId가 올바르지 않습니다."),
+});

@@ -10,6 +10,8 @@ const markMessageNotificationsReadForChatRoom = vi.fn();
 const countUnreadMessagesForUser = vi.fn();
 const sendMessage = vi.fn();
 const toggleMessageReaction = vi.fn();
+const editMessage = vi.fn();
+const deleteMessage = vi.fn();
 
 vi.mock("@/lib/chat/http", async () => {
   const response = await import("@/lib/posts/response");
@@ -23,9 +25,11 @@ vi.mock("@/lib/chat/service", () => ({
   countUnreadMessagesForUser,
   sendMessage,
   toggleMessageReaction,
+  editMessage,
+  deleteMessage,
 }));
 
-const { GET, PATCH, POST } = await import("./route");
+const { DELETE, GET, PATCH, POST } = await import("./route");
 
 const sessionUser = { id: 1, nickname: "닉네임" };
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -349,5 +353,133 @@ describe("PATCH /api/chat/[id]/messages", () => {
 
     expect(res.status).toBe(400);
     expect(toggleMessageReaction).not.toHaveBeenCalled();
+  });
+});
+
+// Phase P-6: same PATCH route/function as reactions above -- a body shape
+// with `content` (not `emoji`) dispatches to editMessage instead. See the
+// route's own comment on how the two are told apart.
+describe("PATCH /api/chat/[id]/messages (edit)", () => {
+  it("rejects an unauthenticated request", async () => {
+    requireUserForApi.mockResolvedValueOnce({ response: jsonError(401, "로그인이 필요합니다.") });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/chat/1/messages", {
+        method: "PATCH",
+        body: JSON.stringify({ messageId: 1, content: "수정된 내용" }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(401);
+    expect(editMessage).not.toHaveBeenCalled();
+  });
+
+  it("edits the message as the authenticated session user, not any userId in the body", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    editMessage.mockResolvedValueOnce({
+      kind: "ok",
+      data: { id: 1, content: "수정된 내용", editedAt: new Date() },
+    });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/chat/1/messages", {
+        method: "PATCH",
+        body: JSON.stringify({ messageId: 1, content: "수정된 내용", userId: "someone-else" }),
+      }),
+      params("1"),
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.data.content).toBe("수정된 내용");
+    expect(editMessage).toHaveBeenCalledWith(1, 1, sessionUser.id, "수정된 내용");
+    expect(toggleMessageReaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects an empty content", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/chat/1/messages", {
+        method: "PATCH",
+        body: JSON.stringify({ messageId: 1, content: "   " }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(400);
+    expect(editMessage).not.toHaveBeenCalled();
+  });
+
+  it("rejects editing another user's message", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    editMessage.mockResolvedValueOnce({ kind: "forbidden" });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/chat/1/messages", {
+        method: "PATCH",
+        body: JSON.stringify({ messageId: 1, content: "해킹 시도" }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 400 for a messageId that doesn't belong to this room", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    editMessage.mockResolvedValueOnce({ kind: "invalid_message" });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/chat/1/messages", {
+        method: "PATCH",
+        body: JSON.stringify({ messageId: 999, content: "수정된 내용" }),
+      }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("DELETE /api/chat/[id]/messages", () => {
+  it("rejects an unauthenticated request", async () => {
+    requireUserForApi.mockResolvedValueOnce({ response: jsonError(401, "로그인이 필요합니다.") });
+
+    const res = await DELETE(new NextRequest("http://localhost/api/chat/1/messages?messageId=1"), params("1"));
+
+    expect(res.status).toBe(401);
+    expect(deleteMessage).not.toHaveBeenCalled();
+  });
+
+  it("deletes the message as the authenticated session user", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    deleteMessage.mockResolvedValueOnce({ kind: "ok", data: { messageId: 1 } });
+
+    const res = await DELETE(new NextRequest("http://localhost/api/chat/1/messages?messageId=1"), params("1"));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.data).toEqual({ messageId: 1 });
+    expect(deleteMessage).toHaveBeenCalledWith(1, 1, sessionUser);
+  });
+
+  it("rejects a missing messageId", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+
+    const res = await DELETE(new NextRequest("http://localhost/api/chat/1/messages"), params("1"));
+
+    expect(res.status).toBe(400);
+    expect(deleteMessage).not.toHaveBeenCalled();
+  });
+
+  it("rejects deleting another user's message", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    deleteMessage.mockResolvedValueOnce({ kind: "forbidden" });
+
+    const res = await DELETE(new NextRequest("http://localhost/api/chat/1/messages?messageId=1"), params("1"));
+
+    expect(res.status).toBe(403);
   });
 });

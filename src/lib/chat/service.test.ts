@@ -10,7 +10,14 @@ class FakePrismaClientKnownRequestError extends Error {
 }
 
 const chatRoom = { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() };
-const message = { findMany: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn(), count: vi.fn() };
+const message = {
+  findMany: vi.fn(),
+  updateMany: vi.fn(),
+  update: vi.fn(),
+  findUnique: vi.fn(),
+  findFirst: vi.fn(),
+  count: vi.fn(),
+};
 const userTable = { findUnique: vi.fn() };
 const notification = { updateMany: vi.fn() };
 const lostPostTable = { findUnique: vi.fn() };
@@ -69,6 +76,8 @@ vi.mock("@/lib/chat/realtimeAdmin", () => ({ broadcastChatEvent }));
 
 const {
   countUnreadMessagesForUser,
+  deleteMessage,
+  editMessage,
   getChatRoomForUser,
   getChatRoomParticipantIds,
   getMessage,
@@ -594,6 +603,11 @@ describe("listMessages", () => {
           content: "원본 내용",
           imageUrl: null,
           hiddenAt: new Date(),
+          // Admin-hidden, not self-deleted: hiddenByUserId (an admin, here
+          // just any id distinct from the sender) differs from
+          // senderUserId -- see maskedContent()'s own disambiguation.
+          hiddenByUserId: 42,
+          senderUserId: foundOwner,
           sender: { nickname: "상대방" },
         },
       },
@@ -1051,6 +1065,10 @@ describe("sendMessage", () => {
         content: "실제 원본 내용",
         imageUrl: "https://x/y.jpg",
         hiddenAt: new Date(),
+        // Admin-hidden, not self-deleted -- see the identical comment on
+        // listMessages' own "masked preview" test above.
+        hiddenByUserId: 42,
+        senderUserId: foundOwner,
         sender: { nickname: "상대방" },
       });
       txMessageCreate.mockResolvedValueOnce({
@@ -1293,6 +1311,196 @@ describe("toggleMessageReaction", () => {
     const result = await toggleMessageReaction(100, 1, "👍", sender);
 
     expect(result.kind).toBe("ok");
+  });
+});
+
+// Phase P-6: editing the sender's own message text -- strictly self-only,
+// no admin override (see editMessage's own comment on why that differs
+// from deleteMessage below).
+describe("editMessage", () => {
+  it("returns not_found for a nonexistent room", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(null);
+
+    const result = await editMessage(999, 1, lostOwner, "수정된 내용");
+
+    expect(result).toEqual({ kind: "not_found" });
+    expect(message.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-participant", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+
+    const result = await editMessage(100, 1, stranger, "수정된 내용");
+
+    expect(result).toEqual({ kind: "forbidden" });
+    expect(message.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a messageId that doesn't belong to this chat room", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce({ id: 1, chatRoomId: 999, senderUserId: lostOwner, hiddenAt: null });
+
+    const result = await editMessage(100, 1, lostOwner, "수정된 내용");
+
+    expect(result).toEqual({ kind: "invalid_message" });
+    expect(message.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects editing another participant's message", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce({ id: 1, chatRoomId: 100, senderUserId: foundOwner, hiddenAt: null });
+
+    const result = await editMessage(100, 1, lostOwner, "해킹 시도");
+
+    expect(result).toEqual({ kind: "forbidden" });
+    expect(message.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects editing an already-hidden/deleted message", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce({
+      id: 1,
+      chatRoomId: 100,
+      senderUserId: lostOwner,
+      hiddenAt: new Date(),
+    });
+
+    const result = await editMessage(100, 1, lostOwner, "수정된 내용");
+
+    expect(result).toEqual({ kind: "invalid_message" });
+    expect(message.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects an empty (whitespace-only) edit", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce({ id: 1, chatRoomId: 100, senderUserId: lostOwner, hiddenAt: null });
+
+    const result = await editMessage(100, 1, lostOwner, "   ");
+
+    expect(result).toEqual({ kind: "invalid_content" });
+    expect(message.update).not.toHaveBeenCalled();
+  });
+
+  it("edits the sender's own message, stamps editedAt, and broadcasts a 'message' realtime event", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce({ id: 1, chatRoomId: 100, senderUserId: lostOwner, hiddenAt: null });
+    const editedAt = new Date();
+    message.update.mockResolvedValueOnce({
+      id: 1,
+      senderUserId: lostOwner,
+      content: "수정된 내용",
+      imageUrl: null,
+      createdAt: new Date("2026-01-01"),
+      editedAt,
+      sender: { nickname: "닉네임" },
+      replyToMessage: null,
+    });
+    messageReaction.findMany.mockResolvedValueOnce([]);
+
+    const result = await editMessage(100, 1, lostOwner, "  수정된 내용  ");
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.content).toBe("수정된 내용");
+      expect(result.data.editedAt).toBe(editedAt);
+    }
+    expect(message.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 1 },
+        data: { content: "수정된 내용", editedAt: expect.any(Date) },
+      }),
+    );
+    // Reuses the exact same "message" event sendMessage's own broadcast
+    // uses -- ChatThread.tsx's syncLatest() already re-fetches-and-
+    // upserts-by-id on it, so an edit needs no new realtime event type.
+    expect(broadcastChatEvent).toHaveBeenCalledWith(100, { event: "message", payload: { messageId: 1 } });
+  });
+});
+
+// Phase P-6: soft-deleting ("삭제") a message reuses the existing
+// hiddenAt/hiddenByUserId columns (admin moderation's own "hide" fields) --
+// see deleteMessage's own comment for why this isn't a new column/policy.
+describe("deleteMessage", () => {
+  it("returns not_found for a nonexistent room", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(null);
+
+    const result = await deleteMessage(999, 1, sender);
+
+    expect(result).toEqual({ kind: "not_found" });
+    expect(message.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-participant", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+
+    const result = await deleteMessage(100, 1, { ...sender, id: stranger } as unknown as User);
+
+    expect(result).toEqual({ kind: "forbidden" });
+    expect(message.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects a messageId that doesn't belong to this chat room", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 999, senderUserId: lostOwner, hiddenAt: null });
+
+    const result = await deleteMessage(100, 1, sender);
+
+    expect(result).toEqual({ kind: "invalid_message" });
+    expect(message.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects deleting another participant's message when the requester isn't an admin", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 100, senderUserId: foundOwner, hiddenAt: null });
+
+    const result = await deleteMessage(100, 1, { ...sender, isAdmin: false } as unknown as User);
+
+    expect(result).toEqual({ kind: "forbidden" });
+    expect(message.update).not.toHaveBeenCalled();
+  });
+
+  it("deletes the sender's own message and broadcasts a 'message' realtime event", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 100, senderUserId: lostOwner, hiddenAt: null });
+    message.update.mockResolvedValueOnce({});
+
+    const result = await deleteMessage(100, 1, sender);
+
+    expect(result).toEqual({ kind: "ok", data: { messageId: 1 } });
+    expect(message.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: { hiddenAt: expect.any(Date), hiddenByUserId: lostOwner, hiddenReason: null },
+    });
+    expect(broadcastChatEvent).toHaveBeenCalledWith(100, { event: "message", payload: { messageId: 1 } });
+  });
+
+  // Phase P-6: mirrors posts/service.ts's deleteLostPost/deleteFoundPost's
+  // own asAdmin bypass -- an existing admin capability pattern, not a new
+  // one, and separate from (doesn't change) the report -> HIDE_MESSAGE flow.
+  it("allows an admin to delete another participant's message", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 100, senderUserId: foundOwner, hiddenAt: null });
+    message.update.mockResolvedValueOnce({});
+
+    const admin = { ...sender, id: 77, isAdmin: true } as unknown as User;
+    const result = await deleteMessage(100, 1, admin);
+
+    expect(result).toEqual({ kind: "ok", data: { messageId: 1 } });
+    expect(message.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: { hiddenAt: expect.any(Date), hiddenByUserId: 77, hiddenReason: null },
+    });
+  });
+
+  it("is idempotent -- deleting an already-hidden message succeeds without writing again or re-broadcasting", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 100, senderUserId: lostOwner, hiddenAt: new Date() });
+
+    const result = await deleteMessage(100, 1, sender);
+
+    expect(result).toEqual({ kind: "ok", data: { messageId: 1 } });
+    expect(message.update).not.toHaveBeenCalled();
+    expect(broadcastChatEvent).not.toHaveBeenCalled();
   });
 });
 

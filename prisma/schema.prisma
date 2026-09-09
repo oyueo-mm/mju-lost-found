@@ -385,6 +385,13 @@ model Message {
   sender           User      @relation("MessageSender", fields: [senderUserId], references: [id], onDelete: Restrict)
   content          String    @db.Text
   createdAt        DateTime  @default(now()) @map("created_at")
+  // Phase P-6: null means never edited. Set only by the sender editing
+  // their own message's text (see chat/service.ts's editMessage) -- purely
+  // additive/nullable, every existing message defaults to "never edited".
+  // Distinct from hiddenAt below: an edit changes content in place, a
+  // delete masks it -- a message can be edited any number of times before
+  // (or instead of) ever being deleted.
+  editedAt         DateTime? @map("edited_at")
   // Phase N: superseded by the per-(room,user) cursor in ChatRead below --
   // this per-message column is no longer written to (chat/service.ts no
   // longer has any bulk-UPDATE-many-messages read path) or read for
@@ -392,6 +399,14 @@ model Message {
   // this phase's own "기존 ChatRoom/Message 구조를 최대한 유지" instruction.
   // Historical rows keep whatever value they already had.
   readAt           DateTime? @map("read_at")
+  // Phase P-6: reused as-is for a sender's own "메시지 삭제" (soft delete),
+  // not a new column/policy -- previously only ever set by admin
+  // moderation (Report -> HIDE_MESSAGE). hiddenByUserId === senderUserId
+  // now also happens when the sender deletes their own message; display
+  // (chat/service.ts) distinguishes the two cases by that equality to show
+  // "삭제된 메시지입니다." vs the existing admin-hidden placeholder, never a
+  // new field. See this phase's own "기존 hidden 구조를 우선 활용, 새 삭제
+  // 정책을 임의로 만들지 않는다" instruction.
   hiddenAt         DateTime? @map("hidden_at")
   hiddenByUserId   Int?      @map("hidden_by_user_id")
   hiddenBy         User?     @relation("MessageHiddenBy", fields: [hiddenByUserId], references: [id], onDelete: Restrict)

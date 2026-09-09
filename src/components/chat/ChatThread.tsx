@@ -31,6 +31,14 @@ type MessageItem = {
   content: string;
   imageUrl: string | null;
   createdAt: string;
+  // Phase P-6: null means never edited -- see chat/service.ts's
+  // MessageDTO.editedAt for the full reasoning.
+  editedAt: string | null;
+  // Phase P-6: true once this message has been soft-deleted (by its
+  // sender or an admin) -- content is already the server-masked
+  // placeholder string when this is true, see chat/service.ts's
+  // maskedContent().
+  isDeleted: boolean;
   // Phase N: replaces the old `readAt: string | null` -- see chat/
   // service.ts's MessageDTO.readByCounterpart for the full reasoning.
   // Only meaningful for a message where isMine is true; combined at
@@ -62,6 +70,16 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
   // MessageActionMenu's own "no server round-trip for a client action"
   // design).
   const [replyingTo, setReplyingTo] = useState<ReplyPreview | null>(null);
+  // Phase P-6: which message (if any) is currently showing inline edit UI
+  // in place of its normal bubble -- lives here (not inside
+  // MessageActionMenu) because saving needs to update this component's
+  // own `messages` state, the same way handleSend/handleReactionChange
+  // already do. editDraft is the textarea's own controlled value, seeded
+  // from the message's current content when editing starts.
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   // Phase N: the counterpart's read cursor, updated live from realtime
   // "read" broadcasts -- null means "no live update received yet this
   // session", in which case each message's own server-computed
@@ -347,6 +365,68 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
     handleReactionChange(messageId, json.data.reactions);
   }
 
+  // Phase P-6: enters inline-editing mode for this message -- passed to
+  // MessageActionMenu as onEdit. The actual save/cancel UI lives in the
+  // render below (a textarea in place of the normal bubble), not here.
+  function startEditing(m: MessageItem) {
+    setEditingMessageId(m.id);
+    setEditDraft(m.content);
+    setEditError(null);
+  }
+
+  function cancelEditing() {
+    setEditingMessageId(null);
+    setEditDraft("");
+    setEditError(null);
+  }
+
+  // Same PATCH route the reaction toggle above already uses -- a body
+  // with `content` (not `emoji`) dispatches to editMessage server-side
+  // instead (see the route's own comment). The response is this
+  // message's full, fresh MessageDTO, so it replaces the local copy
+  // directly -- no extra re-fetch needed, same pattern handleSend already
+  // uses for a freshly-sent message.
+  async function saveEdit(messageId: number) {
+    const trimmed = editDraft.trim();
+    if (!trimmed || editSaving) return;
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      const res = await fetch(`/api/chat/${chatRoomId}/messages`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId, content: trimmed }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setEditError(json.error ?? "메시지를 수정하지 못했습니다.");
+        return;
+      }
+      setMessages((prev) => (prev ? prev.map((m) => (m.id === messageId ? { ...m, ...json.data } : m)) : prev));
+      cancelEditing();
+    } catch {
+      setEditError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  // Passed to MessageActionMenu as onDelete. The DELETE response only
+  // carries { messageId }, not the masked content string -- syncLatest()
+  // re-fetches through the same authorized GET the initial load already
+  // uses, picking up the server's own "삭제된 메시지입니다." placeholder
+  // (chat/service.ts's maskedContent()) rather than duplicating that
+  // string here. Throws on failure so MessageActionMenu shows the error
+  // inline, same convention as toggleReaction above.
+  async function deleteMessageById(messageId: number) {
+    const res = await fetch(`/api/chat/${chatRoomId}/messages?messageId=${messageId}`, { method: "DELETE" });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json.error ?? "메시지를 삭제하지 못했습니다.");
+    }
+    await syncLatest();
+  }
+
   // Phase N: the server-computed flag (accurate as of the last fetch) is
   // the baseline; a live "read" broadcast received since then can only
   // ever push otherUserLastReadId forward, never backward, so `||` here
@@ -398,60 +478,101 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
               {!m.isMine && (
                 <span className="mb-0.5 text-xs text-muted-foreground">{m.senderNickname ?? "알 수 없음"}</span>
               )}
-              {/* Phase D-2: replaces the always-visible "신고" link with an
-                  action menu (desktop hover "⋯", mobile long-press) --
-                  wraps just the image/bubble (not the sender label or
-                  timestamp below), so the press target is the message
-                  content itself. createReport() itself still rejects
-                  reporting your own message, so this isn't hidden for
-                  m.isMine either -- same "validate at submit, not in the
-                  UI" rule the old always-visible button used. */}
-              <MessageActionMenu
-                messageId={m.id}
-                align={m.isMine ? "end" : "start"}
-                onReply={() =>
-                  setReplyingTo({
-                    id: m.id,
-                    senderNickname: m.senderNickname,
-                    content: m.content,
-                    hasImage: Boolean(m.imageUrl),
-                  })
-                }
-                onReact={(emoji) => toggleReaction(m.id, emoji)}
-              >
-                {m.replyTo && (
-                  <div
-                    className={`mb-1 max-w-full truncate rounded-lg border-l-2 border-border bg-muted/60 px-2 py-1 text-xs text-muted-foreground`}
-                  >
-                    <span className="font-medium">{m.replyTo.senderNickname ?? "알 수 없음"}</span>
-                    {": "}
-                    {m.replyTo.content || (m.replyTo.hasImage ? "사진" : "")}
+              {editingMessageId === m.id ? (
+                // Phase P-6: inline editing replaces the normal bubble in
+                // place (no separate modal/screen) -- sized/aligned like
+                // the bubble it stands in for, so the layout doesn't jump.
+                <div className="flex w-full max-w-[75%] flex-col gap-1.5">
+                  <textarea
+                    value={editDraft}
+                    onChange={(e) => setEditDraft(e.target.value)}
+                    maxLength={2000}
+                    rows={2}
+                    autoFocus
+                    disabled={editSaving}
+                    className="w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground disabled:opacity-60"
+                  />
+                  {editError && <p className="text-xs text-destructive">{editError}</p>}
+                  <div className={`flex gap-2 ${m.isMine ? "justify-end" : "justify-start"}`}>
+                    <button
+                      type="button"
+                      onClick={cancelEditing}
+                      disabled={editSaving}
+                      className="rounded-full border border-border px-3 py-1 text-xs text-foreground disabled:opacity-60"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => saveEdit(m.id)}
+                      disabled={editSaving || !editDraft.trim()}
+                      className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-60"
+                    >
+                      {editSaving ? "저장 중..." : "저장"}
+                    </button>
                   </div>
-                )}
-                {m.imageUrl && (
-                  <div className="mb-1 max-w-[240px] overflow-hidden rounded-2xl border border-border">
-                    <Image
-                      src={m.imageUrl}
-                      alt="전송된 이미지"
-                      width={480}
-                      height={480}
-                      className="h-auto w-full"
-                      onLoad={handleImageLoad}
-                    />
-                  </div>
-                )}
-                {m.content && (
-                  <div
-                    className={`rounded-2xl px-4 py-2 text-sm ${
-                      m.isMine
-                        ? "rounded-br-sm bg-primary text-primary-foreground"
-                        : "rounded-bl-sm bg-muted text-foreground"
-                    }`}
-                  >
-                    {m.content}
-                  </div>
-                )}
-              </MessageActionMenu>
+                </div>
+              ) : (
+                // Phase D-2: replaces the always-visible "신고" link with an
+                // action menu (desktop hover "⋯", mobile long-press) --
+                // wraps just the image/bubble (not the sender label or
+                // timestamp below), so the press target is the message
+                // content itself. createReport() itself still rejects
+                // reporting your own message, so this isn't hidden for
+                // m.isMine either -- same "validate at submit, not in the
+                // UI" rule the old always-visible button used.
+                <MessageActionMenu
+                  messageId={m.id}
+                  align={m.isMine ? "end" : "start"}
+                  content={m.content}
+                  isMine={m.isMine}
+                  isDeleted={m.isDeleted}
+                  onReply={() =>
+                    setReplyingTo({
+                      id: m.id,
+                      senderNickname: m.senderNickname,
+                      content: m.content,
+                      hasImage: Boolean(m.imageUrl),
+                    })
+                  }
+                  onReact={(emoji) => toggleReaction(m.id, emoji)}
+                  onEdit={() => startEditing(m)}
+                  onDelete={() => deleteMessageById(m.id)}
+                >
+                  {m.replyTo && (
+                    <div
+                      className={`mb-1 max-w-full truncate rounded-lg border-l-2 border-border bg-muted/60 px-2 py-1 text-xs text-muted-foreground`}
+                    >
+                      <span className="font-medium">{m.replyTo.senderNickname ?? "알 수 없음"}</span>
+                      {": "}
+                      {m.replyTo.content || (m.replyTo.hasImage ? "사진" : "")}
+                    </div>
+                  )}
+                  {m.imageUrl && (
+                    <div className="mb-1 max-w-[240px] overflow-hidden rounded-2xl border border-border">
+                      <Image
+                        src={m.imageUrl}
+                        alt="전송된 이미지"
+                        width={480}
+                        height={480}
+                        className="h-auto w-full"
+                        onLoad={handleImageLoad}
+                      />
+                    </div>
+                  )}
+                  {m.content && (
+                    <div
+                      className={`rounded-2xl px-4 py-2 text-sm ${
+                        m.isMine
+                          ? "rounded-br-sm bg-primary text-primary-foreground"
+                          : "rounded-bl-sm bg-muted text-foreground"
+                      } ${m.isDeleted ? "italic opacity-70" : ""}`}
+                    >
+                      {m.content}
+                    </div>
+                  )}
+                </MessageActionMenu>
+              )}
               {/* Phase D-4: existing badges are themselves clickable (not
                   just the picker) -- tapping your own already-picked emoji
                   again removes it, same toggle semantics as picking it
@@ -482,6 +603,10 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
                   확인할 수 있게 한다". */}
               <span className="mt-0.5 text-xs text-muted-foreground" title={formatAbsoluteTime(new Date(m.createdAt))}>
                 {formatRelativeTime(new Date(m.createdAt))}
+                {/* Phase P-6: never shown for a hidden/deleted message --
+                    m.editedAt is already forced to null for those server-
+                    side (see chat/service.ts's listMessages own comment). */}
+                {m.editedAt ? " · (수정됨)" : ""}
                 {m.isMine ? ` · ${isReadByCounterpart(m) ? "읽음" : "안 읽음"}` : ""}
               </span>
             </div>

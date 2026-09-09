@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { chatMutationResultToResponse, jsonError, requireUserForApi, withErrorHandling } from "@/lib/chat/http";
-import { listMessagesQuerySchema, sendMessageSchema, toggleReactionSchema } from "@/lib/chat/schema";
+import {
+  deleteMessageQuerySchema,
+  editMessageSchema,
+  listMessagesQuerySchema,
+  sendMessageSchema,
+  toggleReactionSchema,
+} from "@/lib/chat/schema";
 import {
   countUnreadMessagesForUser,
+  deleteMessage,
+  editMessage,
   listMessages,
   markChatRoomRead,
   markMessageNotificationsReadForChatRoom,
@@ -97,12 +105,15 @@ export const POST = withErrorHandling(
   },
 );
 
-// PATCH /api/chat/[id]/messages { messageId, emoji } -- toggles the
-// authenticated current user's own reaction (never a userId from the
-// body). Lives in this same route file/function rather than a new one --
-// see this phase's own function-count constraint -- the same way Phase
-// 32's image search shares /api/posts via a `mode` field instead of a
-// new route.
+// PATCH /api/chat/[id]/messages -- two different bodies share this same
+// route/function rather than a new one (see this phase's own
+// function-count constraint, and Phase 32's image search sharing
+// /api/posts via a `mode` field the same way):
+//   { messageId, emoji }   -- toggles the caller's own reaction (unchanged)
+//   { messageId, content } -- edits the caller's own message text (Phase P-6)
+// Told apart by shape (`content` in body means "edit"), never a userId/
+// senderId from the body either way -- both dispatch to a service function
+// that re-derives the actual actor from the authenticated session.
 export const PATCH = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const auth = await requireUserForApi();
@@ -121,12 +132,47 @@ export const PATCH = withErrorHandling(
       return jsonError(400, "잘못된 요청 본문입니다.");
     }
 
+    if (body && typeof body === "object" && "content" in body) {
+      const parsed = editMessageSchema.safeParse(body);
+      if (!parsed.success) {
+        return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
+      }
+      const result = await editMessage(id, parsed.data.messageId, auth.user.id, parsed.data.content);
+      return chatMutationResultToResponse(result);
+    }
+
     const parsed = toggleReactionSchema.safeParse(body);
     if (!parsed.success) {
       return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
     }
 
     const result = await toggleMessageReaction(id, parsed.data.messageId, parsed.data.emoji, auth.user);
+    return chatMutationResultToResponse(result);
+  },
+);
+
+// DELETE /api/chat/[id]/messages?messageId= -- soft-deletes ("삭제") the
+// caller's own message (or, for an admin, any message in the room -- see
+// chat/service.ts::deleteMessage's own comment). Same file as GET/POST/
+// PATCH above, no new route -- messageId is a query param since this
+// resource is the room's message list, not one specific message.
+export const DELETE = withErrorHandling(
+  async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+    const auth = await requireUserForApi();
+    if ("response" in auth) return auth.response;
+
+    const { id: idParam } = await params;
+    const id = Number(idParam);
+    if (!Number.isInteger(id)) {
+      return jsonError(400, "id가 올바르지 않습니다.");
+    }
+
+    const parsed = deleteMessageQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
+    if (!parsed.success) {
+      return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
+    }
+
+    const result = await deleteMessage(id, parsed.data.messageId, auth.user);
     return chatMutationResultToResponse(result);
   },
 );
