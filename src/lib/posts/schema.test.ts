@@ -10,6 +10,8 @@ import {
   DEFAULT_PAGE,
   listQuerySchema,
   MAX_LIMIT,
+  updateFoundPostSchema,
+  updateLostPostSchema,
 } from "./schema";
 
 const validLost = {
@@ -74,6 +76,64 @@ describe("createLostPostSchema", () => {
       expect(createLostPostSchema.safeParse({ ...validLost, campus: c }).success).toBe(true);
     }
   });
+
+  // Phase P-5: null means "the poster doesn't know" -- a genuine, distinct
+  // state from a required non-empty string, never coerced from/to an
+  // empty string. See schema.prisma's own comment on LostPost.location/
+  // lostAt for why this isn't a "미상" placeholder string instead.
+  it("accepts location: null (위치 미상)", () => {
+    const result = createLostPostSchema.safeParse({ ...validLost, location: null });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.location).toBeNull();
+  });
+
+  it("accepts lostAt: null (시간 미상)", () => {
+    const result = createLostPostSchema.safeParse({ ...validLost, lostAt: null });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.lostAt).toBeNull();
+  });
+
+  it("accepts both location and lostAt as null at once", () => {
+    expect(createLostPostSchema.safeParse({ ...validLost, location: null, lostAt: null }).success).toBe(true);
+  });
+
+  it("still rejects an empty-string location -- null is the only accepted 'unknown' value", () => {
+    expect(createLostPostSchema.safeParse({ ...validLost, location: "" }).success).toBe(false);
+  });
+
+  it("still rejects lostAt: 'not-a-date' even though null is allowed", () => {
+    expect(createLostPostSchema.safeParse({ ...validLost, lostAt: "not-a-date" }).success).toBe(false);
+  });
+});
+
+describe("updateLostPostSchema", () => {
+  // Phase P-5: an edit can move a post from a known value back to
+  // 미상 (explicit null) or from 미상 to a known value (a real string/date)
+  // -- both must round-trip through the same partial-update schema an
+  // unrelated field-only edit already uses.
+  it("accepts changing location to null (known -> 미상)", () => {
+    expect(updateLostPostSchema.safeParse({ location: null }).success).toBe(true);
+  });
+
+  it("accepts changing location from null to a real value (미상 -> known)", () => {
+    const result = updateLostPostSchema.safeParse({ location: "학생회관 2층" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.location).toBe("학생회관 2층");
+  });
+
+  it("accepts changing lostAt to null (known -> 미상)", () => {
+    expect(updateLostPostSchema.safeParse({ lostAt: null }).success).toBe(true);
+  });
+
+  it("accepts changing lostAt from null to a real value (미상 -> known)", () => {
+    const result = updateLostPostSchema.safeParse({ lostAt: "2026-02-01T09:00" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.lostAt).toBeInstanceOf(Date);
+  });
+
+  it("still allows omitting location/lostAt entirely (unchanged)", () => {
+    expect(updateLostPostSchema.safeParse({ title: "새 제목" }).success).toBe(true);
+  });
 });
 
 describe("createFoundPostSchema", () => {
@@ -82,6 +142,25 @@ describe("createFoundPostSchema", () => {
     expect(
       createFoundPostSchema.safeParse({ ...validFound, status: "찾는 중" }).success,
     ).toBe(false);
+  });
+
+  it("accepts location: null and foundAt: null (위치/시간 미상)", () => {
+    const validFound = { ...validLost, foundAt: validLost.lostAt };
+    const result = createFoundPostSchema.safeParse({ ...validFound, location: null, foundAt: null });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.location).toBeNull();
+      expect(result.data.foundAt).toBeNull();
+    }
+  });
+});
+
+describe("updateFoundPostSchema", () => {
+  it("accepts changing foundAt to null and back to a real value", () => {
+    expect(updateFoundPostSchema.safeParse({ foundAt: null }).success).toBe(true);
+    const result = updateFoundPostSchema.safeParse({ foundAt: "2026-02-01T09:00" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.foundAt).toBeInstanceOf(Date);
   });
 });
 

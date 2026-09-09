@@ -23,6 +23,12 @@ function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
+// Phase P-5: null means the poster marked the time as unknown -- see
+// schema.prisma's own comment on LostPost.lostAt/FoundPost.foundAt.
+function formatDateOrUnknown(date: Date | null): string {
+  return date ? formatDate(date) : "시간 미상";
+}
+
 export default async function PostDetailPage({
   params,
   searchParams,
@@ -207,11 +213,11 @@ export default async function PostDetailPage({
           </span>
           <span className="flex items-center gap-1">
             <PinIcon className="size-3.5" />
-            {post.location}
+            {post.location ?? "위치 미상"}
           </span>
           <span className="flex items-center gap-1">
             <ClockIcon className="size-3.5" />
-            {dateLabel}: {formatDate(dateValue)}
+            {dateLabel}: {formatDateOrUnknown(dateValue)}
           </span>
           <span className="flex items-center gap-1">
             <EyeIcon className="size-3.5" />

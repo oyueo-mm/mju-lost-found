@@ -209,6 +209,46 @@ describe("createLostPost / createFoundPost", () => {
     expect(embedPostBestEffort).toHaveBeenCalledWith("lost", 1, expect.objectContaining({ title: "t" }));
   });
 
+  // Phase P-5: null location/lostAt (위치/시간 미상) must not block creation
+  // or the embedding step -- buildEmbeddingText() (src/lib/ai/embedding.ts)
+  // already skips a falsy field, so passing the row through unchanged
+  // (including its null location) is the correct, minimal behavior here.
+  it("creates a post with location and lostAt both null (위치/시간 미상) and still embeds it", async () => {
+    lostPost.create.mockResolvedValueOnce({
+      id: 1,
+      title: "t",
+      description: "d",
+      category: "c",
+      location: null,
+      status: "SEARCHING",
+      imageUrl: null,
+      lostAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+    });
+
+    const result = await createLostPost(author, {
+      title: "t",
+      description: "d",
+      category: "c",
+      location: null,
+      campus: "인문캠퍼스",
+      lostAt: null,
+    });
+    await flushAfterCallbacks();
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.location).toBeNull();
+      expect(result.data.lostAt).toBeNull();
+    }
+    expect(lostPost.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ location: null, lostAt: null }) }),
+    );
+    expect(embedPostBestEffort).toHaveBeenCalledWith("lost", 1, expect.objectContaining({ location: null }));
+  });
+
   it("rejects post creation for a suspended user without writing to the DB", async () => {
     const suspended = { ...author, isSuspended: true, suspendedUntil: null };
 
@@ -269,6 +309,93 @@ describe("updateLostPost", () => {
     await flushAfterCallbacks();
 
     expect(embedPostBestEffort).toHaveBeenCalledWith("lost", 1, expect.objectContaining({ title: "새 제목" }));
+  });
+
+  // Phase P-5: 미상 <-> known transitions must round-trip through a plain
+  // update, same as any other field edit -- location re-embeds (it's an
+  // EMBEDDING_INPUT_FIELDS member); lostAt does not (it never was).
+  it("updates location from a known value to null (known -> 위치 미상) and re-embeds", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
+    lostPost.update.mockResolvedValueOnce({
+      id: 1,
+      title: "t",
+      description: "d",
+      category: "c",
+      location: null,
+      status: "SEARCHING",
+      imageUrl: null,
+      lostAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+    });
+
+    const result = await updateLostPost(1, 1, { location: null });
+    await flushAfterCallbacks();
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.data.location).toBeNull();
+    expect(lostPost.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ location: null }) }),
+    );
+    expect(embedPostBestEffort).toHaveBeenCalledWith("lost", 1, expect.objectContaining({ location: null }));
+  });
+
+  it("updates location from null to a real value (위치 미상 -> known) and re-embeds", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
+    lostPost.update.mockResolvedValueOnce({
+      id: 1,
+      title: "t",
+      description: "d",
+      category: "c",
+      location: "학생회관 2층",
+      status: "SEARCHING",
+      imageUrl: null,
+      lostAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+    });
+
+    const result = await updateLostPost(1, 1, { location: "학생회관 2층" });
+    await flushAfterCallbacks();
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.data.location).toBe("학생회관 2층");
+    expect(embedPostBestEffort).toHaveBeenCalledWith(
+      "lost",
+      1,
+      expect.objectContaining({ location: "학생회관 2층" }),
+    );
+  });
+
+  it("updates lostAt from a known value to null (known -> 시간 미상) without triggering a re-embed", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
+    lostPost.update.mockResolvedValueOnce({
+      id: 1,
+      title: "t",
+      description: "d",
+      category: "c",
+      location: "l",
+      status: "SEARCHING",
+      imageUrl: null,
+      lostAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+    });
+
+    const result = await updateLostPost(1, 1, { lostAt: null });
+    await flushAfterCallbacks();
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.data.lostAt).toBeNull();
+    expect(lostPost.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ lostAt: null }) }),
+    );
+    // lostAt is not an EMBEDDING_INPUT_FIELDS member -- an lostAt-only edit
+    // shouldn't burn an inference call.
+    expect(embedPostBestEffort).not.toHaveBeenCalled();
   });
 
   // Phase 23: a changed embedding can change what this post's cached
@@ -387,6 +514,37 @@ describe("updateLostPost", () => {
 
     expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
     expect(foundPost.update).not.toHaveBeenCalled();
+  });
+
+  // Phase P-5: FoundPost mirrors LostPost's own location/foundAt-null
+  // handling exactly (see updateLostPost's own tests above) -- one
+  // representative case here confirms the symmetry, not a full duplicate
+  // of every LostPost scenario.
+  it("updates a FoundPost's location and foundAt to null (위치/시간 미상) and only re-embeds for location", async () => {
+    foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1 });
+    foundPost.update.mockResolvedValueOnce({
+      id: 2,
+      title: "t",
+      description: "d",
+      category: "c",
+      location: null,
+      status: "KEEPING",
+      imageUrl: null,
+      foundAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+    });
+
+    const result = await updateFoundPost(2, 1, { location: null, foundAt: null });
+    await flushAfterCallbacks();
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.location).toBeNull();
+      expect(result.data.foundAt).toBeNull();
+    }
+    expect(embedPostBestEffort).toHaveBeenCalledWith("found", 2, expect.objectContaining({ location: null }));
   });
 });
 

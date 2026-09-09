@@ -16,7 +16,7 @@ const FEATURES: { Icon: ComponentType<{ className?: string }>; title: string; de
   {
     Icon: SearchIcon,
     title: "검색",
-    description: "제목, 카테고리, 위치로 원하는 게시물을 빠르게 찾을 수 있습니다.",
+    description: "제목, 카테고리, 위치로 원하는 게시글을 빠르게 찾을 수 있습니다.",
   },
   {
     Icon: ShieldIcon,
@@ -25,13 +25,13 @@ const FEATURES: { Icon: ComponentType<{ className?: string }>; title: string; de
   },
   {
     Icon: EyeIcon,
-    title: "사진으로 비슷한 게시물 찾기",
-    description: "사진 한 장이면 비슷하게 생긴 게시물을 바로 찾아볼 수 있습니다.",
+    title: "사진으로 비슷한 게시글 찾기",
+    description: "사진 한 장이면 비슷하게 생긴 게시글을 바로 찾아볼 수 있습니다.",
   },
   {
     Icon: ChatIcon,
     title: "채팅으로 바로 연락",
-    description: "게시물 작성자와 채팅으로 연락해 물건을 주고받을 수 있습니다.",
+    description: "게시글 작성자와 채팅으로 연락해 물건을 주고받을 수 있습니다.",
   },
 ];
 

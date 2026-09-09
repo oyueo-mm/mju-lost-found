@@ -40,6 +40,22 @@ describe("buildEmbeddingText", () => {
   it("returns an empty string when every field is empty", () => {
     expect(buildEmbeddingText({})).toBe("");
   });
+
+  // Phase P-5: a 위치 미상 post stores location as null (never a "미상"
+  // placeholder string, see schema.prisma's own comment on
+  // LostPost.location) -- confirms that null is treated exactly like a
+  // missing field here, so no meaningless placeholder ever reaches the
+  // embedding model.
+  it("skips a null location (위치 미상) the same way it skips a missing one", () => {
+    const text = buildEmbeddingText({
+      title: "검은색 지갑",
+      description: "학생회관 근처에서 잃어버렸어요",
+      category: "지갑",
+      location: null,
+    });
+    expect(text).toBe("검은색 지갑 학생회관 근처에서 잃어버렸어요 지갑");
+    expect(text).not.toContain("미상");
+  });
 });
 
 // LexicalHashEmbeddingProvider is no longer what getEmbeddingProvider()

@@ -39,7 +39,7 @@ export default async function EditPostPage({
   if (post.author.id !== user.id) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-        본인이 작성한 게시물만 수정할 수 있습니다.
+        본인이 작성한 게시글만 수정할 수 있습니다.
       </div>
     );
   }
@@ -60,7 +60,11 @@ export default async function EditPostPage({
           category: post.category,
           location: post.location,
           campus: post.campus,
-          dateValue: toDateTimeLocalValue(dateValue),
+          // Phase P-5: null (time marked unknown) stays null here -- only
+          // a real Date is converted to the datetime-local string format.
+          // PostForm's own dateUnknown toggle is what decides, from this,
+          // whether to seed the date input as unknown or pre-filled.
+          dateValue: dateValue ? toDateTimeLocalValue(dateValue) : null,
           imageUrl: post.imageUrl,
         }}
       />

@@ -61,11 +61,13 @@ export type LostPostDTO = {
   title: string;
   description: string;
   category: string;
-  location: string;
+  // Phase P-5: null means "the poster doesn't know" -- see schema.prisma's
+  // own comment on LostPost.location.
+  location: string | null;
   campus: string;
   status: string;
   imageUrl: string | null;
-  lostAt: Date;
+  lostAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   author: Author;
@@ -90,11 +92,11 @@ export type FoundPostDTO = {
   title: string;
   description: string;
   category: string;
-  location: string;
+  location: string | null;
   campus: string;
   status: string;
   imageUrl: string | null;
-  foundAt: Date;
+  foundAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   author: Author;
@@ -234,11 +236,11 @@ export function toLostPostDTO(row: {
   title: string;
   description: string;
   category: string;
-  location: string;
+  location: string | null;
   campus: string;
   status: PrismaLostPostStatus;
   imageUrl: string | null;
-  lostAt: Date;
+  lostAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   viewCount: number;
@@ -253,11 +255,11 @@ export function toFoundPostDTO(row: {
   title: string;
   description: string;
   category: string;
-  location: string;
+  location: string | null;
   campus: string;
   status: PrismaFoundPostStatus;
   imageUrl: string | null;
-  foundAt: Date;
+  foundAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   viewCount: number;
@@ -513,4 +515,31 @@ export async function searchPosts({
   if (type === "lost") return listLostPosts({ q, ...params });
   if (type === "found") return listFoundPosts({ q, ...params });
   return searchAllPosts({ q, ...params });
+}
+
+// Phase P-4: real DB counts for the logged-out landing page (see
+// components/home/landing/LandingStats.tsx) -- "실제 DB 데이터, 임의 숫자
+// 사용 금지" per this phase's own spec, so this is a plain COUNT against
+// each board plus a rolling 7-day window for "최근 등록", never a mock/
+// hardcoded number. Lives in this AI-dependency-free half of posts/
+// service.ts (see this file's own module comment) so the landing page's
+// Server Component stays out of the @huggingface/transformers import
+// chain, same reasoning searchPosts()/listLostPosts() already follow.
+const RECENT_STATS_WINDOW_DAYS = 7;
+
+export type PostStats = {
+  lostCount: number;
+  foundCount: number;
+  recentCount: number;
+};
+
+export async function getPostStats(): Promise<PostStats> {
+  const since = new Date(Date.now() - RECENT_STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const [lostCount, foundCount, recentLostCount, recentFoundCount] = await Promise.all([
+    prisma.lostPost.count(),
+    prisma.foundPost.count(),
+    prisma.lostPost.count({ where: { createdAt: { gte: since } } }),
+    prisma.foundPost.count({ where: { createdAt: { gte: since } } }),
+  ]);
+  return { lostCount, foundCount, recentCount: recentLostCount + recentFoundCount };
 }

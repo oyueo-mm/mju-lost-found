@@ -12,7 +12,7 @@ export function ImageSearchShowcase() {
           <span className="text-xs font-medium text-primary">이미지 검색</span>
           <h2 className="text-xl font-bold text-foreground md:text-2xl">사진 한 장이면 충분합니다</h2>
           <p className="text-sm text-muted-foreground md:text-base">
-            찾고 있는 물건과 닮은 사진을 올리면, AI가 비슷하게 생긴 게시물을 찾아드립니다. 제품명을 몰라도
+            찾고 있는 물건과 닮은 사진을 올리면, AI가 비슷하게 생긴 게시글을 찾아드립니다. 제품명을 몰라도
             괜찮습니다.
           </p>
         </div>

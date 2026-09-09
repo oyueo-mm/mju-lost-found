@@ -303,3 +303,26 @@ body {
     transform: translateY(10px);
   }
 }
+
+/* Phase P-4: a plain on-load fade+rise for content that's already on
+   screen at first paint (no scroll/IntersectionObserver involved, unlike
+   [data-reveal] above) -- used by the login card, so it arrives with a
+   small settle instead of popping in fully formed. Same short duration
+   and easing as [data-reveal] for a consistent feel, and the same
+   prefers-reduced-motion gate: outside this media query the element is
+   just static, visible HTML with no animation at all. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-fade-in] {
+    animation: fade-in-rise 450ms ease-out both;
+  }
+}
+@keyframes fade-in-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

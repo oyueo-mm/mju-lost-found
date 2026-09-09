@@ -84,7 +84,19 @@ function toModerationActionDTO(row: ModerationAction & { adminUser: { nickname: 
 // placeholder -- an admin needs the real content to review a report even
 // after the message has already been hidden.
 export type ReportTargetInfo =
-  | { kind: "post"; postKind: "lost" | "found"; title: string; description: string; category: string; location: string; status: string; authorNickname: string | null; createdAt: Date }
+  | {
+      kind: "post";
+      postKind: "lost" | "found";
+      title: string;
+      description: string;
+      category: string;
+      // Phase P-5: null means "the poster didn't know" -- see
+      // schema.prisma's own comment on LostPost.location.
+      location: string | null;
+      status: string;
+      authorNickname: string | null;
+      createdAt: Date;
+    }
   | { kind: "message"; content: string; senderNickname: string | null; createdAt: Date; chatRoomId: number }
   | { kind: "user"; nickname: string | null }
   // Phase C-3: postType/postId let the admin UI link to the post the

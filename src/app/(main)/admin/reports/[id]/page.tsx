@@ -77,7 +77,7 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
             <span className="text-muted-foreground">{report.targetInfo.description}</span>
             <span className="text-xs text-muted-foreground">
               작성자: {report.targetInfo.authorNickname ?? "알 수 없음"} · {report.targetInfo.category} ·{" "}
-              {report.targetInfo.location} · 상태: {report.targetInfo.status} · 작성일:{" "}
+              {report.targetInfo.location ?? "위치 미상"} · 상태: {report.targetInfo.status} · 작성일:{" "}
               {formatDate(report.targetInfo.createdAt)}
             </span>
           </div>

@@ -1,5 +1,6 @@
 import { ScrollReveal } from "@/components/ui/ScrollReveal";
 import { Hero } from "./landing/Hero";
+import { LandingStats } from "./landing/LandingStats";
 import { FeatureGrid } from "./landing/FeatureGrid";
 import { AiSearchShowcase } from "./landing/AiSearchShowcase";
 import { ImageSearchShowcase } from "./landing/ImageSearchShowcase";
@@ -23,6 +24,12 @@ export function LandingHero() {
   return (
     <div className="flex flex-col">
       <Hero />
+
+      {/* Phase P-4: not wrapped in ScrollReveal, same reasoning as Hero
+          itself -- real numbers right under the headline are the "혹시 내
+          물건도 있지 않을까" hook this phase asks for, so they should be
+          there instantly rather than arrive on scroll. */}
+      <LandingStats />
 
       <ScrollReveal>
         <FeatureGrid />

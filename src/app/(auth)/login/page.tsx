@@ -20,7 +20,7 @@ const REASON_MESSAGES: Record<LoginReason, string> = {
   write: "게시글을 작성하거나 수정하려면 로그인해주세요.",
   chat: "채팅을 이용하려면 로그인해주세요.",
   match: "매칭 정보를 보려면 로그인해주세요.",
-  mypost: "내 게시물을 보려면 로그인해주세요.",
+  mypost: "내 게시글을 보려면 로그인해주세요.",
   notification: "알림을 확인하려면 로그인해주세요.",
 };
 
@@ -51,12 +51,30 @@ export default async function LoginPage({
   const reasonMessage = reason && isLoginReason(reason) ? REASON_MESSAGES[reason] : null;
 
   return (
-    <div className="flex min-h-full flex-1 flex-col items-center justify-center px-6 py-12">
-      <div className="flex w-full max-w-sm flex-col items-center gap-7 text-center">
-        <div className="flex flex-col items-center gap-3">
+    // Phase P-4: a very soft, low-opacity glow behind the card (same
+    // decorative pattern Hero.tsx's landing page already uses) instead of
+    // the previous bare-background layout -- gives the screen a designed,
+    // considered feel without introducing a new visual language. The card
+    // itself uses a low-contrast border (border-border/60) and a soft
+    // shadow instead of a full-strength border, since in the default
+    // light theme --card and --background are the same white (see
+    // globals.css) and a full-opacity border was the only thing drawing a
+    // hard edge around the content. The dedicated high-contrast
+    // accessibility theme is untouched -- only this page's own classes
+    // changed, not the shared color tokens.
+    <div className="relative flex min-h-full flex-1 flex-col items-center justify-center overflow-hidden px-6 py-12">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-1/4 left-1/2 -z-10 h-80 w-80 -translate-x-1/2 rounded-full bg-primary/10 blur-3xl"
+      />
+      <div
+        data-fade-in
+        className="flex w-full max-w-sm flex-col items-center gap-8 rounded-2xl border border-border/60 bg-card/80 px-8 py-10 text-center shadow-sm backdrop-blur-sm"
+      >
+        <div className="flex flex-col items-center gap-3.5">
           <LogoMark size={56} />
-          <div className="flex flex-col items-center gap-1">
-            <h1 className="text-xl font-semibold text-foreground">명지 스마트 분실물 센터</h1>
+          <div className="flex flex-col items-center gap-1.5">
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">명지 스마트 분실물 센터</h1>
             <p className="text-sm text-muted-foreground">캠퍼스에서 잃어버린 물건을 빠르게 찾아드려요</p>
           </div>
         </div>
@@ -119,7 +137,7 @@ export default async function LoginPage({
           </p>
         )}
 
-        <div className="flex w-full flex-col items-center gap-1.5 border-t border-border pt-6">
+        <div className="flex w-full flex-col items-center gap-1.5 border-t border-border/60 pt-6">
           <p className="text-sm text-muted-foreground">명지대 계정이 없으신가요?</p>
           <Link href="/account-guide" className="text-sm font-medium text-primary hover:opacity-80">
             명지대 계정 생성 방법 보기

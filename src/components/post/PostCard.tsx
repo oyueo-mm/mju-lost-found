@@ -68,7 +68,15 @@ type PostCardProps = {
 // element's box, independent of which descendant is topmost for clicks.
 export function PostCard({ post, scoreLabel = "검색 유사도" }: PostCardProps) {
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-card border border-border bg-card transition-colors hover:border-foreground/30">
+    // Phase P-4: `transition` (not `transition-colors`) so border-color,
+    // box-shadow, and the small hover lift below all animate off the same
+    // single transition-property list -- stacking two transition-*
+    // utilities on one element is unreliable in Tailwind (whichever rule
+    // lands last in the generated stylesheet wins, not necessarily the
+    // one written last in this className), so this uses the one utility
+    // that already covers all three instead. Kept short (existing
+    // duration-150 default) and subtle -- a hint of depth, not a jump.
+    <div className="group relative flex flex-col overflow-hidden rounded-card border border-border bg-card transition duration-150 hover:border-foreground/30 hover:shadow-md motion-safe:hover:-translate-y-0.5">
       <div className="relative aspect-4/5 w-full shrink-0 overflow-hidden bg-muted md:aspect-4/3">
         {post.imageUrl ? (
           <Image
@@ -77,7 +85,7 @@ export function PostCard({ post, scoreLabel = "검색 유사도" }: PostCardProp
             fill
             sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
             loading="lazy"
-            className="object-cover transition-transform group-hover:scale-[1.03]"
+            className="object-cover transition-transform motion-safe:group-hover:scale-[1.03]"
           />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-muted-foreground">
@@ -107,7 +115,7 @@ export function PostCard({ post, scoreLabel = "검색 유사도" }: PostCardProp
         <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
           <span className="flex items-center gap-1 truncate">
             <PinIcon className="size-3.5 shrink-0" />
-            <span className="truncate">{post.location}</span>
+            <span className="truncate">{post.location ?? "위치 미상"}</span>
           </span>
           <span className="flex items-center gap-1">
             <ClockIcon className="size-3.5 shrink-0" />

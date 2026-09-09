@@ -41,7 +41,7 @@ export default async function FoundListPage({
       <div className="flex flex-col gap-6">
         <h1 className="text-xl font-semibold text-foreground">습득물 게시판</h1>
         <div className="rounded-card border border-destructive/30 bg-destructive-muted p-10 text-center text-sm text-destructive">
-          게시물을 불러오지 못했어요. 잠시 후 다시 시도해주세요.
+          게시글을 불러오지 못했어요. 잠시 후 다시 시도해주세요.
         </div>
       </div>
     );

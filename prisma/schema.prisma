@@ -207,7 +207,13 @@ model LostPost {
   // to filter by category later -- adding an index/enum is a decision for
   // whichever phase builds that filter, not this one.
   category    String          @db.Text
-  location    String          @db.Text
+  // Phase P-5: nullable, not an empty-string/"미상" placeholder -- null
+  // means "the poster genuinely doesn't know the location", a real,
+  // distinct state from an empty required field. buildEmbeddingText()
+  // (src/lib/ai/embedding.ts) already treats a falsy field as "skip it",
+  // so a null location simply drops out of the embedding text instead of
+  // polluting it with a meaningless placeholder token.
+  location    String?         @db.Text
   // Phase 31: a fixed set of two real MJU campuses (see CAMPUSES in
   // src/lib/posts/schema.ts) -- unlike `category`/`location` above, this
   // is a brand-new field with no legacy free-text data to stay
@@ -217,7 +223,13 @@ model LostPost {
   // field's own comment. Required, defaulting existing/omitted rows to
   // "인문캠퍼스" per this phase's spec.
   campus      String          @default("인문캠퍼스") @db.Text
-  lostAt      DateTime        @map("lost_at")
+  // Phase P-5: nullable, same "genuine unknown, not a fabricated date"
+  // reasoning as `location` above -- never defaulted to `now()` or any
+  // other invented timestamp. lostAt/foundAt were never part of search
+  // filtering or sorting (buildSearchWhere/buildOrderBy use `createdAt`
+  // instead, see posts/service.ts), so making this nullable has no
+  // search-ordering impact.
+  lostAt      DateTime?       @map("lost_at")
   status      LostPostStatus  @default(SEARCHING)
   imageUrl    String?         @db.Text @map("image_url")
   createdAt   DateTime        @default(now()) @map("created_at")
@@ -261,10 +273,12 @@ model FoundPost {
   title       String           @db.Text
   description String           @db.Text
   category    String           @db.Text
-  location    String           @db.Text
+  // See LostPost.location's comment -- identical shape/reasoning.
+  location    String?          @db.Text
   // See LostPost.campus's comment -- identical shape/reasoning.
   campus      String           @default("인문캠퍼스") @db.Text
-  foundAt     DateTime         @map("found_at")
+  // See LostPost.lostAt's comment -- identical shape/reasoning.
+  foundAt     DateTime?        @map("found_at")
   status      FoundPostStatus  @default(KEEPING)
   imageUrl    String?          @db.Text @map("image_url")
   createdAt   DateTime         @default(now()) @map("created_at")

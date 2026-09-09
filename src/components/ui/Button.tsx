@@ -21,8 +21,20 @@ const SIZES = {
 export type ButtonVariant = keyof typeof VARIANTS;
 export type ButtonSize = keyof typeof SIZES;
 
+// Phase P-4: `transition` (covers color + transform in one
+// transition-property list, see PostCard.tsx's own comment on why two
+// separate transition-* utilities on one element is unreliable in
+// Tailwind) plus a small `active:scale` press -- every button/LinkButton
+// in the app already shares this one function, so this one change gives
+// every click in the product the same brief, consistent press feedback
+// without touching any call site. `motion-safe:` (Tailwind's built-in
+// prefers-reduced-motion variant, no config needed) keeps the press scale
+// out of the DOM entirely for a reduced-motion user, same "off means off,
+// not smaller" rule globals.css's own [data-reveal]/[data-fade-in] blocks
+// already follow. Kept subtle (2% scale, default duration) so it reads as
+// "this responded to your tap", not a bounce.
 function buttonClassName(variant: ButtonVariant, size: ButtonSize, className: string) {
-  return `inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 ${VARIANTS[variant]} ${SIZES[size]} ${className}`;
+  return `inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full font-medium transition motion-safe:active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 ${VARIANTS[variant]} ${SIZES[size]} ${className}`;
 }
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {

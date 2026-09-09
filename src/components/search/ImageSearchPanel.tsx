@@ -166,7 +166,7 @@ export function ImageSearchPanel({ type }: ImageSearchPanelProps) {
             </p>
           )}
           {results.length === 0 ? (
-            <EmptyState title="비슷한 게시물을 찾지 못했어요." description="다른 사진으로 다시 시도해보세요." />
+            <EmptyState title="비슷한 게시글을 찾지 못했어요." description="다른 사진으로 다시 시도해보세요." />
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {results.map((post) => (

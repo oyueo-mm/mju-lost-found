@@ -165,7 +165,15 @@ export type ListQuery = z.infer<typeof listQuerySchema>;
 const title = z.string().trim().min(1, "제목을 입력해주세요.").max(200);
 const description = z.string().trim().min(1, "설명을 입력해주세요.").max(5000);
 const category = z.string().trim().min(1, "카테고리를 입력해주세요.").max(100);
-const location = z.string().trim().min(1, "위치를 입력해주세요.").max(200);
+// Phase P-5: `.nullable()`, not `.optional()` -- the field must still be
+// present on every create (the form always sends either a real value or
+// an explicit null, see PostForm.tsx's locationUnknown toggle), but its
+// value can genuinely be "unknown" (null) instead of a non-empty string.
+// null means "the poster doesn't know", never coerced from/to an empty
+// string or a placeholder like "미상" -- see schema.prisma's own comment
+// on LostPost.location for why that distinction matters downstream
+// (search, embedding).
+const location = z.string().trim().min(1, "위치를 입력해주세요.").max(200).nullable();
 // Phase 31: required on every create -- unlike location (free text, no
 // fixed list), an omitted/invalid campus is a validation error rather
 // than falling back to DEFAULT_CAMPUS server-side, so the form's own
@@ -178,7 +186,10 @@ export const createLostPostSchema = z.object({
   category,
   location,
   campus,
-  lostAt: z.coerce.date("분실 일시가 올바르지 않습니다."),
+  // Phase P-5: same nullable-not-optional shape as `location` above --
+  // always present, either a real coerced Date or an explicit null for
+  // "시간 미상" (see PostForm.tsx's dateUnknown toggle).
+  lostAt: z.coerce.date("분실 일시가 올바르지 않습니다.").nullable(),
   status: z.enum(LOST_STATUSES).optional(),
 });
 export type CreateLostPostInput = z.infer<typeof createLostPostSchema>;
@@ -192,7 +203,7 @@ export const createFoundPostSchema = z.object({
   category,
   location,
   campus,
-  foundAt: z.coerce.date("습득 일시가 올바르지 않습니다."),
+  foundAt: z.coerce.date("습득 일시가 올바르지 않습니다.").nullable(),
   status: z.enum(FOUND_STATUSES).optional(),
 });
 export type CreateFoundPostInput = z.infer<typeof createFoundPostSchema>;

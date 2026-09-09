@@ -27,9 +27,12 @@ type PostFormValues = {
   title: string;
   description: string;
   category: string;
-  location: string;
+  // Phase P-5: null means the poster marked this as unknown -- see
+  // schema.prisma's own comment on LostPost.location/lostAt. Never an
+  // empty string or a "미상" placeholder.
+  location: string | null;
   campus: string;
-  dateValue: string; // <input type="datetime-local"> value
+  dateValue: string | null; // <input type="datetime-local"> value, or null if unknown
   imageUrl: string | null;
 };
 
@@ -74,7 +77,7 @@ function nowAsDateTimeLocalValue(): string {
 // updateFoundPostSchema (createXPostSchema.partial()) already accept a
 // partial body server-side, so omitting an unchanged field here needs no
 // API/schema change.
-function fieldIfChanged(isEdit: boolean, key: string, current: string, initial: string | undefined) {
+function fieldIfChanged<T>(isEdit: boolean, key: string, current: T, initial: T | undefined) {
   if (!isEdit || initial === undefined || current !== initial) {
     return { [key]: current };
   }
@@ -117,6 +120,13 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
   // in edit mode, DEFAULT_CAMPUS for a brand-new one), and the toggle
   // buttons below no longer allow deselecting back to "none".
   const [campus, setCampus] = useState<string>(initialValues?.campus ?? DEFAULT_CAMPUS);
+  // Phase P-5: "미상" toggles -- initialized from whether the existing post
+  // (edit mode) actually has a null location/date, never guessed from an
+  // empty string. Create mode has no initialValues at all, so both default
+  // to false (알고 있음), matching the form's pre-P-5 behavior exactly when
+  // never touched.
+  const [locationUnknown, setLocationUnknown] = useState(initialValues?.location === null);
+  const [dateUnknown, setDateUnknown] = useState(initialValues?.dateValue === null);
 
   // Same outside-click-to-close mechanism PostManageMenu already
   // established (Phase H-6) -- plain useState + a document listener, no
@@ -196,8 +206,12 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
     const title = String(formData.get("title") ?? "");
     const description = String(formData.get("description") ?? "");
     const category = String(formData.get("category") ?? "");
-    const location = String(formData.get("location") ?? "");
-    const dateValue = String(formData.get("date") ?? "");
+    // Phase P-5: null (never an empty string or a "미상" placeholder) when
+    // the poster toggled 위치/시간 미상 -- read from this component's own
+    // toggle state, not from the (disabled, so browser-excluded anyway)
+    // form field, so this is correct regardless of that native behavior.
+    const location = locationUnknown ? null : String(formData.get("location") ?? "");
+    const dateValue = dateUnknown ? null : String(formData.get("date") ?? "");
 
     const isEdit = postId !== undefined;
     const dateField = DATE_FIELD[type];
@@ -407,9 +421,33 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
         </div>
 
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-foreground">
-            위치
-            <RequiredMark />
+          <span className="flex items-center justify-between gap-2">
+            <span className="font-medium text-foreground">
+              위치
+              {!locationUnknown && <RequiredMark />}
+            </span>
+            {/* Phase P-5: a single toggle, not a two-button segmented
+                group (unlike 캠퍼스 above) -- there's only one meaningful
+                action from either state ("switch to the other one"), so
+                one button whose own label names that action is enough;
+                aria-pressed still reports which state is current for
+                assistive tech. Toggling to 모름 disables/unrequires the
+                input below and clears any popover open state, but never
+                erases whatever the poster already typed -- switching back
+                restores it exactly (the input itself is untouched, see
+                defaultValue below). */}
+            <button
+              type="button"
+              onClick={() => {
+                setLocationUnknown((unknown) => !unknown);
+                setLocationMenuOpen(false);
+              }}
+              aria-pressed={locationUnknown}
+              disabled={pending}
+              className="shrink-0 text-xs font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline disabled:opacity-60"
+            >
+              {locationUnknown ? "위치를 알고 있어요" : "위치를 몰라요"}
+            </button>
           </span>
           {/* Phase P-2: the popover now follows the `campus` toggle above
               (getLocationSuggestions(campus)) instead of always listing
@@ -426,16 +464,16 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
               ref={locationInputRef}
               name="location"
               type="text"
-              required
+              required={!locationUnknown}
               maxLength={200}
-              placeholder="예: 학생회관 3층 카페"
-              defaultValue={initialValues?.location}
-              disabled={pending}
+              placeholder={locationUnknown ? "위치 미상으로 등록돼요" : "예: 학생회관 3층 카페"}
+              defaultValue={initialValues?.location ?? undefined}
+              disabled={pending || locationUnknown}
               className={`${FIELD_CLASS} flex-1`}
             />
             <button
               type="button"
-              disabled={pending}
+              disabled={pending || locationUnknown}
               onClick={() => setLocationMenuOpen((open) => !open)}
               aria-haspopup="menu"
               aria-expanded={locationMenuOpen}
@@ -475,16 +513,28 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
         </label>
 
         <label className="flex flex-col gap-1.5 text-sm">
-          <span className="font-medium text-foreground">
-            {DATE_LABEL[type]}
-            <RequiredMark />
+          <span className="flex items-center justify-between gap-2">
+            <span className="font-medium text-foreground">
+              {DATE_LABEL[type]}
+              {!dateUnknown && <RequiredMark />}
+            </span>
+            {/* Phase P-5: same single-toggle pattern as 위치 above. */}
+            <button
+              type="button"
+              onClick={() => setDateUnknown((unknown) => !unknown)}
+              aria-pressed={dateUnknown}
+              disabled={pending}
+              className="shrink-0 text-xs font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline disabled:opacity-60"
+            >
+              {dateUnknown ? "시간을 알고 있어요" : "시간을 몰라요"}
+            </button>
           </span>
           <input
             name="date"
             type="datetime-local"
-            required
+            required={!dateUnknown}
             defaultValue={initialValues?.dateValue ?? nowAsDateTimeLocalValue()}
-            disabled={pending}
+            disabled={pending || dateUnknown}
             className={FIELD_CLASS}
           />
         </label>

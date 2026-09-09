@@ -34,7 +34,7 @@ export default async function ChatListPage() {
       {rooms.length === 0 ? (
         <EmptyState
           title="아직 채팅방이 없어요."
-          description="게시물 상세 화면에서 매칭을 확정하거나 작성자에게 문의하기를 누르면 채팅을 시작할 수 있어요."
+          description="게시글 상세 화면에서 매칭을 확정하거나 작성자에게 문의하기를 누르면 채팅을 시작할 수 있어요."
         />
       ) : (
         <div className="flex flex-col gap-2.5">

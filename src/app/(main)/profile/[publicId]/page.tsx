@@ -84,7 +84,7 @@ export default async function ProfilePage({
         <h2 className="text-sm font-semibold text-foreground">작성 게시글</h2>
         {!posts ? (
           <div className="rounded-card border border-destructive/30 bg-destructive-muted p-10 text-center text-sm text-destructive">
-            게시물을 불러오지 못했어요. 잠시 후 다시 시도해주세요.
+            게시글을 불러오지 못했어요. 잠시 후 다시 시도해주세요.
           </div>
         ) : posts.items.length === 0 ? (
           <EmptyState title="작성한 게시글이 없어요." />

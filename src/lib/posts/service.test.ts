@@ -40,6 +40,7 @@ const {
   deleteFoundPost,
   deleteLostPost,
   getLostPost,
+  getPostStats,
   listFoundPosts,
   listFoundPostsByUser,
   listLostPosts,
@@ -87,6 +88,36 @@ describe("listLostPosts / listFoundPosts", () => {
 
     expect(result.items).toEqual([]);
     expect(result.total).toBe(0);
+  });
+
+  // Phase P-5: a 위치/시간 미상 post is a completely normal row from
+  // listing's own point of view -- buildSearchWhere/buildOrderBy only ever
+  // filter/sort by createdAt (never location/lostAt, see this file's own
+  // buildOrderBy), so a null location/lostAt here has zero effect on
+  // whether or where this post shows up in a plain list.
+  it("lists a location/lostAt-unknown (미상) post exactly like any other", async () => {
+    lostPost.findMany.mockResolvedValueOnce([
+      {
+        id: 1,
+        title: "t",
+        description: "d",
+        category: "c",
+        location: null,
+        status: "SEARCHING",
+        imageUrl: null,
+        lostAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        user: { id: 1, nickname: "닉네임", publicId: "pub-1" },
+      },
+    ]);
+    lostPost.count.mockResolvedValueOnce(1);
+
+    const result = await listLostPosts({ page: 1, limit: 20 });
+
+    expect(result.total).toBe(1);
+    expect(result.items[0].location).toBeNull();
+    expect(result.items[0].lostAt).toBeNull();
   });
 });
 
@@ -313,5 +344,42 @@ describe("listPostsByUser", () => {
 
     expect(result.items).toEqual([]);
     expect(result.total).toBe(0);
+  });
+});
+
+// Phase P-4: the logged-out landing page's real-DB stat counts (see
+// components/home/landing/LandingStats.tsx) -- these are plain COUNT
+// queries, never a fabricated number, so the tests just check the right
+// counts feed the right fields.
+describe("getPostStats", () => {
+  it("returns the total lost/found counts and the combined recent (7-day) count", async () => {
+    lostPost.count.mockResolvedValueOnce(11); // total lost
+    foundPost.count.mockResolvedValueOnce(9); // total found
+    lostPost.count.mockResolvedValueOnce(2); // recent lost
+    foundPost.count.mockResolvedValueOnce(3); // recent found
+
+    const stats = await getPostStats();
+
+    expect(stats).toEqual({ lostCount: 11, foundCount: 9, recentCount: 5 });
+  });
+
+  it("scopes the recent counts to createdAt >= a 7-day-ago cutoff", async () => {
+    const start = new Date("2026-03-10T00:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(start);
+    try {
+      lostPost.count.mockResolvedValueOnce(0);
+      foundPost.count.mockResolvedValueOnce(0);
+      lostPost.count.mockResolvedValueOnce(0);
+      foundPost.count.mockResolvedValueOnce(0);
+
+      await getPostStats();
+
+      const expectedSince = new Date(start.getTime() - 7 * 24 * 60 * 60 * 1000);
+      expect(lostPost.count).toHaveBeenNthCalledWith(2, { where: { createdAt: { gte: expectedSince } } });
+      expect(foundPost.count).toHaveBeenNthCalledWith(2, { where: { createdAt: { gte: expectedSince } } });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

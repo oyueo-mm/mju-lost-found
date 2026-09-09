@@ -32,7 +32,7 @@ export function SimilarPostsSection({ sourceType, recommendations, loadFailed }:
       <div className="flex flex-col gap-1">
         <h2 className="font-semibold text-foreground">AI 추천</h2>
         <p className="text-xs text-muted-foreground">
-          이 게시물과 관련된 {BOARD_LABEL[targetType]}을 AI가 추천해요. 실제 동일 물건 여부를 보장하지는 않아요.
+          이 게시글과 관련된 {BOARD_LABEL[targetType]}을 AI가 추천해요. 실제 동일 물건 여부를 보장하지는 않아요.
         </p>
       </div>
 
@@ -41,7 +41,7 @@ export function SimilarPostsSection({ sourceType, recommendations, loadFailed }:
       ) : recommendations.length === 0 ? (
         <EmptyState
           title={`추천할 ${BOARD_LABEL[targetType]}이 아직 없어요.`}
-          description={`관련된 ${BOARD_LABEL[targetType]} 게시물이 등록되면 여기에 표시돼요.`}
+          description={`관련된 ${BOARD_LABEL[targetType]} 게시글이 등록되면 여기에 표시돼요.`}
         />
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
