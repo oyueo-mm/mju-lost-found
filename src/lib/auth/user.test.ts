@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
 const upsert = vi.fn();
+const updateMany = vi.fn();
+const findUniqueOrThrow = vi.fn();
 
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { user: { upsert } },
+  prisma: { user: { upsert, updateMany, findUniqueOrThrow } },
 }));
 
-const { resolveOrCreateUser } = await import("./user");
+const { resolveOrCreateUser, recordPrivacyConsent } = await import("./user");
 
 describe("resolveOrCreateUser", () => {
   it("looks up an existing user by email (login) -- get-or-create, not duplicate-create", async () => {
@@ -81,5 +83,44 @@ describe("resolveOrCreateUser", () => {
         create: expect.objectContaining({ lastLoginAt: expect.any(Date) }),
       }),
     );
+  });
+});
+
+describe("recordPrivacyConsent", () => {
+  it("stamps privacyConsentAt with the server's own clock, only while it's still unset", async () => {
+    updateMany.mockResolvedValueOnce({ count: 1 });
+    findUniqueOrThrow.mockResolvedValueOnce({ id: 5, privacyConsentAt: new Date() });
+
+    await recordPrivacyConsent(5);
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 5, privacyConsentAt: null },
+      data: { privacyConsentAt: expect.any(Date) },
+    });
+  });
+
+  it("returns the fresh user row after recording consent", async () => {
+    updateMany.mockResolvedValueOnce({ count: 1 });
+    findUniqueOrThrow.mockResolvedValueOnce({ id: 5, privacyConsentAt: new Date("2026-01-01T00:00:00Z") });
+
+    const user = await recordPrivacyConsent(5);
+
+    expect(findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 5 } });
+    expect(user).toEqual({ id: 5, privacyConsentAt: new Date("2026-01-01T00:00:00Z") });
+  });
+
+  // Idempotent: a second call (double-submit, or hitting the API directly
+  // after already consenting) must not overwrite the original consent
+  // instant -- the where-clause's `privacyConsentAt: null` guard makes
+  // updateMany match zero rows in that case, same "only if still unset"
+  // pattern as onboarding/actions.ts's nickname write.
+  it("does not overwrite an already-recorded consent timestamp", async () => {
+    updateMany.mockResolvedValueOnce({ count: 0 });
+    const original = new Date("2025-06-01T00:00:00Z");
+    findUniqueOrThrow.mockResolvedValueOnce({ id: 5, privacyConsentAt: original });
+
+    const user = await recordPrivacyConsent(5);
+
+    expect(user.privacyConsentAt).toEqual(original);
   });
 });

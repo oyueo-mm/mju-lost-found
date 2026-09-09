@@ -52,6 +52,17 @@ function loginRedirectUrl(reason?: LoginReason, callbackUrl?: string): string {
   return query ? `/login?${query}` : "/login";
 }
 
+// Phase 8: /privacy-consent has no `reason` variants (unlike /login's
+// REASON_MESSAGES) -- its content is the same fixed consent notice
+// regardless of which page sent the user there, so only callbackUrl is
+// ever threaded through.
+function privacyConsentRedirectUrl(callbackUrl?: string): string {
+  const params = new URLSearchParams();
+  if (callbackUrl) params.set("callbackUrl", callbackUrl);
+  const query = params.toString();
+  return query ? `/privacy-consent?${query}` : "/privacy-consent";
+}
+
 // /login reads a caller-supplied `callbackUrl` back out of its own query
 // string (see loginRedirectUrl above, and DirectChatButton's login-prompt
 // link on /post/[id]) to send the user back where they came from after
@@ -87,10 +98,22 @@ export async function requireUser(reason?: LoginReason, callbackUrl?: string): P
 
 // The full page-level gate used before a write action, matching the
 // legacy ui/auth.py::require_ready_user(): not logged in -> /login;
-// logged in but nickname not set yet -> /onboarding; both satisfied ->
-// the User row. Used by /lost/new, /found/new, and the edit page.
+// logged in but hasn't agreed to the privacy notice yet -> /privacy-
+// consent; logged in and consented but nickname not set yet ->
+// /onboarding; all three satisfied -> the User row. Used by /lost/new,
+// /found/new, and the edit page.
+//
+// Phase 8: privacyConsentAt is checked *before* nickname, matching this
+// phase's own spec diagram (Google OAuth -> 로그인 성공 -> privacyConsentAt
+// 확인 -> ... -> 서비스 진입, with nickname onboarding coming after) --
+// setting a nickname is itself a personal-data-entering action, so it
+// shouldn't be reachable before the user has agreed to the privacy
+// notice either. callbackUrl is forwarded to /privacy-consent so
+// consenting lands the user back on the page they were trying to reach,
+// not just "/".
 export async function requireReadyUser(reason?: LoginReason, callbackUrl?: string): Promise<User> {
   const user = await requireUser(reason, callbackUrl);
+  if (user.privacyConsentAt === null) redirect(privacyConsentRedirectUrl(callbackUrl));
   if (user.nickname === null) redirect("/onboarding");
   return user;
 }

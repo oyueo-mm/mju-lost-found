@@ -157,6 +157,18 @@ model User {
   // Deliberately NOT a "currently online" signal -- see admin/users.ts's
   // getUserDetailForAdmin for why presence isn't derived from this alone.
   lastLoginAt     DateTime? @map("last_login_at")
+  // Phase 8: NULL means this user has never agreed to the service's
+  // privacy notice; a timestamp means they agreed at that exact instant.
+  // Deliberately NOT a boolean -- a single flag would lose *when* consent
+  // was given, which this column exists specifically to preserve. Set
+  // exactly once, only by the user's own explicit action (POST
+  // /api/me/privacy-consent, see auth/user.ts's recordPrivacyConsent) --
+  // never inferred from Google OAuth succeeding (see auth.ts's jwt
+  // callback / resolveOrCreateUser, which never touches this column) and
+  // never backfilled for existing rows by this migration, so every user
+  // who signed up before this phase starts out requiring consent exactly
+  // like a brand-new user does.
+  privacyConsentAt DateTime? @map("privacy_consent_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 

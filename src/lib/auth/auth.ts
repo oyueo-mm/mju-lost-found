@@ -14,6 +14,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      // Phase 8: narrower than next-auth's own default ("openid email
+      // profile") -- this app never reads a Google profile picture, and
+      // the *only* thing "profile" scope actually earns this app is
+      // User.name (see resolveOrCreateUser below), which is itself only
+      // ever shown once, on the onboarding welcome line, and to admins in
+      // the user list -- everywhere else in this app (author bylines,
+      // chat, comments, ...) displays the user's own chosen `nickname`,
+      // never `name`. That one cosmetic use isn't worth the OAuth consent
+      // screen also asking for gender/locale/"other public profile info"
+      // (all bundled under Google's single indivisible "profile" scope,
+      // regardless of whether an app's code ever reads them). Dropping it
+      // costs nothing structurally: resolveOrCreateUser already falls
+      // back to the email's local part when Google reports no name (see
+      // its own comment), and its `update` branch only *writes* name when
+      // one is actually provided (`?? undefined`), so an existing user's
+      // already-stored real name is never overwritten with the fallback
+      // on a later login. email/email_verified (the signIn callback's own
+      // @mju.ac.kr gate) and `sub` (googleId) both come from `openid
+      // email` alone -- neither needs `profile`.
+      authorization: { params: { scope: "openid email" } },
     }),
   ],
   session: { strategy: "jwt" },

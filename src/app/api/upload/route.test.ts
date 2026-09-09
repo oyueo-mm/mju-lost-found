@@ -22,7 +22,13 @@ vi.mock("@/lib/images/supabaseAdmin", () => ({ createSignedUploadUrl }));
 
 const { POST } = await import("./route");
 
-const readyUser = { id: 1, nickname: "닉네임", isSuspended: false, suspendedUntil: null };
+const readyUser = {
+  id: 1,
+  nickname: "닉네임",
+  isSuspended: false,
+  suspendedUntil: null,
+  privacyConsentAt: new Date("2026-01-01T00:00:00Z"),
+};
 
 function requestWith(body: unknown) {
   return new NextRequest("http://localhost/api/upload", {
@@ -62,6 +68,20 @@ describe("POST /api/upload", () => {
     const { status } = await callAndGetJson({ postType: "lost", postId: 1, contentType: "image/jpeg" });
 
     expect(status).toBe(403);
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
+  // Phase 8: checked before the nickname check, matching the same
+  // ordering requireUserForApi() uses -- this route duplicates that
+  // check inline instead of going through requireUserForApi (see this
+  // route's own top comment on why).
+  it("rejects a user who hasn't agreed to the privacy notice yet", async () => {
+    getCurrentUser.mockResolvedValueOnce({ ...readyUser, privacyConsentAt: null });
+
+    const { status, json } = await callAndGetJson({ postType: "lost", postId: 1, contentType: "image/jpeg" });
+
+    expect(status).toBe(403);
+    expect(json.error).toMatch(/동의/);
     expect(createSignedUploadUrl).not.toHaveBeenCalled();
   });
 

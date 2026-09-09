@@ -73,18 +73,38 @@ describe("requireUser", () => {
 });
 
 describe("requireReadyUser", () => {
-  it("returns the user when nickname is already set", async () => {
+  it("returns the user when consented and nickname is already set", async () => {
     auth.mockResolvedValueOnce({ user: { id: "1" } });
-    findUnique.mockResolvedValueOnce({ id: 1, nickname: "닉네임" });
+    findUnique.mockResolvedValueOnce({ id: 1, nickname: "닉네임", privacyConsentAt: new Date() });
 
-    await expect(requireReadyUser()).resolves.toEqual({ id: 1, nickname: "닉네임" });
+    await expect(requireReadyUser()).resolves.toMatchObject({ id: 1, nickname: "닉네임" });
   });
 
   it("redirects to /onboarding when signed in but nickname is not set yet", async () => {
     auth.mockResolvedValueOnce({ user: { id: "1" } });
-    findUnique.mockResolvedValueOnce({ id: 1, nickname: null });
+    findUnique.mockResolvedValueOnce({ id: 1, nickname: null, privacyConsentAt: new Date() });
 
     await expect(requireReadyUser()).rejects.toThrow("REDIRECT:/onboarding");
+  });
+
+  // Phase 8: checked before nickname -- a signed-in user who hasn't
+  // agreed to the privacy notice yet is bounced there first, even if
+  // their nickname is already set (e.g. an existing pre-Phase-8 user, see
+  // this phase's own "기존 사용자 처리" section).
+  it("redirects to /privacy-consent when signed in but not yet consented, even with a nickname already set", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({ id: 1, nickname: "닉네임", privacyConsentAt: null });
+
+    await expect(requireReadyUser()).rejects.toThrow("REDIRECT:/privacy-consent");
+  });
+
+  it("forwards callbackUrl to /privacy-consent when not yet consented", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({ id: 1, nickname: "닉네임", privacyConsentAt: null });
+
+    await expect(requireReadyUser(undefined, "/lost/new")).rejects.toThrow(
+      "REDIRECT:/privacy-consent?callbackUrl=%2Flost%2Fnew",
+    );
   });
 
   it("redirects to /login when not signed in (delegates to requireUser)", async () => {
@@ -196,6 +216,22 @@ describe("requireActiveUser", () => {
     });
 
     await expect(requireActiveUser()).rejects.toThrow("REDIRECT:/onboarding");
+  });
+
+  // Phase 8: requireActiveUser delegates to requireReadyUser, so the
+  // consent gate applies here too without any code change to this
+  // function -- this just documents that the delegation actually cascades.
+  it("redirects to /privacy-consent before checking suspension when not yet consented", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({
+      id: 1,
+      nickname: "닉네임",
+      privacyConsentAt: null,
+      isSuspended: true,
+      suspendedUntil: null,
+    });
+
+    await expect(requireActiveUser()).rejects.toThrow("REDIRECT:/privacy-consent");
   });
 });
 

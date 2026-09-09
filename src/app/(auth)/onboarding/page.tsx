@@ -7,6 +7,15 @@ import { NicknameForm } from "./NicknameForm";
 export default async function OnboardingPage() {
   const user = await requireUser(); // redirects to /login if not signed in
 
+  // Phase 8: consent comes before nickname (see session.ts's
+  // requireReadyUser for the same ordering) -- this page calls
+  // requireUser() directly, not requireReadyUser(), specifically so it
+  // can redirect a not-yet-consented visitor to /privacy-consent instead
+  // of looping back to itself.
+  if (user.privacyConsentAt === null) {
+    redirect("/privacy-consent?callbackUrl=%2Fonboarding");
+  }
+
   if (user.nickname !== null) {
     redirect("/");
   }

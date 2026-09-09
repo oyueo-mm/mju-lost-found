@@ -30,3 +30,25 @@ export async function resolveOrCreateUser(params: {
     },
   });
 }
+
+// Phase 8: the only place privacyConsentAt is ever written -- called
+// solely from POST /api/me/privacy-consent, i.e. only when the user
+// themselves clicked the consent button (never from the OAuth/login flow
+// above, see that column's own schema.prisma comment). `new Date()` is
+// this server's own clock, never a client-supplied value, matching this
+// phase's own "클라이언트가 전달한 timestamp를 신뢰하지 않는다" requirement.
+//
+// The `privacyConsentAt: null` guard in the where-clause makes this
+// idempotent without clobbering an already-recorded consent instant: a
+// second call (double-submit, or hitting the API directly after already
+// consenting) matches zero rows and changes nothing, so the *original*
+// consent timestamp is what's preserved -- mirrors
+// onboarding/actions.ts's identical "only if still unset" pattern for
+// nickname.
+export async function recordPrivacyConsent(userId: number) {
+  await prisma.user.updateMany({
+    where: { id: userId, privacyConsentAt: null },
+    data: { privacyConsentAt: new Date() },
+  });
+  return prisma.user.findUniqueOrThrow({ where: { id: userId } });
+}

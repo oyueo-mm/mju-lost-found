@@ -44,6 +44,14 @@ export default async function LoginPage({
   // loosen or tighten who's allowed to log in.
   const [user, googleTestModeEnabled] = await Promise.all([getCurrentUser(), isGoogleTestModeEnabled()]);
   if (user) {
+    // Phase 8: same three-way precedence as session.ts's requireReadyUser
+    // (consent -> nickname -> ready) -- an already-signed-in visitor who
+    // lands back on /login (e.g. clicking the Google button again) gets
+    // routed exactly where a fresh sign-in would send them.
+    if (user.privacyConsentAt === null) {
+      const params = callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : "";
+      redirect(`/privacy-consent${params}`);
+    }
     redirect(user.nickname ? (callbackUrl ?? "/") : "/onboarding");
   }
 

@@ -27,6 +27,14 @@ const requestSchema = z.object({
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const user = await getCurrentUser();
   if (!user) return jsonError(401, "로그인이 필요합니다.");
+  // Phase 8: this route doesn't go through requireUserForApi() (see this
+  // file's own top comment -- it already duplicates the login/nickname
+  // checks inline), so the same consent check requireUserForApi() gained
+  // is added here directly too. Image upload is part of "게시글 작성/수정",
+  // exactly the boundary this phase's spec calls out.
+  if (user.privacyConsentAt === null) {
+    return jsonError(403, "개인정보 수집·이용 동의가 필요합니다.");
+  }
   if (user.nickname === null) return jsonError(403, "닉네임을 먼저 설정해주세요.");
   if (isCurrentlySuspended(user)) {
     return jsonError(403, "정지된 계정은 이 기능을 사용할 수 없습니다.");
