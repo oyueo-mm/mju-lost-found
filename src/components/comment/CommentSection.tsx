@@ -7,8 +7,8 @@ import { useRouter } from "next/navigation";
 import type { PostType } from "@/lib/posts/schema";
 import { Button } from "@/components/ui/Button";
 import { ChatBubbleIcon } from "@/components/icons";
-import { ReportButton } from "@/components/report/ReportButton";
 import { AuthorLink } from "@/components/user/AuthorLink";
+import { CommentActionMenu } from "@/components/comment/CommentActionMenu";
 
 type CommentAuthor = { id: number; nickname: string | null; publicId: string };
 type CommentDTO = {
@@ -196,37 +196,30 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
     }
   }
 
+  // Phase 7: confirmation now happens inside CommentActionMenu (same
+  // division of labor as chat's deleteMessageById/MessageActionMenu) --
+  // this only does the fetch + local-state update, and throws on failure
+  // so the menu can show the error inline instead of this component's own
+  // top-level `error` banner.
   async function handleDelete(commentId: number) {
-    if (pendingId !== null) return;
-    if (!confirm("댓글을 삭제하시겠습니까? 이 댓글에 달린 답글도 함께 삭제됩니다.")) return;
-
-    setPendingId(commentId);
-    setError(null);
-    try {
-      const res = await fetch(`/api/posts/${postId}/comments/${commentId}?type=${postType}`, {
-        method: "DELETE",
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error ?? "댓글을 삭제하지 못했습니다.");
-        return;
-      }
-      // Phase H-3: the server cascades the deleted comment's entire reply
-      // subtree (Comment.parentId's onDelete: Cascade) -- mirrored here so
-      // local state doesn't keep showing replies whose parent just
-      // disappeared. Computed from the tree built from *current* comments,
-      // not a stale snapshot.
-      const deletedSubtree = new Set<number>();
-      const tree = buildCommentTree(comments);
-      const deletedNode = findNodeInTree(tree, commentId);
-      if (deletedNode) collectSubtreeIds(deletedNode, deletedSubtree);
-      else deletedSubtree.add(commentId);
-      setComments((prev) => prev.filter((c) => !deletedSubtree.has(c.id)));
-    } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
-    } finally {
-      setPendingId(null);
+    const res = await fetch(`/api/posts/${postId}/comments/${commentId}?type=${postType}`, {
+      method: "DELETE",
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(json.error ?? "댓글을 삭제하지 못했습니다.");
     }
+    // Phase H-3: the server cascades the deleted comment's entire reply
+    // subtree (Comment.parentId's onDelete: Cascade) -- mirrored here so
+    // local state doesn't keep showing replies whose parent just
+    // disappeared. Computed from the tree built from *current* comments,
+    // not a stale snapshot.
+    const deletedSubtree = new Set<number>();
+    const tree = buildCommentTree(comments);
+    const deletedNode = findNodeInTree(tree, commentId);
+    if (deletedNode) collectSubtreeIds(deletedNode, deletedSubtree);
+    else deletedSubtree.add(commentId);
+    setComments((prev) => prev.filter((c) => !deletedSubtree.has(c.id)));
   }
 
   function findNodeInTree(nodes: CommentNode[], id: number): CommentNode | null {
@@ -244,99 +237,108 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
     const isOwner = currentUser?.id === comment.author.id;
     const canDelete = isOwner || isAdmin;
     const isEditing = editingId === comment.id;
+    // Phase 7: Comment.updatedAt is already a Prisma @updatedAt column
+    // (see schema.prisma) that only ever moves off createdAt when the
+    // content is actually edited -- reused directly as the "(수정됨)"
+    // signal instead of adding a new editedAt column, unlike chat's
+    // Message (which needed one because Message rows are also touched by
+    // reactions/hiding, so its updatedAt-equivalent couldn't mean "edited"
+    // on its own).
+    const wasEdited = comment.updatedAt.getTime() !== comment.createdAt.getTime();
     // Phase H-3: the @닉네임 target -- only shown when this comment is a
     // reply AND its parent is still resolvable from current state (a
     // dangling parentId, e.g. after a local-state edge case, just omits
     // the tag rather than showing something wrong).
     const replyTargetNickname = comment.parentId !== null ? (commentsById.get(comment.parentId)?.author.nickname ?? null) : null;
 
-    return (
-      <>
-        <div className="flex items-center justify-between gap-2">
-          {/* Phase H-7: same profile link every other author display uses --
-              this is exactly the "닉네임 · 시간" shape this phase's spec gives
-              as its own example. */}
-          <AuthorLink
-            nickname={comment.author.nickname}
-            publicId={comment.author.publicId}
-            className="font-medium text-foreground hover:underline"
-          />
-          <span className="text-xs text-muted-foreground">{formatRelativeTime(comment.createdAt)}</span>
-        </div>
-
-        {isEditing ? (
-          <div className="flex flex-col gap-2">
-            <textarea
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              maxLength={COMMENT_MAX_LENGTH}
-              rows={2}
-              className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
+    if (isEditing) {
+      return (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <AuthorLink
+              nickname={comment.author.nickname}
+              publicId={comment.author.publicId}
+              className="font-medium text-foreground hover:underline"
             />
-            <div className="flex gap-2">
-              <Button type="button" size="sm" onClick={() => handleSaveEdit(comment.id)} disabled={pendingId !== null}>
-                {pendingId === comment.id ? "저장 중..." : "저장"}
-              </Button>
-              <Button type="button" variant="secondary" size="sm" onClick={() => setEditingId(null)}>
-                취소
-              </Button>
-            </div>
+            <span className="text-xs text-muted-foreground">{formatRelativeTime(comment.createdAt)}</span>
           </div>
-        ) : (
-          <>
-            <p className="whitespace-pre-wrap text-foreground">
-              {replyTargetNickname && (
-                <Link
-                  href={`#comment-${comment.parentId}`}
-                  className="mr-1 font-medium text-primary hover:underline"
-                >
-                  @{replyTargetNickname}
-                </Link>
-              )}
-              {comment.content}
-            </p>
-            {(isOwner || canDelete || currentUser) && (
-              <div className="flex flex-wrap items-center gap-3 text-xs">
-                {isOwner && (
-                  <button
-                    type="button"
-                    onClick={() => startEdit(comment)}
-                    className="text-muted-foreground underline hover:text-foreground"
-                  >
-                    수정
-                  </button>
-                )}
-                {canDelete && (
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(comment.id)}
-                    disabled={pendingId !== null}
-                    className="text-destructive underline disabled:opacity-60"
-                  >
-                    {pendingId === comment.id ? "삭제 중..." : "삭제"}
-                  </button>
-                )}
-                {/* Phase H-3: reply toggle now available at every depth --
-                    a reply can itself be replied to, unlike the old
-                    top-level-only restriction. */}
-                {currentUser && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReplyingToId((prev) => (prev === comment.id ? null : comment.id));
-                      setReplyContent("");
-                    }}
-                    className="text-muted-foreground underline hover:text-foreground"
-                  >
-                    답글
-                  </button>
-                )}
-                {currentUser && <ReportButton targetType="comment" targetId={comment.id} buttonLabel="신고" />}
-              </div>
+          <textarea
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            maxLength={COMMENT_MAX_LENGTH}
+            rows={2}
+            autoFocus
+            className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
+          />
+          <div className="flex gap-2">
+            <Button type="button" size="sm" onClick={() => handleSaveEdit(comment.id)} disabled={pendingId !== null}>
+              {pendingId === comment.id ? "저장 중..." : "저장"}
+            </Button>
+            <Button type="button" variant="secondary" size="sm" onClick={() => setEditingId(null)}>
+              취소
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col gap-2">
+        {/* Phase 7: 수정/삭제/신고 now live in the same "⋯"-menu / mobile
+            long-press pattern P-6 introduced for chat messages (see
+            CommentActionMenu, modeled on chat/MessageActionMenu.tsx). 답글
+            stays a separate, always-visible button below since it isn't an
+            ownership-gated action. */}
+        <CommentActionMenu
+          commentId={comment.id}
+          canEdit={isOwner}
+          canDelete={canDelete}
+          canReport={Boolean(currentUser) && !isOwner}
+          onEdit={() => startEdit(comment)}
+          onDelete={() => handleDelete(comment.id)}
+        >
+          <div className="flex items-center justify-between gap-2">
+            {/* Phase H-7: same profile link every other author display uses --
+                this is exactly the "닉네임 · 시간" shape this phase's spec gives
+                as its own example. */}
+            <AuthorLink
+              nickname={comment.author.nickname}
+              publicId={comment.author.publicId}
+              className="font-medium text-foreground hover:underline"
+            />
+            <span className="text-xs text-muted-foreground">
+              {formatRelativeTime(comment.createdAt)}
+              {wasEdited ? " · (수정됨)" : ""}
+            </span>
+          </div>
+          <p className="whitespace-pre-wrap text-foreground">
+            {replyTargetNickname && (
+              <Link href={`#comment-${comment.parentId}`} className="mr-1 font-medium text-primary hover:underline">
+                @{replyTargetNickname}
+              </Link>
             )}
-          </>
+            {comment.content}
+          </p>
+        </CommentActionMenu>
+
+        {currentUser && (
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            {/* Phase H-3: reply toggle now available at every depth -- a
+                reply can itself be replied to, unlike the old
+                top-level-only restriction. */}
+            <button
+              type="button"
+              onClick={() => {
+                setReplyingToId((prev) => (prev === comment.id ? null : comment.id));
+                setReplyContent("");
+              }}
+              className="text-muted-foreground underline hover:text-foreground"
+            >
+              답글
+            </button>
+          </div>
         )}
-      </>
+      </div>
     );
   }
 
