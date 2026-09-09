@@ -88,6 +88,29 @@ enum NotificationType {
   ANNOUNCEMENT     @map("announcement")
 }
 
+// Phase 11-5: the four categories this app's own Feedback form (not
+// Report -- see that model's own comment) offers. Kept small/fixed
+// (matching every other enum in this file) rather than free-text, so the
+// admin list can filter/group by it.
+enum FeedbackCategory {
+  FEATURE_REQUEST @map("feature_request")
+  INCONVENIENCE   @map("inconvenience")
+  BUG             @map("bug")
+  OTHER           @map("other")
+}
+
+// Phase 11-5: mirrors this app's own "접수/검토 중/반영 예정/반영 완료/반영하지
+// 않음" admin workflow (see this phase's own spec) -- a fixed, small state
+// machine, not free text, same reasoning as every other status enum here
+// (LostPostStatus, ReportStatus, ...).
+enum FeedbackStatus {
+  RECEIVED    @map("received")
+  IN_REVIEW   @map("in_review")
+  PLANNED     @map("planned")
+  COMPLETED   @map("completed")
+  NOT_PLANNED @map("not_planned")
+}
+
 // ---------- User ----------
 
 model User {
@@ -212,6 +235,11 @@ model User {
   // own comment. Only one FK path between the two models, so (like
   // appSettingsUpdates above) this needs no explicit relation name.
   announcementsCreated      Announcement[]
+  // Phase 11-5: this user's own submitted service-feedback -- see
+  // Feedback's own comment for why this is a separate model from Report.
+  // Only one FK path (userId), so (like announcementsCreated above) no
+  // explicit relation name is needed.
+  feedbacksSubmitted        Feedback[]
 
   @@map("User")
 }
@@ -848,4 +876,34 @@ model Announcement {
   createdBy       User?    @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@map("Announcement")
+}
+
+// ---------- Feedback ----------
+
+// Phase 11-5: "서비스 자체에 대한 의견" (기능 제안/불편사항/버그/기타) -- a
+// deliberately separate model from Report, which exists only for reporting
+// a specific post/message/comment/user (see ReportTargetType). Feedback has
+// no target at all; it's addressed to the service itself, submitted only by
+// a logged-in user (never anonymous -- see this phase's own spec section
+// 5-4), and the one place it's surfaced back to that user is their own
+// "내가 보낸 의견" list (getMyFeedback() in feedback/service.ts) -- another
+// user's feedback is never visible to a non-admin under any query in that
+// module.
+model Feedback {
+  id        Int              @id @default(autoincrement())
+  userId    Int              @map("user_id")
+  user      User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  category  FeedbackCategory
+  title     String           @db.Text
+  content   String           @db.Text
+  status    FeedbackStatus   @default(RECEIVED)
+  // Admin-only free text -- never shown to the submitting user (see this
+  // phase's own spec section 5-8/5-9: only 관리자 reads/writes this).
+  adminNote String?          @db.Text @map("admin_note")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  @@index([userId], map: "idx_feedback_user_id")
+  @@index([status], map: "idx_feedback_status")
+  @@map("Feedback")
 }

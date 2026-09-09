@@ -22,23 +22,35 @@ function formatDate(date: Date): string {
 export default async function AdminDashboardPage() {
   const admin = await requireAdmin(); // redirects unless logged in, ready, and DB-flagged admin
 
-  const [pendingResult, suspendedCount, lostCount, foundCount, userCount, announcementCount, appSettings] =
-    await Promise.all([
-      listReportsForAdmin(admin, { status: "pending", page: 1, limit: 5 }),
-      prisma.user.count({ where: { isSuspended: true } }),
-      prisma.lostPost.count(),
-      prisma.foundPost.count(),
-      // Phase 28-1: real count backing the new "사용자 관리" entry point below
-      // -- same "every number here is a real query, never mock data" rule
-      // this page's own top comment already states.
-      prisma.user.count(),
-      // Phase M: same rule, for the new "공지사항" tile below.
-      prisma.announcement.count(),
-      // Phase H-3: current Google 테스트 모드 상태, for GoogleTestModeToggle
-      // below -- server-rendered so the admin always sees the real DB state
-      // on load, never a stale/optimistic default.
-      getAppSettings(),
-    ]);
+  const [
+    pendingResult,
+    suspendedCount,
+    lostCount,
+    foundCount,
+    userCount,
+    announcementCount,
+    pendingFeedbackCount,
+    appSettings,
+  ] = await Promise.all([
+    listReportsForAdmin(admin, { status: "pending", page: 1, limit: 5 }),
+    prisma.user.count({ where: { isSuspended: true } }),
+    prisma.lostPost.count(),
+    prisma.foundPost.count(),
+    // Phase 28-1: real count backing the new "사용자 관리" entry point below
+    // -- same "every number here is a real query, never mock data" rule
+    // this page's own top comment already states.
+    prisma.user.count(),
+    // Phase M: same rule, for the new "공지사항" tile below.
+    prisma.announcement.count(),
+    // Phase 11-5: same rule, for the new "서비스 의견" tile below -- counts
+    // only 접수(RECEIVED) status, matching "신고 대기" tile's own "지금 봐야
+    // 할 것" framing.
+    prisma.feedback.count({ where: { status: "RECEIVED" } }),
+    // Phase H-3: current Google 테스트 모드 상태, for GoogleTestModeToggle
+    // below -- server-rendered so the admin always sees the real DB state
+    // on load, never a stale/optimistic default.
+    getAppSettings(),
+  ]);
 
   const pending = pendingResult.kind === "ok" ? pendingResult.data : { items: [], total: 0 };
 
@@ -89,6 +101,17 @@ export default async function AdminDashboardPage() {
         >
           <span className="text-xs text-muted-foreground">공지사항</span>
           <span className="text-2xl font-bold text-foreground">{announcementCount}</span>
+        </Link>
+        {/* Phase 11-5: new tile -- /admin/feedback. Not a main-nav tab
+            (same "새로운 탭을 추가하지 않는다" rule Phase M's own comment
+            above states), just another entry point off this existing
+            dashboard. */}
+        <Link
+          href="/admin/feedback?status=received"
+          className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"
+        >
+          <span className="text-xs text-muted-foreground">서비스 의견 (접수)</span>
+          <span className="text-2xl font-bold text-foreground">{pendingFeedbackCount}</span>
         </Link>
       </div>
 

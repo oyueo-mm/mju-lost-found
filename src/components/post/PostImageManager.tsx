@@ -127,19 +127,48 @@ export function PostImageManager({
         </ul>
       )}
 
-      <label
-        className={`inline-flex w-fit items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50 ${atMax ? "pointer-events-none opacity-50" : "cursor-pointer"}`}
-      >
-        사진 추가
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          multiple
-          disabled={disabled || atMax}
-          onChange={handleFileInputChange}
-          className="sr-only"
-        />
-      </label>
+      {/* Phase 11-5: two separate inputs instead of one, so the choice
+          between "카메라로 촬영"/"갤러리에서 선택" is explicit rather than
+          left to whatever native chooser a given browser happens to show.
+          `capture="environment"` (rear camera) is what actually opens the
+          camera app directly on a phone -- both accept image/*+capture and
+          plain accept-only are still HTML `<input type="file">`, no new
+          dependency; the *same* handleFileInputChange/validateImageFile/
+          max-5 pipeline (existing multi-image gallery, unchanged) runs for
+          a photo from either input, so a captured photo is never a special
+          case anywhere downstream. On a browser that ignores `capture`
+          (every desktop browser, and some mobile ones) this input just
+          behaves like a plain file picker -- never broken, only ever
+          degrades to "갤러리에서 선택"의 동작. */}
+      <div className="flex flex-wrap gap-2">
+        <label
+          className={`inline-flex w-fit items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50 ${atMax ? "pointer-events-none opacity-50" : "cursor-pointer"}`}
+        >
+          사진 촬영
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            disabled={disabled || atMax}
+            onChange={handleFileInputChange}
+            className="sr-only"
+          />
+        </label>
+
+        <label
+          className={`inline-flex w-fit items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-foreground/30 has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50 ${atMax ? "pointer-events-none opacity-50" : "cursor-pointer"}`}
+        >
+          갤러리에서 선택
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            disabled={disabled || atMax}
+            onChange={handleFileInputChange}
+            className="sr-only"
+          />
+        </label>
+      </div>
 
       <p className="text-xs text-muted-foreground">
         JPEG, PNG, WebP · 최대 10MB · 최대 {MAX_IMAGES_PER_POST}장 ({items.length}/{MAX_IMAGES_PER_POST})

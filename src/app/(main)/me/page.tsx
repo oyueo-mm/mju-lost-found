@@ -6,6 +6,7 @@ import { getUnreadNotificationCount } from "@/lib/notification/service";
 import { isAdmin } from "@/lib/moderation/service";
 import { UserIcon, ChevronRightIcon, BellIcon, ShieldIcon, LogoutIcon, ChatBubbleIcon } from "@/components/icons";
 import { ThemeSettings } from "@/components/settings/ThemeSettings";
+import { InstallAppPrompt } from "@/components/settings/InstallAppPrompt";
 import { NicknameSettings } from "@/components/settings/NicknameSettings";
 import { CopyPublicId } from "@/components/settings/CopyPublicId";
 import type { ReactNode } from "react";
@@ -88,6 +89,10 @@ export default async function MePage() {
       <section className="overflow-hidden rounded-card border border-border bg-card">
         <MenuRow href="/posts/mine" icon={<UserIcon className="size-4.5" />} label="내가 쓴 게시글" />
         <MenuRow href="/me/comments" icon={<ChatBubbleIcon className="size-4.5" />} label="내가 쓴 댓글" />
+        {/* Phase 11-5: "서비스 개선 제안" -- 제출 폼과 "내가 보낸 의견" 목록이
+            함께 있는 /feedback으로 연결. Report(신고)와 혼동하지 않도록
+            별도 아이콘/문구를 쓴다. */}
+        <MenuRow href="/feedback" icon={<ChatBubbleIcon className="size-4.5" />} label="서비스 개선 제안" />
       </section>
 
       <section className="overflow-hidden rounded-card border border-border bg-card">
@@ -110,6 +115,8 @@ export default async function MePage() {
           <MenuRow href="/admin" icon={<ShieldIcon className="size-4.5 text-primary" />} label="관리자 센터" />
         </section>
       )}
+
+      <InstallAppPrompt />
 
       <ThemeSettings />
 

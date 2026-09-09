@@ -43,7 +43,14 @@ export function Footer() {
             </p>
           </div>
 
-          <nav aria-label="바로가기" className="flex flex-col gap-1.5 text-xs sm:items-end">
+          {/* Phase 11-5: both nav blocks switch from a vertical stack to a
+              horizontal, wrapping row from md: up (desktop/tablet) -- was
+              flex-col at every width, which read as an unnecessarily tall
+              column of links once there was room for a single row. flex-wrap
+              keeps it from ever forcing horizontal scroll/overflow if the
+              viewport is narrower than the full link list; mobile (<md)
+              keeps the original vertical stack unchanged. */}
+          <nav aria-label="바로가기" className="flex flex-col gap-1.5 text-xs sm:items-end md:flex-row md:items-center md:flex-wrap md:gap-x-4 md:gap-y-1.5">
             <Link href="/" className={FOOTER_LINK_CLASS}>
               홈
             </Link>
@@ -61,7 +68,7 @@ export function Footer() {
             </Link>
           </nav>
 
-          <nav aria-label="정책 및 안내" className="flex flex-col gap-1.5 text-xs sm:items-end">
+          <nav aria-label="정책 및 안내" className="flex flex-col gap-1.5 text-xs sm:items-end md:flex-row md:items-center md:flex-wrap md:gap-x-4 md:gap-y-1.5">
             <Link href="/policy/terms" className={FOOTER_LINK_CLASS}>
               이용약관
             </Link>
