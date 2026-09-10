@@ -3,6 +3,7 @@ import { Pagination } from "@/components/search/Pagination";
 import { SemanticSearchNotice } from "@/components/search/SemanticSearchNotice";
 import { PostCard } from "@/components/post/PostCard";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Lost112Notice } from "@/components/search/Lost112Notice";
 import { searchPosts } from "@/lib/posts/service";
 import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, listQuerySchema } from "@/lib/posts/schema";
@@ -58,7 +59,10 @@ export default async function SearchPage({
       <SearchFilterBar basePath="/search" showTypeFilter imageSearchEnabled>
         <SemanticSearchNotice mode={mode} />
         {results.items.length === 0 ? (
-          <EmptyState title="검색 결과가 없어요." description="다른 검색어나 필터로 다시 시도해보세요." />
+          <div className="flex flex-col gap-4">
+            <EmptyState title="검색 결과가 없어요." description="다른 검색어나 필터로 다시 시도해보세요." />
+            <Lost112Notice />
+          </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {results.items.map((post) => (

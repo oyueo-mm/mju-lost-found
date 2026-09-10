@@ -3,6 +3,7 @@ import { Pagination } from "@/components/search/Pagination";
 import { SemanticSearchNotice } from "@/components/search/SemanticSearchNotice";
 import { PostCard } from "@/components/post/PostCard";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Lost112Notice } from "@/components/search/Lost112Notice";
 import { LinkButton } from "@/components/ui/Button";
 import { searchPosts } from "@/lib/posts/service";
 import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
@@ -64,19 +65,22 @@ export default async function FoundListPage({
       >
         <SemanticSearchNotice mode={mode} />
         {posts.items.length === 0 ? (
-          <EmptyState
-            title={raw.q || raw.category || raw.campus || raw.status ? "검색 결과가 없어요." : "아직 등록된 습득물이 없어요."}
-            description={
-              raw.q || raw.category || raw.campus || raw.status
-                ? "다른 검색어나 필터로 다시 시도해보세요."
-                : "주운 물건을 등록해서 주인을 찾아주세요."
-            }
-            action={
-              !(raw.q || raw.category || raw.campus || raw.status) && (
-                <LinkButton href="/found/new">습득물 등록하기</LinkButton>
-              )
-            }
-          />
+          <div className="flex flex-col gap-4">
+            <EmptyState
+              title={raw.q || raw.category || raw.campus || raw.status ? "검색 결과가 없어요." : "아직 등록된 습득물이 없어요."}
+              description={
+                raw.q || raw.category || raw.campus || raw.status
+                  ? "다른 검색어나 필터로 다시 시도해보세요."
+                  : "주운 물건을 등록해서 주인을 찾아주세요."
+              }
+              action={
+                !(raw.q || raw.category || raw.campus || raw.status) && (
+                  <LinkButton href="/found/new">습득물 등록하기</LinkButton>
+                )
+              }
+            />
+            <Lost112Notice />
+          </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {posts.items.map((post) => (

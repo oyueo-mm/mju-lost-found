@@ -319,6 +319,17 @@ export default async function PostDetailPage({
           to any logged-in user, including the literal author, as long as
           they aren't a manager of that same org). A personal post keeps
           its original !isOwner-only gate unchanged. */}
+      {/* LOST112 연계 Phase §9/§10: 습득물 게시글에 연락할 때만 -- 실제로
+          "내 물건일 수 있다"고 주장하며 반환을 요청하는 쪽은 항상 이
+          방향(분실자 -> 습득자)이다. 기존 채팅하기/단체에 문의하기 버튼은
+          그대로 두고, 그 위에 순수 안내 문구만 추가한다 -- 개인/단체 채팅
+          구조를 분리하지 않고 두 경우 모두 동일하게 보인다. */}
+      {post.type === "found" && (post.organizationId !== null ? organizationChat.show : !isOwner) && (
+        <p className="rounded-lg bg-primary-muted px-3.5 py-3 text-xs text-primary">
+          💡 물건의 특징을 함께 알려주세요 -- 게시글에 공개되지 않은 특징이나 분실 장소·시기 등을
+          전달하면 소유자 확인과 안전한 반환에 도움이 돼요.
+        </p>
+      )}
       {(post.organizationId !== null ? organizationChat.show : !isOwner) &&
         (organizationChat.disabled ? (
           <span className="w-fit rounded-full border border-border px-4 py-2 text-sm font-medium text-muted-foreground opacity-60">

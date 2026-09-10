@@ -8,6 +8,7 @@ import type { PostDTO } from "@/lib/posts/service";
 import type { PostListType } from "@/lib/posts/schema";
 import { PostCard } from "@/components/post/PostCard";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Lost112Notice } from "@/components/search/Lost112Notice";
 import { Button } from "@/components/ui/Button";
 import { ImageOffIcon } from "@/components/icons";
 
@@ -166,7 +167,10 @@ export function ImageSearchPanel({ type }: ImageSearchPanelProps) {
             </p>
           )}
           {results.length === 0 ? (
-            <EmptyState title="비슷한 게시글을 찾지 못했어요." description="다른 사진으로 다시 시도해보세요." />
+            <div className="flex flex-col gap-4">
+              <EmptyState title="비슷한 게시글을 찾지 못했어요." description="다른 사진으로 다시 시도해보세요." />
+              <Lost112Notice />
+            </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {results.map((post) => (

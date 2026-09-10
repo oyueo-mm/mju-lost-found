@@ -535,6 +535,18 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             className={FIELD_CLASS}
           />
         </label>
+
+        {/* LOST112 연계 Phase §8: 습득물 작성 화면 전용 -- 필수 입력 필드나
+            별도 인증 절차를 추가하지 않고, 설명란 바로 아래에 순수 안내
+            문구만 덧붙인다. 새로운 "비공개 사진"/"소유권 인증" 기능은
+            없다 -- 습득자가 스스로 어떤 특징을 설명에서 빼둘지 판단하도록
+            돕는 텍스트일 뿐이다. */}
+        {type === "found" && (
+          <p className="rounded-lg bg-primary-muted px-3.5 py-3 text-xs text-primary">
+            💡 반환 전 확인 -- 물건의 고유한 특징이나 내부 내용 등 결정적인 정보는 설명에 모두 공개하지 않는
+            것이 좋아요. 나중에 문의가 오면 공개하지 않은 특징을 물어보고 실제 소유자인지 확인할 수 있어요.
+          </p>
+        )}
       </section>
 
       {/* Phase 12-8 §1: 개인/단체 토글 + (단체 선택 시) 대표 단체 드롭다운 --
