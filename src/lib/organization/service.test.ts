@@ -77,6 +77,7 @@ const {
   isOrganizationMember,
   getOrganizationRole,
   getMyOrganizationMemberships,
+  getMyOrganizationJoinRequests,
   getMyPendingJoinRequest,
   listJoinRequestsForOrganization,
   validateOrganizationPosting,
@@ -195,6 +196,58 @@ describe("getMyOrganizationMemberships (Phase 12-4 §23)", () => {
       { organizationId: 10, organizationName: "총학생회", organizationStatus: "active", role: "leader" },
       { organizationId: 11, organizationName: "동아리", organizationStatus: "inactive", role: "member" },
     ]);
+  });
+});
+
+describe("getMyOrganizationJoinRequests (Phase 12-10 §5)", () => {
+  it("본인이 낸 가입 신청 전체를 단체명과 함께, 최신순으로 반환한다 (개인정보 없음)", async () => {
+    organizationJoinRequest.findMany.mockResolvedValueOnce([
+      {
+        id: 61,
+        organizationId: 11,
+        status: "PENDING",
+        rejectionReason: null,
+        createdAt: new Date("2026-02-01"),
+        organization: { name: "AI 동아리" },
+      },
+      {
+        id: 55,
+        organizationId: 10,
+        status: "APPROVED",
+        rejectionReason: null,
+        createdAt: new Date("2026-01-01"),
+        organization: { name: "개발 동아리" },
+      },
+    ]);
+
+    const result = await getMyOrganizationJoinRequests(2);
+
+    expect(result).toEqual([
+      {
+        id: 61,
+        organizationId: 11,
+        organizationName: "AI 동아리",
+        status: "pending",
+        rejectionReason: null,
+        createdAt: new Date("2026-02-01"),
+      },
+      {
+        id: 55,
+        organizationId: 10,
+        organizationName: "개발 동아리",
+        status: "approved",
+        rejectionReason: null,
+        createdAt: new Date("2026-01-01"),
+      },
+    ]);
+    expect(organizationJoinRequest.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 2 }, orderBy: [{ createdAt: "desc" }] }),
+    );
+  });
+
+  it("신청 내역이 없으면 빈 배열을 반환한다", async () => {
+    organizationJoinRequest.findMany.mockResolvedValueOnce([]);
+    expect(await getMyOrganizationJoinRequests(2)).toEqual([]);
   });
 });
 

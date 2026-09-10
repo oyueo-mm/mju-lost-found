@@ -76,9 +76,18 @@ export function Footer() {
             <Link href="/chat" className={FOOTER_LINK_CLASS}>
               채팅
             </Link>
+            {/* Phase 12-10 §10: "서비스" 그룹에 단체 추가 -- 기존 4개 링크는
+                그대로 두고 자연스럽게 통합한다. */}
+            <Link href="/organizations" className={FOOTER_LINK_CLASS}>
+              단체
+            </Link>
           </nav>
 
-          <nav aria-label="정책 및 안내" className="flex flex-col gap-1.5 text-xs sm:items-end md:flex-row md:items-center md:flex-wrap md:gap-x-4 md:gap-y-1.5">
+          {/* Phase 12-10 §9/§10: "도움말" 그룹 -- 기존 4개 링크(이용약관/
+              개인정보처리방침/운영정책/계정 안내)는 그대로 유지하고,
+              "서비스 개선 제안"(기존 /feedback 재사용, 새 접수 시스템 아님)과
+              "단체 이용 안내"(신규 정적 안내 페이지)만 추가한다. */}
+          <nav aria-label="도움말" className="flex flex-col gap-1.5 text-xs sm:items-end md:flex-row md:items-center md:flex-wrap md:gap-x-4 md:gap-y-1.5">
             <Link href="/policy/terms" className={FOOTER_LINK_CLASS}>
               이용약관
             </Link>
@@ -90,6 +99,12 @@ export function Footer() {
             </Link>
             <Link href="/account-guide" className={FOOTER_LINK_CLASS}>
               계정 안내
+            </Link>
+            <Link href="/feedback" className={FOOTER_LINK_CLASS}>
+              서비스 개선 제안
+            </Link>
+            <Link href="/organizations/guide" className={FOOTER_LINK_CLASS}>
+              단체 이용 안내
             </Link>
           </nav>
         </div>

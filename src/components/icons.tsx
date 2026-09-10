@@ -224,3 +224,17 @@ export function MoreIcon(props: IconProps) {
     </svg>
   );
 }
+
+// Phase 12-10 §7: "단체 ⓘ" 도움말 아이콘 -- 원 + i, 이 파일의 기존 24x24/
+// 1.75px-stroke 언어를 그대로 따른다. 점(dot)만 채워진 원(fill)으로, 세로
+// 막대는 얇은 stroke line으로 표현해 AlertIcon의 "점" 표현 방식과 일관되게
+// 맞춘다.
+export function InfoIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5.5" />
+      <circle cx="12" cy="7.75" r="0.6" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}

@@ -711,6 +711,38 @@ export async function listJoinRequestsForOrganization(
   return { kind: "ok", data: rows.map(toJoinRequestDTO) };
 }
 
+export type MyOrganizationJoinRequestDTO = {
+  id: number;
+  organizationId: number;
+  organizationName: string;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  rejectionReason: string | null;
+  createdAt: Date;
+};
+
+// Phase 12-10 §5: 단체 허브의 "신청 내역" 탭 전용 -- 본인이 낸 가입 신청
+// 전체(모든 상태, 여러 단체에 걸쳐)를 한 번에 보여준다. listJoinRequestsForOrganization
+// (관리자용, 한 단체 안의 모든 신청자)과는 반대 방향의 조회라 신청자 자신의
+// 정보(requester)는 필요 없고, 대신 어느 단체에 낸 신청인지(organizationName)가
+// 필요하다는 점만 다르다 -- 그래서 별도 DTO/함수로 분리했다(§25: 다른
+// 신청자의 정보는 이 함수 어디에서도 select하지 않는다).
+export async function getMyOrganizationJoinRequests(userId: number): Promise<MyOrganizationJoinRequestDTO[]> {
+  const rows = await prisma.organizationJoinRequest.findMany({
+    where: { userId },
+    orderBy: [{ createdAt: "desc" }],
+    take: JOIN_REQUEST_LIST_CAP,
+    include: { organization: { select: { name: true } } },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    organizationId: row.organizationId,
+    organizationName: row.organization.name,
+    status: REQUEST_STATUS_FROM_DB[row.status],
+    rejectionReason: row.rejectionReason,
+    createdAt: row.createdAt,
+  }));
+}
+
 export async function cancelJoinRequest(userId: number, requestId: number): Promise<OrganizationMutationResult<{ id: number }>> {
   const existing = await prisma.organizationJoinRequest.findUnique({ where: { id: requestId } });
   if (!existing) return { kind: "not_found" };
