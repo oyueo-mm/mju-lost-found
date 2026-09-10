@@ -104,6 +104,37 @@ describe("createLostPostSchema", () => {
   it("still rejects lostAt: 'not-a-date' even though null is allowed", () => {
     expect(createLostPostSchema.safeParse({ ...validLost, lostAt: "not-a-date" }).success).toBe(false);
   });
+
+  // Phase 12-5 §6/§7: organizationId is genuinely optional (omitted ==
+  // personal post, unchanged existing behavior) and, when present, only
+  // shape-validated here -- existence/ACTIVE/membership is
+  // validateOrganizationPosting()'s job, not zod's.
+  it("accepts a payload with no organizationId at all (personal post)", () => {
+    const result = createLostPostSchema.safeParse(validLost);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.organizationId).toBeUndefined();
+  });
+
+  it("accepts organizationId: null (explicit personal post)", () => {
+    const result = createLostPostSchema.safeParse({ ...validLost, organizationId: null });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.organizationId).toBeNull();
+  });
+
+  it("accepts a positive integer organizationId", () => {
+    const result = createLostPostSchema.safeParse({ ...validLost, organizationId: 10 });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.organizationId).toBe(10);
+  });
+
+  it("rejects a non-positive organizationId", () => {
+    expect(createLostPostSchema.safeParse({ ...validLost, organizationId: 0 }).success).toBe(false);
+    expect(createLostPostSchema.safeParse({ ...validLost, organizationId: -1 }).success).toBe(false);
+  });
+
+  it("rejects a non-integer organizationId", () => {
+    expect(createLostPostSchema.safeParse({ ...validLost, organizationId: 1.5 }).success).toBe(false);
+  });
 });
 
 describe("updateLostPostSchema", () => {
@@ -134,6 +165,27 @@ describe("updateLostPostSchema", () => {
   it("still allows omitting location/lostAt entirely (unchanged)", () => {
     expect(updateLostPostSchema.safeParse({ title: "새 제목" }).success).toBe(true);
   });
+
+  // Phase 12-7 §4: reverses Phase 12-5's §10 "fixed at creation" policy --
+  // organizationId is now a genuinely editable field, shape-validated the
+  // same as on create (positive integer, or null for 개인).
+  it("accepts a positive integer organizationId on update", () => {
+    const result = updateLostPostSchema.safeParse({ title: "새 제목", organizationId: 10 });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.organizationId).toBe(10);
+  });
+
+  it("accepts organizationId: null on update (단체 -> 개인)", () => {
+    const result = updateLostPostSchema.safeParse({ title: "새 제목", organizationId: null });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.organizationId).toBeNull();
+  });
+
+  it("omitting organizationId on update leaves it absent (attribution unchanged)", () => {
+    const result = updateLostPostSchema.safeParse({ title: "새 제목" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).not.toHaveProperty("organizationId");
+  });
 });
 
 describe("createFoundPostSchema", () => {
@@ -161,6 +213,19 @@ describe("updateFoundPostSchema", () => {
     const result = updateFoundPostSchema.safeParse({ foundAt: "2026-02-01T09:00" });
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.foundAt).toBeInstanceOf(Date);
+  });
+
+  // See updateLostPostSchema's own identical tests -- same shape/reasoning.
+  it("accepts a positive integer organizationId on update", () => {
+    const result = updateFoundPostSchema.safeParse({ title: "새 제목", organizationId: 10 });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.organizationId).toBe(10);
+  });
+
+  it("accepts organizationId: null on update (단체 -> 개인)", () => {
+    const result = updateFoundPostSchema.safeParse({ title: "새 제목", organizationId: null });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.organizationId).toBeNull();
   });
 });
 

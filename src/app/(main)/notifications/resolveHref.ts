@@ -3,6 +3,7 @@ import { getCommentPostRef } from "@/lib/comment/service";
 import { getReportTargetRef } from "@/lib/report/service";
 import { resolveMessageTarget, resolvePostTarget } from "@/lib/report/targets";
 import { getAnnouncement } from "@/lib/announcement/service";
+import { getOrganizationById } from "@/lib/organization/service";
 
 // Resolves a notification's relatedType/relatedId into a link to navigate
 // to, when there's something to link to. Kept out of
@@ -49,6 +50,18 @@ export async function resolveHref(
   if (relatedType === "announcement") {
     const announcement = await getAnnouncement(relatedId);
     return announcement ? `/announcements/${announcement.id}` : null;
+  }
+
+  // Phase 12-4 §28: ORGANIZATION_REQUEST_PROCESSED (가입 신청 승인/거절)의
+  // relatedType. Creation-request 알림(Phase 12-3, relatedType =
+  // "organization_creation_request")과는 값이 다르다 -- 그쪽은 아직 이 함수가
+  // 지원하지 않아 최종 return null로 떨어지고, 이번 가입 신청 알림은 단체
+  // 자체(/organizations/[id])로 바로 연결한다는 최소 변경만 추가한다.
+  // getOrganizationById는 인증/멤버십 여부와 무관한 공개 조회(단체 목록/
+  // 프로필 페이지와 동일한 posture)이므로 별도 권한 재검증이 필요 없다.
+  if (relatedType === "organization") {
+    const organization = await getOrganizationById(relatedId);
+    return organization ? `/organizations/${organization.id}` : null;
   }
 
   if (relatedType === "message") {

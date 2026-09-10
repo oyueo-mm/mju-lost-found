@@ -30,6 +30,14 @@ vi.mock("@/lib/db/prisma", () => ({ prisma: { comment, lostPost, foundPost, noti
 vi.mock("@/lib/moderation/service", () => ({
   isAdmin: (user: { isAdmin: boolean }) => user.isAdmin,
 }));
+// Phase 12-5: organization/service.ts's own import chain (organization/
+// authz.ts, generated Prisma enums for OrganizationRole/Status/
+// RequestStatus) has nothing to do with what this file tests -- only
+// validateOrganizationPosting() is actually called by comment/service.ts,
+// so it's stubbed directly, same "mock a heavy sibling module wholesale"
+// convention as the moderation/service mock just above.
+const validateOrganizationPosting = vi.fn();
+vi.mock("@/lib/organization/service", () => ({ validateOrganizationPosting }));
 // Same convention as chat/service.test.ts's own mock of this module --
 // only the one enum member this file actually exercises is stubbed.
 vi.mock("@/generated/prisma/client", () => ({
@@ -300,6 +308,125 @@ describe("createComment", () => {
   });
 });
 
+// Phase 12-5 §19/§31/§32: organization attribution on comment creation --
+// validateOrganizationPosting() (mocked at the top of this file) is
+// exercised the same way as posts/aiService.test.ts's own equivalent
+// suite; the specific existence/ACTIVE/membership logic itself is covered
+// by organization/service.test.ts's own tests, not duplicated here.
+describe("createComment -- organization attribution (Phase 12-5)", () => {
+  it("organizationId omitted -- personal comment, validateOrganizationPosting never called", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1 });
+    comment.create.mockResolvedValueOnce({
+      id: 10,
+      content: "댓글입니다",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      parentId: null,
+      author: { id: 1, nickname: "닉네임" },
+      organization: null,
+    });
+
+    const result = await createComment(author, "lost", 1, { content: "댓글입니다" });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.organizationId).toBeNull();
+      expect(result.data.organizationName).toBeNull();
+    }
+    expect(validateOrganizationPosting).not.toHaveBeenCalled();
+    expect(comment.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ organizationId: null }) }),
+    );
+  });
+
+  it("ACTIVE organization + active member -- succeeds and persists organizationId", async () => {
+    validateOrganizationPosting.mockResolvedValueOnce({ kind: "ok" });
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1 });
+    comment.create.mockResolvedValueOnce({
+      id: 10,
+      content: "조직 댓글입니다",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      parentId: null,
+      author: { id: 1, nickname: "닉네임" },
+      organization: { id: 10, name: "도서관 자치 위원회" },
+    });
+
+    const result = await createComment(author, "lost", 1, { content: "조직 댓글입니다", organizationId: 10 });
+
+    expect(validateOrganizationPosting).toHaveBeenCalledWith(author.id, 10);
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.organizationId).toBe(10);
+      expect(result.data.organizationName).toBe("도서관 자치 위원회");
+    }
+    expect(comment.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ organizationId: 10 }) }),
+    );
+  });
+
+  it("non-member -- rejected as forbidden without writing to the DB", async () => {
+    validateOrganizationPosting.mockResolvedValueOnce({ kind: "forbidden" });
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1 });
+
+    const result = await createComment(author, "lost", 1, { content: "댓글", organizationId: 10 });
+
+    expect(result).toEqual({ kind: "forbidden", reason: "organization_not_member" });
+    expect(comment.create).not.toHaveBeenCalled();
+  });
+
+  it("INACTIVE organization -- rejected even for an existing member", async () => {
+    validateOrganizationPosting.mockResolvedValueOnce({ kind: "inactive_organization" });
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1 });
+
+    const result = await createComment(author, "lost", 1, { content: "댓글", organizationId: 10 });
+
+    expect(result).toEqual({ kind: "forbidden", reason: "organization_inactive" });
+    expect(comment.create).not.toHaveBeenCalled();
+  });
+
+  it("nonexistent organizationId -- not_found", async () => {
+    validateOrganizationPosting.mockResolvedValueOnce({ kind: "not_found" });
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1 });
+
+    const result = await createComment(author, "lost", 1, { content: "댓글", organizationId: 999999 });
+
+    expect(result).toEqual({ kind: "forbidden", reason: "organization_not_found" });
+    expect(comment.create).not.toHaveBeenCalled();
+  });
+
+  // §19: the post's own attribution and the comment's organization are
+  // deliberately independent -- validateOrganizationPosting is checked
+  // purely against the comment's own organizationId, never anything
+  // about the post being commented on.
+  it("comment organization is independent of the post's own attribution", async () => {
+    validateOrganizationPosting.mockResolvedValueOnce({ kind: "ok" });
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1 }); // the post itself carries no organization info here
+    comment.create.mockResolvedValueOnce({
+      id: 10,
+      content: "조직 댓글입니다",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      parentId: null,
+      author: { id: 1, nickname: "닉네임" },
+      organization: { id: 10, name: "도서관 자치 위원회" },
+    });
+
+    const result = await createComment(author, "lost", 1, { content: "조직 댓글입니다", organizationId: 10 });
+
+    expect(result.kind).toBe("ok");
+    expect(validateOrganizationPosting).toHaveBeenCalledWith(author.id, 10);
+  });
+
+  it("suspended user is rejected before organization validation even runs", async () => {
+    const result = await createComment(suspendedAuthor, "lost", 1, { content: "댓글", organizationId: 10 });
+
+    expect(result).toEqual({ kind: "forbidden", reason: "suspended" });
+    expect(validateOrganizationPosting).not.toHaveBeenCalled();
+    expect(comment.create).not.toHaveBeenCalled();
+  });
+});
+
 describe("updateComment", () => {
   it("allows the author to edit their own comment", async () => {
     comment.findUnique.mockResolvedValueOnce({ id: 10, authorUserId: 1, author: { id: 1, nickname: "닉네임" } });
@@ -314,6 +441,31 @@ describe("updateComment", () => {
     const result = await updateComment(1, 10, { content: "수정된 내용" });
 
     expect(result.kind).toBe("ok");
+  });
+
+  // Phase 12-5 §20: updateComment only ever writes `content` -- even if a
+  // caller somehow constructs an UpdateCommentInput with organizationId on
+  // it (bypassing the schema), it's never read.
+  it("never changes organizationId even if present on the input object", async () => {
+    comment.findUnique.mockResolvedValueOnce({
+      id: 10,
+      authorUserId: 1,
+      author: { id: 1, nickname: "닉네임" },
+      organization: { id: 5, name: "원래 조직" },
+    });
+    comment.update.mockResolvedValueOnce({
+      id: 10,
+      content: "수정된 내용",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      author: { id: 1, nickname: "닉네임" },
+      organization: { id: 5, name: "원래 조직" },
+    });
+
+    await updateComment(1, 10, { content: "수정된 내용", organizationId: 999 } as never);
+
+    const callArgs = comment.update.mock.calls[0][0];
+    expect(callArgs.data).not.toHaveProperty("organizationId");
   });
 
   it("rejects editing someone else's comment, even for an admin", async () => {

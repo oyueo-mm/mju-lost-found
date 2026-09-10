@@ -10,11 +10,22 @@ import { z } from "zod";
 // comment, exactly as before. Depth itself (rejecting a reply-to-a-reply)
 // is enforced in comment/service.ts, not here -- this schema only checks
 // shape, not whether the referenced row is itself already a reply.
+// Phase 12-5: optional org attribution, same shape/reasoning as
+// posts/schema.ts's own organizationId field -- shape-only here, real
+// existence/ACTIVE/membership validation happens in
+// validateOrganizationPosting() (organization/service.ts), never in zod.
+const organizationId = z.number().int().positive().nullable().optional();
+
 export const createCommentSchema = z.object({
   content: z.string().trim().min(1, "댓글 내용을 입력해주세요.").max(1000),
   parentId: z.number().int().positive().optional(),
+  organizationId,
 });
 export type CreateCommentInput = z.infer<typeof createCommentSchema>;
 
-export const updateCommentSchema = createCommentSchema;
+// Phase 12-5 §20: organizationId is fixed at creation and can never be
+// changed by an update -- same "omit, not merely optional" treatment as
+// posts/schema.ts's updateLostPostSchema/updateFoundPostSchema (see that
+// file's own comment for why omit rather than optional).
+export const updateCommentSchema = createCommentSchema.omit({ organizationId: true });
 export type UpdateCommentInput = z.infer<typeof updateCommentSchema>;

@@ -17,6 +17,7 @@ import {
 } from "@/lib/images/galleryState";
 import { PostImageManager } from "./PostImageManager";
 import { Button } from "@/components/ui/Button";
+import { PostAsSelector } from "@/components/organization/PostAsSelector";
 
 const FIELD_CLASS =
   "rounded-lg border border-border bg-transparent px-3 py-2.5 text-sm text-foreground disabled:opacity-60";
@@ -45,12 +46,28 @@ type PostFormValues = {
   // primary) by getLostPost/getFoundPost. Empty array for a post with no
   // image, same as before (never a broken-image placeholder).
   images: { id: number; imageUrl: string }[];
+  // Phase 12-7 §4: null for a personal post -- the post's current
+  // attribution, only ever read in edit mode to seed the 게시 주체
+  // selector's initial value.
+  organizationId: number | null;
+  // Only meaningful alongside organizationId -- lets the selector show the
+  // post's *current* organization even if the editor is no longer an
+  // ACTIVE member of it (so myOrganizations, fetched fresh, wouldn't
+  // otherwise include it as a selectable option).
+  organizationName: string | null;
 };
 
 type PostFormProps = {
   type: PostType;
   postId?: number; // present in edit mode
   initialValues?: PostFormValues;
+  // Phase 12-5 §13/§14, Phase 12-7 §4: the current user's own
+  // ACTIVE-organization memberships, fetched server-side (see lost/new,
+  // found/new, post/[id]/edit page.tsx) -- never built from client state.
+  // Passed in both create and edit mode now (Phase 12-7 reverses Phase
+  // 12-5's "fixed at creation" policy) -- edit mode also lets the poster
+  // move a post between 개인/단체 A/단체 B.
+  myOrganizations?: { organizationId: number; organizationName: string }[];
 };
 
 const DATE_FIELD = { lost: "lostAt", found: "foundAt" } as const;
@@ -95,10 +112,14 @@ function fieldIfChanged<T>(isEdit: boolean, key: string, current: T, initial: T 
   return {};
 }
 
-export function PostForm({ type, postId, initialValues }: PostFormProps) {
+export function PostForm({ type, postId, initialValues, myOrganizations = [] }: PostFormProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Phase 12-5 §13: "개인" (null) or one of myOrganizations's ids -- only
+  // ever read in create mode (see handleSubmit below, gated on !isEdit),
+  // so this has no effect on an edit submission regardless of its value.
+  const [organizationId, setOrganizationId] = useState<number | null>(initialValues?.organizationId ?? null);
   // Phase 11-4D: replaces selectedFile/removeExisting -- one ordered list
   // covering both the post's surviving existing images (edit mode) and any
   // new files picked in this session, array order == displayOrder, index 0
@@ -371,6 +392,13 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
       // tracked in this component's own `campus` state instead.
       ...fieldIfChanged(isEdit, "campus", campus, initialValues?.campus),
       ...fieldIfChanged(isEdit, dateField, dateValue, initialValues?.dateValue),
+      // Phase 12-7 §4: now genuinely editable -- same fieldIfChanged
+      // pattern as every other field above, so an edit that didn't touch
+      // 게시 주체 omits organizationId entirely (server-side: "leave
+      // attribution unchanged", see updateLostPost/updateFoundPost's own
+      // comment) rather than re-validating membership on every unrelated
+      // edit.
+      ...fieldIfChanged(isEdit, "organizationId", organizationId, initialValues?.organizationId),
     };
 
     const url = postId ? `/api/posts/${postId}?type=${type}` : "/api/posts";
@@ -508,6 +536,30 @@ export function PostForm({ type, postId, initialValues }: PostFormProps) {
           />
         </label>
       </section>
+
+      {/* Phase 12-8 §1: 개인/단체 토글 + (단체 선택 시) 대표 단체 드롭다운 --
+          shown in both create and edit mode (Phase 12-7 already allows
+          editing 게시 주체; this phase only changes the selector's shape).
+          A user with no ACTIVE-organization membership (and, in edit
+          mode, whose post isn't currently attributed to some other
+          organization) sees nothing new here -- PostAsSelector itself
+          renders null in that case. */}
+      {(myOrganizations.length > 0 || initialValues?.organizationId != null) && (
+        <section className="flex flex-col gap-3 rounded-card border border-border bg-card p-5">
+          <h2 className="text-sm font-semibold text-foreground">게시 주체</h2>
+          <PostAsSelector
+            organizations={myOrganizations}
+            value={organizationId}
+            onChange={setOrganizationId}
+            disabled={pending}
+            currentOrganizationIfUnlisted={
+              initialValues?.organizationId != null
+                ? { organizationId: initialValues.organizationId, organizationName: initialValues.organizationName ?? "알 수 없는 단체" }
+                : null
+            }
+          />
+        </section>
+      )}
 
       <section className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
         <h2 className="text-sm font-semibold text-foreground">분류 및 장소</h2>

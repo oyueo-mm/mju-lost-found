@@ -30,6 +30,8 @@ export default async function AdminDashboardPage() {
     userCount,
     announcementCount,
     pendingFeedbackCount,
+    pendingOrganizationRequestCount,
+    organizationCount,
     appSettings,
   ] = await Promise.all([
     listReportsForAdmin(admin, { status: "pending", page: 1, limit: 5 }),
@@ -46,6 +48,14 @@ export default async function AdminDashboardPage() {
     // only 접수(RECEIVED) status, matching "신고 대기" tile's own "지금 봐야
     // 할 것" framing.
     prisma.feedback.count({ where: { status: "RECEIVED" } }),
+    // Phase 12-3: same rule, for the new "단체 생성 신청" tile below --
+    // counts only PENDING requests.
+    prisma.organizationCreationRequest.count({ where: { status: "PENDING" } }),
+    // Phase 12-6: same rule, for the new "단체 관리" tile below -- counts
+    // every Organization regardless of status (ACTIVE+INACTIVE), matching
+    // that tile's own "전체 단체를 관리한다" framing (unlike the pending-
+    // request tile above, which intentionally counts only PENDING).
+    prisma.organization.count(),
     // Phase H-3: current Google 테스트 모드 상태, for GoogleTestModeToggle
     // below -- server-rendered so the admin always sees the real DB state
     // on load, never a stale/optimistic default.
@@ -112,6 +122,24 @@ export default async function AdminDashboardPage() {
         >
           <span className="text-xs text-muted-foreground">서비스 의견 (접수)</span>
           <span className="text-2xl font-bold text-foreground">{pendingFeedbackCount}</span>
+        </Link>
+        {/* Phase 12-3: new tile -- /admin/organization-requests. 동일한
+            "새로운 탭을 추가하지 않는다" 원칙, 대시보드 타일로만 추가. */}
+        <Link
+          href="/admin/organization-requests?status=pending"
+          className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"
+        >
+          <span className="text-xs text-muted-foreground">단체 생성 신청 (대기)</span>
+          <span className="text-2xl font-bold text-foreground">{pendingOrganizationRequestCount}</span>
+        </Link>
+        {/* Phase 12-6: new tile -- /admin/organizations. 동일한 "새로운
+            탭을 추가하지 않는다" 원칙, 대시보드 타일로만 추가. */}
+        <Link
+          href="/admin/organizations"
+          className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"
+        >
+          <span className="text-xs text-muted-foreground">단체 관리</span>
+          <span className="text-2xl font-bold text-foreground">{organizationCount}</span>
         </Link>
       </div>
 

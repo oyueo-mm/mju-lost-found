@@ -55,7 +55,16 @@ export const POST = withErrorHandling(
       case "parent_not_found":
         return jsonError(404, "답글을 달 댓글을 찾을 수 없습니다.");
       case "forbidden":
-        return jsonError(403, "정지된 계정은 댓글을 작성할 수 없습니다.");
+        switch (created.reason) {
+          case "organization_not_found":
+            return jsonError(404, "단체를 찾을 수 없습니다.");
+          case "organization_inactive":
+            return jsonError(403, "비활성화된 단체 명의로는 댓글을 작성할 수 없습니다.");
+          case "organization_not_member":
+            return jsonError(403, "해당 단체의 구성원만 단체 명의로 댓글을 작성할 수 있습니다.");
+          default:
+            return jsonError(403, "정지된 계정은 댓글을 작성할 수 없습니다.");
+        }
       case "not_found":
         return jsonError(404, "게시물을 찾을 수 없습니다.");
     }

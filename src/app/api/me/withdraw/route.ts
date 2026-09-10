@@ -14,7 +14,17 @@ export const POST = withErrorHandling(async () => {
   const user = await getCurrentUser();
   if (!user) return jsonError(401, "로그인이 필요합니다.");
 
-  await withdrawUser(user.id);
+  const result = await withdrawUser(user.id);
+  // Phase 12-2: a user who is the sole LEADER of a still-ACTIVE
+  // organization can't withdraw until they appoint a successor -- see
+  // withdrawUser()'s own comment. This never touches the session/DB row
+  // (no signOut below either), so the account stays exactly as it was.
+  if (result.kind === "sole_leader_block") {
+    return jsonError(
+      409,
+      `다음 단체의 유일한 대표 관리자이므로 탈퇴할 수 없습니다. 먼저 다른 구성원에게 대표 관리자 권한을 위임해주세요: ${result.organizationNames.join(", ")}`,
+    );
+  }
 
   // Clears the session cookie right away instead of leaving a still-
   // "valid" JWT pointing at a now-deletedAt row for getCurrentUser() to

@@ -69,6 +69,15 @@ vi.mock("@/lib/ai/postEmbedding", () => ({
 vi.mock("@/lib/ai/embedding", () => ({ getEmbeddingProvider: () => ({ embed }) }));
 vi.mock("@/lib/ai/imageEmbedding", () => ({ getImageEmbeddingProvider: () => ({ embed: imageEmbed }) }));
 vi.mock("@/lib/ai/vectorSearch", () => ({ findPostsBySemanticQuery, findPostsByImageQuery }));
+// Phase 12-5: organization/service.ts's own import chain (authz.ts,
+// generated Prisma enums for OrganizationRole/Status/RequestStatus) has
+// nothing to do with what this file tests -- only validateOrganizationPosting()
+// is actually called by aiService.ts's createLostPost/createFoundPost, and
+// only when a test explicitly passes organizationId, so it's stubbed
+// directly, same "mock a heavy sibling module wholesale" convention this
+// file already uses for @/lib/ai/*.
+const validateOrganizationPosting = vi.fn();
+vi.mock("@/lib/organization/service", () => ({ validateOrganizationPosting }));
 
 // Phase 21: this module (aiService.ts) is what actually houses
 // createLostPost/updateLostPost/createFoundPost/updateFoundPost, and
@@ -267,6 +276,170 @@ describe("createLostPost / createFoundPost", () => {
   });
 });
 
+// Phase 12-5 §31: organization attribution on post creation --
+// validateOrganizationPosting() (mocked at the top of this file) is the
+// single source of truth this suite verifies is actually consulted and
+// actually respected; the specific existence/ACTIVE/membership logic
+// itself is covered by organization/service.test.ts's own
+// validateOrganizationPosting tests, not duplicated here.
+describe("createLostPost / createFoundPost -- organization attribution (Phase 12-5)", () => {
+  const lostInput = {
+    title: "t",
+    description: "d",
+    category: "c",
+    location: "l",
+    campus: "인문캠퍼스" as const,
+    lostAt: new Date(),
+  };
+
+  it("organizationId omitted -- personal post, validateOrganizationPosting never called", async () => {
+    lostPost.create.mockResolvedValueOnce({
+      id: 1,
+      ...lostInput,
+      status: "SEARCHING",
+      imageUrl: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+      organization: null,
+    });
+
+    const result = await createLostPost(author, lostInput);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.organizationId).toBeNull();
+      expect(result.data.organizationName).toBeNull();
+    }
+    expect(validateOrganizationPosting).not.toHaveBeenCalled();
+    const callArgs = lostPost.create.mock.calls[0][0];
+    expect(callArgs.data).not.toHaveProperty("organizationId");
+  });
+
+  it("organizationId: null -- explicit personal post, same as omitted", async () => {
+    lostPost.create.mockResolvedValueOnce({
+      id: 1,
+      ...lostInput,
+      status: "SEARCHING",
+      imageUrl: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+      organization: null,
+    });
+
+    const result = await createLostPost(author, { ...lostInput, organizationId: null });
+
+    expect(result.kind).toBe("ok");
+    expect(validateOrganizationPosting).not.toHaveBeenCalled();
+  });
+
+  it("ACTIVE organization + active member -- succeeds and persists organizationId", async () => {
+    validateOrganizationPosting.mockResolvedValueOnce({ kind: "ok" });
+    lostPost.create.mockResolvedValueOnce({
+      id: 1,
+      ...lostInput,
+      status: "SEARCHING",
+      imageUrl: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+      organization: { id: 10, name: "도서관 자치 위원회" },
+    });
+
+    const result = await createLostPost(author, { ...lostInput, organizationId: 10 });
+
+    expect(validateOrganizationPosting).toHaveBeenCalledWith(author.id, 10);
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.organizationId).toBe(10);
+      expect(result.data.organizationName).toBe("도서관 자치 위원회");
+    }
+    expect(lostPost.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ organizationId: 10 }) }),
+    );
+  });
+
+  it("non-member -- rejected as forbidden without writing to the DB", async () => {
+    validateOrganizationPosting.mockResolvedValueOnce({ kind: "forbidden" });
+
+    const result = await createLostPost(author, { ...lostInput, organizationId: 10 });
+
+    expect(result).toEqual({ kind: "forbidden", reason: "organization_not_member" });
+    expect(lostPost.create).not.toHaveBeenCalled();
+  });
+
+  it("INACTIVE organization -- rejected even for an existing member", async () => {
+    validateOrganizationPosting.mockResolvedValueOnce({ kind: "inactive_organization" });
+
+    const result = await createLostPost(author, { ...lostInput, organizationId: 10 });
+
+    expect(result).toEqual({ kind: "forbidden", reason: "organization_inactive" });
+    expect(lostPost.create).not.toHaveBeenCalled();
+  });
+
+  it("nonexistent organizationId -- not_found", async () => {
+    validateOrganizationPosting.mockResolvedValueOnce({ kind: "not_found" });
+
+    const result = await createLostPost(author, { ...lostInput, organizationId: 999999 });
+
+    expect(result).toEqual({ kind: "forbidden", reason: "organization_not_found" });
+    expect(lostPost.create).not.toHaveBeenCalled();
+  });
+
+  // §31 role spoofing: this suite has no way to even *send* a client
+  // "role" field -- CreateLostPostInput only carries organizationId (see
+  // posts/schema.ts) -- so the only thing createLostPost ever passes to
+  // validateOrganizationPosting is (author.id, organizationId), never
+  // anything client-supplied about role/membership. Asserting the exact
+  // call signature here is what proves a spoofed role has nowhere to go.
+  it("never passes anything but (userId, organizationId) to validateOrganizationPosting -- no role field exists to spoof", async () => {
+    validateOrganizationPosting.mockResolvedValueOnce({ kind: "ok" });
+    lostPost.create.mockResolvedValueOnce({
+      id: 1,
+      ...lostInput,
+      status: "SEARCHING",
+      imageUrl: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+      organization: { id: 10, name: "org" },
+    });
+
+    await createLostPost(author, { ...lostInput, organizationId: 10 });
+
+    expect(validateOrganizationPosting).toHaveBeenCalledWith(author.id, 10);
+    expect(validateOrganizationPosting.mock.calls[0]).toHaveLength(2);
+  });
+
+  it("suspended user is rejected before organization validation even runs", async () => {
+    const suspended = { ...author, isSuspended: true, suspendedUntil: null };
+
+    const result = await createLostPost(suspended, { ...lostInput, organizationId: 10 });
+
+    expect(result).toEqual({ kind: "forbidden", reason: "suspended" });
+    expect(validateOrganizationPosting).not.toHaveBeenCalled();
+    expect(lostPost.create).not.toHaveBeenCalled();
+  });
+
+  it("createFoundPost -- same organization gate as createLostPost", async () => {
+    validateOrganizationPosting.mockResolvedValueOnce({ kind: "forbidden" });
+
+    const result = await createFoundPost(author, {
+      title: "t",
+      description: "d",
+      category: "c",
+      location: "l",
+      campus: "인문캠퍼스",
+      foundAt: new Date(),
+      organizationId: 10,
+    });
+
+    expect(result).toEqual({ kind: "forbidden", reason: "organization_not_member" });
+    expect(foundPost.create).not.toHaveBeenCalled();
+  });
+});
+
 describe("updateLostPost", () => {
   it("allows the owner to update their own post", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
@@ -287,6 +460,34 @@ describe("updateLostPost", () => {
     const result = await updateLostPost(1, 1, { title: "새 제목" });
 
     expect(result.kind).toBe("ok");
+  });
+
+  // Phase 12-7 §4: organizationId omitted from the update input entirely
+  // -- attribution must stay untouched (this is what distinguishes
+  // "omitted" from an explicit organizationId: null, tested separately
+  // below in the dedicated organization-attribution describe block).
+  it("leaves organizationId untouched when omitted from the update input", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
+    lostPost.update.mockResolvedValueOnce({
+      id: 1,
+      title: "새 제목",
+      description: "d",
+      category: "c",
+      location: "l",
+      status: "SEARCHING",
+      imageUrl: null,
+      lostAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+      organization: { id: 10, name: "원래 단체" },
+    });
+
+    await updateLostPost(1, 1, { title: "새 제목" });
+
+    const callArgs = lostPost.update.mock.calls[0][0];
+    expect(callArgs.data).not.toHaveProperty("organizationId");
+    expect(validateOrganizationPosting).not.toHaveBeenCalled();
   });
 
   it("re-embeds when an embedding-relevant field (title) changes", async () => {
@@ -545,6 +746,142 @@ describe("updateLostPost", () => {
       expect(result.data.foundAt).toBeNull();
     }
     expect(embedPostBestEffort).toHaveBeenCalledWith("found", 2, expect.objectContaining({ location: null }));
+  });
+
+  // Phase 12-7 §4: organizationId is now editable on update -- reverses
+  // Phase 12-5's original "fixed at creation" policy. All four
+  // transitions (개인→개인/개인→단체/단체 A→단체 B/단체→개인) go through
+  // the exact same validateOrganizationPosting() gate createLostPost's own
+  // create-time check uses.
+  describe("organization attribution changes (Phase 12-7)", () => {
+    it("개인 → 단체: validates and persists the new organizationId", async () => {
+      validateOrganizationPosting.mockResolvedValueOnce({ kind: "ok" });
+      lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
+      lostPost.update.mockResolvedValueOnce({
+        id: 1,
+        title: "t",
+        description: "d",
+        category: "c",
+        location: "l",
+        status: "SEARCHING",
+        imageUrl: null,
+        lostAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        user: { id: 1, nickname: "닉네임" },
+        organization: { id: 10, name: "총학생회" },
+      });
+
+      const result = await updateLostPost(1, 1, { organizationId: 10 });
+
+      expect(validateOrganizationPosting).toHaveBeenCalledWith(1, 10);
+      expect(result.kind).toBe("ok");
+      if (result.kind === "ok") expect(result.data.organizationId).toBe(10);
+      expect(lostPost.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ organizationId: 10 }) }),
+      );
+    });
+
+    it("단체 A → 단체 B: re-validates membership in the new target organization", async () => {
+      validateOrganizationPosting.mockResolvedValueOnce({ kind: "ok" });
+      lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, organizationId: 10 });
+      lostPost.update.mockResolvedValueOnce({
+        id: 1,
+        title: "t",
+        description: "d",
+        category: "c",
+        location: "l",
+        status: "SEARCHING",
+        imageUrl: null,
+        lostAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        user: { id: 1, nickname: "닉네임" },
+        organization: { id: 20, name: "AI 동아리" },
+      });
+
+      const result = await updateLostPost(1, 1, { organizationId: 20 });
+
+      expect(validateOrganizationPosting).toHaveBeenCalledWith(1, 20);
+      expect(result.kind).toBe("ok");
+      if (result.kind === "ok") expect(result.data.organizationId).toBe(20);
+    });
+
+    it("단체 → 개인: explicit null bypasses validateOrganizationPosting entirely", async () => {
+      lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, organizationId: 10 });
+      lostPost.update.mockResolvedValueOnce({
+        id: 1,
+        title: "t",
+        description: "d",
+        category: "c",
+        location: "l",
+        status: "SEARCHING",
+        imageUrl: null,
+        lostAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        user: { id: 1, nickname: "닉네임" },
+        organization: null,
+      });
+
+      const result = await updateLostPost(1, 1, { organizationId: null });
+
+      expect(validateOrganizationPosting).not.toHaveBeenCalled();
+      expect(result.kind).toBe("ok");
+      if (result.kind === "ok") expect(result.data.organizationId).toBeNull();
+      expect(lostPost.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ organizationId: null }) }),
+      );
+    });
+
+    it("권한 없는 단체로 변경 시도 -- forbidden, DB에 쓰지 않는다", async () => {
+      validateOrganizationPosting.mockResolvedValueOnce({ kind: "forbidden" });
+      lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
+
+      const result = await updateLostPost(1, 1, { organizationId: 999 });
+
+      expect(result).toEqual({ kind: "forbidden", reason: "organization_not_member" });
+      expect(lostPost.update).not.toHaveBeenCalled();
+    });
+
+    it("INACTIVE 단체로 변경 시도 -- forbidden, DB에 쓰지 않는다", async () => {
+      validateOrganizationPosting.mockResolvedValueOnce({ kind: "inactive_organization" });
+      lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
+
+      const result = await updateLostPost(1, 1, { organizationId: 10 });
+
+      expect(result).toEqual({ kind: "forbidden", reason: "organization_inactive" });
+      expect(lostPost.update).not.toHaveBeenCalled();
+    });
+
+    it("존재하지 않는 단체로 변경 시도 -- not_found", async () => {
+      validateOrganizationPosting.mockResolvedValueOnce({ kind: "not_found" });
+      lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
+
+      const result = await updateLostPost(1, 1, { organizationId: 999999 });
+
+      expect(result).toEqual({ kind: "forbidden", reason: "organization_not_found" });
+      expect(lostPost.update).not.toHaveBeenCalled();
+    });
+
+    it("소유자가 아니면 organizationId 검증 전에 이미 forbidden", async () => {
+      lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 2 });
+
+      const result = await updateLostPost(1, 1, { organizationId: 10 });
+
+      expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
+      expect(validateOrganizationPosting).not.toHaveBeenCalled();
+    });
+
+    it("updateFoundPost도 동일한 검증 게이트를 거친다", async () => {
+      validateOrganizationPosting.mockResolvedValueOnce({ kind: "forbidden" });
+      foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1 });
+
+      const result = await updateFoundPost(2, 1, { organizationId: 10 });
+
+      expect(result).toEqual({ kind: "forbidden", reason: "organization_not_member" });
+      expect(foundPost.update).not.toHaveBeenCalled();
+    });
   });
 });
 

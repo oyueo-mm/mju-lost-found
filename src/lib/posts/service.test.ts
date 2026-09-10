@@ -52,6 +52,7 @@ const {
   listLostPosts,
   listLostPostsByUser,
   listPostsByUser,
+  listRecentPostsByOrganization,
 } = await import("./service");
 
 beforeEach(() => {
@@ -436,6 +437,58 @@ describe("listPostsByUser", () => {
 
     expect(result.items).toEqual([]);
     expect(result.total).toBe(0);
+  });
+});
+
+// Phase 12-5 §30: /organizations/[id]'s "최근 게시글" preview -- same
+// merge-and-sort shape as listPostsByUser above, filtered by
+// organizationId instead of userId, no pagination (a flat cap only).
+describe("listRecentPostsByOrganization", () => {
+  const orgLostRow = (id: number, createdAt: Date) => ({
+    id,
+    title: `lost-${id}`,
+    description: "d",
+    category: "c",
+    location: "l",
+    status: "SEARCHING",
+    imageUrl: null,
+    lostAt: createdAt,
+    createdAt,
+    updatedAt: createdAt,
+    user: { id: 7, nickname: "닉네임", publicId: "pub-7" },
+    organization: { id: 10, name: "도서관 자치 위원회" },
+  });
+  const orgFoundRow = (id: number, createdAt: Date) => ({
+    id,
+    title: `found-${id}`,
+    description: "d",
+    category: "c",
+    location: "l",
+    status: "KEEPING",
+    imageUrl: null,
+    foundAt: createdAt,
+    createdAt,
+    updatedAt: createdAt,
+    user: { id: 7, nickname: "닉네임", publicId: "pub-7" },
+    organization: { id: 10, name: "도서관 자치 위원회" },
+  });
+
+  it("merges LostPost + FoundPost for the given organizationId, newest first", async () => {
+    lostPost.findMany.mockResolvedValueOnce([orgLostRow(2, new Date("2026-01-03")), orgLostRow(1, new Date("2026-01-01"))]);
+    foundPost.findMany.mockResolvedValueOnce([orgFoundRow(3, new Date("2026-01-02"))]);
+
+    const result = await listRecentPostsByOrganization(10);
+
+    expect(lostPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId: 10 } }));
+    expect(foundPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId: 10 } }));
+    expect(result.map((p) => p.id)).toEqual([2, 3, 1]);
+    expect(result.every((p) => p.organizationId === 10)).toBe(true);
+  });
+
+  it("returns an empty array for an organization with no posts", async () => {
+    lostPost.findMany.mockResolvedValueOnce([]);
+    foundPost.findMany.mockResolvedValueOnce([]);
+    expect(await listRecentPostsByOrganization(999)).toEqual([]);
   });
 });
 

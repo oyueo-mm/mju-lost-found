@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireReadyUser } from "@/lib/auth/session";
 import { getFoundPost, getLostPost } from "@/lib/posts/service";
 import { postTypeSchema } from "@/lib/posts/schema";
+import { getMyOrganizationMemberships } from "@/lib/organization/service";
 import { PostForm } from "@/components/post/PostForm";
 
 function toDateTimeLocalValue(date: Date): string {
@@ -46,6 +47,11 @@ export default async function EditPostPage({
 
   const dateValue = post.type === "lost" ? post.lostAt : post.foundAt;
 
+  // Phase 12-7 §4: same server-fetched-membership convention as
+  // lost/new, found/new page.tsx -- now also needed in edit mode, since
+  // 게시 주체 is editable here too.
+  const myOrganizations = (await getMyOrganizationMemberships(user.id)).filter((m) => m.organizationStatus === "active");
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
@@ -54,6 +60,7 @@ export default async function EditPostPage({
       <PostForm
         type={type}
         postId={post.id}
+        myOrganizations={myOrganizations}
         initialValues={{
           title: post.title,
           description: post.description,
@@ -69,6 +76,8 @@ export default async function EditPostPage({
           // displayOrder) -- defaulting to [] only satisfies the type for
           // PostDTO's other, list-producing callers, which never reach here.
           images: (post.images ?? []).map((img) => ({ id: img.id, imageUrl: img.imageUrl })),
+          organizationId: post.organizationId,
+          organizationName: post.organizationName,
         }}
       />
     </div>

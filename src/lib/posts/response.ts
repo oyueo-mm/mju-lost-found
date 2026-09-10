@@ -50,11 +50,17 @@ export function postMutationResultToResponse<T>(
     case "not_found":
       return jsonError(404, "게시물을 찾을 수 없습니다.");
     case "forbidden":
-      return jsonError(
-        403,
-        result.reason === "suspended"
-          ? SUSPENDED_ACCOUNT_MESSAGE
-          : "본인 게시물만 수정/삭제할 수 있습니다.",
-      );
+      switch (result.reason) {
+        case "suspended":
+          return jsonError(403, SUSPENDED_ACCOUNT_MESSAGE);
+        case "organization_not_found":
+          return jsonError(404, "단체를 찾을 수 없습니다.");
+        case "organization_inactive":
+          return jsonError(403, "비활성화된 단체 명의로는 게시할 수 없습니다.");
+        case "organization_not_member":
+          return jsonError(403, "해당 단체의 구성원만 단체 명의로 게시할 수 있습니다.");
+        default:
+          return jsonError(403, "본인 게시물만 수정/삭제할 수 있습니다.");
+      }
   }
 }

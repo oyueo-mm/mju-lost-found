@@ -4,7 +4,8 @@ import { requireReadyUser } from "@/lib/auth/session";
 import { signOut } from "@/lib/auth/auth";
 import { getUnreadNotificationCount } from "@/lib/notification/service";
 import { isAdmin } from "@/lib/moderation/service";
-import { UserIcon, ChevronRightIcon, BellIcon, ShieldIcon, LogoutIcon, ChatBubbleIcon } from "@/components/icons";
+import { getMyOrganizationMemberships } from "@/lib/organization/service";
+import { UserIcon, ChevronRightIcon, BellIcon, ShieldIcon, LogoutIcon, ChatBubbleIcon, PlusIcon } from "@/components/icons";
 import { ThemeSettings } from "@/components/settings/ThemeSettings";
 import { InstallAppPrompt } from "@/components/settings/InstallAppPrompt";
 import { NicknameSettings } from "@/components/settings/NicknameSettings";
@@ -51,6 +52,13 @@ export default async function MePage() {
 
   const admin = isAdmin(user);
 
+  let myOrganizations: Awaited<ReturnType<typeof getMyOrganizationMemberships>> = [];
+  try {
+    myOrganizations = await getMyOrganizationMemberships(user.id);
+  } catch (error) {
+    console.error("Failed to load organization memberships", error);
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-foreground">내 정보</h1>
@@ -93,7 +101,39 @@ export default async function MePage() {
             함께 있는 /feedback으로 연결. Report(신고)와 혼동하지 않도록
             별도 아이콘/문구를 쓴다. */}
         <MenuRow href="/feedback" icon={<ChatBubbleIcon className="size-4.5" />} label="서비스 개선 제안" />
+        {/* Phase 12-4: 단체 목록 -- 가입 신청은 이 목록에서 개별 단체 프로필로
+            들어가 진행한다(§4/§6). */}
+        <MenuRow href="/organizations" icon={<ShieldIcon className="size-4.5" />} label="단체 목록" />
+        {/* Phase 12-3: 단체 생성 신청 -- /organizations/create가 폼과 대기
+            중인 신청 상태를 함께 보여주므로 별도의 "내 신청 목록" 페이지는
+            만들지 않는다. */}
+        <MenuRow href="/organizations/create" icon={<PlusIcon className="size-4.5" />} label="단체 생성 신청" />
       </section>
+
+      {/* Phase 12-4 §23: 내가 가입한 단체 -- 단체명/역할/상태만 노출하고
+          클릭하면 해당 단체 프로필로 이동한다. 멤버십이 없으면 섹션 자체를
+          숨긴다(admin 센터 섹션과 동일하게 조건부 렌더링). */}
+      {myOrganizations.length > 0 && (
+        <>
+          <p className="px-1 text-xs font-medium text-muted-foreground">내 단체</p>
+          <section className="overflow-hidden rounded-card border border-border bg-card">
+            {myOrganizations.map((membership) => (
+              <MenuRow
+                key={membership.organizationId}
+                href={`/organizations/${membership.organizationId}`}
+                icon={<ShieldIcon className="size-4.5" />}
+                label={membership.organizationName}
+                meta={
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                    {membership.role === "leader" ? "대표 관리자" : membership.role === "admin" ? "관리자" : "구성원"}
+                    {membership.organizationStatus === "inactive" ? " · 비활성" : ""}
+                  </span>
+                }
+              />
+            ))}
+          </section>
+        </>
+      )}
 
       <section className="overflow-hidden rounded-card border border-border bg-card">
         <MenuRow

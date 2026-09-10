@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { isAdmin } from "@/lib/moderation/service";
+import { validateOrganizationPosting } from "@/lib/organization/service";
 import type { PostType } from "@/lib/posts/schema";
 import { NotificationType, type User } from "@/generated/prisma/client";
 import type { CreateCommentInput, UpdateCommentInput } from "./schema";
@@ -25,6 +26,12 @@ export type CommentDTO = {
   // nickname to /profile/[publicId] -- `id` itself is never used as a
   // link target, only for internal comparisons (isOwner, etc).
   author: { id: number; nickname: string | null; publicId: string };
+  // Phase 12-5: null for a personal comment (unchanged, common case). The
+  // actual author is always `author` above -- see posts/service.ts's
+  // LostPostDTO.organizationId/organizationName own comment for the same
+  // actor/attribution split, identical reasoning here.
+  organizationId: number | null;
+  organizationName: string | null;
 };
 
 export type CommentMutationResult<T> =
@@ -36,9 +43,26 @@ export type CommentMutationResult<T> =
   // treated identically -- from the caller's perspective there is no
   // valid parent to reply to either way).
   | { kind: "parent_not_found" }
-  | { kind: "forbidden"; reason: "not_owner" | "suspended" | "not_admin" };
+  | {
+      kind: "forbidden";
+      // Phase 12-5: organization_* reasons only ever come from
+      // validateOrganizationPosting() when a create request carries a
+      // non-null organizationId -- see posts/service.ts's
+      // PostMutationResult own comment, identical shape/reasoning.
+      reason:
+        | "not_owner"
+        | "suspended"
+        | "not_admin"
+        | "organization_not_found"
+        | "organization_inactive"
+        | "organization_not_member";
+    };
 
 const AUTHOR_SELECT = { id: true, nickname: true, publicId: true } as const;
+// See posts/service.ts's own POST_ORGANIZATION_SELECT -- identical shape/
+// reasoning, kept as a separate local constant since this module has no
+// dependency on posts/service.ts otherwise.
+const ORGANIZATION_SELECT = { id: true, name: true } as const;
 
 function toCommentDTO(row: {
   id: number;
@@ -47,8 +71,10 @@ function toCommentDTO(row: {
   updatedAt: Date;
   parentId: number | null;
   author: { id: number; nickname: string | null; publicId: string };
+  organization: { id: number; name: string } | null;
 }): CommentDTO {
-  return row;
+  const { organization, ...rest } = row;
+  return { ...rest, organizationId: organization?.id ?? null, organizationName: organization?.name ?? null };
 }
 
 async function postExists(type: PostType, postId: number): Promise<boolean> {
@@ -72,7 +98,7 @@ export async function listCommentsForPost(type: PostType, postId: number): Promi
     where: type === "lost" ? { lostPostId: postId } : { foundPostId: postId },
     orderBy: { createdAt: "asc" },
     take: COMMENT_LIST_CAP,
-    include: { author: { select: AUTHOR_SELECT } },
+    include: { author: { select: AUTHOR_SELECT }, organization: { select: ORGANIZATION_SELECT } },
   });
   return rows.map(toCommentDTO);
 }
@@ -91,6 +117,19 @@ export async function createComment(
   }
   if (!(await postExists(type, postId))) {
     return { kind: "post_not_found" };
+  }
+
+  // Phase 12-5 §19: deliberately independent of the post's own
+  // organizationId -- a comment can be posted as any organization the
+  // commenter is currently an active member of, regardless of who/what
+  // authored the post itself. Same validateOrganizationPosting() call as
+  // posts/aiService.ts's createLostPost/createFoundPost -- see that
+  // function's own comment.
+  if (input.organizationId != null) {
+    const check = await validateOrganizationPosting(author.id, input.organizationId);
+    if (check.kind === "not_found") return { kind: "forbidden", reason: "organization_not_found" };
+    if (check.kind === "inactive_organization") return { kind: "forbidden", reason: "organization_inactive" };
+    if (check.kind === "forbidden") return { kind: "forbidden", reason: "organization_not_member" };
   }
 
   // Phase H-3: resolved once, up front, so the notification recipient
@@ -120,9 +159,10 @@ export async function createComment(
         content: input.content,
         authorUserId: author.id,
         parentId: parent?.id ?? null,
+        organizationId: input.organizationId ?? null,
         ...(type === "lost" ? { lostPostId: postId } : { foundPostId: postId }),
       },
-      include: { author: { select: AUTHOR_SELECT } },
+      include: { author: { select: AUTHOR_SELECT }, organization: { select: ORGANIZATION_SELECT } },
     });
 
     // Never notify yourself for replying to your own comment -- same
@@ -208,7 +248,7 @@ export async function listCommentsByUser(userId: number): Promise<MyCommentDTO[]
 async function findOwnedComment(id: number) {
   return prisma.comment.findUnique({
     where: { id },
-    include: { author: { select: AUTHOR_SELECT } },
+    include: { author: { select: AUTHOR_SELECT }, organization: { select: ORGANIZATION_SELECT } },
   });
 }
 
@@ -230,7 +270,7 @@ export async function updateComment(
   const row = await prisma.comment.update({
     where: { id },
     data: { content: input.content },
-    include: { author: { select: AUTHOR_SELECT } },
+    include: { author: { select: AUTHOR_SELECT }, organization: { select: ORGANIZATION_SELECT } },
   });
   return { kind: "ok", data: toCommentDTO(row) };
 }

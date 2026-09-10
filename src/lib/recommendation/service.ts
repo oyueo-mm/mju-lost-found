@@ -5,7 +5,7 @@ import {
   findSimilarPostsByImage,
   type VectorSearchResult,
 } from "@/lib/ai/vectorSearch";
-import { AUTHOR_SELECT, toFoundPostDTO, toLostPostDTO, type PostDTO } from "@/lib/posts/service";
+import { AUTHOR_SELECT, POST_ORGANIZATION_SELECT, toFoundPostDTO, toLostPostDTO, type PostDTO } from "@/lib/posts/service";
 import type { PostType } from "@/lib/posts/schema";
 
 // Phase J-2: replaces the removed Match domain's findMatchCandidates()
@@ -148,8 +148,8 @@ export async function findPostRecommendations(sourceType: PostType, sourceId: nu
   const ids = ranking.map((r) => r.id);
   const rows =
     targetType === "lost"
-      ? await prisma.lostPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT } } })
-      : await prisma.foundPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT } } });
+      ? await prisma.lostPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } })
+      : await prisma.foundPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } });
   const rowById = new Map(rows.map((row) => [row.id, row]));
   const scoreById = new Map(ranking.map((r) => [r.id, r.score]));
 

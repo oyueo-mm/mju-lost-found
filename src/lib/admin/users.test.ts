@@ -29,6 +29,11 @@ vi.mock("@/lib/db/prisma", () => ({
 // project already use for a same-domain collaborator) so this test file
 // only ever depends on what it actually exercises.
 vi.mock("@/lib/moderation/service", () => ({ isAdmin: (u: { isAdmin: boolean }) => u.isAdmin }));
+// Phase 12-5: comment/service.ts (imported transitively via listCommentsByUser)
+// now itself imports organization/service.ts -- mocked wholesale here for
+// the same reason as moderation/service.ts just above, since this file
+// never exercises anything organization-related.
+vi.mock("@/lib/organization/service", () => ({ validateOrganizationPosting: vi.fn() }));
 // Same convention as comment/service.test.ts's own mock of this module --
 // only the members this file actually exercises are stubbed.
 vi.mock("@/generated/prisma/client", () => ({

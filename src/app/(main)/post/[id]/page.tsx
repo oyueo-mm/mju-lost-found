@@ -7,6 +7,7 @@ import { getFoundPost, getLostPost } from "@/lib/posts/service";
 import { FOUND_STATUSES, LOST_STATUSES, postTypeSchema } from "@/lib/posts/schema";
 import { isAdmin } from "@/lib/moderation/service";
 import { listCommentsForPost } from "@/lib/comment/service";
+import { getMyOrganizationMemberships } from "@/lib/organization/service";
 import { PostManageMenu } from "@/components/post/PostManageMenu";
 import { PostImageGallery } from "@/components/post/PostImageGallery";
 import { ViewTracker } from "@/components/post/ViewTracker";
@@ -17,7 +18,7 @@ import { CommentSection } from "@/components/comment/CommentSection";
 import { encodePostTargetId } from "@/lib/report/targets";
 import { ReportButton } from "@/components/report/ReportButton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { AuthorLink } from "@/components/user/AuthorLink";
+import { AttributionLink } from "@/components/user/AttributionLink";
 import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
@@ -112,9 +113,27 @@ export default async function PostDetailPage({
     }
   }
 
-  const [comments, { recommendations, recommendationsFailed }] = await Promise.all([
+  // Phase 12-5 §22: same server-fetched-membership convention as
+  // lost/new, found/new page.tsx's own myOrganizations -- only fetched for
+  // a logged-in viewer (a logged-out one never sees the comment composer
+  // at all, see CommentSection's own currentUser-gated form).
+  async function loadMyOrganizations() {
+    if (!currentUser) return [];
+    try {
+      const memberships = await getMyOrganizationMemberships(currentUser.id);
+      return memberships
+        .filter((m) => m.organizationStatus === "active")
+        .map((m) => ({ organizationId: m.organizationId, organizationName: m.organizationName }));
+    } catch (error) {
+      console.error("Failed to load organization memberships", error);
+      return [];
+    }
+  }
+
+  const [comments, { recommendations, recommendationsFailed }, myOrganizations] = await Promise.all([
     loadComments(),
     loadRecommendations(),
+    loadMyOrganizations(),
   ]);
 
   return (
@@ -188,11 +207,16 @@ export default async function PostDetailPage({
             {/* Phase H-7: clickable, same as every other author display in
                 this app (PostCard/CommentSection/chat header) -- including
                 on the viewer's own post, which goes to their own profile,
-                same as anyone else's. */}
-            <AuthorLink
-              nickname={post.author.nickname}
-              publicId={post.author.publicId}
+                same as anyone else's. Phase 12-8 §2/§3: an organization-
+                attributed post shows ONLY the organization here -- see
+                AttributionLink's own comment for why the real author is
+                never rendered alongside it. */}
+            <AttributionLink
+              organizationId={post.organizationId}
+              organizationName={post.organizationName}
+              author={post.author}
               className="w-fit truncate text-sm font-medium text-primary hover:underline"
+              iconClassName="size-4 shrink-0"
             />
             <h1 className="text-xl font-semibold text-foreground md:text-2xl">{post.title}</h1>
           </div>
@@ -305,6 +329,7 @@ export default async function PostDetailPage({
         initialComments={comments}
         currentUser={currentUser ? { id: currentUser.id } : null}
         isAdmin={viewerIsAdmin}
+        myOrganizations={myOrganizations}
       />
     </div>
   );

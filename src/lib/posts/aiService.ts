@@ -7,6 +7,7 @@ import { getEmbeddingProvider } from "@/lib/ai/embedding";
 import { getImageEmbeddingProvider } from "@/lib/ai/imageEmbedding";
 import { findPostsByImageQuery, findPostsBySemanticQuery } from "@/lib/ai/vectorSearch";
 import { invalidateRecommendationCache } from "@/lib/recommendation/service";
+import { validateOrganizationPosting } from "@/lib/organization/service";
 import type { User } from "@/generated/prisma/client";
 import type {
   CreateFoundPostInput,
@@ -19,6 +20,7 @@ import type {
 } from "./schema";
 import {
   AUTHOR_SELECT,
+  POST_ORGANIZATION_SELECT,
   FOUND_STATUS_TO_DB,
   LOST_STATUS_TO_DB,
   searchPosts as searchPostsKeywordOnly,
@@ -54,6 +56,17 @@ export async function createLostPost(
   if (isCurrentlySuspended(author)) {
     return { kind: "forbidden", reason: "suspended" };
   }
+  // Phase 12-5 §6/§8: organizationId === null/undefined means an ordinary
+  // personal post -- existing behavior, no extra check. A non-null value
+  // is never trusted as-is: validateOrganizationPosting() re-derives
+  // existence/ACTIVE/membership from the DB every time (never from
+  // anything the client claims about its own role).
+  if (input.organizationId != null) {
+    const check = await validateOrganizationPosting(author.id, input.organizationId);
+    if (check.kind === "not_found") return { kind: "forbidden", reason: "organization_not_found" };
+    if (check.kind === "inactive_organization") return { kind: "forbidden", reason: "organization_inactive" };
+    if (check.kind === "forbidden") return { kind: "forbidden", reason: "organization_not_member" };
+  }
   const { status, ...rest } = input;
   const row = await prisma.lostPost.create({
     data: {
@@ -61,7 +74,7 @@ export async function createLostPost(
       userId: author.id,
       ...(status !== undefined && { status: LOST_STATUS_TO_DB[status] }),
     },
-    include: { user: { select: AUTHOR_SELECT } },
+    include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
   });
   // Post-commit, best-effort -- see embedPostBestEffort()'s doc comment.
   // A brand-new post always has all four embeddable fields, so this
@@ -91,6 +104,21 @@ export async function updateLostPost(
   if (!existing) return { kind: "not_found" };
   if (existing.userId !== userId) return { kind: "forbidden", reason: "not_owner" };
 
+  // Phase 12-7 §4: organizationId is now editable -- omitted means "leave
+  // attribution unchanged" (input.organizationId is simply absent, so
+  // `rest` below never carries the key and Prisma leaves the column
+  // untouched); explicit null means "개인"; a positive integer is
+  // re-validated fresh against the *current* user's membership every time
+  // (never trusted merely because it matches the post's existing value --
+  // the editor might not even be a member of that organization any more).
+  // Same validateOrganizationPosting() gate as createLostPost's own.
+  if (input.organizationId != null) {
+    const check = await validateOrganizationPosting(userId, input.organizationId);
+    if (check.kind === "not_found") return { kind: "forbidden", reason: "organization_not_found" };
+    if (check.kind === "inactive_organization") return { kind: "forbidden", reason: "organization_inactive" };
+    if (check.kind === "forbidden") return { kind: "forbidden", reason: "organization_not_member" };
+  }
+
   const { status, ...rest } = input;
   const row = await prisma.lostPost.update({
     where: { id },
@@ -98,7 +126,7 @@ export async function updateLostPost(
       ...rest,
       ...(status !== undefined && { status: LOST_STATUS_TO_DB[status] }),
     },
-    include: { user: { select: AUTHOR_SELECT } },
+    include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
   });
   // Only re-embed when a field that actually feeds buildEmbeddingText()
   // changed -- e.g. a status-only update (marking a post found/complete)
@@ -130,6 +158,13 @@ export async function createFoundPost(
   if (isCurrentlySuspended(author)) {
     return { kind: "forbidden", reason: "suspended" };
   }
+  // See createLostPost's own comment -- identical shape/reasoning.
+  if (input.organizationId != null) {
+    const check = await validateOrganizationPosting(author.id, input.organizationId);
+    if (check.kind === "not_found") return { kind: "forbidden", reason: "organization_not_found" };
+    if (check.kind === "inactive_organization") return { kind: "forbidden", reason: "organization_inactive" };
+    if (check.kind === "forbidden") return { kind: "forbidden", reason: "organization_not_member" };
+  }
   const { status, ...rest } = input;
   const row = await prisma.foundPost.create({
     data: {
@@ -137,7 +172,7 @@ export async function createFoundPost(
       userId: author.id,
       ...(status !== undefined && { status: FOUND_STATUS_TO_DB[status] }),
     },
-    include: { user: { select: AUTHOR_SELECT } },
+    include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
   });
   // Phase H-5-1: see createLostPost's own comment -- same after()
   // deferral, same unchanged failure behavior.
@@ -154,6 +189,14 @@ export async function updateFoundPost(
   if (!existing) return { kind: "not_found" };
   if (existing.userId !== userId) return { kind: "forbidden", reason: "not_owner" };
 
+  // See updateLostPost's own comment -- identical shape/reasoning.
+  if (input.organizationId != null) {
+    const check = await validateOrganizationPosting(userId, input.organizationId);
+    if (check.kind === "not_found") return { kind: "forbidden", reason: "organization_not_found" };
+    if (check.kind === "inactive_organization") return { kind: "forbidden", reason: "organization_inactive" };
+    if (check.kind === "forbidden") return { kind: "forbidden", reason: "organization_not_member" };
+  }
+
   const { status, ...rest } = input;
   const row = await prisma.foundPost.update({
     where: { id },
@@ -161,7 +204,7 @@ export async function updateFoundPost(
       ...rest,
       ...(status !== undefined && { status: FOUND_STATUS_TO_DB[status] }),
     },
-    include: { user: { select: AUTHOR_SELECT } },
+    include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
   });
   // Phase H-5-1: see updateLostPost's own comment -- embed + invalidate
   // moved together into after(), same relative order, same failure
@@ -233,8 +276,8 @@ async function rankSemanticCandidates(
   const ids = ranked.map((r) => r.id);
   const rows =
     type === "lost"
-      ? await prisma.lostPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT } } })
-      : await prisma.foundPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT } } });
+      ? await prisma.lostPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } })
+      : await prisma.foundPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } });
   const rowById = new Map(rows.map((row) => [row.id, row]));
 
   // Re-order to match the similarity ranking -- `findMany({id:{in}})` does
@@ -392,8 +435,8 @@ export async function searchPostsByImage(
   const ids = ranked.map((r) => r.id);
   const rows =
     targetType === "lost"
-      ? await prisma.lostPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT } } })
-      : await prisma.foundPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT } } });
+      ? await prisma.lostPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } })
+      : await prisma.foundPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } });
   const rowById = new Map(rows.map((row) => [row.id, row]));
 
   // Re-order to match the similarity ranking and drop any id whose row

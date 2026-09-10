@@ -7,12 +7,14 @@ const getReportTargetRef = vi.fn();
 const resolveMessageTarget = vi.fn();
 const resolvePostTarget = vi.fn();
 const getAnnouncement = vi.fn();
+const getOrganizationById = vi.fn();
 
 vi.mock("@/lib/chat/service", () => ({ getMessage, getChatRoomForUser }));
 vi.mock("@/lib/comment/service", () => ({ getCommentPostRef }));
 vi.mock("@/lib/report/service", () => ({ getReportTargetRef }));
 vi.mock("@/lib/report/targets", () => ({ resolveMessageTarget, resolvePostTarget }));
 vi.mock("@/lib/announcement/service", () => ({ getAnnouncement }));
+vi.mock("@/lib/organization/service", () => ({ getOrganizationById }));
 
 const { resolveHref } = await import("./resolveHref");
 
@@ -44,6 +46,24 @@ describe("resolveHref -- announcement notifications", () => {
     getAnnouncement.mockResolvedValueOnce(null);
 
     expect(await resolveHref(1, "announcement", "announcement", 42)).toBeNull();
+  });
+});
+
+// Phase 12-4 §28: ORGANIZATION_REQUEST_PROCESSED(가입 신청 승인/거절)
+// notification -- relatedType="organization", relatedId는 조직 자체의 id.
+describe("resolveHref -- organization join request notifications", () => {
+  it("links to the organization profile page", async () => {
+    getOrganizationById.mockResolvedValueOnce({ id: 10, name: "명지대학교 총학생회" });
+
+    const href = await resolveHref(1, "ORGANIZATION_REQUEST_PROCESSED", "organization", 10);
+
+    expect(href).toBe("/organizations/10");
+    expect(getOrganizationById).toHaveBeenCalledWith(10);
+  });
+
+  it("returns null (no crash) when the organization was since deleted", async () => {
+    getOrganizationById.mockResolvedValueOnce(null);
+    expect(await resolveHref(1, "ORGANIZATION_REQUEST_PROCESSED", "organization", 10)).toBeNull();
   });
 });
 

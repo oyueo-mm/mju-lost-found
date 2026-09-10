@@ -31,7 +31,7 @@ describe("POST /api/me/withdraw", () => {
 
   it("withdraws the current user's own account -- id comes from the session, never the client", async () => {
     getCurrentUser.mockResolvedValueOnce({ id: 7 });
-    withdrawUser.mockResolvedValueOnce({ id: 7, deletedAt: new Date() });
+    withdrawUser.mockResolvedValueOnce({ kind: "ok", data: { id: 7, deletedAt: new Date() } });
     signOut.mockResolvedValueOnce(undefined);
 
     const res = await POST();
@@ -47,7 +47,7 @@ describe("POST /api/me/withdraw", () => {
   // request only -- see route.ts's own comment.
   it("clears the session (signOut) after a successful withdrawal", async () => {
     getCurrentUser.mockResolvedValueOnce({ id: 7 });
-    withdrawUser.mockResolvedValueOnce({ id: 7, deletedAt: new Date() });
+    withdrawUser.mockResolvedValueOnce({ kind: "ok", data: { id: 7, deletedAt: new Date() } });
     signOut.mockResolvedValueOnce(undefined);
 
     await POST();
@@ -62,6 +62,22 @@ describe("POST /api/me/withdraw", () => {
     const res = await POST();
 
     expect(res.status).toBe(500);
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  // Phase 12-2: the sole-LEADER block -- withdrawUser() itself never
+  // touches the User row or notifications in this case (see its own
+  // comment), and this route must not sign the session out either, since
+  // the account is still fully active.
+  it("rejects withdrawal (without signing out) when the user is the sole LEADER of an organization", async () => {
+    getCurrentUser.mockResolvedValueOnce({ id: 7 });
+    withdrawUser.mockResolvedValueOnce({ kind: "sole_leader_block", organizationNames: ["명지대학교 총학생회"] });
+
+    const res = await POST();
+    const json = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(json.error).toContain("명지대학교 총학생회");
     expect(signOut).not.toHaveBeenCalled();
   });
 });

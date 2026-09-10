@@ -105,7 +105,10 @@ describe("findPostRecommendations", () => {
 
     expect(foundPost.findMany).toHaveBeenCalledWith({
       where: { id: { in: [5] } },
-      include: { user: { select: { id: true, nickname: true, publicId: true } } },
+      include: {
+        user: { select: { id: true, nickname: true, publicId: true } },
+        organization: { select: { id: true, name: true } },
+      },
     });
     expect(result).toEqual([
       expect.objectContaining({

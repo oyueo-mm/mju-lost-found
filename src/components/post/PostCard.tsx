@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import type { PostDTO } from "@/lib/posts/service";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { AuthorLink } from "@/components/user/AuthorLink";
+import { AttributionLink } from "@/components/user/AttributionLink";
 import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
@@ -119,10 +119,19 @@ export function PostCard({ post, scoreLabel = "검색 유사도", showPercentage
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-3.5">
-        <AuthorLink
-          nickname={post.author.nickname}
-          publicId={post.author.publicId}
-          className="relative z-10 w-fit truncate text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+        {/* Phase 12-8 §2/§3: organization-attributed posts show ONLY the
+            organization here -- the real author's nickname/publicId is
+            never rendered for those (AttributionLink's own comment). A
+            personal post renders exactly like the old plain AuthorLink. */}
+        <AttributionLink
+          organizationId={post.organizationId}
+          organizationName={post.organizationName}
+          author={post.author}
+          className={
+            post.organizationId != null
+              ? "relative z-10 text-xs font-medium text-primary hover:underline"
+              : "relative z-10 w-fit truncate text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+          }
         />
         <h3 className="truncate text-sm font-semibold text-foreground">{post.title}</h3>
         <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">

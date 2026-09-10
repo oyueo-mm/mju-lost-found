@@ -74,18 +74,33 @@ enum ModerationActionType {
 }
 
 enum NotificationType {
-  MESSAGE          @map("message")
-  MATCH            @map("match")
-  REPORT_PROCESSED @map("report_processed")
-  POST_DELETED     @map("post_deleted")
-  MESSAGE_HIDDEN   @map("message_hidden")
-  USER_SUSPENDED   @map("user_suspended")
-  COMMENT_REPLY    @map("comment_reply")
+  MESSAGE                        @map("message")
+  MATCH                          @map("match")
+  REPORT_PROCESSED               @map("report_processed")
+  POST_DELETED                   @map("post_deleted")
+  MESSAGE_HIDDEN                 @map("message_hidden")
+  USER_SUSPENDED                 @map("user_suspended")
+  COMMENT_REPLY                  @map("comment_reply")
   // Phase M: fanned out to every user (one Notification row each) when an
   // admin creates an Announcement -- see announcement/service.ts. relatedType
   // is "announcement", relatedId is Announcement.id, same polymorphic
   // no-FK shape every other NotificationType here already uses.
-  ANNOUNCEMENT     @map("announcement")
+  ANNOUNCEMENT                   @map("announcement")
+  // Phase 12-3: sent to exactly one recipient (the requester,
+  // OrganizationCreationRequest.requestedByUserId) when their organization
+  // creation request is approved or rejected -- never fanned out, unlike
+  // ANNOUNCEMENT above. relatedType is "organization_creation_request",
+  // relatedId is OrganizationCreationRequest.id. Created inside the same
+  // transaction as the request's own status update (see
+  // organization/service.ts's approveOrganizationCreationRequest/
+  // rejectOrganizationCreationRequest), same "creation stays inside the
+  // causing domain's own transaction" rule notification/service.ts's own
+  // module comment states. No resolveHref.ts entry yet -- there is no
+  // per-request detail page for a regular user this phase (only
+  // /organizations/create), so this falls through to no-link the same way
+  // a stale "match" relatedType already does; the notification's own
+  // title/content still renders normally either way.
+  ORGANIZATION_REQUEST_PROCESSED @map("organization_request_processed")
 }
 
 // Phase 11-5: the four categories this app's own Feedback form (not
@@ -111,10 +126,47 @@ enum FeedbackStatus {
   NOT_PLANNED @map("not_planned")
 }
 
+// Phase 12-2: an OrganizationMember's role within exactly one
+// Organization -- deliberately separate from the single global
+// User.isAdmin flag (Platform Admin), which every org-authz helper in
+// src/lib/organization/authz.ts treats as a completely independent axis
+// (see that file's own comment). LEADER/ADMIN/MEMBER only ever apply
+// scoped to one OrganizationMember row, never globally.
+enum OrganizationRole {
+  LEADER @map("leader")
+  ADMIN  @map("admin")
+  MEMBER @map("member")
+}
+
+// Phase 12-2: mirrors User's own soft-delete philosophy (see
+// User.deletedAt / withdrawUser()'s own comment) -- an Organization is
+// never hard-deleted, only deactivated, so every FK pointing at it can
+// stay simple and nothing that already referenced it (posts, comments,
+// membership history once post/comment integration lands in a later
+// phase) ever needs special-case handling for "the org row is just gone."
+enum OrganizationStatus {
+  ACTIVE   @map("active")
+  INACTIVE @map("inactive")
+}
+
+// Shared by OrganizationCreationRequest.status and
+// OrganizationJoinRequest.status -- both are the exact same "누가 신청 ->
+// 검토자 승인/거절/신청자 취소" shape, just with a different reviewer
+// audience (Platform Admin vs. an org's own LEADER/ADMIN) and a different
+// side effect on approval, so one enum is reused rather than declaring two
+// identical ones -- same reasoning ReportTargetType's own comment gives
+// for being shared by Report and ModerationAction.
+enum OrganizationRequestStatus {
+  PENDING   @map("pending")
+  APPROVED  @map("approved")
+  REJECTED  @map("rejected")
+  CANCELLED @map("cancelled")
+}
+
 // ---------- User ----------
 
 model User {
-  id              Int       @id @default(autoincrement())
+  id                        Int       @id @default(autoincrement())
   // Phase H-7: opaque, unguessable identifier for public profile URLs
   // (/profile/[publicId]) -- kept entirely separate from `id` above,
   // which stays the internal identifier for ownership/relations/session
@@ -127,18 +179,18 @@ model User {
   // pre-existing data, unlike a client-side default which only ever
   // applies to rows inserted after the change. Immutable in practice
   // because no API/action in this app ever writes to it post-creation.
-  publicId        String    @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid @map("public_id")
-  email           String    @unique
-  name            String
+  publicId                  String    @unique @default(dbgenerated("gen_random_uuid()")) @map("public_id") @db.Uuid
+  email                     String    @unique
+  name                      String
   // Phase H-7: duplicate nicknames are now allowed by design (this
   // phase's own spec) -- public identity/URLs use `publicId` above
   // instead, so nickname no longer needs to be unique for that purpose.
   // The old idx_user_nickname/User_nickname_key UNIQUE index is dropped
   // in this phase's migration.
-  nickname        String?
-  isAdmin         Boolean   @default(false) @map("is_admin")
-  isSuspended     Boolean   @default(false) @map("is_suspended")
-  suspendedUntil  DateTime? @map("suspended_until")
+  nickname                  String?
+  isAdmin                   Boolean   @default(false) @map("is_admin")
+  isSuspended               Boolean   @default(false) @map("is_suspended")
+  suspendedUntil            DateTime? @map("suspended_until")
   // Phase H-3: which admin most recently suspended this user -- mirrors
   // isSuspended/suspendedUntil's own "current state only, not a history
   // log" shape (see H-2's analysis): cleared to null on unsuspend, the
@@ -151,15 +203,15 @@ model User {
   // the same User row that flow was already updating. Never populated
   // retroactively for suspensions that predate this column -- those stay
   // null, permanently unknown (no source of truth exists to recover it).
-  suspendedByUserId Int?  @map("suspended_by_user_id")
-  suspendedBy       User? @relation("UserSuspendedBy", fields: [suspendedByUserId], references: [id], onDelete: Restrict)
+  suspendedByUserId         Int?      @map("suspended_by_user_id")
+  suspendedBy               User?     @relation("UserSuspendedBy", fields: [suspendedByUserId], references: [id], onDelete: Restrict)
   // Google's stable per-account identifier ("sub"), separate from email
   // (which Google account holders can in principle change) -- set on
   // first sign-in. There's only one provider (Google) and no next-auth
   // Adapter in use (see src/lib/auth/*), so a single nullable column here
   // is enough; a full Account table only earns its keep once a second
   // login provider needs linking to the same User.
-  googleId        String?   @unique @map("google_id")
+  googleId                  String?   @unique @map("google_id")
   // Phase I: cooldown gate for nickname changes from /me (onboarding's own
   // one-time initial set, onboarding/actions.ts, never touches this --
   // only a later *change* does). Stores the next allowed change instant
@@ -179,7 +231,7 @@ model User {
   // so a data anomaly reads as "unknown", never a fabricated timestamp).
   // Deliberately NOT a "currently online" signal -- see admin/users.ts's
   // getUserDetailForAdmin for why presence isn't derived from this alone.
-  lastLoginAt     DateTime? @map("last_login_at")
+  lastLoginAt               DateTime? @map("last_login_at")
   // Phase 8: NULL means this user has never agreed to the service's
   // privacy notice; a timestamp means they agreed at that exact instant.
   // Deliberately NOT a boolean -- a single flag would lose *when* consent
@@ -191,7 +243,7 @@ model User {
   // never backfilled for existing rows by this migration, so every user
   // who signed up before this phase starts out requiring consent exactly
   // like a brand-new user does.
-  privacyConsentAt DateTime? @map("privacy_consent_at")
+  privacyConsentAt          DateTime? @map("privacy_consent_at")
   // Phase 10: NULL means this account is active; a timestamp means the
   // user withdrew at that instant (auth/user.ts's withdrawUser -- the
   // only place this is ever set, always by the account's own owner, never
@@ -201,45 +253,62 @@ model User {
   // this flag is what actually makes the account unusable -- session.ts's
   // getCurrentUser() treats any row with this set as "not logged in",
   // regardless of how valid the session cookie still looks.
-  deletedAt       DateTime? @map("deleted_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt                 DateTime? @map("deleted_at")
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
 
-  lostPosts             LostPost[]
-  foundPosts            FoundPost[]
-  comments              Comment[]
-  initiatedChatRooms    ChatRoom[]         @relation("ChatRoomInitiator")
-  sentMessages          Message[]          @relation("MessageSender")
-  hiddenMessages        Message[]          @relation("MessageHiddenBy")
+  lostPosts                    LostPost[]
+  foundPosts                   FoundPost[]
+  comments                     Comment[]
+  initiatedChatRooms           ChatRoom[]                    @relation("ChatRoomInitiator")
+  sentMessages                 Message[]                     @relation("MessageSender")
+  hiddenMessages               Message[]                     @relation("MessageHiddenBy")
   // Phase N: this user's own read cursor in each room they're part of --
   // see ChatRead's own comment.
-  chatReads             ChatRead[]
-  reportsFiled          Report[]           @relation("ReportReporter")
-  reportsProcessed      Report[]           @relation("ReportProcessedBy")
-  moderationActions     ModerationAction[]
-  notifications         Notification[]
-  messageReactions      MessageReaction[]
+  chatReads                    ChatRead[]
+  reportsFiled                 Report[]                      @relation("ReportReporter")
+  reportsProcessed             Report[]                      @relation("ReportProcessedBy")
+  moderationActions            ModerationAction[]
+  notifications                Notification[]
+  messageReactions             MessageReaction[]
   // Phase H-3: the reverse side of suspendedBy above -- every user this
   // admin has directly or via report-flow suspended (current state only,
   // see that field's own comment). Never queried from the User side in
   // this app today; kept only because Prisma requires the back-relation to
   // be declared on both models for a self-relation.
-  suspendedByActions    User[]             @relation("UserSuspendedBy")
-  appSettingsUpdates    AppSettings[]
+  suspendedByActions           User[]                        @relation("UserSuspendedBy")
+  appSettingsUpdates           AppSettings[]
   // Phase I: appeals this user has filed against their own suspension(s),
   // and (separately) appeals this user has reviewed as an admin -- see
   // SuspensionAppeal's own comment for the full shape.
-  suspensionAppeals         SuspensionAppeal[] @relation("SuspensionAppealUser")
-  suspensionAppealsReviewed SuspensionAppeal[] @relation("SuspensionAppealReviewedBy")
+  suspensionAppeals            SuspensionAppeal[]            @relation("SuspensionAppealUser")
+  suspensionAppealsReviewed    SuspensionAppeal[]            @relation("SuspensionAppealReviewedBy")
   // Phase M: announcements this admin has authored -- see Announcement's
   // own comment. Only one FK path between the two models, so (like
   // appSettingsUpdates above) this needs no explicit relation name.
-  announcementsCreated      Announcement[]
+  announcementsCreated         Announcement[]
   // Phase 11-5: this user's own submitted service-feedback -- see
   // Feedback's own comment for why this is a separate model from Report.
   // Only one FK path (userId), so (like announcementsCreated above) no
   // explicit relation name is needed.
-  feedbacksSubmitted        Feedback[]
+  feedbacksSubmitted           Feedback[]
+  // Phase 12-2: this user's own organization memberships (across every
+  // organization they belong to, any role) -- only one FK path
+  // (userId), so no explicit relation name needed.
+  organizationMemberships      OrganizationMember[]
+  // Phase 12-2: two distinct actor roles on OrganizationCreationRequest,
+  // same "two relation names off the same User model" mechanic
+  // Report.reporterUserId/processedByUserId already established --
+  // requests this user filed (as an applicant) vs. requests this user
+  // reviewed (as a Platform Admin, requireAdmin()-gated).
+  organizationCreationRequests OrganizationCreationRequest[] @relation("OrgCreationRequester")
+  organizationCreationReviews  OrganizationCreationRequest[] @relation("OrgCreationReviewer")
+  // Phase 12-2: same actor-role split as above, this time for
+  // OrganizationJoinRequest -- requests this user filed (to join some
+  // organization) vs. requests this user reviewed (as that organization's
+  // own LEADER/ADMIN, never a Platform Admin concern).
+  organizationJoinRequests     OrganizationJoinRequest[]     @relation("OrgJoinRequester")
+  organizationJoinReviews      OrganizationJoinRequest[]     @relation("OrgJoinReviewer")
 
   @@map("User")
 }
@@ -247,23 +316,23 @@ model User {
 // ---------- LostPost ----------
 
 model LostPost {
-  id          Int             @id @default(autoincrement())
-  userId      Int             @map("user_id")
-  user        User            @relation(fields: [userId], references: [id], onDelete: Restrict)
-  title       String          @db.Text
-  description String          @db.Text
+  id             Int                         @id @default(autoincrement())
+  userId         Int                         @map("user_id")
+  user           User                        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  title          String                      @db.Text
+  description    String                      @db.Text
   // Kept as free text (matches the original TEXT column, no CHECK/enum on
   // category in schema.sql) even though /lost and /search will likely want
   // to filter by category later -- adding an index/enum is a decision for
   // whichever phase builds that filter, not this one.
-  category    String          @db.Text
+  category       String                      @db.Text
   // Phase P-5: nullable, not an empty-string/"미상" placeholder -- null
   // means "the poster genuinely doesn't know the location", a real,
   // distinct state from an empty required field. buildEmbeddingText()
   // (src/lib/ai/embedding.ts) already treats a falsy field as "skip it",
   // so a null location simply drops out of the embedding text instead of
   // polluting it with a meaningless placeholder token.
-  location    String?         @db.Text
+  location       String?                     @db.Text
   // Phase 31: a fixed set of two real MJU campuses (see CAMPUSES in
   // src/lib/posts/schema.ts) -- unlike `category`/`location` above, this
   // is a brand-new field with no legacy free-text data to stay
@@ -272,18 +341,18 @@ model LostPost {
   // the DB level" convention `category` already follows -- see that
   // field's own comment. Required, defaulting existing/omitted rows to
   // "인문캠퍼스" per this phase's spec.
-  campus      String          @default("인문캠퍼스") @db.Text
+  campus         String                      @default("인문캠퍼스") @db.Text
   // Phase P-5: nullable, same "genuine unknown, not a fabricated date"
   // reasoning as `location` above -- never defaulted to `now()` or any
   // other invented timestamp. lostAt/foundAt were never part of search
   // filtering or sorting (buildSearchWhere/buildOrderBy use `createdAt`
   // instead, see posts/service.ts), so making this nullable has no
   // search-ordering impact.
-  lostAt      DateTime?       @map("lost_at")
-  status      LostPostStatus  @default(SEARCHING)
-  imageUrl    String?         @db.Text @map("image_url")
-  createdAt   DateTime        @default(now()) @map("created_at")
-  updatedAt   DateTime        @updatedAt @map("updated_at")
+  lostAt         DateTime?                   @map("lost_at")
+  status         LostPostStatus              @default(SEARCHING)
+  imageUrl       String?                     @map("image_url") @db.Text
+  createdAt      DateTime                    @default(now()) @map("created_at")
+  updatedAt      DateTime                    @updatedAt @map("updated_at")
   // pgvector, 768-dim (jhgan/ko-sroberta-multitask's output size -- see
   // docs/AI_MATCHING_ARCHITECTURE.md). Prisma has no native vector type,
   // so this is Unsupported -- it never appears in Prisma Client's
@@ -292,7 +361,7 @@ model LostPost {
   // with no embedding yet (creation failed to embed, or predates this
   // column) simply doesn't participate in similarity search, rather than
   // being disallowed from existing at all.
-  embedding   Unsupported("vector(768)")?
+  embedding      Unsupported("vector(768)")?
   // pgvector, 768-dim (Xenova/siglip-base-patch16-224's vision-tower output
   // size -- see docs/IMAGE_EMBEDDING_POC.md). A deliberately separate
   // column from `embedding` above, never the same vector space -- text and
@@ -305,10 +374,23 @@ model LostPost {
   // (src/lib/posts/views.ts) rather than on every render -- see that
   // file's own comment for why. Existing rows default to 0 via the
   // migration, same as any other additive column in this schema.
-  viewCount   Int             @default(0) @map("view_count")
+  viewCount      Int                         @default(0) @map("view_count")
+  // Phase 12-5: optional org attribution -- the actual author/owner is
+  // always `user` above (unchanged); this only marks which Organization,
+  // if any, the post is posted *as*. Set once at creation and never
+  // changed by update (see posts/aiService.ts's updateLostPost -- it never
+  // accepts this field), so a post's attribution can't drift after a user
+  // later leaves the organization, gets demoted, or the organization is
+  // deactivated (Phase 12-1 §9/Phase 12-5's own spec). SetNull (not
+  // Restrict/Cascade) because an Organization is only ever deactivated,
+  // never hard-deleted today -- but if a future cleanup phase ever does
+  // delete one, existing posts should survive as ordinary personal posts
+  // rather than being blocked or cascaded away.
+  organizationId Int?                        @map("organization_id")
+  organization   Organization?               @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
-  comments         Comment[]
-  directChatRooms  ChatRoom[] @relation("ChatRoomDirectLostPost")
+  comments        Comment[]
+  directChatRooms ChatRoom[]  @relation("ChatRoomDirectLostPost")
   // Phase 11-4B: `imageUrl`/`embedding`/`imageEmbedding` above are kept
   // exactly as-is (never removed) -- they now serve as a denormalized
   // "primary image" cache, synced from whichever PostImage row has
@@ -317,44 +399,49 @@ model LostPost {
   // recommendation hydration) keeps working with zero changes. This
   // relation is additive only; nothing in this phase actually writes to
   // it from the upload/edit flow yet (see PostImage's own comment).
-  images           PostImage[]
+  images          PostImage[]
 
   @@index([userId], map: "idx_lostpost_user_id")
+  @@index([organizationId], map: "idx_lostpost_organization_id")
   @@map("LostPost")
 }
 
 // ---------- FoundPost ----------
 
 model FoundPost {
-  id          Int              @id @default(autoincrement())
-  userId      Int              @map("user_id")
-  user        User             @relation(fields: [userId], references: [id], onDelete: Restrict)
-  title       String           @db.Text
-  description String           @db.Text
-  category    String           @db.Text
+  id             Int                         @id @default(autoincrement())
+  userId         Int                         @map("user_id")
+  user           User                        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  title          String                      @db.Text
+  description    String                      @db.Text
+  category       String                      @db.Text
   // See LostPost.location's comment -- identical shape/reasoning.
-  location    String?          @db.Text
+  location       String?                     @db.Text
   // See LostPost.campus's comment -- identical shape/reasoning.
-  campus      String           @default("인문캠퍼스") @db.Text
+  campus         String                      @default("인문캠퍼스") @db.Text
   // See LostPost.lostAt's comment -- identical shape/reasoning.
-  foundAt     DateTime?        @map("found_at")
-  status      FoundPostStatus  @default(KEEPING)
-  imageUrl    String?          @db.Text @map("image_url")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
+  foundAt        DateTime?                   @map("found_at")
+  status         FoundPostStatus             @default(KEEPING)
+  imageUrl       String?                     @map("image_url") @db.Text
+  createdAt      DateTime                    @default(now()) @map("created_at")
+  updatedAt      DateTime                    @updatedAt @map("updated_at")
   // See LostPost.embedding's comment -- identical shape/reasoning.
-  embedding   Unsupported("vector(768)")?
+  embedding      Unsupported("vector(768)")?
   // See LostPost.imageEmbedding's comment -- identical shape/reasoning.
   imageEmbedding Unsupported("vector(768)")?
   // See LostPost.viewCount's comment -- identical shape/reasoning.
-  viewCount   Int              @default(0) @map("view_count")
+  viewCount      Int                         @default(0) @map("view_count")
+  // See LostPost.organizationId's own comment -- identical shape/reasoning.
+  organizationId Int?                        @map("organization_id")
+  organization   Organization?               @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
-  comments         Comment[]
-  directChatRooms  ChatRoom[] @relation("ChatRoomDirectFoundPost")
+  comments        Comment[]
+  directChatRooms ChatRoom[]  @relation("ChatRoomDirectFoundPost")
   // See LostPost.images's own comment -- identical shape/reasoning.
-  images           PostImage[]
+  images          PostImage[]
 
   @@index([userId], map: "idx_foundpost_user_id")
+  @@index([organizationId], map: "idx_foundpost_organization_id")
   @@map("FoundPost")
 }
 
@@ -393,7 +480,7 @@ model PostImage {
   lostPost     LostPost?  @relation(fields: [lostPostId], references: [id], onDelete: Cascade)
   foundPostId  Int?       @map("found_post_id")
   foundPost    FoundPost? @relation(fields: [foundPostId], references: [id], onDelete: Cascade)
-  imageUrl     String     @db.Text @map("image_url")
+  imageUrl     String     @map("image_url") @db.Text
   // 0-based, unique within a post (not DB-enforced -- same "ordering is
   // an application-code invariant, not a uniqueness constraint" approach
   // ordinary list-ordering columns take elsewhere in this app; a gap or a
@@ -459,14 +546,14 @@ model MatchCandidateCache {
 // same convention the legacy schema uses everywhere else (e.g.
 // LostPost.category isn't constrained either).
 model ChatRoom {
-  id                   Int        @id @default(autoincrement())
-  directLostPostId     Int?       @map("direct_lost_post_id")
-  directLostPost       LostPost?  @relation("ChatRoomDirectLostPost", fields: [directLostPostId], references: [id], onDelete: Cascade)
-  directFoundPostId    Int?       @map("direct_found_post_id")
-  directFoundPost      FoundPost? @relation("ChatRoomDirectFoundPost", fields: [directFoundPostId], references: [id], onDelete: Cascade)
-  initiatorUserId      Int?       @map("initiator_user_id")
-  initiator            User?      @relation("ChatRoomInitiator", fields: [initiatorUserId], references: [id], onDelete: Restrict)
-  createdAt            DateTime   @default(now()) @map("created_at")
+  id                Int        @id @default(autoincrement())
+  directLostPostId  Int?       @map("direct_lost_post_id")
+  directLostPost    LostPost?  @relation("ChatRoomDirectLostPost", fields: [directLostPostId], references: [id], onDelete: Cascade)
+  directFoundPostId Int?       @map("direct_found_post_id")
+  directFoundPost   FoundPost? @relation("ChatRoomDirectFoundPost", fields: [directFoundPostId], references: [id], onDelete: Cascade)
+  initiatorUserId   Int?       @map("initiator_user_id")
+  initiator         User?      @relation("ChatRoomInitiator", fields: [initiatorUserId], references: [id], onDelete: Restrict)
+  createdAt         DateTime   @default(now()) @map("created_at")
 
   messages  Message[]
   chatReads ChatRead[]
@@ -500,27 +587,27 @@ model ChatRoom {
 // ---------- Message ----------
 
 model Message {
-  id               Int       @id @default(autoincrement())
-  chatRoomId       Int       @map("chat_room_id")
-  chatRoom         ChatRoom  @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
-  senderUserId     Int       @map("sender_user_id")
-  sender           User      @relation("MessageSender", fields: [senderUserId], references: [id], onDelete: Restrict)
-  content          String    @db.Text
-  createdAt        DateTime  @default(now()) @map("created_at")
+  id               Int               @id @default(autoincrement())
+  chatRoomId       Int               @map("chat_room_id")
+  chatRoom         ChatRoom          @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  senderUserId     Int               @map("sender_user_id")
+  sender           User              @relation("MessageSender", fields: [senderUserId], references: [id], onDelete: Restrict)
+  content          String            @db.Text
+  createdAt        DateTime          @default(now()) @map("created_at")
   // Phase P-6: null means never edited. Set only by the sender editing
   // their own message's text (see chat/service.ts's editMessage) -- purely
   // additive/nullable, every existing message defaults to "never edited".
   // Distinct from hiddenAt below: an edit changes content in place, a
   // delete masks it -- a message can be edited any number of times before
   // (or instead of) ever being deleted.
-  editedAt         DateTime? @map("edited_at")
+  editedAt         DateTime?         @map("edited_at")
   // Phase N: superseded by the per-(room,user) cursor in ChatRead below --
   // this per-message column is no longer written to (chat/service.ts no
   // longer has any bulk-UPDATE-many-messages read path) or read for
   // display, but is kept in the schema unchanged rather than dropped, per
   // this phase's own "기존 ChatRoom/Message 구조를 최대한 유지" instruction.
   // Historical rows keep whatever value they already had.
-  readAt           DateTime? @map("read_at")
+  readAt           DateTime?         @map("read_at")
   // Phase P-6: reused as-is for a sender's own "메시지 삭제" (soft delete),
   // not a new column/policy -- previously only ever set by admin
   // moderation (Report -> HIDE_MESSAGE). hiddenByUserId === senderUserId
@@ -529,10 +616,10 @@ model Message {
   // "삭제된 메시지입니다." vs the existing admin-hidden placeholder, never a
   // new field. See this phase's own "기존 hidden 구조를 우선 활용, 새 삭제
   // 정책을 임의로 만들지 않는다" instruction.
-  hiddenAt         DateTime? @map("hidden_at")
-  hiddenByUserId   Int?      @map("hidden_by_user_id")
-  hiddenBy         User?     @relation("MessageHiddenBy", fields: [hiddenByUserId], references: [id], onDelete: Restrict)
-  hiddenReason     String?   @db.Text @map("hidden_reason")
+  hiddenAt         DateTime?         @map("hidden_at")
+  hiddenByUserId   Int?              @map("hidden_by_user_id")
+  hiddenBy         User?             @relation("MessageHiddenBy", fields: [hiddenByUserId], references: [id], onDelete: Restrict)
+  hiddenReason     String?           @map("hidden_reason") @db.Text
   // Phase 28-3: same "public Storage URL string, nullable" shape as
   // LostPost/FoundPost.imageUrl -- a message can carry an image instead
   // of (or alongside) text; `content` stays a required column (an
@@ -540,7 +627,7 @@ model Message {
   // so this is a purely additive column with zero migration needed for
   // any existing row (defaults to NULL, meaning "no image", for every
   // message sent before this phase).
-  imageUrl         String?   @db.Text @map("image_url")
+  imageUrl         String?           @map("image_url") @db.Text
   // Phase D-3: unlike Comment.parentId (Cascade, capped at one level),
   // replies here have no depth limit -- replying to a reply is normal
   // chat UX (KakaoTalk/Instagram DMs both allow it) -- and use
@@ -550,9 +637,9 @@ model Message {
   // is ever added -- losing the "replied to" pointer on an old message
   // should never cascade-delete an entire reply chain's worth of chat
   // history.
-  replyToMessageId Int?      @map("reply_to_message_id")
-  replyToMessage   Message?  @relation("MessageReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
-  replies          Message[] @relation("MessageReplies")
+  replyToMessageId Int?              @map("reply_to_message_id")
+  replyToMessage   Message?          @relation("MessageReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies          Message[]         @relation("MessageReplies")
   // Phase D-4
   reactions        MessageReaction[]
 
@@ -623,22 +710,22 @@ model MessageReaction {
 // ---------- Report ----------
 
 model Report {
-  id                 Int              @id @default(autoincrement())
-  reporterUserId     Int              @map("reporter_user_id")
-  reporter           User             @relation("ReportReporter", fields: [reporterUserId], references: [id], onDelete: Restrict)
-  targetType         ReportTargetType @map("target_type")
+  id                Int              @id @default(autoincrement())
+  reporterUserId    Int              @map("reporter_user_id")
+  reporter          User             @relation("ReportReporter", fields: [reporterUserId], references: [id], onDelete: Restrict)
+  targetType        ReportTargetType @map("target_type")
   // Polymorphic reference (post/message/user, per targetType) -- not a
   // real foreign key in the legacy schema either, so it stays a plain
   // column here too.
-  targetId           Int              @map("target_id")
-  reason             String           @db.Text
-  detail             String?          @db.Text
-  createdAt          DateTime         @default(now()) @map("created_at")
-  status             ReportStatus     @default(PENDING)
-  processedAt        DateTime?        @map("processed_at")
-  processedByUserId  Int?             @map("processed_by_user_id")
-  processedBy        User?            @relation("ReportProcessedBy", fields: [processedByUserId], references: [id], onDelete: Restrict)
-  adminNote          String?          @db.Text @map("admin_note")
+  targetId          Int              @map("target_id")
+  reason            String           @db.Text
+  detail            String?          @db.Text
+  createdAt         DateTime         @default(now()) @map("created_at")
+  status            ReportStatus     @default(PENDING)
+  processedAt       DateTime?        @map("processed_at")
+  processedByUserId Int?             @map("processed_by_user_id")
+  processedBy       User?            @relation("ReportProcessedBy", fields: [processedByUserId], references: [id], onDelete: Restrict)
+  adminNote         String?          @map("admin_note") @db.Text
 
   moderationAction ModerationAction?
 
@@ -651,7 +738,7 @@ model Report {
 // ---------- ModerationAction ----------
 
 model ModerationAction {
-  id           Int                  @id @default(autoincrement())
+  id             Int                  @id @default(autoincrement())
   // Phase I: nullable now -- a direct admin suspension (admin/users.ts's
   // updateUserByAdmin, unlike the report-flow's applyReportAction) has no
   // underlying Report to attach to, so it records a ModerationAction with
@@ -661,27 +748,27 @@ model ModerationAction {
   // NULL in a unique index, so any number of reportId: null rows coexist
   // fine, while a real report can still only ever have one action, exactly
   // as before.
-  reportId     Int?                 @unique @map("report_id")
-  report       Report?              @relation(fields: [reportId], references: [id], onDelete: Restrict)
-  targetType   ReportTargetType     @map("target_type")
-  targetId     Int                  @map("target_id")
-  actionType   ModerationActionType @map("action_type")
+  reportId       Int?                 @unique @map("report_id")
+  report         Report?              @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  targetType     ReportTargetType     @map("target_type")
+  targetId       Int                  @map("target_id")
+  actionType     ModerationActionType @map("action_type")
   // Phase I: the free-form "상세 사유" -- unchanged column, now paired with
   // reasonCategory below. Required (application-layer, not a DB
   // constraint -- same "no CHECK/enum" convention every free-text reason
   // column in this schema already follows, see Report.reason's own
   // comment) specifically for actionType=SUSPEND_USER; stays optional for
   // the other three action types exactly as before.
-  reason       String?              @db.Text
+  reason         String?              @db.Text
   // Phase I: the picked preset (허위 게시물/부적절한 게시물/욕설·비방/반복적인
   // 규정 위반/스팸·도배/기타), only ever populated alongside `reason` for a
   // SUSPEND_USER action -- null for delete_post/hide_message/delete_comment,
   // which this phase does not touch.
-  reasonCategory String?            @db.Text @map("reason_category")
-  adminUserId  Int                  @map("admin_user_id")
-  adminUser    User                 @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
-  createdAt    DateTime             @default(now()) @map("created_at")
-  expiresAt    DateTime?            @map("expires_at")
+  reasonCategory String?              @map("reason_category") @db.Text
+  adminUserId    Int                  @map("admin_user_id")
+  adminUser      User                 @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
+  createdAt      DateTime             @default(now()) @map("created_at")
+  expiresAt      DateTime?            @map("expires_at")
 
   // Phase 11-3: this table previously had no index at all besides the
   // reportId unique -- added only after confirming both of these are real,
@@ -731,12 +818,12 @@ model SuspensionAppeal {
 // ---------- Notification ----------
 
 model Notification {
-  id           Int              @id @default(autoincrement())
-  userId       Int              @map("user_id")
-  user         User             @relation(fields: [userId], references: [id], onDelete: Restrict)
-  type         NotificationType
-  title        String           @db.Text
-  content      String           @db.Text
+  id          Int              @id @default(autoincrement())
+  userId      Int              @map("user_id")
+  user        User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  type        NotificationType
+  title       String           @db.Text
+  content     String           @db.Text
   // @db.Text is safe here even though this column is part of the composite
   // unique index below: PostgreSQL (unlike MySQL, which needs a prefix
   // length for TEXT/BLOB columns in an index) has no such restriction, and
@@ -744,10 +831,10 @@ model Notification {
   // already `text` regardless -- this annotation is just made explicit for
   // consistency with the rest of this schema. Same free-text, no-FK shape
   // as Report/ModerationAction's targetId in the legacy schema.
-  relatedType  String?          @db.Text @map("related_type")
-  relatedId    Int?             @map("related_id")
-  isRead       Boolean          @default(false) @map("is_read")
-  createdAt    DateTime         @default(now()) @map("created_at")
+  relatedType String?          @map("related_type") @db.Text
+  relatedId   Int?             @map("related_id")
+  isRead      Boolean          @default(false) @map("is_read")
+  createdAt   DateTime         @default(now()) @map("created_at")
 
   @@unique([userId, type, relatedType, relatedId])
   @@index([userId, isRead, createdAt(sort: Desc)], map: "idx_notification_user_read_created")
@@ -766,29 +853,37 @@ model Notification {
 // (comment/service.ts), not a DB constraint -- same convention this
 // schema already uses everywhere a row can point at one of two tables.
 model Comment {
-  id             Int        @id @default(autoincrement())
-  lostPostId     Int?       @map("lost_post_id")
-  lostPost       LostPost?  @relation(fields: [lostPostId], references: [id], onDelete: Cascade)
-  foundPostId    Int?       @map("found_post_id")
-  foundPost      FoundPost? @relation(fields: [foundPostId], references: [id], onDelete: Cascade)
-  authorUserId   Int        @map("author_user_id")
-  author         User       @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
-  content        String     @db.Text
-  createdAt      DateTime   @default(now()) @map("created_at")
-  updatedAt      DateTime   @updatedAt @map("updated_at")
+  id             Int           @id @default(autoincrement())
+  lostPostId     Int?          @map("lost_post_id")
+  lostPost       LostPost?     @relation(fields: [lostPostId], references: [id], onDelete: Cascade)
+  foundPostId    Int?          @map("found_post_id")
+  foundPost      FoundPost?    @relation(fields: [foundPostId], references: [id], onDelete: Cascade)
+  authorUserId   Int           @map("author_user_id")
+  author         User          @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+  content        String        @db.Text
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
   // Phase C-2: one level of replies only, enforced in application code
   // (comment/service.ts rejects creating a reply whose parent already has
   // a parentId of its own) -- not a DB constraint, same convention as the
   // "exactly one of lostPostId/foundPostId" rule above. onDelete: Cascade
   // means deleting a top-level comment also deletes its own replies,
   // never anything deeper (depth is capped at 1 by construction).
-  parentId       Int?       @map("parent_id")
-  parent         Comment?   @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies        Comment[]  @relation("CommentReplies")
+  parentId       Int?          @map("parent_id")
+  parent         Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies        Comment[]     @relation("CommentReplies")
+  // Phase 12-5: see LostPost.organizationId's own comment -- identical
+  // shape/reasoning. Deliberately independent of the post's own
+  // organizationId: a comment on someone else's (or an individual's) post
+  // can still be posted as an organization, and vice versa (this phase's
+  // own spec §19 example).
+  organizationId Int?          @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
   @@index([lostPostId, createdAt], map: "idx_comment_lost_post_created")
   @@index([foundPostId, createdAt], map: "idx_comment_found_post_created")
   @@index([parentId], map: "idx_comment_parent")
+  @@index([organizationId], map: "idx_comment_organization_id")
   @@map("Comment")
 }
 
@@ -808,11 +903,11 @@ model Comment {
 // Report.targetId) -- a row surviving after its post is deleted is inert
 // bookkeeping, never read back for anything once the post is gone.
 model PostView {
-  id         Int      @id @default(autoincrement())
-  postType   String   @map("post_type")
-  postId     Int      @map("post_id")
-  viewerKey  String   @map("viewer_key")
-  viewedAt   DateTime @default(now()) @map("viewed_at")
+  id        Int      @id @default(autoincrement())
+  postType  String   @map("post_type")
+  postId    Int      @map("post_id")
+  viewerKey String   @map("viewer_key")
+  viewedAt  DateTime @default(now()) @map("viewed_at")
 
   @@unique([postType, postId, viewerKey])
   @@map("PostView")
@@ -899,7 +994,7 @@ model Feedback {
   status    FeedbackStatus   @default(RECEIVED)
   // Admin-only free text -- never shown to the submitting user (see this
   // phase's own spec section 5-8/5-9: only 관리자 reads/writes this).
-  adminNote String?          @db.Text @map("admin_note")
+  adminNote String?          @map("admin_note") @db.Text
   createdAt DateTime         @default(now()) @map("created_at")
   updatedAt DateTime         @updatedAt @map("updated_at")
 
@@ -907,3 +1002,152 @@ model Feedback {
   @@index([status], map: "idx_feedback_status")
   @@map("Feedback")
 }
+
+// ---------- Organization ----------
+// Phase 12-2: DB/service/authz groundwork only -- see the Phase 12-1
+// design report for the full rationale. No UI, no /organizations routes,
+// and LostPost/FoundPost/Comment do NOT get an organizationId column yet;
+// this phase only lays down Organization/OrganizationMember/
+// OrganizationCreationRequest/OrganizationJoinRequest and the
+// service/authz layer above them. Phase 12-5 later adds the
+// organizationId column to LostPost/FoundPost/Comment (see each model's
+// own comment) -- everything else below is unchanged from Phase 12-2.
+//
+// Design principle carried through every model below: the actor who
+// performs an action is always a real User (Restrict FK, matching this
+// schema's own dominant convention of protecting a User row from
+// disappearing out from under other people's data); who/what an action is
+// *about* (an Organization, or -- in a later phase -- an org-authored
+// post) is a separate, more permissive FK. Same actor/subject split this
+// schema already uses for Report.reporterUserId vs. targetType/targetId.
+
+// An Organization is never hard-deleted, only deactivated (status =
+// INACTIVE) -- see OrganizationStatus's own comment. No `publicId` here
+// unlike User: an organization's existence is meant to be publicly
+// discoverable (unlike an individual's account), so its own sequential
+// `id` in a URL leaks nothing an org wouldn't already want visible --
+// this is a deliberate, reasoned deviation from the User.publicId
+// pattern, not an oversight.
+model Organization {
+  id               Int                @id @default(autoincrement())
+  name             String             @db.Text
+  description      String?            @db.Text
+  // Free text ("학생회"/"동아리"/"행정팀"/...), same convention as
+  // LostPost.category -- no CHECK/enum for an open-ended lookup-like
+  // value in this schema.
+  organizationType String             @map("organization_type") @db.Text
+  // 소속 단과대/학과 등 -- free text, not the fixed 2-value CAMPUSES set
+  // LostPost.campus uses, since an organization's scope doesn't fit that
+  // same closed vocabulary (a university-wide org spans both campuses).
+  scope            String?            @db.Text
+  contactEmail     String?            @map("contact_email") @db.Text
+  status           OrganizationStatus @default(ACTIVE)
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+
+  members      OrganizationMember[]
+  joinRequests OrganizationJoinRequest[]
+  // Phase 12-5: back-relations for LostPost/FoundPost/Comment.organizationId
+  // -- see each of those fields' own comment. Purely for Prisma's relation
+  // graph; no query in this app lists "all posts/comments for an org" via
+  // these fields directly (organization/service.ts's own listing, if any,
+  // queries LostPost/FoundPost with a where: { organizationId } instead).
+  lostPosts    LostPost[]
+  foundPosts   FoundPost[]
+  comments     Comment[]
+
+  @@index([status], map: "idx_organization_status")
+  @@map("Organization")
+}
+
+// The join between User and Organization, with a per-membership role.
+// `@@unique([organizationId, userId])` is what makes "a user can't join
+// the same organization twice" a real DB constraint, not just an
+// application-layer check -- createJoinRequest()/approveJoinRequest() in
+// organization/service.ts still re-check it themselves first (for a
+// clean typed "already a member" result instead of a raw constraint-
+// violation error), but the index is the actual backstop.
+model OrganizationMember {
+  id             Int              @id @default(autoincrement())
+  organizationId Int              @map("organization_id")
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         Int              @map("user_id")
+  user           User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  role           OrganizationRole @default(MEMBER)
+  joinedAt       DateTime         @default(now()) @map("joined_at")
+
+  @@unique([organizationId, userId])
+  @@index([userId], map: "idx_org_member_user_id")
+  @@index([organizationId, role], map: "idx_org_member_org_role")
+  @@map("OrganizationMember")
+}
+
+// A user's request to have a brand-new Organization created, reviewed by
+// a Platform Admin (never an org-internal reviewer -- no Organization
+// exists yet for this request to belong to). On approval,
+// organization/service.ts::approveOrganizationCreationRequest() creates
+// the Organization + an OrganizationMember(role=LEADER) for
+// requestedByUserId, and this row's own resultingOrganizationId, in one
+// transaction (mirrors createAnnouncement()'s own
+// create-then-fan-out-atomically shape).
+model OrganizationCreationRequest {
+  id                      Int                       @id @default(autoincrement())
+  requestedByUserId       Int                       @map("requested_by_user_id")
+  requestedBy             User                      @relation("OrgCreationRequester", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  organizationName        String                    @map("organization_name") @db.Text
+  organizationType        String                    @map("organization_type") @db.Text
+  scope                   String?                   @db.Text
+  contactEmail            String                    @map("contact_email") @db.Text
+  // "조직 생성 목적" -- free-form justification, required (unlike
+  // Organization.description, which is optional once the org actually
+  // exists).
+  purpose                 String                    @db.Text
+  status                  OrganizationRequestStatus @default(PENDING)
+  reviewedByUserId        Int?                      @map("reviewed_by_user_id")
+  reviewedBy              User?                     @relation("OrgCreationReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  reviewedAt              DateTime?                 @map("reviewed_at")
+  rejectionReason         String?                   @map("rejection_reason") @db.Text
+  adminNote               String?                   @map("admin_note") @db.Text
+  // Plain scalar, not a relation -- MVP keeps this a simple unique int
+  // (set only on approval) rather than adding a second FK path between
+  // these two models for a value that's only ever read back, never
+  // queried through.
+  resultingOrganizationId Int?                      @unique @map("resulting_organization_id")
+  createdAt               DateTime                  @default(now()) @map("created_at")
+
+  @@index([status], map: "idx_org_creation_request_status")
+  @@map("OrganizationCreationRequest")
+}
+
+// A user's request to join an *existing* Organization, reviewed by that
+// same organization's own LEADER/ADMIN (never a Platform Admin concern --
+// contrast with OrganizationCreationRequest above). On approval,
+// organization/service.ts::approveJoinRequest() creates an
+// OrganizationMember(role=MEMBER) and marks this row APPROVED in one
+// transaction.
+model OrganizationJoinRequest {
+  id               Int                       @id @default(autoincrement())
+  organizationId   Int                       @map("organization_id")
+  organization     Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId           Int                       @map("user_id")
+  user             User                      @relation("OrgJoinRequester", fields: [userId], references: [id], onDelete: Restrict)
+  message          String?                   @db.Text
+  status           OrganizationRequestStatus @default(PENDING)
+  reviewedByUserId Int?                      @map("reviewed_by_user_id")
+  reviewedBy       User?                     @relation("OrgJoinReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  reviewedAt       DateTime?                 @map("reviewed_at")
+  rejectionReason  String?                   @map("rejection_reason") @db.Text
+  createdAt        DateTime                  @default(now()) @map("created_at")
+
+  @@index([organizationId, status], map: "idx_org_join_request_org_status")
+  @@map("OrganizationJoinRequest")
+}
+
+// Phase 12-2: "동일 조직에 PENDING 요청 중복 방지" -- not expressible in
+// Prisma's schema DSL (a partial/filtered unique index), so it's declared
+// by hand in this phase's own migration SQL instead, the same way
+// PostImage's own isPrimary-at-most-one-per-post constraint is (see that
+// model's own comment in this file):
+//   CREATE UNIQUE INDEX idx_org_join_request_pending_unique
+//     ON "OrganizationJoinRequest"(organization_id, user_id)
+//     WHERE status = 'pending';

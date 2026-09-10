@@ -180,6 +180,14 @@ const location = z.string().trim().min(1, "위치를 입력해주세요.").max(2
 // pre-selected default is what actually reaches the API.
 const campus = z.enum(CAMPUSES, "캠퍼스를 선택해주세요.");
 
+// Phase 12-5: optional org attribution. Only shape-validated here (a
+// positive integer, or absent/null for a personal post) -- existence/
+// ACTIVE/membership/role are never decided by zod, only by
+// validateOrganizationPosting() in service/aiService (§8 of this phase's
+// spec: schema validation is never the last word on whether the post is
+// actually allowed to attribute to that organization).
+const organizationId = z.number().int().positive().nullable().optional();
+
 export const createLostPostSchema = z.object({
   title,
   description,
@@ -191,9 +199,18 @@ export const createLostPostSchema = z.object({
   // "시간 미상" (see PostForm.tsx's dateUnknown toggle).
   lostAt: z.coerce.date("분실 일시가 올바르지 않습니다.").nullable(),
   status: z.enum(LOST_STATUSES).optional(),
+  organizationId,
 });
 export type CreateLostPostInput = z.infer<typeof createLostPostSchema>;
 
+// Phase 12-7: organizationId is now editable (this phase reverses Phase
+// 12-5's §10 "fixed at creation" policy -- see this phase's own spec §4:
+// 개인→단체/단체 A→단체 B/단체→개인 전환을 모두 지원한다). Shape-only here,
+// same as the create schema's own organizationId -- omitted means "leave
+// attribution unchanged", explicit null means "personal", a positive
+// integer is re-validated against the *current* user's membership by
+// validateOrganizationPosting() in updateLostPost/updateFoundPost, never
+// trusted from this schema alone.
 export const updateLostPostSchema = createLostPostSchema.partial();
 export type UpdateLostPostInput = z.infer<typeof updateLostPostSchema>;
 
@@ -205,8 +222,10 @@ export const createFoundPostSchema = z.object({
   campus,
   foundAt: z.coerce.date("습득 일시가 올바르지 않습니다.").nullable(),
   status: z.enum(FOUND_STATUSES).optional(),
+  organizationId,
 });
 export type CreateFoundPostInput = z.infer<typeof createFoundPostSchema>;
 
+// See updateLostPostSchema's own comment -- identical shape/reasoning.
 export const updateFoundPostSchema = createFoundPostSchema.partial();
 export type UpdateFoundPostInput = z.infer<typeof updateFoundPostSchema>;

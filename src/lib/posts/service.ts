@@ -53,6 +53,16 @@ const FOUND_STATUS_FROM_DB: Record<PrismaFoundPostStatus, string> = {
 // stays for internal use (e.g. "is this the current user's own post"), it
 // is never rendered as a link target.
 export const AUTHOR_SELECT = { id: true, nickname: true, publicId: true } as const;
+
+// Phase 12-5: paired with AUTHOR_SELECT above at every query site that
+// produces a LostPostDTO/FoundPostDTO -- a plain relation `select` (not a
+// service/authz call), same one-extra-column-fetch cost as AUTHOR_SELECT
+// itself, so adding org attribution to every list/detail/search path never
+// introduces an N+1 query. Only `id`/`name`: nothing else about the
+// organization (status, contactEmail, ...) is needed just to label a post,
+// and the organization's own profile page is one click away for anyone who
+// wants more.
+export const POST_ORGANIZATION_SELECT = { id: true, name: true } as const;
 export type Author = { id: number; nickname: string | null; publicId: string };
 
 // Phase 11-4D: only ever set by getLostPost/getFoundPost (a single-post
@@ -82,6 +92,12 @@ export type LostPostDTO = {
   createdAt: Date;
   updatedAt: Date;
   author: Author;
+  // Phase 12-5: null for a personal post (the common case, unchanged
+  // behavior). The actual owner/actor is always `author` above -- these two
+  // fields only ever label which Organization, if any, the post is posted
+  // *as* (see LostPost.organizationId's own schema.prisma comment).
+  organizationId: number | null;
+  organizationName: string | null;
   // Phase 23: plain counter, see LostPost.viewCount's schema comment.
   viewCount: number;
   // Phase 12/15-2: only ever set on a semantic-search or image-similarity
@@ -114,6 +130,9 @@ export type FoundPostDTO = {
   createdAt: Date;
   updatedAt: Date;
   author: Author;
+  // See LostPostDTO.organizationId/organizationName's own comment.
+  organizationId: number | null;
+  organizationName: string | null;
   viewCount: number;
   score?: number;
   // Phase 11-4D: see PostImageSummary's own comment -- only present on
@@ -126,7 +145,14 @@ export type PostDTO = LostPostDTO | FoundPostDTO;
 export type PostMutationResult<T> =
   | { kind: "ok"; data: T }
   | { kind: "not_found" }
-  | { kind: "forbidden"; reason: "not_owner" | "suspended" };
+  | {
+      kind: "forbidden";
+      // Phase 12-5: organization_* reasons only ever come from
+      // validateOrganizationPosting() (see organization/service.ts) when a
+      // create request carries a non-null organizationId -- not_owner/
+      // suspended are unchanged from before this phase.
+      reason: "not_owner" | "suspended" | "organization_not_found" | "organization_inactive" | "organization_not_member";
+    };
 
 type Page = { page: number; limit: number };
 export type PagedResult<T> = {
@@ -262,6 +288,12 @@ export function toLostPostDTO(row: {
   updatedAt: Date;
   viewCount: number;
   user: Author;
+  // Phase 12-5: required (not optional) -- every call site below now
+  // selects this relation, same "no include site left behind" guarantee
+  // AUTHOR_SELECT's own required `user` already gives; a call site that
+  // forgot to add POST_ORGANIZATION_SELECT fails to compile instead of
+  // silently producing a DTO with a missing field.
+  organization: { id: number; name: string } | null;
   // Phase 11-4D: only getLostPost's own query actually includes this
   // relation (see that function) -- every list-producing row this same
   // converter is reused for simply has no `images` key at all, which
@@ -269,8 +301,15 @@ export function toLostPostDTO(row: {
   // LostPostDTO.images's own optional-ness.
   images?: PostImageSummary[];
 }): LostPostDTO {
-  const { user, status, ...rest } = row;
-  return { type: "lost", ...rest, status: LOST_STATUS_FROM_DB[status], author: user };
+  const { user, status, organization, ...rest } = row;
+  return {
+    type: "lost",
+    ...rest,
+    status: LOST_STATUS_FROM_DB[status],
+    author: user,
+    organizationId: organization?.id ?? null,
+    organizationName: organization?.name ?? null,
+  };
 }
 
 export function toFoundPostDTO(row: {
@@ -287,10 +326,19 @@ export function toFoundPostDTO(row: {
   updatedAt: Date;
   viewCount: number;
   user: Author;
+  // See toLostPostDTO's own comment -- identical shape/reasoning.
+  organization: { id: number; name: string } | null;
   images?: PostImageSummary[];
 }): FoundPostDTO {
-  const { user, status, ...rest } = row;
-  return { type: "found", ...rest, status: FOUND_STATUS_FROM_DB[status], author: user };
+  const { user, status, organization, ...rest } = row;
+  return {
+    type: "found",
+    ...rest,
+    status: FOUND_STATUS_FROM_DB[status],
+    author: user,
+    organizationId: organization?.id ?? null,
+    organizationName: organization?.name ?? null,
+  };
 }
 
 // ---------- LostPost ----------
@@ -308,7 +356,7 @@ export async function listLostPosts({
       orderBy: buildOrderBy(filters.sort),
       skip,
       take: limit,
-      include: { user: { select: AUTHOR_SELECT } },
+      include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
     }),
     prisma.lostPost.count({ where }),
   ]);
@@ -326,7 +374,7 @@ export async function listLostPostsByUser(userId: number): Promise<LostPostDTO[]
     where: { userId },
     orderBy: buildOrderBy(),
     take: MY_POSTS_CAP,
-    include: { user: { select: AUTHOR_SELECT } },
+    include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
   });
   return rows.map(toLostPostDTO);
 }
@@ -342,7 +390,7 @@ export async function getLostPost(id: number): Promise<LostPostDTO | null> {
   const row = await prisma.lostPost.findUnique({
     where: { id },
     include: {
-      user: { select: AUTHOR_SELECT },
+      user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT },
       images: {
         orderBy: { displayOrder: "asc" },
         select: { id: true, imageUrl: true, displayOrder: true, isPrimary: true },
@@ -406,7 +454,7 @@ export async function listFoundPosts({
       orderBy: buildOrderBy(filters.sort),
       skip,
       take: limit,
-      include: { user: { select: AUTHOR_SELECT } },
+      include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
     }),
     prisma.foundPost.count({ where }),
   ]);
@@ -419,7 +467,7 @@ export async function listFoundPostsByUser(userId: number): Promise<FoundPostDTO
     where: { userId },
     orderBy: buildOrderBy(),
     take: MY_POSTS_CAP,
-    include: { user: { select: AUTHOR_SELECT } },
+    include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
   });
   return rows.map(toFoundPostDTO);
 }
@@ -429,7 +477,7 @@ export async function getFoundPost(id: number): Promise<FoundPostDTO | null> {
   const row = await prisma.foundPost.findUnique({
     where: { id },
     include: {
-      user: { select: AUTHOR_SELECT },
+      user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT },
       images: {
         orderBy: { displayOrder: "asc" },
         select: { id: true, imageUrl: true, displayOrder: true, isPrimary: true },
@@ -462,6 +510,40 @@ export async function deleteFoundPost(
   return { kind: "ok", data: { id } };
 }
 
+// Phase 12-5 §30: /organizations/[id]'s own "최근 게시글" preview section --
+// reuses the exact same query/DTO shape as listPostsByUser (Lost+Found
+// merged, newest first) just filtered by organizationId instead of
+// userId, so no new API route or list service is needed for this. A small
+// flat cap (not real pagination) -- this is a preview on the org profile
+// page, not a dedicated org-posts listing page (out of scope this phase,
+// see this phase's own spec §30).
+const ORGANIZATION_POST_PREVIEW_CAP = 10;
+
+export async function listRecentPostsByOrganization(
+  organizationId: number,
+  limit: number = ORGANIZATION_POST_PREVIEW_CAP,
+): Promise<PostDTO[]> {
+  const orderBy = buildOrderBy();
+  const [lostRows, foundRows] = await Promise.all([
+    prisma.lostPost.findMany({
+      where: { organizationId },
+      orderBy,
+      take: limit,
+      include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
+    }),
+    prisma.foundPost.findMany({
+      where: { organizationId },
+      orderBy,
+      take: limit,
+      include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
+    }),
+  ]);
+
+  return [...lostRows.map(toLostPostDTO), ...foundRows.map(toFoundPostDTO)]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .slice(0, limit);
+}
+
 // ---------- Search (type=all) ----------
 
 // Prisma has no cross-model UNION, so a `type=all` search can't be one
@@ -489,8 +571,8 @@ async function searchAllPosts({
   const depth = Math.min(page * limit, 1000);
 
   const [lostRows, foundRows, lostTotal, foundTotal] = await Promise.all([
-    prisma.lostPost.findMany({ where, orderBy, take: depth, include: { user: { select: AUTHOR_SELECT } } }),
-    prisma.foundPost.findMany({ where, orderBy, take: depth, include: { user: { select: AUTHOR_SELECT } } }),
+    prisma.lostPost.findMany({ where, orderBy, take: depth, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } }),
+    prisma.foundPost.findMany({ where, orderBy, take: depth, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } }),
     prisma.lostPost.count({ where }),
     prisma.foundPost.count({ where }),
   ]);
@@ -532,13 +614,13 @@ export async function listPostsByUser(userId: number, { page, limit }: Page): Pr
       where: { userId },
       orderBy,
       take: depth,
-      include: { user: { select: AUTHOR_SELECT } },
+      include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
     }),
     prisma.foundPost.findMany({
       where: { userId },
       orderBy,
       take: depth,
-      include: { user: { select: AUTHOR_SELECT } },
+      include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
     }),
     prisma.lostPost.count({ where: { userId } }),
     prisma.foundPost.count({ where: { userId } }),

@@ -7,8 +7,9 @@ import { useRouter } from "next/navigation";
 import type { PostType } from "@/lib/posts/schema";
 import { Button } from "@/components/ui/Button";
 import { ChatBubbleIcon } from "@/components/icons";
-import { AuthorLink } from "@/components/user/AuthorLink";
+import { AttributionLink } from "@/components/user/AttributionLink";
 import { CommentActionMenu } from "@/components/comment/CommentActionMenu";
+import { PostAsSelector } from "@/components/organization/PostAsSelector";
 
 type CommentAuthor = { id: number; nickname: string | null; publicId: string };
 type CommentDTO = {
@@ -23,6 +24,11 @@ type CommentDTO = {
   // separate depth/path column needed.
   parentId: number | null;
   author: CommentAuthor;
+  // Phase 12-5: null for a personal comment (unchanged, common case) --
+  // see comment/service.ts's CommentDTO own comment for the actor/
+  // attribution split this mirrors.
+  organizationId: number | null;
+  organizationName: string | null;
 };
 
 type CommentSectionProps = {
@@ -31,6 +37,12 @@ type CommentSectionProps = {
   initialComments: CommentDTO[];
   currentUser: { id: number } | null;
   isAdmin: boolean;
+  // Phase 12-5 §22: current user's own ACTIVE-organization memberships,
+  // fetched server-side by the post detail page -- same convention as
+  // PostForm's own myOrganizations prop. Empty for a logged-out viewer or
+  // one with no organization memberships, in which case the composer looks
+  // exactly as it did before this phase.
+  myOrganizations: { organizationId: number; organizationName: string }[];
 };
 
 // Coarse, Korean-labeled relative time -- matches this phase's own mockup
@@ -88,7 +100,14 @@ function collectSubtreeIds(node: CommentNode, into: Set<number>): void {
   for (const child of node.children) collectSubtreeIds(child, into);
 }
 
-export function CommentSection({ postType, postId, initialComments, currentUser, isAdmin }: CommentSectionProps) {
+export function CommentSection({
+  postType,
+  postId,
+  initialComments,
+  currentUser,
+  isAdmin,
+  myOrganizations,
+}: CommentSectionProps) {
   const router = useRouter();
   const [comments, setComments] = useState(initialComments);
   const [newContent, setNewContent] = useState("");
@@ -97,12 +116,18 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState("");
   const [pendingId, setPendingId] = useState<number | null>(null);
+  // Phase 12-5 §18/§22: "개인" (null) or one of myOrganizations's ids for
+  // the top-level composer -- independent of replyOrganizationId below,
+  // since a top-level comment and a reply are two separate compositions
+  // that can each attribute to a different organization (or none).
+  const [organizationId, setOrganizationId] = useState<number | null>(null);
   // Phase H-3: which comment's reply form is open (at most one at a time,
   // now at any depth, not just top-level) -- kept separate from
   // newContent/submitting so writing a reply never clobbers an
   // in-progress top-level comment draft.
   const [replyingToId, setReplyingToId] = useState<number | null>(null);
   const [replyContent, setReplyContent] = useState("");
+  const [replyOrganizationId, setReplyOrganizationId] = useState<number | null>(null);
   const [replySubmitting, setReplySubmitting] = useState(false);
 
   async function handleSubmit(event: React.FormEvent) {
@@ -115,7 +140,7 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
       const res = await fetch(`/api/posts/${postId}/comments?type=${postType}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: newContent }),
+        body: JSON.stringify({ content: newContent, organizationId }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -124,6 +149,7 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
       }
       setComments((prev) => [...prev, { ...json.data, createdAt: new Date(json.data.createdAt), updatedAt: new Date(json.data.updatedAt) }]);
       setNewContent("");
+      setOrganizationId(null);
       router.refresh();
     } catch {
       setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
@@ -147,7 +173,7 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
       const res = await fetch(`/api/posts/${postId}/comments?type=${postType}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: replyContent, parentId }),
+        body: JSON.stringify({ content: replyContent, parentId, organizationId: replyOrganizationId }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -156,6 +182,7 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
       }
       setComments((prev) => [...prev, { ...json.data, createdAt: new Date(json.data.createdAt), updatedAt: new Date(json.data.updatedAt) }]);
       setReplyContent("");
+      setReplyOrganizationId(null);
       setReplyingToId(null);
       router.refresh();
     } catch {
@@ -255,9 +282,10 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
       return (
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
-            <AuthorLink
-              nickname={comment.author.nickname}
-              publicId={comment.author.publicId}
+            <AttributionLink
+              organizationId={comment.organizationId}
+              organizationName={comment.organizationName}
+              author={comment.author}
               className="font-medium text-foreground hover:underline"
             />
             <span className="text-xs text-muted-foreground">{formatRelativeTime(comment.createdAt)}</span>
@@ -298,12 +326,15 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
           onDelete={() => handleDelete(comment.id)}
         >
           <div className="flex items-center justify-between gap-2">
-            {/* Phase H-7: same profile link every other author display uses --
-                this is exactly the "닉네임 · 시간" shape this phase's spec gives
-                as its own example. */}
-            <AuthorLink
-              nickname={comment.author.nickname}
-              publicId={comment.author.publicId}
+            {/* Phase H-7: same profile link every other author display uses.
+                Phase 12-8 §5: an organization-attributed comment shows
+                ONLY the organization here -- see AttributionLink's own
+                comment for why the real author is never rendered
+                alongside it. */}
+            <AttributionLink
+              organizationId={comment.organizationId}
+              organizationName={comment.organizationName}
+              author={comment.author}
               className="font-medium text-foreground hover:underline"
             />
             <span className="text-xs text-muted-foreground">
@@ -365,6 +396,13 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
           disabled={replySubmitting}
           autoFocus
           className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground disabled:opacity-60"
+        />
+        <PostAsSelector
+          organizations={myOrganizations}
+          value={replyOrganizationId}
+          onChange={setReplyOrganizationId}
+          disabled={replySubmitting}
+          ariaLabel="답글 작성 주체 선택"
         />
         <div className="flex gap-2">
           <Button type="submit" size="sm" disabled={replySubmitting || !replyContent.trim()}>
@@ -438,6 +476,13 @@ export function CommentSection({ postType, postId, initialComments, currentUser,
             rows={3}
             disabled={submitting}
             className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground disabled:opacity-60"
+          />
+          <PostAsSelector
+            organizations={myOrganizations}
+            value={organizationId}
+            onChange={setOrganizationId}
+            disabled={submitting}
+            ariaLabel="댓글 작성 주체 선택"
           />
           <Button type="submit" size="sm" disabled={submitting || !newContent.trim()} className="self-start">
             {submitting ? "작성 중..." : "댓글 작성"}

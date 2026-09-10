@@ -23,6 +23,10 @@ const NOTIFICATION_TYPE_FROM_DB: Record<PrismaNotificationType, string> = {
   USER_SUSPENDED: "user_suspended",
   COMMENT_REPLY: "comment_reply",
   ANNOUNCEMENT: "announcement",
+  // Phase 12-3: see schema.prisma's own comment on this enum value --
+  // sent to exactly one recipient (the requester) when their
+  // OrganizationCreationRequest is approved or rejected.
+  ORGANIZATION_REQUEST_PROCESSED: "organization_request_processed",
 };
 
 // Same Korean labels as the legacy pages/8_알림.py's TYPE_LABELS.
@@ -35,6 +39,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   user_suspended: "계정 정지",
   comment_reply: "새 답글",
   announcement: "공지사항",
+  organization_request_processed: "단체 생성 신청 결과",
 };
 
 export type NotificationDTO = {
