@@ -7,7 +7,7 @@ import { getFoundPost, getLostPost } from "@/lib/posts/service";
 import { FOUND_STATUSES, LOST_STATUSES, postTypeSchema } from "@/lib/posts/schema";
 import { isAdmin } from "@/lib/moderation/service";
 import { listCommentsForPost } from "@/lib/comment/service";
-import { getMyOrganizationMemberships } from "@/lib/organization/service";
+import { getMyOrganizationMemberships, getOrganizationById, getOrganizationRole } from "@/lib/organization/service";
 import { PostManageMenu } from "@/components/post/PostManageMenu";
 import { PostImageGallery } from "@/components/post/PostImageGallery";
 import { ViewTracker } from "@/components/post/ViewTracker";
@@ -130,10 +130,35 @@ export default async function PostDetailPage({
     }
   }
 
-  const [comments, { recommendations, recommendationsFailed }, myOrganizations] = await Promise.all([
+  // Phase 12-11 §18/§19: whether to show "단체에 문의하기" at all (only for
+  // an organization-attributed post) and whether it should be usable right
+  // now. A LEADER/ADMIN of *this exact* organization never sees the
+  // button -- inquiring with one's own organization is meaningless (see
+  // chat/service.ts's own getOrCreateOrganizationChatRoom, which rejects
+  // this server-side regardless; this is purely proactive UI, not the
+  // real gate). An INACTIVE organization keeps the button visible but
+  // disabled -- existing inquiry rooms stay reachable from /chat, only
+  // *new* ones are blocked (§17).
+  async function loadOrganizationChatEligibility(): Promise<{ show: boolean; disabled: boolean }> {
+    if (post!.organizationId === null) return { show: false, disabled: false };
+    try {
+      const [organization, role] = await Promise.all([
+        getOrganizationById(post!.organizationId),
+        currentUser ? getOrganizationRole(post!.organizationId, currentUser.id) : Promise.resolve(null),
+      ]);
+      if (role === "leader" || role === "admin") return { show: false, disabled: false };
+      return { show: true, disabled: !organization || organization.status !== "active" };
+    } catch (error) {
+      console.error("Failed to load organization chat eligibility", error);
+      return { show: true, disabled: false };
+    }
+  }
+
+  const [comments, { recommendations, recommendationsFailed }, myOrganizations, organizationChat] = await Promise.all([
     loadComments(),
     loadRecommendations(),
     loadMyOrganizations(),
+    loadOrganizationChatEligibility(),
   ]);
 
   return (
@@ -287,15 +312,26 @@ export default async function PostDetailPage({
           silently absent with no explanation. The API re-checks
           ownership/suspension/post-existence regardless
           (getOrCreateDirectChatRoom); this is UI guidance only. */}
-      {!isOwner &&
-        (currentUser ? (
-          <DirectChatButton postType={type} postId={post.id} />
+      {/* Phase 12-11 §1/§18: an organization-attributed post's chat entry
+          point is gated on organizationChat.show (never on isOwner alone
+          -- the literal author of an org post is very often not that
+          org's LEADER/ADMIN, and §2 explicitly requires this to stay open
+          to any logged-in user, including the literal author, as long as
+          they aren't a manager of that same org). A personal post keeps
+          its original !isOwner-only gate unchanged. */}
+      {(post.organizationId !== null ? organizationChat.show : !isOwner) &&
+        (organizationChat.disabled ? (
+          <span className="w-fit rounded-full border border-border px-4 py-2 text-sm font-medium text-muted-foreground opacity-60">
+            폐쇄된 단체입니다
+          </span>
+        ) : currentUser ? (
+          <DirectChatButton postType={type} postId={post.id} isOrganizationPost={post.organizationId !== null} />
         ) : (
           <Link
             href={`/login?reason=chat&callbackUrl=${encodeURIComponent(`/post/${post.id}?type=${type}`)}`}
             className="w-fit rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-foreground/30"
           >
-            채팅하기
+            {post.organizationId !== null ? "단체에 문의하기" : "채팅하기"}
           </Link>
         ))}
 

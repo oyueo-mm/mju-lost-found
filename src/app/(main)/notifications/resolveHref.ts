@@ -64,6 +64,20 @@ export async function resolveHref(
     return organization ? `/organizations/${organization.id}` : null;
   }
 
+  // Phase 12-11 §9/§11: ORGANIZATION_CHAT_RECEIVED -- relatedId here is
+  // the ChatRoom's own id (never a Message id, unlike the "message"
+  // branch below), since this notification fires once at room-creation,
+  // before any message necessarily exists yet. getChatRoomForUser() is
+  // the same real access check every other chat notification link
+  // already re-derives through -- a stale/tampered relatedId, or a
+  // manager who has since lost LEADER/ADMIN in this organization, can
+  // never produce a link into a room this user can no longer actually
+  // open.
+  if (relatedType === "organization_chat_room" && type === "organization_chat_received") {
+    const room = await getChatRoomForUser(relatedId, userId);
+    return room.kind === "ok" ? `/chat/${room.data.id}` : null;
+  }
+
   if (relatedType === "message") {
     // Phase 11: relatedId here is a Message id (see chat/service.ts's
     // sendMessage(), never a ChatRoom id) -- resolve it to the room, then

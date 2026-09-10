@@ -26,6 +26,9 @@ export function chatMutationResultToResponse<T>(
     case "forbidden":
       if (result.reason === "suspended") return jsonError(403, SUSPENDED_ACCOUNT_MESSAGE);
       if (result.reason === "self") return jsonError(403, "자기 자신의 게시물에는 채팅을 시작할 수 없습니다.");
+      // Phase 12-11 §19: a LEADER/ADMIN of the organization itself tried
+      // to open a new inquiry with their own organization.
+      if (result.reason === "organization_manager") return jsonError(403, "본인이 관리하는 단체에는 문의를 시작할 수 없습니다.");
       return jsonError(403, "이 채팅방에 접근할 권한이 없습니다.");
     case "invalid_content":
       return jsonError(400, "메시지를 입력해주세요.");
@@ -37,5 +40,9 @@ export function chatMutationResultToResponse<T>(
       return jsonError(400, "반응을 남길 메시지를 확인할 수 없습니다.");
     case "invalid_message":
       return jsonError(400, "메시지를 확인할 수 없습니다.");
+    // Phase 12-11 §17: the post's organization is closed (INACTIVE) -- new
+    // inquiries are blocked, existing inquiry rooms are unaffected.
+    case "inactive_organization":
+      return jsonError(400, "폐쇄된 단체에는 새로운 문의를 시작할 수 없습니다.");
   }
 }

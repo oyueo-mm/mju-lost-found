@@ -28,11 +28,25 @@ const commentTable = { findUnique: vi.fn() };
 const messageReaction = { deleteMany: vi.fn(), create: vi.fn(), findMany: vi.fn() };
 // Phase N
 const chatRead = { findUnique: vi.fn(), upsert: vi.fn() };
+// Phase 12-11: organization-inquiry chat -- who currently manages which
+// org (participantIdsOf/listChatRoomsForUser/countUnreadMessagesForUser),
+// and the org row itself (resolveDetailDTO's org branch,
+// getOrCreateOrganizationChatRoom's ACTIVE/INACTIVE check).
+const organizationMember = { findMany: vi.fn() };
+const organizationTable = { findUnique: vi.fn() };
 const $queryRaw = vi.fn();
+const txChatRoomCreate = vi.fn();
 const txMessageCreate = vi.fn();
 const txNotificationCreate = vi.fn();
+const txNotificationCreateMany = vi.fn();
+const txOrganizationMemberFindMany = vi.fn();
 const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
-  fn({ message: { create: txMessageCreate }, notification: { create: txNotificationCreate } }),
+  fn({
+    chatRoom: { create: txChatRoomCreate },
+    message: { create: txMessageCreate },
+    notification: { create: txNotificationCreate, createMany: txNotificationCreateMany },
+    organizationMember: { findMany: txOrganizationMemberFindMany },
+  }),
 );
 
 // Phase J-2: no `match` key at all on the mocked prisma object -- if any
@@ -50,14 +64,29 @@ vi.mock("@/lib/db/prisma", () => ({
     lostPost: lostPostTable,
     foundPost: foundPostTable,
     comment: commentTable,
+    organizationMember,
+    organization: organizationTable,
     $transaction,
     $queryRaw,
   },
 }));
 vi.mock("@/generated/prisma/client", () => ({
-  NotificationType: { MESSAGE: "MESSAGE" },
+  NotificationType: { MESSAGE: "MESSAGE", ORGANIZATION_CHAT_RECEIVED: "ORGANIZATION_CHAT_RECEIVED" },
+  OrganizationRole: { LEADER: "LEADER", ADMIN: "ADMIN", MEMBER: "MEMBER" },
+  OrganizationStatus: { ACTIVE: "ACTIVE", INACTIVE: "INACTIVE" },
   Prisma: { PrismaClientKnownRequestError: FakePrismaClientKnownRequestError },
 }));
+// Phase 12-11: getOrCreateOrganizationChatRoom's own manager-self-check --
+// mocked wholesale (same convention every other collaborator in this file
+// follows), same module organization/authz.ts's own tests already cover
+// in isolation.
+const getMembership = vi.fn();
+vi.mock("@/lib/organization/authz", () => ({ getMembership }));
+// Phase 12-11: the org-manager notification fan-out -- mocked wholesale so
+// these tests assert *that* it was called with the right input, not its
+// own internals (already covered by notification/adminFanout.test.ts).
+const fanOutToOrganizationManagers = vi.fn();
+vi.mock("@/lib/notification/adminFanout", () => ({ fanOutToOrganizationManagers }));
 vi.mock("@/lib/auth/suspension", () => ({
   isCurrentlySuspended: (user: { isSuspended?: boolean }) => Boolean(user?.isSuspended),
 }));
@@ -88,6 +117,7 @@ const {
   getChatRoomParticipantIds,
   getMessage,
   getOrCreateDirectChatRoom,
+  getOrCreateOrganizationChatRoom,
   listChatRoomsForUser,
   listMessages,
   markChatRoomRead,
@@ -140,6 +170,22 @@ function roomDirect(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+// Phase 12-11: an organization inquiry room -- `stranger` (the inquirer)
+// opened it against org id 10 via LostPost id=1. counterpartUserId is
+// absent (undefined, matching a real row's NULL) -- only organizationId
+// identifies this as an org room, never both set at once.
+function orgRoom(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 500,
+    initiatorUserId: stranger,
+    organizationId: 10,
+    createdAt: new Date("2026-01-01"),
+    directLostPost: postRef({ id: 1, userId: lostOwner, title: "지갑 분실" }),
+    directFoundPost: null,
+    ...overrides,
+  };
+}
+
 const sender = { id: lostOwner, nickname: "닉네임", isSuspended: false, suspendedUntil: null } as unknown as User;
 
 beforeEach(() => {
@@ -159,6 +205,12 @@ beforeEach(() => {
   // as messageReaction.findMany above. Tests that actually care about
   // readByCounterpart override this with their own mockResolvedValueOnce.
   chatRead.findUnique.mockResolvedValue(null);
+  // Phase 12-11: default "this user manages no organizations" / "this org
+  // has no managers" for every pre-existing (personal-chat) test in this
+  // file -- tests that actually exercise organization-chat behavior
+  // override this with their own mockResolvedValueOnce.
+  organizationMember.findMany.mockResolvedValue([]);
+  txOrganizationMemberFindMany.mockResolvedValue([]);
 });
 
 // Phase 10: mirrors legacy get_or_create_direct_chat_room()'s exact
@@ -391,6 +443,187 @@ describe("getOrCreateDirectChatRoom", () => {
       });
     });
   });
+
+  // Phase 12-11 §0/§18: no commentId + the post itself is organization-
+  // attributed -> delegates to getOrCreateOrganizationChatRoom instead of
+  // treating post.userId (the real, usually-hidden author) as the
+  // counterpart.
+  it("delegates to organization chat when the post has an organizationId and no commentId was given", async () => {
+    lostPostTable.findUnique.mockResolvedValueOnce({ id: 1, userId: lostOwner, organizationId: 10 });
+    organizationTable.findUnique.mockResolvedValueOnce({ status: "ACTIVE" });
+    getMembership.mockResolvedValueOnce(null); // viewer isn't a member at all
+    chatRoom.findUnique.mockResolvedValueOnce(null);
+    txChatRoomCreate.mockResolvedValueOnce({ id: 400 });
+    chatRoom.findUnique.mockResolvedValueOnce(orgRoom({ id: 400 }));
+    organizationTable.findUnique.mockResolvedValueOnce({ id: 10, name: "총학생회" });
+    userTable.findUnique.mockResolvedValueOnce({ id: stranger, nickname: "방문자", publicId: "pub-stranger" });
+
+    const result = await getOrCreateDirectChatRoom("lost", 1, viewer);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.roomType).toBe("organization");
+      expect(result.data.counterpart).toEqual({ kind: "organization", id: 10, name: "총학생회" });
+    }
+    expect(commentTable.findUnique).not.toHaveBeenCalled();
+  });
+
+  // A commentId is present -- always stays personal (§4's existing rule),
+  // regardless of the post's own organizationId.
+  it("a commentId always stays a personal chat with the comment's real author, even on an organization post", async () => {
+    lostPostTable.findUnique.mockResolvedValueOnce({ id: 1, userId: lostOwner, organizationId: 10 });
+    commentTable.findUnique.mockResolvedValueOnce({ authorUserId: foundOwner, lostPostId: 1, foundPostId: null });
+    chatRoom.findUnique.mockResolvedValueOnce(null);
+    chatRoom.create.mockResolvedValueOnce({ id: 301 });
+    chatRoom.findUnique.mockResolvedValueOnce(roomDirect({ id: 301 }));
+
+    const result = await getOrCreateDirectChatRoom("lost", 1, viewer, 55);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.data.roomType).toBe("direct");
+    expect(organizationTable.findUnique).not.toHaveBeenCalled();
+    expect(chatRoom.create).toHaveBeenCalledWith({
+      data: { directLostPostId: 1, initiatorUserId: stranger, counterpartUserId: foundOwner },
+      select: { id: true },
+    });
+  });
+});
+
+// Phase 12-11 §0/§2/§6/§7/§9/§17/§19: "단체에 문의하기" -- the organization
+// itself is the counterpart, never the post's real (usually-hidden) author.
+describe("getOrCreateOrganizationChatRoom", () => {
+  const inquirer = { id: stranger, nickname: "문의자", isSuspended: false, suspendedUntil: null } as unknown as User;
+
+  it("creates a new inquiry room and notifies the org's LEADER/ADMIN, excluding the inquirer", async () => {
+    organizationTable.findUnique.mockResolvedValueOnce({ status: "ACTIVE" });
+    getMembership.mockResolvedValueOnce(null); // inquirer has no role in this org at all
+    chatRoom.findUnique.mockResolvedValueOnce(null); // no existing room
+    txChatRoomCreate.mockResolvedValueOnce({ id: 500 });
+    chatRoom.findUnique.mockResolvedValueOnce(orgRoom({ id: 500 }));
+    organizationTable.findUnique.mockResolvedValueOnce({ id: 10, name: "총학생회" });
+    userTable.findUnique.mockResolvedValueOnce({ id: stranger, nickname: "문의자", publicId: "pub-stranger" });
+
+    const result = await getOrCreateOrganizationChatRoom("lost", 1, inquirer, 10);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.roomType).toBe("organization");
+      expect(result.data.id).toBe(500);
+      expect(result.data.counterpart).toEqual({ kind: "organization", id: 10, name: "총학생회" });
+    }
+    expect(txChatRoomCreate).toHaveBeenCalledWith({
+      data: { directLostPostId: 1, initiatorUserId: stranger, organizationId: 10 },
+      select: { id: true },
+    });
+    expect(fanOutToOrganizationManagers).toHaveBeenCalledWith(expect.anything(), {
+      organizationId: 10,
+      excludeUserId: stranger,
+      type: "ORGANIZATION_CHAT_RECEIVED",
+      title: expect.any(String),
+      content: expect.any(String),
+      relatedType: "organization_chat_room",
+      relatedId: 500,
+    });
+  });
+
+  it("reuses the existing room for the same (user, org, post) instead of creating a duplicate -- and does not re-notify", async () => {
+    organizationTable.findUnique.mockResolvedValueOnce({ status: "ACTIVE" });
+    getMembership.mockResolvedValueOnce(null);
+    chatRoom.findUnique.mockResolvedValueOnce({ id: 500 }); // existing room found by the unique constraint
+    chatRoom.findUnique.mockResolvedValueOnce(orgRoom({ id: 500 }));
+    organizationTable.findUnique.mockResolvedValueOnce({ id: 10, name: "총학생회" });
+    userTable.findUnique.mockResolvedValueOnce({ id: stranger, nickname: "문의자", publicId: "pub-stranger" });
+
+    const result = await getOrCreateOrganizationChatRoom("lost", 1, inquirer, 10);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.data.id).toBe(500);
+    expect(txChatRoomCreate).not.toHaveBeenCalled();
+    expect(fanOutToOrganizationManagers).not.toHaveBeenCalled();
+  });
+
+  // §7: same user + same org, but a *different* post -- a separate room,
+  // never reused (their unique-constraint where clause differs by
+  // directLostPostId, so this is exercised by construction; asserted here
+  // for the record).
+  it("a different post for the same (user, org) creates a separate room", async () => {
+    organizationTable.findUnique.mockResolvedValueOnce({ status: "ACTIVE" });
+    getMembership.mockResolvedValueOnce(null);
+    chatRoom.findUnique.mockResolvedValueOnce(null);
+    txChatRoomCreate.mockResolvedValueOnce({ id: 501 });
+    chatRoom.findUnique.mockResolvedValueOnce(orgRoom({ id: 501, directLostPost: postRef({ id: 2 }) }));
+    organizationTable.findUnique.mockResolvedValueOnce({ id: 10, name: "총학생회" });
+    userTable.findUnique.mockResolvedValueOnce({ id: stranger, nickname: "문의자", publicId: "pub-stranger" });
+
+    const result = await getOrCreateOrganizationChatRoom("lost", 2, inquirer, 10);
+
+    expect(result.kind).toBe("ok");
+    expect(chatRoom.findUnique).toHaveBeenNthCalledWith(1, {
+      where: {
+        directLostPostId_initiatorUserId_organizationId: {
+          directLostPostId: 2,
+          initiatorUserId: stranger,
+          organizationId: 10,
+        },
+      },
+    });
+  });
+
+  it("blocks a new inquiry on an INACTIVE (closed) organization", async () => {
+    organizationTable.findUnique.mockResolvedValueOnce({ status: "INACTIVE" });
+
+    const result = await getOrCreateOrganizationChatRoom("lost", 1, inquirer, 10);
+
+    expect(result).toEqual({ kind: "inactive_organization" });
+    expect(chatRoom.create).not.toHaveBeenCalled();
+    expect(txChatRoomCreate).not.toHaveBeenCalled();
+  });
+
+  it("blocks a LEADER of this exact organization from inquiring with their own org", async () => {
+    organizationTable.findUnique.mockResolvedValueOnce({ status: "ACTIVE" });
+    getMembership.mockResolvedValueOnce({ id: 1, organizationId: 10, userId: stranger, role: "LEADER" });
+
+    const result = await getOrCreateOrganizationChatRoom("lost", 1, inquirer, 10);
+
+    expect(result).toEqual({ kind: "forbidden", reason: "organization_manager" });
+    expect(txChatRoomCreate).not.toHaveBeenCalled();
+  });
+
+  it("blocks an ADMIN of this exact organization from inquiring with their own org", async () => {
+    organizationTable.findUnique.mockResolvedValueOnce({ status: "ACTIVE" });
+    getMembership.mockResolvedValueOnce({ id: 1, organizationId: 10, userId: stranger, role: "ADMIN" });
+
+    const result = await getOrCreateOrganizationChatRoom("lost", 1, inquirer, 10);
+
+    expect(result).toEqual({ kind: "forbidden", reason: "organization_manager" });
+    expect(txChatRoomCreate).not.toHaveBeenCalled();
+  });
+
+  // §2: a plain MEMBER (not LEADER/ADMIN) is explicitly allowed to inquire
+  // -- membership never restricts who can reach the org, only managing it.
+  it("allows a plain MEMBER of the organization to inquire", async () => {
+    organizationTable.findUnique.mockResolvedValueOnce({ status: "ACTIVE" });
+    getMembership.mockResolvedValueOnce({ id: 1, organizationId: 10, userId: stranger, role: "MEMBER" });
+    chatRoom.findUnique.mockResolvedValueOnce(null);
+    txChatRoomCreate.mockResolvedValueOnce({ id: 502 });
+    chatRoom.findUnique.mockResolvedValueOnce(orgRoom({ id: 502 }));
+    organizationTable.findUnique.mockResolvedValueOnce({ id: 10, name: "총학생회" });
+    userTable.findUnique.mockResolvedValueOnce({ id: stranger, nickname: "문의자", publicId: "pub-stranger" });
+
+    const result = await getOrCreateOrganizationChatRoom("lost", 1, inquirer, 10);
+
+    expect(result.kind).toBe("ok");
+    expect(txChatRoomCreate).toHaveBeenCalled();
+  });
+
+  it("rejects a suspended requester before ever looking at the organization", async () => {
+    const suspended = { id: stranger, nickname: "정지됨", isSuspended: true, suspendedUntil: null } as unknown as User;
+
+    const result = await getOrCreateOrganizationChatRoom("lost", 1, suspended, 10);
+
+    expect(result).toEqual({ kind: "forbidden", reason: "suspended" });
+    expect(organizationTable.findUnique).not.toHaveBeenCalled();
+  });
 });
 
 describe("getChatRoomForUser", () => {
@@ -448,6 +681,83 @@ describe("getChatRoomForUser", () => {
     const result = await getChatRoomForUser(200, 12345);
 
     expect(result).toEqual({ kind: "forbidden" });
+  });
+
+  // Phase 12-11 §15/§16/§24 (tests 5-10): organization room access is
+  // dynamic -- the inquirer, or a *current* LEADER/ADMIN of the room's own
+  // organization (never a fixed list stored on the room). Each test below
+  // re-fetches the room fresh (findChatRoomRow) and re-derives membership
+  // fresh (organizationMember.findMany), exactly as the real request path
+  // does -- nothing here is cached or trusted from the client.
+  describe("organization room access", () => {
+    it("the inquirer can access their own inquiry room", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(orgRoom());
+      organizationMember.findMany.mockResolvedValueOnce([]); // org has no managers yet
+      organizationTable.findUnique.mockResolvedValueOnce({ id: 10, name: "총학생회" });
+      userTable.findUnique.mockResolvedValueOnce({ id: stranger, nickname: "문의자", publicId: "pub-stranger" });
+
+      const result = await getChatRoomForUser(500, stranger);
+
+      expect(result.kind).toBe("ok");
+      if (result.kind === "ok") expect(result.data.counterpart).toEqual({ kind: "organization", id: 10, name: "총학생회" });
+    });
+
+    it("a LEADER of the room's organization can access it", async () => {
+      const leaderId = 42;
+      chatRoom.findUnique.mockResolvedValueOnce(orgRoom());
+      organizationMember.findMany.mockResolvedValueOnce([{ userId: leaderId }]);
+      organizationTable.findUnique.mockResolvedValueOnce({ id: 10, name: "총학생회" });
+      userTable.findUnique.mockResolvedValueOnce({ id: stranger, nickname: "문의자", publicId: "pub-stranger" });
+
+      const result = await getChatRoomForUser(500, leaderId);
+
+      expect(result.kind).toBe("ok");
+      expect(organizationMember.findMany).toHaveBeenCalledWith({
+        where: { organizationId: 10, role: { in: ["LEADER", "ADMIN"] } },
+        select: { userId: true },
+      });
+    });
+
+    it("an ADMIN of the room's organization can access it", async () => {
+      const adminId = 43;
+      chatRoom.findUnique.mockResolvedValueOnce(orgRoom());
+      organizationMember.findMany.mockResolvedValueOnce([{ userId: adminId }]);
+      organizationTable.findUnique.mockResolvedValueOnce({ id: 10, name: "총학생회" });
+      userTable.findUnique.mockResolvedValueOnce({ id: stranger, nickname: "문의자", publicId: "pub-stranger" });
+
+      const result = await getChatRoomForUser(500, adminId);
+
+      expect(result.kind).toBe("ok");
+    });
+
+    it("a plain MEMBER of the room's organization cannot access it", async () => {
+      const memberId = 44;
+      chatRoom.findUnique.mockResolvedValueOnce(orgRoom());
+      // The org's manager query never returns a plain MEMBER -- it filters
+      // role IN (LEADER, ADMIN) at the DB level, so a MEMBER never appears
+      // in this set even though they belong to the organization.
+      organizationMember.findMany.mockResolvedValueOnce([]);
+
+      const result = await getChatRoomForUser(500, memberId);
+
+      expect(result).toEqual({ kind: "forbidden" });
+    });
+
+    it("a manager of a *different* organization cannot access this room", async () => {
+      const otherOrgManagerId = 45;
+      chatRoom.findUnique.mockResolvedValueOnce(orgRoom()); // organizationId: 10
+      // This org's (id 10) own manager list doesn't include id 45 -- they
+      // manage some *other* organization, which is never even queried
+      // here (the check is scoped to this room's own organizationId).
+      organizationMember.findMany.mockResolvedValueOnce([]);
+
+      const result = await getChatRoomForUser(500, otherOrgManagerId);
+
+      expect(result).toEqual({ kind: "forbidden" });
+      expect(organizationMember.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ organizationId: 10 }) }),
+      );
+    });
   });
 });
 
@@ -1042,6 +1352,80 @@ describe("sendMessage", () => {
     expect(txNotificationCreate).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ userId: foundOwner, relatedId: 1 }) }),
     );
+  });
+
+  // Phase 12-11 §12/§24 (test 16): a message inside an *existing* org
+  // inquiry room never fans a Notification out to every LEADER/ADMIN --
+  // that's the room-creation-time "new inquiry" event, not a per-message
+  // one. Only the single inquirer (never the whole manager roster) is
+  // ever notified from sendMessage, and only when a manager is the one
+  // replying.
+  describe("organization room notifications", () => {
+    it("a manager replying notifies only the inquirer, never fans out to every manager", async () => {
+      const managerId = 42;
+      const manager = { id: managerId, nickname: "담당자", isSuspended: false, suspendedUntil: null } as unknown as User;
+      chatRoom.findUnique.mockResolvedValueOnce(orgRoom()); // initiatorUserId: stranger, organizationId: 10
+      organizationMember.findMany.mockResolvedValueOnce([{ userId: managerId }]);
+      txMessageCreate.mockResolvedValueOnce({
+        id: 9,
+        senderUserId: managerId,
+        content: "안녕하세요, 무엇을 도와드릴까요?",
+        createdAt: new Date(),
+        readAt: null,
+        sender: { nickname: "담당자" },
+      });
+
+      const result = await sendMessage(500, manager, "안녕하세요, 무엇을 도와드릴까요?");
+
+      expect(result.kind).toBe("ok");
+      expect(txNotificationCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ userId: stranger, relatedId: 9 }) }),
+      );
+      expect(txNotificationCreate).toHaveBeenCalledTimes(1); // never once per manager
+      expect(fanOutToOrganizationManagers).not.toHaveBeenCalled();
+    });
+
+    it("the inquirer sending a message notifies nobody (never fans out to managers)", async () => {
+      const inquirerUser = { id: stranger, nickname: "문의자", isSuspended: false, suspendedUntil: null } as unknown as User;
+      chatRoom.findUnique.mockResolvedValueOnce(orgRoom());
+      organizationMember.findMany.mockResolvedValueOnce([{ userId: 42 }, { userId: 43 }]);
+      txMessageCreate.mockResolvedValueOnce({
+        id: 10,
+        senderUserId: stranger,
+        content: "언제 처리되나요?",
+        createdAt: new Date(),
+        readAt: null,
+        sender: { nickname: "문의자" },
+      });
+
+      const result = await sendMessage(500, inquirerUser, "언제 처리되나요?");
+
+      expect(result.kind).toBe("ok");
+      expect(txNotificationCreate).not.toHaveBeenCalled();
+      expect(fanOutToOrganizationManagers).not.toHaveBeenCalled();
+    });
+
+    it("a second manager replying to an already-answered inquiry still only notifies the inquirer once, not repeatedly to every manager", async () => {
+      const secondManagerId = 43;
+      const secondManager = { id: secondManagerId, nickname: "다른 담당자", isSuspended: false, suspendedUntil: null } as unknown as User;
+      chatRoom.findUnique.mockResolvedValueOnce(orgRoom());
+      organizationMember.findMany.mockResolvedValueOnce([{ userId: 42 }, { userId: secondManagerId }]);
+      txMessageCreate.mockResolvedValueOnce({
+        id: 11,
+        senderUserId: secondManagerId,
+        content: "추가로 확인해보겠습니다.",
+        createdAt: new Date(),
+        readAt: null,
+        sender: { nickname: "다른 담당자" },
+      });
+
+      await sendMessage(500, secondManager, "추가로 확인해보겠습니다.");
+
+      expect(txNotificationCreate).toHaveBeenCalledTimes(1);
+      expect(txNotificationCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ userId: stranger }) }),
+      );
+    });
   });
 
   // Phase N

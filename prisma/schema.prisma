@@ -101,6 +101,16 @@ enum NotificationType {
   // a stale "match" relatedType already does; the notification's own
   // title/content still renders normally either way.
   ORGANIZATION_REQUEST_PROCESSED @map("organization_request_processed")
+  // Phase 12-11 §9: sent to every current LEADER/ADMIN of an Organization
+  // (never MEMBER, never the inquirer themselves) the moment a new
+  // organization inquiry ChatRoom is created -- once per room, never per
+  // message (see chat/service.ts's own getOrCreateOrganizationChatRoom
+  // comment for why repeat messages don't re-fire this). relatedType is
+  // "organization_chat_room", relatedId is the new ChatRoom's own id (not
+  // a Message id, unlike MESSAGE below) -- resolveHref.ts re-derives real
+  // access via getChatRoomForUser() the same way every other chat-related
+  // notification link already does.
+  ORGANIZATION_CHAT_RECEIVED     @map("organization_chat_received")
   // Phase 12-9 §2: sent to every current Platform Admin (User.isAdmin ===
   // true) -- never to the reporter/submitter themselves -- the moment a
   // new Report/Feedback/SuspensionAppeal is filed, so an admin doesn't
@@ -588,8 +598,31 @@ model ChatRoom {
   // constraints below stay meaningful. Existing rows were backfilled to
   // their post's author (the only value they could have meant) by this
   // phase's own migration.
-  counterpartUserId Int        @map("counterpart_user_id")
-  counterpart       User       @relation("ChatRoomCounterpart", fields: [counterpartUserId], references: [id], onDelete: Restrict)
+  // Phase 12-11 §4/§20: nullable as of this phase -- an organization-
+  // inquiry room (organizationId set below) has no single counterpart
+  // User at all (the "other side" is the organization itself, resolved
+  // dynamically to whichever Users currently hold LEADER/ADMIN in it), so
+  // forcing a value here would mean picking one particular admin
+  // arbitrarily and silently treating them as if they personally owned
+  // the room -- exactly the "User와 Organization을 같은 의미로 취급하지
+  // 않는다" trap this phase's own spec calls out. Every row this app
+  // creates still sets exactly one of {counterpartUserId, organizationId},
+  // enforced by application code (getOrCreateDirectChatRoom /
+  // getOrCreateOrganizationChatRoom) plus a raw-SQL CHECK constraint added
+  // by this phase's migration -- never by dropping the NOT NULL and
+  // leaving both nullable with no invariant, which is how the spec's
+  // warned-against "counterpartUserId == null 이면 무조건 단체 채팅" guess
+  // could otherwise creep in.
+  counterpartUserId Int?          @map("counterpart_user_id")
+  counterpart       User?         @relation("ChatRoomCounterpart", fields: [counterpartUserId], references: [id], onDelete: Restrict)
+  // Phase 12-11 §4/§6: the room's organization, for an inquiry room only
+  // (null for every personal room, exactly mirroring counterpartUserId's
+  // own nullability the other way). onDelete: Restrict -- same as every
+  // other FK into Organization in this schema; an Organization is never
+  // hard-deleted (only INACTIVE), so this never actually fires, but
+  // matches the existing convention rather than picking a new one.
+  organizationId    Int?          @map("organization_id")
+  organization      Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   createdAt         DateTime   @default(now()) @map("created_at")
 
   messages  Message[]
@@ -613,6 +646,17 @@ model ChatRoom {
   // post, without either colliding.
   @@unique([directLostPostId, initiatorUserId, counterpartUserId], map: "idx_chatroom_direct_lost_unique")
   @@unique([directFoundPostId, initiatorUserId, counterpartUserId], map: "idx_chatroom_direct_found_unique")
+  // Phase 12-11 §7: the organization-inquiry equivalent of the two
+  // constraints above -- a personal room's organizationId is always NULL,
+  // so this never fires for one (Postgres never treats a NULL column as
+  // equal to another row's NULL for uniqueness purposes, same reasoning
+  // this model's own top comment already gives for the directLostPostId/
+  // directFoundPostId pair not colliding with each other). Symmetrically,
+  // an inquiry room's counterpartUserId is always NULL, so the two
+  // constraints above never fire for *it* either -- each shape is
+  // protected by exactly one of these two constraint pairs, never both.
+  @@unique([directLostPostId, initiatorUserId, organizationId], map: "idx_chatroom_direct_lost_org_unique")
+  @@unique([directFoundPostId, initiatorUserId, organizationId], map: "idx_chatroom_direct_found_org_unique")
   // Phase 11-3: initiatorUserId only appears as the *second* column of the
   // two composite unique constraints above, which Postgres can't use for a
   // `WHERE initiatorUserId = X` lookup on its own (a composite B-tree index
@@ -628,6 +672,7 @@ model ChatRoom {
   // now that both queries filter with `OR: [{initiatorUserId}, {counterpartUserId}]`
   // directly instead of joining through directLostPost/directFoundPost.
   @@index([counterpartUserId], map: "idx_chatroom_counterpart_user_id")
+  @@index([organizationId], map: "idx_chatroom_organization_id")
   @@map("ChatRoom")
 }
 
@@ -1102,6 +1147,12 @@ model Organization {
   lostPosts    LostPost[]
   foundPosts   FoundPost[]
   comments     Comment[]
+  // Phase 12-11 §6/§7: every organization-inquiry ChatRoom pointed at this
+  // org -- see ChatRoom.organizationId's own comment. Purely for Prisma's
+  // relation graph, same as lostPosts/foundPosts/comments above; no query
+  // in this app lists "all inquiry rooms for an org" through this field
+  // directly.
+  chatRooms    ChatRoom[]
 
   @@index([status], map: "idx_organization_status")
   @@map("Organization")

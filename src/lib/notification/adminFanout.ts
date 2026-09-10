@@ -1,4 +1,4 @@
-import type { NotificationType, Prisma } from "@/generated/prisma/client";
+import { OrganizationRole, type NotificationType, type Prisma } from "@/generated/prisma/client";
 
 // Phase 12-9 §2: the one shared helper report/service.ts, feedback/
 // service.ts, and moderation/appeals.ts each call, inside their own
@@ -26,6 +26,46 @@ export async function fanOutToAdmins(
 
   await tx.notification.createMany({
     data: admins.map(({ id: userId }) => ({ userId, ...input })),
+    skipDuplicates: true,
+  });
+}
+
+// Phase 12-11 §9/§10: the organization-scoped sibling of fanOutToAdmins
+// above -- notifies every current LEADER/ADMIN of one Organization (never
+// MEMBER, per this phase's own explicit policy) when a new inquiry
+// ChatRoom is created, excluding the inquirer themselves (relevant only if
+// a future caller ever passes an inquirer who happens to already be a
+// manager; chat/service.ts's own getOrCreateOrganizationChatRoom blocks
+// that case before ever reaching here, so this exclusion is a defensive
+// backstop, not the primary enforcement). Same tx-scoped createMany +
+// skipDuplicates shape as fanOutToAdmins -- Notification's own
+// @@unique([userId, type, relatedType, relatedId]) is still the real
+// backstop against a duplicate row.
+export async function fanOutToOrganizationManagers(
+  tx: Prisma.TransactionClient,
+  input: {
+    organizationId: number;
+    excludeUserId: number;
+    type: NotificationType;
+    title: string;
+    content: string;
+    relatedType: string;
+    relatedId: number;
+  },
+): Promise<void> {
+  const { organizationId, excludeUserId, ...notification } = input;
+  const managers = await tx.organizationMember.findMany({
+    where: {
+      organizationId,
+      role: { in: [OrganizationRole.LEADER, OrganizationRole.ADMIN] },
+      userId: { not: excludeUserId },
+    },
+    select: { userId: true },
+  });
+  if (managers.length === 0) return;
+
+  await tx.notification.createMany({
+    data: managers.map(({ userId }) => ({ userId, ...notification })),
     skipDuplicates: true,
   });
 }

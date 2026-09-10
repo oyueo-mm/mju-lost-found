@@ -1,9 +1,26 @@
 import Link from "next/link";
 
 import { requireReadyUser } from "@/lib/auth/session";
-import { listChatRoomsForUser } from "@/lib/chat/service";
+import { listChatRoomsForUser, type ChatRoomListItemDTO } from "@/lib/chat/service";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { ChatIcon } from "@/components/icons";
+import { ChatIcon, ShieldIcon } from "@/components/icons";
+
+// Phase 12-11 §13/§14: a personal room shows the counterpart's nickname,
+// unchanged. An organization room is context-aware -- the inquirer's own
+// list just shows the organization's name (same as any other "who am I
+// talking to" label); a manager's list, viewing someone else's inquiry,
+// shows "문의자 → 단체명" instead so they can tell inquiries apart without
+// opening each one. Never renders any manager's own identity here (there
+// can be several, and the room isn't "about" any one of them).
+function roomTitle(room: ChatRoomListItemDTO, viewerId: number): string {
+  if (room.counterpart.kind === "organization") {
+    if (room.inquirer && room.inquirer.id !== viewerId) {
+      return `${room.inquirer.nickname ?? "알 수 없음"} → ${room.counterpart.name}`;
+    }
+    return room.counterpart.name;
+  }
+  return room.counterpart.nickname ?? "알 수 없음";
+}
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
@@ -45,13 +62,15 @@ export default async function ChatListPage() {
               className="flex items-center gap-3 rounded-card border border-border bg-card p-4 text-sm transition-colors hover:border-foreground/30"
             >
               <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary-muted text-primary">
-                <ChatIcon className="size-5" />
+                {room.counterpart.kind === "organization" ? (
+                  <ShieldIcon className="size-5" />
+                ) : (
+                  <ChatIcon className="size-5" />
+                )}
               </span>
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-semibold text-foreground">
-                    {room.counterpart.nickname ?? "알 수 없음"}
-                  </span>
+                  <span className="truncate font-semibold text-foreground">{roomTitle(room, user.id)}</span>
                   {room.lastMessage && (
                     <span className="shrink-0 text-xs text-muted-foreground">
                       {formatDate(room.lastMessage.createdAt)}

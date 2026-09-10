@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
-import { NotificationType, Prisma, type User } from "@/generated/prisma/client";
+import { NotificationType, OrganizationRole, OrganizationStatus, Prisma, type User } from "@/generated/prisma/client";
 import type { PostType } from "@/lib/posts/schema";
 import { parseChatImagePathname } from "@/lib/images/pathname";
 import { deleteObjectSafely, publicUrlFor } from "@/lib/images/supabaseAdmin";
+import { getMembership } from "@/lib/organization/authz";
+import { fanOutToOrganizationManagers } from "@/lib/notification/adminFanout";
 import { broadcastChatEvent } from "./realtimeAdmin";
 import { MESSAGE_PAGE_SIZE } from "./schema";
 
@@ -25,13 +27,18 @@ type PostRef = { id: number; userId: number; title: string; imageUrl: string | n
 // permission/read functions below still dispatch through one place
 // (participantIdsOf/resolveDetailDTO), mirroring legacy's single
 // _chat_room_participant_ids() funnel.
+//
+// Phase 12-11 §4/§20: counterpartUserId/organizationId are now each
+// independently nullable -- exactly one is ever set on a real row (see
+// ChatRoom's own schema.prisma comment for the full invariant and its DB-
+// level CHECK constraint backstop). null/null or both-set never occurs in
+// practice; every function below still treats "neither branch applies" as
+// not_found rather than assuming one shape.
 type ChatRoomRow = {
   id: number;
   initiatorUserId: number | null;
-  // Phase 12-9: always populated on every row now (see schema.prisma's own
-  // comment on ChatRoom.counterpartUserId) -- the other party, independent
-  // of who currently owns the related post.
-  counterpartUserId: number;
+  counterpartUserId: number | null;
+  organizationId: number | null;
   createdAt: Date;
   directLostPost: PostRef | null;
   directFoundPost: PostRef | null;
@@ -40,7 +47,13 @@ type ChatRoomRow = {
 export type ChatMutationResult<T> =
   | { kind: "ok"; data: T }
   | { kind: "not_found" }
-  | { kind: "forbidden"; reason?: "suspended" | "self" }
+  // Phase 12-11 §19: "organization_manager" -- the requester is already a
+  // LEADER/ADMIN of the very organization they're trying to open a new
+  // inquiry with (self-inquiry to one's own org makes no sense: see
+  // getOrCreateOrganizationChatRoom's own comment). Distinct from "self"
+  // (personal chat's own self-chat guard) since the two guards check
+  // completely different things.
+  | { kind: "forbidden"; reason?: "suspended" | "self" | "organization_manager" }
   | { kind: "invalid_content" }
   // Phase 28-3: imagePath was given but doesn't parse as a real chat
   // image pathname, or names a different chat room than the one the
@@ -59,17 +72,41 @@ export type ChatMutationResult<T> =
   | { kind: "invalid_reaction" }
   // Phase P-6: same "wrong room or doesn't exist" shape as invalid_reply/
   // invalid_reaction, for editMessage/deleteMessage's own messageId.
-  | { kind: "invalid_message" };
+  | { kind: "invalid_message" }
+  // Phase 12-11 §17: the post's organization is INACTIVE ("폐쇄") -- a new
+  // inquiry can't be opened, mirroring validateOrganizationPosting's own
+  // "inactive_organization" kind in organization/service.ts. Existing
+  // inquiry rooms into a since-closed organization are completely
+  // unaffected (getChatRoomForUser/listMessages/sendMessage never check
+  // organization status -- only room creation does).
+  | { kind: "inactive_organization" };
 
-// Phase J-2: only one room shape is left (the Match variant went with the
-// Match domain), but `roomType` is kept on the DTO so every existing
-// consumer (chat list/detail UI, tests) keeps reading the same field it
-// already did rather than being rewritten around its absence.
+// Phase 12-11 §13: a room's "other side" is either a real person (personal
+// chat) or the organization itself (inquiry chat) -- never conflated, and
+// never a User row standing in for an organization or vice versa (this
+// phase's own explicit warning against treating the two as the same
+// thing).
+export type ChatCounterpart =
+  | { kind: "user"; id: number; nickname: string | null; publicId: string | null }
+  | { kind: "organization"; id: number; name: string };
+
+// Phase J-2: `roomType` is kept on the DTO so every existing consumer
+// (chat list/detail UI, tests) keeps reading the same field it already
+// did. Phase 12-11: a second value, "organization", was added -- never
+// replacing "direct".
 export type ChatRoomDetailDTO = {
-  roomType: "direct";
+  roomType: "direct" | "organization";
   id: number;
   createdAt: Date;
-  counterpart: { id: number; nickname: string | null; publicId: string | null };
+  counterpart: ChatCounterpart;
+  // Phase 12-11 §13/§14: populated only for an organization room -- the
+  // actual person who opened the inquiry (the room's own initiatorUserId).
+  // Lets the UI be context-aware without a second query: the inquirer's
+  // own client only needs `counterpart` (the organization); an org
+  // admin's client, viewing someone else's inquiry, additionally shows
+  // this to render "홍길동 → 총학생회 문의" instead of just "총학생회". Always
+  // null for a personal room.
+  inquirer: { id: number; nickname: string | null; publicId: string | null } | null;
   post: { id: number; title: string; type: PostType; imageUrl: string | null };
 };
 
@@ -195,6 +232,7 @@ async function findChatRoomRow(chatRoomId: number): Promise<ChatRoomRow | null> 
       id: true,
       initiatorUserId: true,
       counterpartUserId: true,
+      organizationId: true,
       createdAt: true,
       directLostPost: { select: POST_REF_SELECT },
       directFoundPost: { select: POST_REF_SELECT },
@@ -205,11 +243,32 @@ async function findChatRoomRow(chatRoomId: number): Promise<ChatRoomRow | null> 
 // The single funnel point every permission check goes through (same role
 // legacy's _chat_room_participant_ids had). A row with no initiator
 // (shouldn't exist -- every row this app creates has one) is treated as
-// not_found rather than crashing. Phase 12-9: reads the two participant
-// columns directly rather than re-deriving one of them from the related
-// post's current author -- see ChatRoom.counterpartUserId's own comment.
-function participantIdsOf(room: ChatRoomRow): Set<number> | null {
+// not_found rather than crashing.
+//
+// Phase 12-11 §16/§20: now async -- an organization room's "who may
+// access this" set is dynamic (whoever currently holds LEADER/ADMIN in
+// that org), never a fixed value stored on the room at creation time. A
+// MEMBER never appears here regardless of when they joined; an admin
+// appointed after the room was created gains access the moment they're
+// appointed, and one who steps down loses it the moment they do -- always
+// re-derived fresh from OrganizationMember, same "never cached" rule
+// organization/authz.ts's own module comment establishes for every other
+// org-scoped permission check in this app.
+async function participantIdsOf(room: ChatRoomRow): Promise<Set<number> | null> {
   if (room.initiatorUserId === null) return null;
+
+  if (room.organizationId) {
+    const managers = await prisma.organizationMember.findMany({
+      where: {
+        organizationId: room.organizationId,
+        role: { in: [OrganizationRole.LEADER, OrganizationRole.ADMIN] },
+      },
+      select: { userId: true },
+    });
+    return new Set([room.initiatorUserId, ...managers.map((m) => m.userId)]);
+  }
+
+  if (room.counterpartUserId === null) return null;
   return new Set([room.counterpartUserId, room.initiatorUserId]);
 }
 
@@ -227,32 +286,6 @@ export async function getChatRoomParticipantIds(chatRoomId: number): Promise<Set
   return participantIdsOf(room);
 }
 
-async function resolveDetailDTO(
-  room: ChatRoomRow,
-  requesterId: number,
-): Promise<ChatRoomDetailDTO | null> {
-  const directPost = room.directLostPost ?? room.directFoundPost;
-  if (!directPost || room.initiatorUserId === null) return null;
-  // Phase 12-9: the stored columns *are* the two participants now -- no
-  // more falling back to the post's current author (see
-  // ChatRoom.counterpartUserId's own comment for why that was wrong once
-  // a room's counterpart could be a comment author instead).
-  const otherPartyId = room.initiatorUserId === requesterId ? room.counterpartUserId : room.initiatorUserId;
-  const counterpart = await resolveCounterpart(otherPartyId);
-  return {
-    roomType: "direct",
-    id: room.id,
-    createdAt: room.createdAt,
-    counterpart,
-    post: {
-      id: directPost.id,
-      title: directPost.title,
-      type: room.directLostPost ? "lost" : "found",
-      imageUrl: directPost.imageUrl,
-    },
-  };
-}
-
 // Phase H-7: publicId (nullable only for the fallback below) lets the chat
 // header link the counterpart's name to /profile/[publicId], same as every
 // other author-display site. The `?? {..., publicId: null}` branch only
@@ -268,6 +301,56 @@ async function resolveCounterpart(
     select: { id: true, nickname: true, publicId: true },
   });
   return user ?? { id: userId, nickname: null, publicId: null };
+}
+
+async function resolveDetailDTO(
+  room: ChatRoomRow,
+  requesterId: number,
+): Promise<ChatRoomDetailDTO | null> {
+  const directPost = room.directLostPost ?? room.directFoundPost;
+  if (!directPost || room.initiatorUserId === null) return null;
+
+  const post = {
+    id: directPost.id,
+    title: directPost.title,
+    type: (room.directLostPost ? "lost" : "found") as PostType,
+    imageUrl: directPost.imageUrl,
+  };
+
+  // Phase 12-11 §6/§13: an inquiry room's "other side" is the organization
+  // itself -- never one particular User standing in for it. `inquirer` is
+  // always the room's own initiator (the person who opened it), exposed
+  // alongside `counterpart` so a viewer who *isn't* the inquirer (an org
+  // admin looking at someone else's inquiry) can tell the two apart (see
+  // ChatRoomDetailDTO.inquirer's own comment).
+  if (room.organizationId) {
+    const organization = await prisma.organization.findUnique({
+      where: { id: room.organizationId },
+      select: { id: true, name: true },
+    });
+    if (!organization) return null; // defensive -- Organization rows are never hard-deleted
+    const inquirer = await resolveCounterpart(room.initiatorUserId);
+    return {
+      roomType: "organization",
+      id: room.id,
+      createdAt: room.createdAt,
+      counterpart: { kind: "organization", id: organization.id, name: organization.name },
+      inquirer,
+      post,
+    };
+  }
+
+  if (room.counterpartUserId === null) return null; // defensive -- every personal room has this set
+  const otherPartyId = room.initiatorUserId === requesterId ? room.counterpartUserId : room.initiatorUserId;
+  const counterpart = await resolveCounterpart(otherPartyId);
+  return {
+    roomType: "direct",
+    id: room.id,
+    createdAt: room.createdAt,
+    counterpart: { kind: "user", ...counterpart },
+    inquirer: null,
+    post,
+  };
 }
 
 // Phase 10: get-or-create a *direct* ChatRoom between requester (the
@@ -295,6 +378,15 @@ async function resolveCounterpart(
 // authorUserId is exactly what's read below regardless of the comment's
 // own organizationId, so this falls out automatically without any
 // special-casing.
+//
+// Phase 12-11 §0/§18: when there's no commentId and the post itself is
+// organization-attributed (post.organizationId set), this is no longer a
+// personal chat at all -- delegates to getOrCreateOrganizationChatRoom
+// rather than ever treating post.userId (the real, usually-hidden author)
+// as the chat counterpart. A comment-chat request (commentId present)
+// always stays personal regardless of the *post's* own organizationId --
+// §4's existing rule that a comment's real author is always the real chat
+// recipient is untouched by this phase.
 export async function getOrCreateDirectChatRoom(
   postType: PostType,
   postId: number,
@@ -307,11 +399,21 @@ export async function getOrCreateDirectChatRoom(
 
   const post =
     postType === "lost"
-      ? await prisma.lostPost.findUnique({ where: { id: postId }, select: { id: true, userId: true } })
-      : await prisma.foundPost.findUnique({ where: { id: postId }, select: { id: true, userId: true } });
+      ? await prisma.lostPost.findUnique({
+          where: { id: postId },
+          select: { id: true, userId: true, organizationId: true },
+        })
+      : await prisma.foundPost.findUnique({
+          where: { id: postId },
+          select: { id: true, userId: true, organizationId: true },
+        });
   // A missing post covers both "never existed" and "deleted" -- the row
   // simply isn't found either way, no separate check needed.
   if (!post) return { kind: "not_found" };
+
+  if (commentId === undefined && post.organizationId) {
+    return getOrCreateOrganizationChatRoom(postType, postId, requester, post.organizationId);
+  }
 
   let counterpartUserId = post.userId;
   if (commentId !== undefined) {
@@ -383,6 +485,117 @@ export async function getOrCreateDirectChatRoom(
   return { kind: "ok", data: dto };
 }
 
+// Phase 12-11 §0/§6/§7/§9/§10/§17/§19: get-or-create an *organization*
+// inquiry ChatRoom -- the "단체에 문의하기" flow. `organizationId` is always
+// the caller's own already-resolved value (getOrCreateDirectChatRoom reads
+// it from the post it already fetched), never re-derived from a raw
+// client input, so there's no way to open an inquiry room "at" an
+// organizationId that doesn't actually match the post in question.
+//
+// Room identity is (post, initiator, organization) -- §7's own policy:
+// the same user inquiring about the same organization through two
+// *different* posts gets two separate rooms (their contexts shouldn't
+// mix), but re-clicking "단체에 문의하기" on the same post reuses the
+// existing room, exactly mirroring getOrCreateDirectChatRoom's own
+// idempotency (same unique-constraint-then-P2002-recovery shape).
+export async function getOrCreateOrganizationChatRoom(
+  postType: PostType,
+  postId: number,
+  requester: User,
+  organizationId: number,
+): Promise<ChatMutationResult<ChatRoomDetailDTO>> {
+  if (isCurrentlySuspended(requester)) {
+    return { kind: "forbidden", reason: "suspended" };
+  }
+
+  const organization = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { status: true },
+  });
+  if (!organization) return { kind: "not_found" };
+  // §17: a closed (INACTIVE) organization can't receive *new* inquiries --
+  // existing rooms into it stay fully readable (this check only runs at
+  // creation time, never on read/send paths).
+  if (organization.status !== OrganizationStatus.ACTIVE) return { kind: "inactive_organization" };
+
+  // §19: a LEADER/ADMIN of this exact organization inquiring about their
+  // own organization is never meaningful (they'd just be notifying
+  // themselves) -- checked here, re-derived fresh from the DB, never
+  // trusting the client's own view of "am I a manager here" the way every
+  // other org-authz check in this app already re-derives role state (see
+  // organization/authz.ts's own module comment).
+  const membership = await getMembership(requester.id, organizationId);
+  if (membership?.role === OrganizationRole.LEADER || membership?.role === OrganizationRole.ADMIN) {
+    return { kind: "forbidden", reason: "organization_manager" };
+  }
+
+  const directColumn = postType === "lost" ? ({ directLostPostId: postId } as const) : ({ directFoundPostId: postId } as const);
+  const uniqueWhere =
+    postType === "lost"
+      ? {
+          directLostPostId_initiatorUserId_organizationId: {
+            directLostPostId: postId,
+            initiatorUserId: requester.id,
+            organizationId,
+          },
+        }
+      : {
+          directFoundPostId_initiatorUserId_organizationId: {
+            directFoundPostId: postId,
+            initiatorUserId: requester.id,
+            organizationId,
+          },
+        };
+
+  const existing = await prisma.chatRoom.findUnique({ where: uniqueWhere });
+  if (existing) {
+    const room = await findChatRoomRow(existing.id);
+    const dto = room && (await resolveDetailDTO(room, requester.id));
+    if (dto) return { kind: "ok", data: dto };
+  }
+
+  let createdId: number;
+  try {
+    // Phase 12-11 §9/§12: the "새 문의" notification fan-out happens inside
+    // the same transaction as the room INSERT, and only on this genuinely-
+    // new-room path -- never on the "existing room reused" branch above,
+    // and never again on a later message in this same room (see
+    // sendMessage's own comment on why per-message admin notifications
+    // don't exist). A concurrent create race (P2002 below) means the loser
+    // never reaches this transaction at all, so no duplicate fan-out is
+    // possible there either.
+    createdId = await prisma.$transaction(async (tx) => {
+      const created = await tx.chatRoom.create({
+        data: { ...directColumn, initiatorUserId: requester.id, organizationId },
+        select: { id: true },
+      });
+      await fanOutToOrganizationManagers(tx, {
+        organizationId,
+        excludeUserId: requester.id,
+        type: NotificationType.ORGANIZATION_CHAT_RECEIVED,
+        title: "새로운 단체 문의가 도착했습니다",
+        content: `${requester.nickname ?? "사용자"}님이 단체에 문의를 남겼습니다.`,
+        relatedType: "organization_chat_room",
+        relatedId: created.id,
+      });
+      return created.id;
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const winner = await prisma.chatRoom.findUnique({ where: uniqueWhere });
+      if (!winner) throw error;
+      createdId = winner.id;
+    } else {
+      throw error;
+    }
+  }
+
+  const room = await findChatRoomRow(createdId);
+  const dto = room && (await resolveDetailDTO(room, requester.id));
+  if (!dto) throw new Error(`Failed to load organization ChatRoom ${createdId} for ${postType} post ${postId}`);
+  return { kind: "ok", data: dto };
+}
+
 // Fetch a ChatRoom, but only for a requester who is actually a
 // participant -- mirrors legacy get_chat_room(), for either room shape.
 // Never trusts a client-supplied chatRoomId beyond using it to look the
@@ -393,7 +606,7 @@ export async function getChatRoomForUser(
 ): Promise<ChatMutationResult<ChatRoomDetailDTO>> {
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
-  const participantIds = participantIdsOf(room);
+  const participantIds = await participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
   if (!participantIds.has(requesterId)) return { kind: "forbidden" };
 
@@ -426,18 +639,21 @@ export type AdminChatRoomDTO = {
 // function's participant-only gate is untouched (this phase's own "일반
 // 사용자의 채팅 권한을 변경하지 않는다"), and resolveDetailDTO's
 // "counterpart relative to requesterId" shape has no meaning for a third
-// party who isn't a participant at all. This lists both participants
-// plainly instead, and every message with its own sender attached --
-// deliberately no reply preview/reaction/read-receipt data, since none of
-// that is meaningful for a non-participant and this link only exists to
-// give an admin surrounding context, not a feature-complete chat client
-// (no compose/reply/react/edit/delete capability is exposed here).
-// Performs no authorization itself -- same convention as getMessage()'s
-// own comment -- the caller (the admin page) gates with requireAdmin().
+// party who isn't a participant at all. This lists every current
+// participant plainly instead (for an organization room, that's the
+// inquirer plus every current LEADER/ADMIN -- same set participantIdsOf
+// derives everywhere else), and every message with its own sender
+// attached -- deliberately no reply preview/reaction/read-receipt data,
+// since none of that is meaningful for a non-participant and this link
+// only exists to give an admin surrounding context, not a feature-
+// complete chat client (no compose/reply/react/edit/delete capability is
+// exposed here). Performs no authorization itself -- same convention as
+// getMessage()'s own comment -- the caller (the admin page) gates with
+// requireAdmin().
 export async function getChatRoomForAdmin(chatRoomId: number): Promise<AdminChatRoomDTO | null> {
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return null;
-  const participantIds = participantIdsOf(room);
+  const participantIds = await participantIdsOf(room);
   const directPost = room.directLostPost ?? room.directFoundPost;
   if (!participantIds || !directPost) return null;
 
@@ -466,24 +682,44 @@ export async function getChatRoomForAdmin(chatRoomId: number): Promise<AdminChat
   };
 }
 
-// Every ChatRoom the user participates in -- as the initiator, or as the
-// current author of the post the room is about -- most-recently-active
-// first, mirroring legacy list_chat_rooms_by_user(). Phase J-2: this used
-// to union a second query for Match-based rooms; with Match gone there is
-// only the one (direct) shape left, so the union collapsed into a single
-// findMany.
+// Every ChatRoom the user participates in -- as a personal room's
+// initiator/counterpart, or (Phase 12-11) as the inquirer of one of their
+// own organization inquiries, or as a current LEADER/ADMIN of an
+// organization that has inquiry rooms -- most-recently-active first,
+// mirroring legacy list_chat_rooms_by_user(). Phase J-2: this used to
+// union a second query for Match-based rooms; with Match gone there was
+// only the one (direct) shape left, until Phase 12-11 added the
+// organization shape alongside it.
 export async function listChatRoomsForUser(requesterId: number): Promise<ChatRoomListItemDTO[]> {
+  // Phase 12-11: which organizations this user currently manages -- fresh
+  // on every call (same "never cached" rule as participantIdsOf), used
+  // only to widen the room WHERE clause below so an admin's own inquiry
+  // rooms show up in their chat list without a second round-trip per room.
+  const managedOrgs = await prisma.organizationMember.findMany({
+    where: { userId: requesterId, role: { in: [OrganizationRole.LEADER, OrganizationRole.ADMIN] } },
+    select: { organizationId: true },
+  });
+  const managedOrgIds = managedOrgs.map((m) => m.organizationId);
+
   const rooms = await prisma.chatRoom.findMany({
     where: {
       // Phase 12-9: filters on the two stored participant columns directly
       // now, rather than joining through directLostPost/directFoundPost's
       // *current* owner -- see ChatRoom.counterpartUserId's own comment.
-      OR: [{ initiatorUserId: requesterId }, { counterpartUserId: requesterId }],
+      // Phase 12-11: OR'd with "an organization I currently manage" so an
+      // admin's inbox includes every inquiry room for their org(s), not
+      // just ones they personally opened.
+      OR: [
+        { initiatorUserId: requesterId },
+        { counterpartUserId: requesterId },
+        ...(managedOrgIds.length > 0 ? [{ organizationId: { in: managedOrgIds } }] : []),
+      ],
     },
     select: {
       id: true,
       initiatorUserId: true,
       counterpartUserId: true,
+      organizationId: true,
       createdAt: true,
       directLostPost: { select: POST_REF_SELECT },
       directFoundPost: { select: POST_REF_SELECT },
@@ -532,7 +768,7 @@ export async function listMessages(
 ): Promise<ChatMutationResult<{ items: MessageDTO[]; hasMore: boolean }>> {
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
-  const participantIds = participantIdsOf(room);
+  const participantIds = await participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
   if (!participantIds.has(requesterId)) return { kind: "forbidden" };
 
@@ -552,8 +788,13 @@ export async function listMessages(
   // Phase N: one lookup for the *other* participant's read cursor (never
   // the requester's own -- see MessageDTO.readByCounterpart's own
   // comment), reused for every message on this page rather than a
-  // per-message query. A room only ever has two participants, so "the
-  // other one" is just whichever id in the set isn't requesterId.
+  // per-message query. Phase 12-11: for an organization room this "other"
+  // id is just whichever manager/initiator isn't the requester (picked
+  // arbitrarily among several possible managers) -- read-receipt display
+  // for a many-manager inquiry room is inherently approximate (there's no
+  // single "the other person"), same limitation this DTO already has for
+  // any room with more than two possible viewers; it never blocks or
+  // breaks the message list itself, only the per-message "읽음" hint.
   // Wrapped defensively (unlike every other ChatRead access in this file):
   // this is the one call on the *read* path, reachable the instant this
   // code ships, before the ChatRead migration is necessarily live in every
@@ -636,7 +877,7 @@ export async function markChatRoomRead(
 ): Promise<ChatMutationResult<{ lastReadMessageId: number | null }>> {
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
-  const participantIds = participantIdsOf(room);
+  const participantIds = await participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
   if (!participantIds.has(requesterId)) return { kind: "forbidden" };
 
@@ -676,7 +917,7 @@ export async function markMessageNotificationsReadForChatRoom(
 ): Promise<ChatMutationResult<{ count: number }>> {
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
-  const participantIds = participantIdsOf(room);
+  const participantIds = await participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
   if (!participantIds.has(requesterId)) return { kind: "forbidden" };
 
@@ -708,6 +949,18 @@ export async function markMessageNotificationsReadForChatRoom(
 // chat room's), so distinct messages each get their own notification
 // instead of colliding on Notification's
 // UNIQUE(userId, type, relatedType, relatedId).
+//
+// Phase 12-11 §12: for an organization room there is no single fixed
+// "other participant" to notify the way a personal room has -- and this
+// phase's own spec explicitly forbids fanning a MESSAGE notification out
+// to every manager on every message (that's a "new inquiry" event,
+// already handled once at room-creation time, not a per-message one).
+// Only the inquirer ever gets a message notification here, and only when
+// the *sender* is a manager replying to them -- if the inquirer sends a
+// message, nobody is notified via this path (mirrors "an admin should not
+// get pinged for every line the inquirer types", which fan-out-to-
+// managers would otherwise do).
+//
 // Phase 28-3: imagePath is the Storage *path* the client already uploaded
 // to via POST /api/chat/[id]/upload (which itself gated the upload on
 // chat-room membership) -- never a client-supplied URL, same "the server
@@ -725,7 +978,7 @@ export async function sendMessage(
 ): Promise<ChatMutationResult<MessageDTO>> {
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
-  const participantIds = participantIdsOf(room);
+  const participantIds = await participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
   if (!participantIds.has(sender.id)) return { kind: "forbidden" };
   if (isCurrentlySuspended(sender)) return { kind: "forbidden" };
@@ -764,11 +1017,25 @@ export async function sendMessage(
     replyTarget = target;
   }
 
-  // participantIds is always exactly the sender + the one other
-  // participant (a room's initiator/post-author pair are guaranteed
+  // Phase 12-11: an organization room's notification target is always
+  // "the inquirer, but only if a manager is the one sending" -- computed
+  // directly from room.initiatorUserId rather than from participantIds
+  // (which, for an org room, can hold several managers with no single
+  // "the other one"). A personal room keeps its original computation
+  // unchanged: participantIds is always exactly the sender + the one
+  // other participant (a room's initiator/counterpart pair are guaranteed
   // distinct at creation time -- see getOrCreateDirectChatRoom()'s
-  // self-chat check), so the `?? sender.id` fallback is defensive only.
-  const otherUserId = [...participantIds].find((id) => id !== sender.id) ?? sender.id;
+  // self-chat check), so the `?? sender.id` fallback there is defensive
+  // only.
+  let notifyUserId: number | null = null;
+  if (room.organizationId) {
+    if (room.initiatorUserId !== null && sender.id !== room.initiatorUserId) {
+      notifyUserId = room.initiatorUserId;
+    }
+  } else {
+    const otherUserId = [...participantIds].find((id) => id !== sender.id) ?? sender.id;
+    notifyUserId = otherUserId !== sender.id ? otherUserId : null;
+  }
 
   const message = await prisma.$transaction(async (tx) => {
     const created = await tx.message.create({
@@ -782,13 +1049,10 @@ export async function sendMessage(
       include: { sender: { select: { nickname: true } } },
     });
 
-    // No "other participant" to notify (defensive -- see otherUserId's
-    // own comment above), same as legacy's
-    // next(iter(ids - {sender}), None) -> None -> no notification.
-    if (otherUserId !== sender.id) {
+    if (notifyUserId !== null) {
       await tx.notification.create({
         data: {
-          userId: otherUserId,
+          userId: notifyUserId,
           type: NotificationType.MESSAGE,
           title: "새 메시지가 도착했습니다",
           content: `${sender.nickname ?? "상대방"}님이 메시지를 보냈습니다.`,
@@ -847,7 +1111,7 @@ export async function toggleMessageReaction(
 ): Promise<ChatMutationResult<{ messageId: number; reactions: ReactionSummary[] }>> {
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
-  const participantIds = participantIdsOf(room);
+  const participantIds = await participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
   if (!participantIds.has(requester.id)) return { kind: "forbidden" };
 
@@ -908,7 +1172,7 @@ export async function editMessage(
 ): Promise<ChatMutationResult<MessageDTO>> {
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
-  const participantIds = participantIdsOf(room);
+  const participantIds = await participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
   if (!participantIds.has(requesterId)) return { kind: "forbidden" };
 
@@ -973,7 +1237,7 @@ export async function deleteMessage(
 ): Promise<ChatMutationResult<{ messageId: number }>> {
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
-  const participantIds = participantIdsOf(room);
+  const participantIds = await participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
   // An admin bypasses the membership gate too -- same as the report ->
   // HIDE_MESSAGE flow, which never required the processing admin to be a
@@ -1048,13 +1312,14 @@ export async function getMessage(messageId: number): Promise<{ id: number; chatR
   });
 }
 
-// Phase 17: chat tab's unread badge (Navigation). Reuses exactly the same
-// room-scoping WHERE clause listChatRoomsForUser() uses (only
-// `select: { id: true }` instead of the full detail shape) to find every
-// room this user participates in. A hidden message (Report/
-// ModerationAction) is still counted -- the notification badge signals
-// "something happened here", not "there's readable new content"; opening
-// the room is what actually clears it via markChatRoomRead().
+// Phase 17: chat tab's unread badge (Navigation). Reuses the same
+// room-scoping logic listChatRoomsForUser() uses (an organization room
+// counts for a current LEADER/ADMIN of it too, per Phase 12-11) to find
+// every room this user can see, then counts unread messages across all of
+// them via one raw query. A hidden message (Report/ModerationAction) is
+// still counted -- the notification badge signals "something happened
+// here", not "there's readable new content"; opening the room is what
+// actually clears it via markChatRoomRead().
 //
 // Phase N: the unread threshold is now requesterId's own ChatRead cursor,
 // which varies per room -- Prisma's query builder has no way to express
@@ -1064,12 +1329,19 @@ export async function getMessage(messageId: number): Promise<{ id: number; chatR
 // it as unread via COALESCE(..., 0)) rather than either N+1 per-room
 // queries or a second round trip to fetch every cursor first.
 export async function countUnreadMessagesForUser(requesterId: number): Promise<number> {
+  const managedOrgs = await prisma.organizationMember.findMany({
+    where: { userId: requesterId, role: { in: [OrganizationRole.LEADER, OrganizationRole.ADMIN] } },
+    select: { organizationId: true },
+  });
+  const managedOrgIds = managedOrgs.map((m) => m.organizationId);
+
   const rooms = await prisma.chatRoom.findMany({
     where: {
-      // Phase 12-9: filters on the two stored participant columns directly
-      // now, rather than joining through directLostPost/directFoundPost's
-      // *current* owner -- see ChatRoom.counterpartUserId's own comment.
-      OR: [{ initiatorUserId: requesterId }, { counterpartUserId: requesterId }],
+      OR: [
+        { initiatorUserId: requesterId },
+        { counterpartUserId: requesterId },
+        ...(managedOrgIds.length > 0 ? [{ organizationId: { in: managedOrgIds } }] : []),
+      ],
     },
     select: { id: true },
   });

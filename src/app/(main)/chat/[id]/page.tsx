@@ -7,7 +7,7 @@ import { getChatRoomForUser } from "@/lib/chat/service";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { ReportButton } from "@/components/report/ReportButton";
 import { AuthorLink } from "@/components/user/AuthorLink";
-import { ImageOffIcon } from "@/components/icons";
+import { ImageOffIcon, ShieldIcon } from "@/components/icons";
 
 export default async function ChatRoomPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: idParam } = await params;
@@ -59,18 +59,49 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
             <Link> to the room, and nesting a second link inside it would
             hit the same invalid-HTML/unreliable-click problem PostCard's
             own comment describes -- this room header isn't inside any
-            other link, so no such conflict here. */}
-        <AuthorLink
-          nickname={room.counterpart.nickname}
-          publicId={room.counterpart.publicId}
-          className="font-semibold text-foreground hover:underline"
-        />
-        <div className="flex items-center gap-3">
-          <ReportButton
-            targetType="user"
-            targetId={room.counterpart.id}
-            buttonLabel={`${room.counterpart.nickname ?? "상대방"}님 신고하기`}
+            other link, so no such conflict here.
+            Phase 12-11 §13/§14: an organization room shows the org's name
+            (linked to its profile, same ShieldIcon convention
+            AttributionLink already established) instead of a person --
+            never a manager's own identity, there can be several. A
+            manager viewing someone else's inquiry additionally sees who
+            opened it, in a small caption line underneath. */}
+        {room.counterpart.kind === "organization" ? (
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <Link
+              href={`/organizations/${room.counterpart.id}`}
+              className="flex w-fit items-center gap-1.5 font-semibold text-foreground hover:underline"
+            >
+              <ShieldIcon className="size-4 shrink-0 text-primary" />
+              {room.counterpart.name}
+            </Link>
+            {room.inquirer && room.inquirer.id !== user.id && (
+              <span className="text-xs text-muted-foreground">
+                문의자: {room.inquirer.nickname ?? "알 수 없음"}
+              </span>
+            )}
+          </div>
+        ) : (
+          <AuthorLink
+            nickname={room.counterpart.nickname}
+            publicId={room.counterpart.publicId}
+            className="font-semibold text-foreground hover:underline"
           />
+        )}
+        <div className="flex items-center gap-3">
+          {/* Phase 12-11: reporting "상대방" only makes sense for a real
+              person -- an organization itself isn't a reportable user, and
+              which individual manager might eventually reply is unknown
+              ahead of time, so this control is simply absent on an
+              organization room rather than pointed at an arbitrary
+              manager. */}
+          {room.counterpart.kind === "user" && (
+            <ReportButton
+              targetType="user"
+              targetId={room.counterpart.id}
+              buttonLabel={`${room.counterpart.nickname ?? "상대방"}님 신고하기`}
+            />
+          )}
           <Link href="/chat" className="text-sm text-muted-foreground underline hover:text-foreground">
             채팅 목록
           </Link>
