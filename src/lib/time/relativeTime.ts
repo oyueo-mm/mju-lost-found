@@ -27,5 +27,5 @@ export function formatRelativeTime(date: Date): string {
 // `title` tooltip on hover/long-press, per this phase's own "필요한 경우
 // 오래된 메시지는 정확한 날짜/시간을 확인할 수 있게 한다".
 export function formatAbsoluteTime(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }

@@ -22,14 +22,26 @@ const comment = { findUnique: vi.fn() };
 // with what this file tests, same convention as this file's other
 // wholesale mocks below.
 const getChatRoomParticipantIds = vi.fn();
+// Phase 12-9 §2: createReport() now wraps its insert in $transaction and
+// calls fanOutToAdmins() -- mocked wholesale (that helper's own import
+// chain has nothing to do with what this file tests, same convention as
+// getChatRoomParticipantIds above), and $transaction just runs the
+// callback against a fake tx built from this file's own `report` mock,
+// same "assertions on report.create pass whether the real call happened
+// inside or outside a transaction" convention every other
+// *.service.test.ts in this app already uses.
+const fanOutToAdmins = vi.fn();
+const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn({ report }));
 
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { report, lostPost, foundPost, message, user: userTable, comment },
+  prisma: { report, lostPost, foundPost, message, user: userTable, comment, $transaction },
 }));
 vi.mock("@/lib/chat/service", () => ({ getChatRoomParticipantIds }));
+vi.mock("@/lib/notification/adminFanout", () => ({ fanOutToAdmins }));
 vi.mock("@/generated/prisma/client", () => ({
   ReportTargetType: { POST: "POST", MESSAGE: "MESSAGE", USER: "USER", COMMENT: "COMMENT" },
   ReportStatus: { PENDING: "PENDING", DISMISSED: "DISMISSED", ACTIONED: "ACTIONED" },
+  NotificationType: { REPORT_RECEIVED: "REPORT_RECEIVED" },
   Prisma: { PrismaClientKnownRequestError: FakePrismaClientKnownRequestError },
 }));
 
@@ -236,6 +248,31 @@ describe("createReport", () => {
     expect(report.create).toHaveBeenCalledWith({
       data: { reporterUserId: reporter.id, targetType: "POST", targetId: 5, reason: "기타", detail: "상세" },
     });
+  });
+
+  // Phase 12-9 §2: every successful report fans out to admins -- see
+  // notification/adminFanout.test.ts for the helper's own isolated
+  // coverage (which admins get notified, dedup, etc.); this only asserts
+  // that createReport actually calls it with the right relatedId/type.
+  it("fans out a REPORT_RECEIVED notification to admins on successful creation", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 5, userId: 999 });
+    report.create.mockResolvedValueOnce(reportRow({ id: 77 }));
+
+    await createReport(reporter, { targetType: "post", targetId: 5, reason: "기타" });
+
+    expect(fanOutToAdmins).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: "REPORT_RECEIVED", relatedType: "report", relatedId: 77 }),
+    );
+  });
+
+  it("does not fan out to admins when report creation fails (duplicate)", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 5, userId: 999 });
+    report.create.mockRejectedValueOnce(new FakePrismaClientKnownRequestError("P2002"));
+
+    await createReport(reporter, { targetType: "post", targetId: 5, reason: "기타" });
+
+    expect(fanOutToAdmins).not.toHaveBeenCalled();
   });
 
   it("relies on the UNIQUE constraint (P2002) for duplicate reports, not a precheck", async () => {

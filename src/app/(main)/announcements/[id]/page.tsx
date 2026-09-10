@@ -4,7 +4,7 @@ import { getAnnouncement } from "@/lib/announcement/service";
 import { BellIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 // Phase M: the page an announcement's notification links to (see

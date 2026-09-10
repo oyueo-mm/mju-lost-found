@@ -13,7 +13,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 const ROLE_LABELS = { leader: "대표 관리자", admin: "관리자", member: "구성원" } as const;
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

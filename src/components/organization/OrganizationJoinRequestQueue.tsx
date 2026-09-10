@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ORGANIZATION_REQUEST_STATUS_LABELS, type OrganizationRequestStatusValue } from "@/lib/organization/schema";
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 type JoinRequest = {

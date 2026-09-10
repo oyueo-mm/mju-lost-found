@@ -2,10 +2,13 @@ import { prisma } from "@/lib/db/prisma";
 import {
   FeedbackCategory as PrismaFeedbackCategory,
   FeedbackStatus as PrismaFeedbackStatus,
+  NotificationType as PrismaNotificationType,
   type User,
 } from "@/generated/prisma/client";
 import { isAdmin } from "@/lib/moderation/service";
+import { fanOutToAdmins } from "@/lib/notification/adminFanout";
 import type { CreateFeedbackInput, FeedbackCategoryValue, FeedbackStatusValue, UpdateFeedbackStatusInput } from "./schema";
+import { FEEDBACK_CATEGORY_LABELS } from "./schema";
 
 // Phase 11-5: "서비스 개선 제안" -- deliberately separate from Report (see
 // schema.prisma's own comment on the Feedback model for why). Every
@@ -100,13 +103,25 @@ export type FeedbackMutationResult<T> =
 // never trusts a client-passed userId" rule this app already follows
 // everywhere else, e.g. posts/service.ts's create*Post).
 export async function createFeedback(user: User, input: CreateFeedbackInput): Promise<FeedbackMutationResult<FeedbackDTO>> {
-  const created = await prisma.feedback.create({
-    data: {
-      userId: user.id,
-      category: CATEGORY_TO_DB[input.category],
-      title: input.title,
-      content: input.content,
-    },
+  // Phase 12-9 §2: create + admin fan-out in one transaction -- see
+  // report/service.ts's createReport's own identical comment.
+  const created = await prisma.$transaction(async (tx) => {
+    const feedback = await tx.feedback.create({
+      data: {
+        userId: user.id,
+        category: CATEGORY_TO_DB[input.category],
+        title: input.title,
+        content: input.content,
+      },
+    });
+    await fanOutToAdmins(tx, {
+      type: PrismaNotificationType.FEEDBACK_RECEIVED,
+      title: "새 문의가 접수되었습니다",
+      content: `[${FEEDBACK_CATEGORY_LABELS[input.category]}] ${input.title}`,
+      relatedType: "feedback",
+      relatedId: feedback.id,
+    });
+    return feedback;
   });
   return { kind: "ok", data: toFeedbackDTO(created) };
 }

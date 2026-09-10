@@ -33,6 +33,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
   }
 
-  const result = await getOrCreateDirectChatRoom(parsed.data.postType, parsed.data.postId, auth.user);
+  const result = await getOrCreateDirectChatRoom(parsed.data.postType, parsed.data.postId, auth.user, parsed.data.commentId);
   return chatMutationResultToResponse(result, 201);
 });

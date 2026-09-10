@@ -41,6 +41,16 @@ export function Footer() {
             <p className="text-xs text-muted-foreground">
               명지대학교 학생을 위한 분실물 등록·검색·연락 서비스입니다.
             </p>
+            {/* Phase 12-9 §5: explicit "이 학교 공식 서비스가 아니다" +
+                "학생이 자발적으로 만들었다" 고지 -- 학교 로고/브랜드는 이
+                텍스트 한 줄 외에 새로 추가하지 않는다. 실제로 확인된 팀원
+                이름/연락처가 없으므로(현재 프로젝트에 공개하기로 정해진
+                정보 없음) 구체적인 개인정보는 넣지 않고, "학생이 만들었다"는
+                사실만 표시한다. */}
+            <p className="text-xs text-muted-foreground">
+              명지대학교 학생들이 자발적으로 제작한 프로젝트이며, 명지대학교가 공식적으로 운영하는 서비스가 아닙니다.
+            </p>
+            <p className="text-[11px] text-muted-foreground/80">Created by MJU students</p>
           </div>
 
           {/* Phase 11-5: both nav blocks switch from a vertical stack to a

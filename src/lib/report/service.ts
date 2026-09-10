@@ -3,12 +3,15 @@ import {
   Prisma,
   ReportTargetType as PrismaReportTargetType,
   ReportStatus as PrismaReportStatus,
+  NotificationType as PrismaNotificationType,
   type Report,
   type User,
 } from "@/generated/prisma/client";
 import type { CreateReportInput, ReportStatusValue, ReportTargetType } from "./schema";
+import { REPORT_TARGET_TYPE_LABELS } from "./schema";
 import { resolveCommentTarget, resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "./targets";
 import { getChatRoomParticipantIds } from "@/lib/chat/service";
+import { fanOutToAdmins } from "@/lib/notification/adminFanout";
 
 // Prisma's generated enum values are the ASCII identifiers (POST, MESSAGE,
 // USER / PENDING, DISMISSED, ACTIONED) -- @map only renames the DB column
@@ -106,14 +109,29 @@ export async function createReport(reporter: User, input: CreateReportInput): Pr
   }
 
   try {
-    const created = await prisma.report.create({
-      data: {
-        reporterUserId: reporter.id,
-        targetType: TARGET_TYPE_TO_DB[input.targetType],
-        targetId: input.targetId,
-        reason: input.reason,
-        detail: input.detail ?? null,
-      },
+    // Phase 12-9 §2: create + admin fan-out in one transaction -- a Report
+    // can never exist with zero notifications sent to admins, or vice
+    // versa (same "creation stays inside the causing domain's own
+    // transaction" rule announcement/service.ts's createAnnouncement
+    // already follows for its own fan-out).
+    const created = await prisma.$transaction(async (tx) => {
+      const report = await tx.report.create({
+        data: {
+          reporterUserId: reporter.id,
+          targetType: TARGET_TYPE_TO_DB[input.targetType],
+          targetId: input.targetId,
+          reason: input.reason,
+          detail: input.detail ?? null,
+        },
+      });
+      await fanOutToAdmins(tx, {
+        type: PrismaNotificationType.REPORT_RECEIVED,
+        title: "새 신고가 접수되었습니다",
+        content: `${REPORT_TARGET_TYPE_LABELS[input.targetType]} 신고: ${input.reason}`,
+        relatedType: "report",
+        relatedId: report.id,
+      });
+      return report;
     });
     return { kind: "ok", data: toReportDTO(created) };
   } catch (error) {

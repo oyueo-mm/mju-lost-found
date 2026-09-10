@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
-import type { User } from "@/generated/prisma/client";
+import { NotificationType as PrismaNotificationType, type User } from "@/generated/prisma/client";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
+import { fanOutToAdmins } from "@/lib/notification/adminFanout";
 import { isAdmin } from "./service";
 
 // Phase I section 4: deliberately minimal, per this phase's own spec
@@ -48,8 +49,20 @@ export async function submitSuspensionAppeal(user: User, content: string): Promi
   });
   if (existingPending) return { kind: "already_pending" };
 
-  const created = await prisma.suspensionAppeal.create({
-    data: { userId: user.id, content: trimmed },
+  // Phase 12-9 §2: create + admin fan-out in one transaction -- see
+  // report/service.ts's createReport's own identical comment.
+  const created = await prisma.$transaction(async (tx) => {
+    const appeal = await tx.suspensionAppeal.create({
+      data: { userId: user.id, content: trimmed },
+    });
+    await fanOutToAdmins(tx, {
+      type: PrismaNotificationType.SUSPENSION_APPEAL_RECEIVED,
+      title: "새 이의제기가 접수되었습니다",
+      content: `${user.nickname ?? "사용자"}님이 정지에 대해 이의를 제기했습니다.`,
+      relatedType: "suspension_appeal",
+      relatedId: appeal.id,
+    });
+    return appeal;
   });
   return { kind: "ok", data: toAppealDTO(created) };
 }

@@ -28,6 +28,10 @@ type PostRef = { id: number; userId: number; title: string; imageUrl: string | n
 type ChatRoomRow = {
   id: number;
   initiatorUserId: number | null;
+  // Phase 12-9: always populated on every row now (see schema.prisma's own
+  // comment on ChatRoom.counterpartUserId) -- the other party, independent
+  // of who currently owns the related post.
+  counterpartUserId: number;
   createdAt: Date;
   directLostPost: PostRef | null;
   directFoundPost: PostRef | null;
@@ -190,6 +194,7 @@ async function findChatRoomRow(chatRoomId: number): Promise<ChatRoomRow | null> 
     select: {
       id: true,
       initiatorUserId: true,
+      counterpartUserId: true,
       createdAt: true,
       directLostPost: { select: POST_REF_SELECT },
       directFoundPost: { select: POST_REF_SELECT },
@@ -198,15 +203,14 @@ async function findChatRoomRow(chatRoomId: number): Promise<ChatRoomRow | null> 
 }
 
 // The single funnel point every permission check goes through (same role
-// legacy's _chat_room_participant_ids had). A row with no direct post or
-// no initiator (shouldn't exist -- every row this app creates has both) is
-// treated as not_found rather than crashing.
+// legacy's _chat_room_participant_ids had). A row with no initiator
+// (shouldn't exist -- every row this app creates has one) is treated as
+// not_found rather than crashing. Phase 12-9: reads the two participant
+// columns directly rather than re-deriving one of them from the related
+// post's current author -- see ChatRoom.counterpartUserId's own comment.
 function participantIdsOf(room: ChatRoomRow): Set<number> | null {
-  const directPost = room.directLostPost ?? room.directFoundPost;
-  if (directPost && room.initiatorUserId !== null) {
-    return new Set([directPost.userId, room.initiatorUserId]);
-  }
-  return null;
+  if (room.initiatorUserId === null) return null;
+  return new Set([room.counterpartUserId, room.initiatorUserId]);
 }
 
 // Phase D-2: shared by report/service.ts's message-report membership
@@ -229,8 +233,12 @@ async function resolveDetailDTO(
 ): Promise<ChatRoomDetailDTO | null> {
   const directPost = room.directLostPost ?? room.directFoundPost;
   if (!directPost || room.initiatorUserId === null) return null;
-  const counterpartUserId = directPost.userId === requesterId ? room.initiatorUserId : directPost.userId;
-  const counterpart = await resolveCounterpart(counterpartUserId);
+  // Phase 12-9: the stored columns *are* the two participants now -- no
+  // more falling back to the post's current author (see
+  // ChatRoom.counterpartUserId's own comment for why that was wrong once
+  // a room's counterpart could be a comment author instead).
+  const otherPartyId = room.initiatorUserId === requesterId ? room.counterpartUserId : room.initiatorUserId;
+  const counterpart = await resolveCounterpart(otherPartyId);
   return {
     roomType: "direct",
     id: room.id,
@@ -277,10 +285,21 @@ async function resolveCounterpart(
 // Phase J-2: this is now the *only* way a ChatRoom is ever created -- the
 // Match-mediated variant (getOrCreateChatRoomForMatch) went with the Match
 // domain. Nothing about this function itself changed.
+//
+// Phase 12-9 §3/§4: `commentId` (optional) lets the counterpart be that
+// comment's own actual author instead of the post's current author --
+// only ever a comment id, resolved and re-validated here, never a raw
+// userId the client could claim ("chat with user 123"). §4's own
+// requirement: an organization-attributed comment's real chat recipient
+// is still the comment's real authorUserId, never the organization --
+// authorUserId is exactly what's read below regardless of the comment's
+// own organizationId, so this falls out automatically without any
+// special-casing.
 export async function getOrCreateDirectChatRoom(
   postType: PostType,
   postId: number,
   requester: User,
+  commentId?: number,
 ): Promise<ChatMutationResult<ChatRoomDetailDTO>> {
   if (isCurrentlySuspended(requester)) {
     return { kind: "forbidden", reason: "suspended" };
@@ -293,17 +312,46 @@ export async function getOrCreateDirectChatRoom(
   // A missing post covers both "never existed" and "deleted" -- the row
   // simply isn't found either way, no separate check needed.
   if (!post) return { kind: "not_found" };
-  if (post.userId === requester.id) return { kind: "forbidden", reason: "self" };
+
+  let counterpartUserId = post.userId;
+  if (commentId !== undefined) {
+    const comment = await prisma.comment.findUnique({
+      where: { id: commentId },
+      select: { authorUserId: true, lostPostId: true, foundPostId: true },
+    });
+    // Must actually be a comment on *this* post -- a commentId from a
+    // different post (typo, stale client state, or a deliberately forged
+    // value) is rejected the same way a nonexistent one is, never
+    // silently falling back to "chat with the post author" instead.
+    const belongsToThisPost =
+      comment !== null && (postType === "lost" ? comment.lostPostId === postId : comment.foundPostId === postId);
+    if (!belongsToThisPost) return { kind: "not_found" };
+    counterpartUserId = comment.authorUserId;
+  }
+  if (counterpartUserId === requester.id) return { kind: "forbidden", reason: "self" };
 
   // The compound-unique field name Prisma generates is derived from the
-  // column list itself (directLostPostId_initiatorUserId), NOT from the
-  // @@unique's `map` name in schema.prisma (that only names the actual
-  // SQL index/constraint) -- verified against the generated client types.
+  // column list itself (directLostPostId_initiatorUserId_counterpartUserId),
+  // NOT from the @@unique's `map` name in schema.prisma (that only names
+  // the actual SQL index/constraint) -- verified against the generated
+  // client types.
   const directColumn = postType === "lost" ? ({ directLostPostId: postId } as const) : ({ directFoundPostId: postId } as const);
   const uniqueWhere =
     postType === "lost"
-      ? { directLostPostId_initiatorUserId: { directLostPostId: postId, initiatorUserId: requester.id } }
-      : { directFoundPostId_initiatorUserId: { directFoundPostId: postId, initiatorUserId: requester.id } };
+      ? {
+          directLostPostId_initiatorUserId_counterpartUserId: {
+            directLostPostId: postId,
+            initiatorUserId: requester.id,
+            counterpartUserId,
+          },
+        }
+      : {
+          directFoundPostId_initiatorUserId_counterpartUserId: {
+            directFoundPostId: postId,
+            initiatorUserId: requester.id,
+            counterpartUserId,
+          },
+        };
 
   const existing = await prisma.chatRoom.findUnique({ where: uniqueWhere });
   if (existing) {
@@ -315,7 +363,7 @@ export async function getOrCreateDirectChatRoom(
   let createdId: number;
   try {
     const created = await prisma.chatRoom.create({
-      data: { ...directColumn, initiatorUserId: requester.id },
+      data: { ...directColumn, initiatorUserId: requester.id, counterpartUserId },
       select: { id: true },
     });
     createdId = created.id;
@@ -427,15 +475,15 @@ export async function getChatRoomForAdmin(chatRoomId: number): Promise<AdminChat
 export async function listChatRoomsForUser(requesterId: number): Promise<ChatRoomListItemDTO[]> {
   const rooms = await prisma.chatRoom.findMany({
     where: {
-      OR: [
-        { initiatorUserId: requesterId },
-        { directLostPost: { userId: requesterId } },
-        { directFoundPost: { userId: requesterId } },
-      ],
+      // Phase 12-9: filters on the two stored participant columns directly
+      // now, rather than joining through directLostPost/directFoundPost's
+      // *current* owner -- see ChatRoom.counterpartUserId's own comment.
+      OR: [{ initiatorUserId: requesterId }, { counterpartUserId: requesterId }],
     },
     select: {
       id: true,
       initiatorUserId: true,
+      counterpartUserId: true,
       createdAt: true,
       directLostPost: { select: POST_REF_SELECT },
       directFoundPost: { select: POST_REF_SELECT },
@@ -1018,11 +1066,10 @@ export async function getMessage(messageId: number): Promise<{ id: number; chatR
 export async function countUnreadMessagesForUser(requesterId: number): Promise<number> {
   const rooms = await prisma.chatRoom.findMany({
     where: {
-      OR: [
-        { initiatorUserId: requesterId },
-        { directLostPost: { userId: requesterId } },
-        { directFoundPost: { userId: requesterId } },
-      ],
+      // Phase 12-9: filters on the two stored participant columns directly
+      // now, rather than joining through directLostPost/directFoundPost's
+      // *current* owner -- see ChatRoom.counterpartUserId's own comment.
+      OR: [{ initiatorUserId: requesterId }, { counterpartUserId: requesterId }],
     },
     select: { id: true },
   });

@@ -5,7 +5,7 @@ import { FeedbackForm } from "@/components/feedback/FeedbackForm";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 // Phase 11-5: same tone convention as admin/reports/[id]/page.tsx's own

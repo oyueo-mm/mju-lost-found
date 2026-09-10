@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { BellIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 const PAGE_SIZE = 20;

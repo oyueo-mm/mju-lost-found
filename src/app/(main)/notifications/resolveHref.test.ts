@@ -261,6 +261,38 @@ describe("resolveHref -- report-cluster notifications", () => {
     expect(getReportTargetRef).toHaveBeenCalledWith(77);
     expect(getReportTargetRef).toHaveBeenCalledTimes(1);
   });
+
+  // Phase 12-9 §2: admin-facing -- relatedId is the Report's own id
+  // directly (not a target ref via getReportTargetRef, unlike every other
+  // branch above), since /admin/reports/[id] is the report itself.
+  describe("report_received", () => {
+    it("links straight to /admin/reports/[id], no DB lookup at all", async () => {
+      const href = await resolveHref(9, "report_received", "report", 77);
+
+      expect(href).toBe("/admin/reports/77");
+      expect(getReportTargetRef).not.toHaveBeenCalled();
+    });
+  });
+});
+
+// Phase 12-9 §2: admin-facing notifications for new Feedback/
+// SuspensionAppeal submissions -- both link straight to their own admin
+// page, no DB lookup needed (unlike the reporter-facing report_processed
+// branch, which has to resolve back to the original content).
+describe("resolveHref -- admin submission notifications (Phase 12-9 §2)", () => {
+  it("feedback_received links to /admin/feedback/[id]", async () => {
+    const href = await resolveHref(9, "feedback_received", "feedback", 55);
+    expect(href).toBe("/admin/feedback/55");
+  });
+
+  it("suspension_appeal_received links to the /admin/sanctions queue (no per-item detail page)", async () => {
+    const href = await resolveHref(9, "suspension_appeal_received", "suspension_appeal", 5);
+    expect(href).toBe("/admin/sanctions");
+  });
+
+  it("an unrecognized type for relatedType=feedback falls through to null", async () => {
+    expect(await resolveHref(9, "something_else", "feedback", 55)).toBeNull();
+  });
 });
 
 describe("resolveHref -- other cases", () => {

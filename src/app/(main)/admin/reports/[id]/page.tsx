@@ -15,7 +15,7 @@ const STATUS_TONE_CLASSES: Record<ReportStatusValue, string> = {
 };
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

@@ -9,7 +9,7 @@ import { ShieldIcon } from "@/components/icons";
 import { GoogleTestModeToggle } from "@/components/admin/GoogleTestModeToggle";
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 // Phase 17: "관리자 센터" landing -- a summary dashboard in front of the

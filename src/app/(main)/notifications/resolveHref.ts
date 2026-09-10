@@ -153,7 +153,26 @@ export async function resolveHref(
       return null;
     }
 
+    // Phase 12-9 §2: admin-facing -- relatedId here is the Report's own
+    // id (not a target ref), unlike the reporter-facing branches above.
+    // /admin/reports/[id] re-checks isAdmin() itself (requireAdmin()),
+    // same posture as every other admin link a notification can produce.
+    if (type === "report_received") return `/admin/reports/${relatedId}`;
+
     return null;
+  }
+
+  // Phase 12-9 §2: admin-facing -- relatedId is the Feedback's own id.
+  if (relatedType === "feedback" && type === "feedback_received") {
+    return `/admin/feedback/${relatedId}`;
+  }
+
+  // Phase 12-9 §2: admin-facing -- relatedId is the SuspensionAppeal's own
+  // id, but there's no per-appeal detail route (only the queue page, see
+  // /admin/sanctions/page.tsx) -- links to the queue itself rather than
+  // inventing a new route just for this link target.
+  if (relatedType === "suspension_appeal" && type === "suspension_appeal_received") {
+    return "/admin/sanctions";
   }
 
   return null;

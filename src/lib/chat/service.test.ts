@@ -22,6 +22,8 @@ const userTable = { findUnique: vi.fn() };
 const notification = { updateMany: vi.fn() };
 const lostPostTable = { findUnique: vi.fn() };
 const foundPostTable = { findUnique: vi.fn() };
+// Phase 12-9: getOrCreateDirectChatRoom's own commentId resolution.
+const commentTable = { findUnique: vi.fn() };
 // Phase D-4
 const messageReaction = { deleteMany: vi.fn(), create: vi.fn(), findMany: vi.fn() };
 // Phase N
@@ -47,6 +49,7 @@ vi.mock("@/lib/db/prisma", () => ({
     notification,
     lostPost: lostPostTable,
     foundPost: foundPostTable,
+    comment: commentTable,
     $transaction,
     $queryRaw,
   },
@@ -110,6 +113,12 @@ function roomForOwners(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 100,
     initiatorUserId: foundOwner,
+    // Phase 12-9: always populated on the real row now -- see
+    // ChatRoom.counterpartUserId's own comment. Same value
+    // resolveDetailDTO/participantIdsOf used to derive on the fly from
+    // directLostPost.userId, so every existing test keeps asserting on
+    // the same two participants as before.
+    counterpartUserId: lostOwner,
     createdAt: new Date("2026-01-01"),
     directLostPost: postRef({ id: 1, userId: lostOwner, title: "지갑 분실" }),
     directFoundPost: null,
@@ -123,6 +132,7 @@ function roomDirect(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 200,
     initiatorUserId: stranger,
+    counterpartUserId: lostOwner,
     createdAt: new Date("2026-01-01"),
     directLostPost: postRef({ id: 1, userId: lostOwner, title: "지갑 분실" }),
     directFoundPost: null,
@@ -174,7 +184,7 @@ describe("getOrCreateDirectChatRoom", () => {
       expect(result.data.id).toBe(200);
     }
     expect(chatRoom.create).toHaveBeenCalledWith({
-      data: { directLostPostId: 1, initiatorUserId: stranger },
+      data: { directLostPostId: 1, initiatorUserId: stranger, counterpartUserId: lostOwner },
       select: { id: true },
     });
   });
@@ -191,7 +201,7 @@ describe("getOrCreateDirectChatRoom", () => {
 
     expect(result.kind).toBe("ok");
     expect(chatRoom.create).toHaveBeenCalledWith({
-      data: { directFoundPostId: 5, initiatorUserId: stranger },
+      data: { directFoundPostId: 5, initiatorUserId: stranger, counterpartUserId: foundOwner },
       select: { id: true },
     });
   });
@@ -236,7 +246,13 @@ describe("getOrCreateDirectChatRoom", () => {
     if (result.kind === "ok") expect(result.data.id).toBe(200);
     expect(chatRoom.create).not.toHaveBeenCalled();
     expect(chatRoom.findUnique).toHaveBeenNthCalledWith(1, {
-      where: { directLostPostId_initiatorUserId: { directLostPostId: 1, initiatorUserId: stranger } },
+      where: {
+        directLostPostId_initiatorUserId_counterpartUserId: {
+          directLostPostId: 1,
+          initiatorUserId: stranger,
+          counterpartUserId: lostOwner,
+        },
+      },
     });
   });
 
@@ -275,6 +291,105 @@ describe("getOrCreateDirectChatRoom", () => {
       expect(first.data.id).toBe(second.data.id);
     }
     expect(chatRoom.create).toHaveBeenCalledTimes(1);
+  });
+
+  // Phase 12-9 §3/§4: commentId lets the counterpart be that comment's
+  // own actual author instead of the post's own author -- never a raw
+  // userId the client could claim.
+  describe("commentId -- chat with a comment's actual author", () => {
+    it("creates a room with the comment's author, not the post's author", async () => {
+      lostPostTable.findUnique.mockResolvedValueOnce({ id: 1, userId: lostOwner });
+      commentTable.findUnique.mockResolvedValueOnce({ authorUserId: foundOwner, lostPostId: 1, foundPostId: null });
+      chatRoom.findUnique.mockResolvedValueOnce(null);
+      chatRoom.create.mockResolvedValueOnce({ id: 300 });
+      chatRoom.findUnique.mockResolvedValueOnce(
+        roomDirect({ id: 300, initiatorUserId: stranger, counterpartUserId: foundOwner }),
+      );
+
+      const result = await getOrCreateDirectChatRoom("lost", 1, viewer, 55);
+
+      expect(result.kind).toBe("ok");
+      expect(chatRoom.create).toHaveBeenCalledWith({
+        data: { directLostPostId: 1, initiatorUserId: stranger, counterpartUserId: foundOwner },
+        select: { id: true },
+      });
+    });
+
+    it("rejects chatting with yourself even via a commentId (self-comment)", async () => {
+      lostPostTable.findUnique.mockResolvedValueOnce({ id: 1, userId: lostOwner });
+      commentTable.findUnique.mockResolvedValueOnce({ authorUserId: stranger, lostPostId: 1, foundPostId: null });
+
+      const result = await getOrCreateDirectChatRoom("lost", 1, viewer, 55);
+
+      expect(result).toEqual({ kind: "forbidden", reason: "self" });
+      expect(chatRoom.create).not.toHaveBeenCalled();
+    });
+
+    it("returns not_found for a nonexistent commentId", async () => {
+      lostPostTable.findUnique.mockResolvedValueOnce({ id: 1, userId: lostOwner });
+      commentTable.findUnique.mockResolvedValueOnce(null);
+
+      const result = await getOrCreateDirectChatRoom("lost", 1, viewer, 999);
+
+      expect(result).toEqual({ kind: "not_found" });
+      expect(chatRoom.create).not.toHaveBeenCalled();
+    });
+
+    it("returns not_found when the comment belongs to a different post", async () => {
+      lostPostTable.findUnique.mockResolvedValueOnce({ id: 1, userId: lostOwner });
+      commentTable.findUnique.mockResolvedValueOnce({ authorUserId: foundOwner, lostPostId: 999, foundPostId: null });
+
+      const result = await getOrCreateDirectChatRoom("lost", 1, viewer, 55);
+
+      expect(result).toEqual({ kind: "not_found" });
+      expect(chatRoom.create).not.toHaveBeenCalled();
+    });
+
+    it("reuses the existing room for the same (post, initiator, comment author) triple", async () => {
+      lostPostTable.findUnique.mockResolvedValueOnce({ id: 1, userId: lostOwner });
+      commentTable.findUnique.mockResolvedValueOnce({ authorUserId: foundOwner, lostPostId: 1, foundPostId: null });
+      chatRoom.findUnique.mockResolvedValueOnce({ id: 300 });
+      chatRoom.findUnique.mockResolvedValueOnce(
+        roomDirect({ id: 300, initiatorUserId: stranger, counterpartUserId: foundOwner }),
+      );
+
+      const result = await getOrCreateDirectChatRoom("lost", 1, viewer, 55);
+
+      expect(result.kind).toBe("ok");
+      expect(chatRoom.create).not.toHaveBeenCalled();
+      expect(chatRoom.findUnique).toHaveBeenNthCalledWith(1, {
+        where: {
+          directLostPostId_initiatorUserId_counterpartUserId: {
+            directLostPostId: 1,
+            initiatorUserId: stranger,
+            counterpartUserId: foundOwner,
+          },
+        },
+      });
+    });
+
+    // A second, different commenter on the same post must get their own
+    // room, never collide with (or overwrite) the first comment-author
+    // room -- this is the exact bug the old (post, initiator)-only
+    // uniqueness couldn't prevent.
+    it("a different comment author on the same post gets a separate room", async () => {
+      const thirdUser = 777;
+      lostPostTable.findUnique.mockResolvedValueOnce({ id: 1, userId: lostOwner });
+      commentTable.findUnique.mockResolvedValueOnce({ authorUserId: thirdUser, lostPostId: 1, foundPostId: null });
+      chatRoom.findUnique.mockResolvedValueOnce(null); // no existing room for (1, stranger, thirdUser)
+      chatRoom.create.mockResolvedValueOnce({ id: 301 });
+      chatRoom.findUnique.mockResolvedValueOnce(
+        roomDirect({ id: 301, initiatorUserId: stranger, counterpartUserId: thirdUser }),
+      );
+
+      const result = await getOrCreateDirectChatRoom("lost", 1, viewer, 66);
+
+      expect(result.kind).toBe("ok");
+      expect(chatRoom.create).toHaveBeenCalledWith({
+        data: { directLostPostId: 1, initiatorUserId: stranger, counterpartUserId: thirdUser },
+        select: { id: true },
+      });
+    });
   });
 });
 
@@ -455,11 +570,7 @@ describe("listChatRoomsForUser", () => {
     expect(chatRoom.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          OR: [
-            { initiatorUserId: lostOwner },
-            { directLostPost: { userId: lostOwner } },
-            { directFoundPost: { userId: lostOwner } },
-          ],
+          OR: [{ initiatorUserId: lostOwner }, { counterpartUserId: lostOwner }],
         },
       }),
     );

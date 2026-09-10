@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { ChatBubbleIcon } from "@/components/icons";
 import { AttributionLink } from "@/components/user/AttributionLink";
 import { CommentActionMenu } from "@/components/comment/CommentActionMenu";
+import { CommentChatButton } from "@/components/comment/CommentChatButton";
 import { PostAsSelector } from "@/components/organization/PostAsSelector";
 
 type CommentAuthor = { id: number; nickname: string | null; publicId: string };
@@ -59,7 +60,7 @@ export function formatRelativeTime(date: Date): string {
   if (hours < 24) return `${hours}시간 전`;
   const days = Math.floor(hours / 24);
   if (days < 7) return `${days}일 전`;
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
 }
 
 const COMMENT_MAX_LENGTH = 1000;
@@ -367,6 +368,14 @@ export function CommentSection({
             >
               답글
             </button>
+            {/* Phase 12-9 §3/§4: only for a logged-in viewer who isn't the
+                comment's own author -- never shown to the author viewing
+                their own comment. Works identically for an organization-
+                attributed comment (§4): the button still targets the
+                comment's real author, never the organization. */}
+            {currentUser.id !== comment.author.id && (
+              <CommentChatButton postType={postType} postId={postId} commentId={comment.id} />
+            )}
           </div>
         )}
       </div>

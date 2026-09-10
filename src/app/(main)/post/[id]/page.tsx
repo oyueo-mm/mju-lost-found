@@ -22,7 +22,7 @@ import { AttributionLink } from "@/components/user/AttributionLink";
 import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 // Phase P-5: null means the poster marked the time as unknown -- see

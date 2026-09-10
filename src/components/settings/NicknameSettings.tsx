@@ -16,7 +16,7 @@ type NicknameSettingsProps = {
 };
 
 function formatDateTime(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 // Phase I: pulled out to a plain top-level function (not inlined in the

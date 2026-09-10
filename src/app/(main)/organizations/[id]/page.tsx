@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 const ROLE_LABELS = { leader: "대표 관리자", admin: "관리자", member: "구성원" } as const;
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
 }
 
 // Phase 12-4 §5/§24: /lost, /found와 동일하게 비로그인 사용자도 조회 가능
@@ -55,7 +55,7 @@ export default async function OrganizationProfilePage({ params }: { params: Prom
             <h1 className="text-lg font-semibold text-foreground">{organization.name}</h1>
             {organization.status === "inactive" && (
               <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                비활성화됨
+                폐쇄됨
               </span>
             )}
           </div>

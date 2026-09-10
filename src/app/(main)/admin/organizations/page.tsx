@@ -6,7 +6,7 @@ import { ORGANIZATION_STATUSES, ORGANIZATION_STATUS_LABELS } from "@/lib/organiz
 import { ShieldIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
 }
 
 const PAGE_SIZE = 20;

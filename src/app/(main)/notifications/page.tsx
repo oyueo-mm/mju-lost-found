@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { DEFAULT_LIMIT, DEFAULT_PAGE } from "@/lib/notification/schema";
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 type SearchParams = Record<string, string | string[] | undefined>;

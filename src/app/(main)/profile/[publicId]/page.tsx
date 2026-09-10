@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { UserIcon, BoxIcon, ClockIcon } from "@/components/icons";
 
 function formatJoinDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
 }
 
 // Phase H-7: public by design ("다른 사용자의 프로필을 볼 수 있도록 한다") -- no

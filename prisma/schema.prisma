@@ -101,6 +101,21 @@ enum NotificationType {
   // a stale "match" relatedType already does; the notification's own
   // title/content still renders normally either way.
   ORGANIZATION_REQUEST_PROCESSED @map("organization_request_processed")
+  // Phase 12-9 §2: sent to every current Platform Admin (User.isAdmin ===
+  // true) -- never to the reporter/submitter themselves -- the moment a
+  // new Report/Feedback/SuspensionAppeal is filed, so an admin doesn't
+  // have to keep polling the queue pages to notice new work. Distinct
+  // from REPORT_PROCESSED above (that one goes to the *reporter*, after
+  // processing finishes; these three go to *admins*, the instant
+  // submission happens) -- reusing REPORT_PROCESSED for this would have
+  // conflated two different audiences under one type. relatedType/
+  // relatedId point at the Report/Feedback/SuspensionAppeal row itself,
+  // same polymorphic no-FK shape every other NotificationType here uses;
+  // see fanOutToAdmins() in notification/adminFanout.ts for the one
+  // shared helper all three call sites use.
+  REPORT_RECEIVED                @map("report_received")
+  FEEDBACK_RECEIVED              @map("feedback_received")
+  SUSPENSION_APPEAL_RECEIVED     @map("suspension_appeal_received")
 }
 
 // Phase 11-5: the four categories this app's own Feedback form (not
@@ -261,6 +276,11 @@ model User {
   foundPosts                   FoundPost[]
   comments                     Comment[]
   initiatedChatRooms           ChatRoom[]                    @relation("ChatRoomInitiator")
+  // Phase 12-9 §3/§4: the other party in a direct chat room this user was
+  // invited into -- see ChatRoom.counterpartUserId's own comment for why
+  // this had to become an explicit column instead of always being
+  // computed as "the post's current author".
+  counterpartChatRooms         ChatRoom[]                    @relation("ChatRoomCounterpart")
   sentMessages                 Message[]                     @relation("MessageSender")
   hiddenMessages               Message[]                     @relation("MessageHiddenBy")
   // Phase N: this user's own read cursor in each room they're part of --
@@ -553,6 +573,23 @@ model ChatRoom {
   directFoundPost   FoundPost? @relation("ChatRoomDirectFoundPost", fields: [directFoundPostId], references: [id], onDelete: Cascade)
   initiatorUserId   Int?       @map("initiator_user_id")
   initiator         User?      @relation("ChatRoomInitiator", fields: [initiatorUserId], references: [id], onDelete: Restrict)
+  // Phase 12-9 §3/§4: the room's other party -- previously never stored,
+  // only ever *computed* as "whichever of {initiator, the post's current
+  // author} isn't the requester" (see resolveDetailDTO's old comment).
+  // That worked as long as a direct room's counterpart could only ever be
+  // the post's own author, but §3 needs a viewer to chat with a specific
+  // *comment* author instead, who is frequently a different person -- the
+  // old scheme has no column to remember which one was actually meant, so
+  // a second concurrent comment-author chat on the same post would have
+  // silently collided with (or overwritten the meaning of) the first.
+  // Always populated on every new row (including the original "chat with
+  // the post's author" flow, which now just passes that same user id
+  // explicitly) -- never left null going forward, so the unique
+  // constraints below stay meaningful. Existing rows were backfilled to
+  // their post's author (the only value they could have meant) by this
+  // phase's own migration.
+  counterpartUserId Int        @map("counterpart_user_id")
+  counterpart       User       @relation("ChatRoomCounterpart", fields: [counterpartUserId], references: [id], onDelete: Restrict)
   createdAt         DateTime   @default(now()) @map("created_at")
 
   messages  Message[]
@@ -568,8 +605,14 @@ model ChatRoom {
   // direct-found room) never collides with the directFoundPostId
   // constraint, and vice versa. No raw-SQL migration needed for this; only
   // reach for one if a future change makes this column pair non-null.
-  @@unique([directLostPostId, initiatorUserId], map: "idx_chatroom_direct_lost_unique")
-  @@unique([directFoundPostId, initiatorUserId], map: "idx_chatroom_direct_found_unique")
+  //
+  // Phase 12-9: counterpartUserId joins the key -- a room is now unique per
+  // (post, initiator, counterpart) triple rather than just (post,
+  // initiator), so the same viewer can hold one room with the post's
+  // author *and* a separate room per distinct comment author on that same
+  // post, without either colliding.
+  @@unique([directLostPostId, initiatorUserId, counterpartUserId], map: "idx_chatroom_direct_lost_unique")
+  @@unique([directFoundPostId, initiatorUserId, counterpartUserId], map: "idx_chatroom_direct_found_unique")
   // Phase 11-3: initiatorUserId only appears as the *second* column of the
   // two composite unique constraints above, which Postgres can't use for a
   // `WHERE initiatorUserId = X` lookup on its own (a composite B-tree index
@@ -581,6 +624,10 @@ model ChatRoom {
   // the hottest read path in this app, so this was a real gap, not a
   // speculative one.
   @@index([initiatorUserId], map: "idx_chatroom_initiator_user_id")
+  // Phase 12-9: same reasoning as idx_chatroom_initiator_user_id above,
+  // now that both queries filter with `OR: [{initiatorUserId}, {counterpartUserId}]`
+  // directly instead of joining through directLostPost/directFoundPost.
+  @@index([counterpartUserId], map: "idx_chatroom_counterpart_user_id")
   @@map("ChatRoom")
 }
 

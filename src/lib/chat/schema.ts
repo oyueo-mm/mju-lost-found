@@ -22,6 +22,13 @@ export const MAX_MESSAGE_LENGTH = 2000;
 export const createDirectChatRoomSchema = z.object({
   postType: postTypeSchema,
   postId: z.coerce.number().int().positive("postId가 올바르지 않습니다."),
+  // Phase 12-9 §3/§4: omitted -- chat with the post's own author (unchanged
+  // existing behavior). Present -- chat with *that comment's* actual
+  // author instead. Only ever a comment id, never a raw userId: the
+  // server resolves and re-validates the real author itself (see
+  // getOrCreateDirectChatRoom's own comment) -- a client can't just claim
+  // "chat with user 123".
+  commentId: z.coerce.number().int().positive("commentId가 올바르지 않습니다.").optional(),
 });
 
 export const createChatRoomSchema = createDirectChatRoomSchema;

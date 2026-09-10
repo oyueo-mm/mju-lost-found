@@ -7,7 +7,7 @@ import { cancelOrganizationCreationRequestAction } from "@/app/(main)/organizati
 import { Button } from "@/components/ui/Button";
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 type PendingOrganizationRequestCardProps = {

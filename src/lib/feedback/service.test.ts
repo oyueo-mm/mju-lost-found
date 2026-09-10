@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const feedback = { create: vi.fn(), findMany: vi.fn(), count: vi.fn(), findUnique: vi.fn(), update: vi.fn() };
+// Phase 12-9 §2: createFeedback() now wraps its insert in $transaction and
+// calls fanOutToAdmins() -- see report/service.test.ts's own identical
+// comment for why both are mocked this way.
+const fanOutToAdmins = vi.fn();
+const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn({ feedback }));
 
-vi.mock("@/lib/db/prisma", () => ({ prisma: { feedback } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { feedback, $transaction } }));
 vi.mock("@/lib/moderation/service", () => ({ isAdmin: (u: { isAdmin: boolean }) => u.isAdmin }));
+vi.mock("@/lib/notification/adminFanout", () => ({ fanOutToAdmins }));
 vi.mock("@/generated/prisma/client", () => ({
   FeedbackCategory: { FEATURE_REQUEST: "FEATURE_REQUEST", INCONVENIENCE: "INCONVENIENCE", BUG: "BUG", OTHER: "OTHER" },
   FeedbackStatus: {
@@ -13,6 +19,7 @@ vi.mock("@/generated/prisma/client", () => ({
     COMPLETED: "COMPLETED",
     NOT_PLANNED: "NOT_PLANNED",
   },
+  NotificationType: { FEEDBACK_RECEIVED: "FEEDBACK_RECEIVED" },
 }));
 
 const { createFeedback, getMyFeedback, listFeedbackForAdmin, getFeedbackForAdmin, updateFeedbackStatus } =
@@ -72,6 +79,19 @@ describe("createFeedback", () => {
       expect(result.data).not.toHaveProperty("adminNote");
       expect(result.data).not.toHaveProperty("author");
     }
+  });
+
+  // Phase 12-9 §2: every successful feedback submission fans out to
+  // admins -- see report/service.test.ts's own identical-shape test.
+  it("fans out a FEEDBACK_RECEIVED notification to admins on successful creation", async () => {
+    feedback.create.mockResolvedValueOnce(row({ id: 88 }));
+
+    await createFeedback(nonAdmin as never, { category: "bug", title: "t", content: "c" });
+
+    expect(fanOutToAdmins).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: "FEEDBACK_RECEIVED", relatedType: "feedback", relatedId: 88 }),
+    );
   });
 });
 

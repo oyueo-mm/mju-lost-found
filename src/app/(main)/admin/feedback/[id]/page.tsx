@@ -8,7 +8,7 @@ import { FeedbackStatusForm } from "@/components/admin/FeedbackStatusForm";
 import { ChatBubbleIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

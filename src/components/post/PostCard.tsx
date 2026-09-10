@@ -7,7 +7,7 @@ import { AttributionLink } from "@/components/user/AttributionLink";
 import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
 }
 
 const TYPE_LABEL: Record<PostDTO["type"], string> = { lost: "분실물", found: "습득물" };

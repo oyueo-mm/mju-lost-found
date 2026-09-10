@@ -101,7 +101,24 @@ describe("POST /api/chat", () => {
 
       expect(res.status).toBe(201);
       expect(json.data.id).toBe(200);
-      expect(getOrCreateDirectChatRoom).toHaveBeenCalledWith("lost", 1, sessionUser);
+      expect(getOrCreateDirectChatRoom).toHaveBeenCalledWith("lost", 1, sessionUser, undefined);
+    });
+
+    // Phase 12-9 §3/§4: commentId passes through so the room's counterpart
+    // can be that comment's own author instead of the post's author.
+    it("passes commentId through when chatting with a comment's author", async () => {
+      requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+      getOrCreateDirectChatRoom.mockResolvedValueOnce({ kind: "ok", data: { id: 201, roomType: "direct" } });
+
+      const res = await POST(
+        new NextRequest("http://localhost/api/chat", {
+          method: "POST",
+          body: JSON.stringify({ postType: "lost", postId: 1, commentId: 55 }),
+        }),
+      );
+
+      expect(res.status).toBe(201);
+      expect(getOrCreateDirectChatRoom).toHaveBeenCalledWith("lost", 1, sessionUser, 55);
     });
 
     it("returns 404 for a nonexistent/deleted post", async () => {

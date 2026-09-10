@@ -12,7 +12,7 @@ type GoogleTestModeToggleProps = {
 };
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 // Phase H-3: the button here toggling is UX only -- src/lib/auth/auth.ts's

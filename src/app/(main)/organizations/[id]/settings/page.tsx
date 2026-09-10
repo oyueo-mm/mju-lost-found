@@ -51,7 +51,17 @@ export default async function OrganizationSettingsPage({ params }: { params: Pro
 
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="text-lg font-semibold text-foreground">{organization.name} · 단체 설정</h1>
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="text-lg font-semibold text-foreground">{organization.name} · 단체 설정</h1>
+        {/* Phase 12-9 §8: 폐쇄(INACTIVE) 여부를 설정 페이지 자체에서도 항상
+            보여준다 -- 폐쇄 버튼은 ACTIVE일 때만 보이므로, 폐쇄 후에는 이
+            배지가 유일하게 현재 상태를 알려주는 표시가 된다. */}
+        {organization.status === "inactive" && (
+          <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+            폐쇄됨 (INACTIVE)
+          </span>
+        )}
+      </div>
 
       <Section title="단체 기본 정보">
         <OrganizationProfileEditForm organizationId={id} organization={organization} />
@@ -72,7 +82,7 @@ export default async function OrganizationSettingsPage({ params }: { params: Pro
       )}
 
       {myRole === "leader" && organization.status === "active" && (
-        <Section title="단체 비활성화">
+        <Section title="단체 폐쇄">
           <OrganizationDeactivateControl organizationId={id} />
         </Section>
       )}

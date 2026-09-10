@@ -8,7 +8,7 @@ import { OrganizationRequestReviewForm } from "@/components/admin/OrganizationRe
 import { ShieldIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
