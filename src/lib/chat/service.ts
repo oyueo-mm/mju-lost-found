@@ -682,14 +682,26 @@ export async function getChatRoomForAdmin(chatRoomId: number): Promise<AdminChat
   };
 }
 
-// Every ChatRoom the user participates in -- as a personal room's
-// initiator/counterpart, or (Phase 12-11) as the inquirer of one of their
-// own organization inquiries, or as a current LEADER/ADMIN of an
-// organization that has inquiry rooms -- most-recently-active first,
-// mirroring legacy list_chat_rooms_by_user(). Phase J-2: this used to
-// union a second query for Match-based rooms; with Match gone there was
-// only the one (direct) shape left, until Phase 12-11 added the
-// organization shape alongside it.
+// Every ChatRoom the user participates in *and that has at least one real
+// message* -- as a personal room's initiator/counterpart, or (Phase 12-11)
+// as the inquirer of one of their own organization inquiries, or as a
+// current LEADER/ADMIN of an organization that has inquiry rooms --
+// most-recently-active first, mirroring legacy list_chat_rooms_by_user().
+// Phase J-2: this used to union a second query for Match-based rooms; with
+// Match gone there was only the one (direct) shape left, until Phase 12-11
+// added the organization shape alongside it.
+//
+// 채팅 탭 UX Phase: "채팅 연결하기"만 누르고 실제로 메시지를 한 번도 보내지
+// 않은 방은 이 목록에서 제외한다 -- ChatRoom 생성 자체(getOrCreateDirectChatRoom
+// / getOrCreateOrganizationChatRoom)나 상세 페이지 직접 접근(getChatRoomForUser)
+// 은 전혀 건드리지 않았고, 오직 이 목록 query의 WHERE 조건에 `messages: {
+// some: {} }`(해당 방에 연결된 Message 행이 하나라도 있는지)만 추가했다.
+// 애플리케이션 레벨에서 결과를 필터링하는 대신 DB 쿼리 자체가 메시지 없는
+// 방을 아예 반환하지 않으므로, 그 방을 위한 resolveDetailDTO 호출도, 정렬도
+// 발생하지 않는다. hiddenAt으로 "삭제됨" 처리된 메시지도 여전히 Message
+// 행 자체는 남아있으므로(soft delete) 그 방은 계속 목록에 표시된다 -- 이
+// 요구사항이 "Message가 1개 이상 존재하면"이라고 명시했으므로 숨김 여부는
+// 이 필터와 무관하다.
 export async function listChatRoomsForUser(requesterId: number): Promise<ChatRoomListItemDTO[]> {
   // Phase 12-11: which organizations this user currently manages -- fresh
   // on every call (same "never cached" rule as participantIdsOf), used
@@ -714,6 +726,10 @@ export async function listChatRoomsForUser(requesterId: number): Promise<ChatRoo
         { counterpartUserId: requesterId },
         ...(managedOrgIds.length > 0 ? [{ organizationId: { in: managedOrgIds } }] : []),
       ],
+      // 채팅 탭 UX Phase: 위 OR 조건과 별개의 top-level 키라서 Prisma가
+      // 자동으로 AND로 묶는다 -- "참여자 조건을 만족하는 방" AND "메시지가
+      // 1개 이상 있는 방"만 반환.
+      messages: { some: {} },
     },
     select: {
       id: true,

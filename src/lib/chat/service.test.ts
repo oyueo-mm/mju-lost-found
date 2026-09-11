@@ -871,7 +871,7 @@ describe("listChatRoomsForUser", () => {
   // Phase J-2: one query now (the Match-room query went with the Match
   // domain) -- rooms are scoped to "the user is the initiator, or owns the
   // post the room is about".
-  it("scopes the room query to rooms where the user is the initiator or the post's owner", async () => {
+  it("scopes the room query to rooms where the user is the initiator or the post's owner, and that have at least one message", async () => {
     chatRoom.findMany.mockResolvedValueOnce([]);
 
     await listChatRoomsForUser(lostOwner);
@@ -881,15 +881,16 @@ describe("listChatRoomsForUser", () => {
       expect.objectContaining({
         where: {
           OR: [{ initiatorUserId: lostOwner }, { counterpartUserId: lostOwner }],
+          messages: { some: {} },
         },
       }),
     );
   });
 
-  it("returns every room the user participates in", async () => {
+  it("returns every room the user participates in (the DB query itself already excludes messageless rooms)", async () => {
     chatRoom.findMany.mockResolvedValueOnce([
-      { ...roomForOwners(), messages: [] },
-      { ...roomDirect(), messages: [] },
+      { ...roomForOwners(), messages: [{ content: "안녕하세요", createdAt: new Date(), hiddenAt: null }] },
+      { ...roomDirect(), messages: [{ content: "네 안녕하세요", createdAt: new Date(), hiddenAt: null }] },
     ]);
 
     const results = await listChatRoomsForUser(lostOwner);
@@ -897,6 +898,23 @@ describe("listChatRoomsForUser", () => {
     expect(results).toHaveLength(2);
     expect(results.map((r) => r.roomType)).toEqual(["direct", "direct"]);
     expect(results.map((r) => r.id).sort()).toEqual([100, 200]);
+  });
+
+  // 채팅 탭 UX Phase: the actual exclusion happens in the `messages: {
+  // some: {} }` WHERE clause above (the mock never even returns a
+  // messageless room, matching what the real DB query would do) -- this
+  // test instead pins that every *returned* room's lastMessage is
+  // populated, never null, now that a messageless room can no longer
+  // reach this point.
+  it("always resolves a non-null lastMessage, since every returned room has at least one message", async () => {
+    const sentAt = new Date("2026-01-01T00:00:00.000Z");
+    chatRoom.findMany.mockResolvedValueOnce([
+      { ...roomDirect(), messages: [{ content: "첫 메시지", createdAt: sentAt, hiddenAt: null }] },
+    ]);
+
+    const results = await listChatRoomsForUser(lostOwner);
+
+    expect(results[0].lastMessage).toEqual({ content: "첫 메시지", createdAt: sentAt });
   });
 });
 

@@ -4,7 +4,10 @@ import { chatMutationResultToResponse, jsonError, requireUserForApi, withErrorHa
 import { createChatRoomSchema } from "@/lib/chat/schema";
 import { getOrCreateDirectChatRoom, listChatRoomsForUser } from "@/lib/chat/service";
 
-// GET /api/chat -- every chat room the current user participates in.
+// GET /api/chat -- every chat room the current user participates in that
+// has at least one real message (채팅 탭 UX Phase -- see
+// listChatRoomsForUser's own comment; a room created via "채팅 연결하기"
+// but never actually messaged in is intentionally omitted here).
 export const GET = withErrorHandling(async () => {
   const auth = await requireUserForApi();
   if ("response" in auth) return auth.response;
