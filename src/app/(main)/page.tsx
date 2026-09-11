@@ -56,7 +56,7 @@ export default async function Home() {
           <span className="text-primary">잃어버린 물건</span>, 여기서 찾아보세요
         </h1>
         <p className="text-sm text-muted-foreground md:text-base">
-          비슷한 물건까지 자동으로 찾아드려요 · 캠퍼스 안에서 안전하게 주고받으세요
+          물건의 특징을 자유롭게 설명해보세요. 사진을 더하면 더 정확해져요.
         </p>
         {/* Phase K: same hero search as before, plus a compact copy that
             slides in under the Header once this one scrolls away -- so
@@ -67,7 +67,7 @@ export default async function Home() {
         </div>
         <div className="flex flex-wrap items-center justify-center gap-2">
           <LinkButton href="/lost" variant="secondary" size="sm" className="gap-1.5">
-            <BoxIcon className="size-4" /> 분실물 찾기
+            <BoxIcon className="size-4" /> 분실물 보기
           </LinkButton>
           <LinkButton href="/found" variant="secondary" size="sm" className="gap-1.5">
             <HandboxIcon className="size-4" /> 습득물 보기

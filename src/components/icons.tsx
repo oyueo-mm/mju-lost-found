@@ -140,6 +140,21 @@ export function ImageOffIcon(props: IconProps) {
   );
 }
 
+// AI 검색 UI 시안 개선 Phase: the compact photo-attach trigger next to the
+// AI search input -- a camera reads unambiguously as "add a photo" at
+// small sizes, unlike reusing PlusIcon (already meant "add a post" on
+// Home's shortcuts) or ImageOffIcon (already means "no image"/failure
+// elsewhere in this app). Same 24x24/1.75px-stroke language as every icon
+// above.
+export function CameraIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 8.5a1.5 1.5 0 0 1 1.5-1.5h2l1-2h7l1 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" />
+      <circle cx="12" cy="12.5" r="3.5" />
+    </svg>
+  );
+}
+
 export function ChevronRightIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

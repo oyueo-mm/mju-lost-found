@@ -18,12 +18,17 @@ export default async function SearchPage({
 }) {
   const raw = normalizeSearchParams(await searchParams);
 
-  // Unlike /lost and /found, `type` here is user-selectable and defaults
-  // to "all" (both boards) when not given.
-  const parsed = listQuerySchema.safeParse({ type: "all", ...raw });
+  // Unlike /lost and /found, `type` here is user-selectable. 검색 대상 및
+  // 게시글 목록 UX 개선 Phase §1/§6: 기본값은 "all"이 아니라 "found" --
+  // 이 서비스는 잃어버린 물건을 찾기 위해 검색하는 것이 기본 시나리오라,
+  // 별도로 대상을 바꾸지 않는 한 습득물 게시글을 검색한다. `raw.type`이
+  // 있으면(사용자가 필터를 바꿨거나 그 상태로 북마크/새로고침한 경우)
+  // 그 값이 이 기본값을 덮어쓴다 -- SearchFilterBar's own type state와
+  // 정확히 같은 기본값 규칙.
+  const parsed = listQuerySchema.safeParse({ type: "found", ...raw });
   const query = parsed.success
     ? parsed.data
-    : { type: "all" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
+    : { type: "found" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
   const mode = parsed.success ? parsed.data.mode : "keyword";
 
   // See searchApiClient.ts's comment (also linked from lost/found's pages)

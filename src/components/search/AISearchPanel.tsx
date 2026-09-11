@@ -10,8 +10,7 @@ import { MAX_SEARCH_QUERY_LENGTH } from "@/lib/posts/schema";
 import { PostCard } from "@/components/post/PostCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Lost112Notice } from "@/components/search/Lost112Notice";
-import { Button } from "@/components/ui/Button";
-import { ImageOffIcon } from "@/components/icons";
+import { CameraIcon, SearchIcon, XIcon } from "@/components/icons";
 
 type AISearchPanelProps = {
   // AI 검색 고도화 Phase: replaces the old ImageSearchPanel (이미지 전용)
@@ -24,16 +23,27 @@ type AISearchPanelProps = {
   // board, same restriction the old image-only mode already had --
   // imageEmbedding is a per-board column, there's no cross-board query.
   type: PostListType;
+  // AI 검색 UI 시안 개선 Phase: Home의 히어로 검색창도 이 컴포넌트를 그대로
+  // 재사용한다 -- 새 검색 로직/엔드포인트를 만들지 않고, 입력창
+  // placeholder만 이 화면에 맞게 살짝 바꿀 수 있도록 하는 선택적 prop.
+  // 생략하면 기존 문구 그대로. (검색 대상 및 게시글 목록 UX 개선 Phase:
+  // Home도 `type`을 "all"로 고정하지 않는다 -- 기본값은 "found"이고,
+  // HomeSearchBar 자신의 select로 사용자가 바꿀 수 있다. 이 컴포넌트
+  // 입장에서는 /search·/lost·/found와 똑같이 그냥 호출자가 넘겨준 type을
+  // 그대로 쓸 뿐이다.)
+  placeholder?: string;
 };
 
-// AI 검색 고도화 Phase: "AI 검색" -- 검색어(선택) + 사진(선택), 최소
-// 하나는 있어야 검색된다. 키워드 검색과 명확히 분리된 별도 모드로,
-// 키워드 검색(SearchFilterBar의 기존 q input + router.push 흐름)은 이
-// 컴포넌트가 전혀 건드리지 않는다. 이미지가 URL에 담길 수 없으므로(기존
-// "이미지로 검색"과 동일한 이유) 이 컴포넌트도 client-side fetch로 직접
-// /api/posts를 호출하고 자기 자신이 결과 영역을 그린다 -- 페이지
-// 네비게이션이 일어나지 않는다.
-export function AISearchPanel({ type }: AISearchPanelProps) {
+// AI 검색 UI 시안 개선 Phase: 이 컴포넌트의 입력 영역을 "검색어 입력 +
+// 사진 선택(선택사항) + 검색"이 한 줄의 압축된 바(bar)에 자연스럽게 녹아
+// 있는 형태로 다시 그렸다 -- 이전에는 사진 선택이 처음부터 넓은 점선 박스
+// + 별도 버튼 줄로 항상 펼쳐져 있어 "사진이 필요한 기능"처럼 보였다.
+// 이제는 텍스트 입력 왼쪽의 작은 카메라 아이콘 버튼 하나가 photo attach의
+// 전부다: 누르기 전에는 입력창 폭을 거의 차지하지 않고, 사진을 고르면
+// 그 자리가 작은 thumbnail chip(제거 버튼 포함)으로 바뀐다. 검색/랭킹
+// 로직(handleSearch 이하)은 이전과 완전히 동일 -- 이번 Phase는 시안(UI)
+// 변경이며 API/알고리즘을 건드리지 않는다.
+export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
   const [query, setQuery] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -90,7 +100,8 @@ export function AISearchPanel({ type }: AISearchPanelProps) {
   const hasImageTypeConflict = file !== null && type === "all";
   const canSearch = (trimmedQuery !== "" || file !== null) && !hasImageTypeConflict;
 
-  async function handleSearch() {
+  async function handleSearch(event?: React.FormEvent) {
+    event?.preventDefault();
     if (!canSearch) return;
 
     setPending(true);
@@ -122,9 +133,53 @@ export function AISearchPanel({ type }: AISearchPanelProps) {
     }
   }
 
+  // 사진이 없고 아직 검색하지 않은 상태에서만 "사진은 선택이다"를 한 줄로
+  // 알려준다 -- 사진을 고른 뒤나 결과가 이미 떠 있을 때는 같은 말을
+  // 반복할 필요가 없어 자동으로 사라진다(섹션 2/3 요구사항: 사진을 필수
+  // 입력처럼 보이게 하지 않는다).
+  const showOptionalHint = !file && results === null;
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-3">
+      <form
+        onSubmit={handleSearch}
+        className="flex items-center gap-2 rounded-full border border-border bg-card px-2 py-1.5 shadow-sm transition-colors focus-within:border-primary sm:px-2.5 sm:py-2"
+      >
+        {previewUrl ? (
+          <div className="relative shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element -- local blob: object URL preview, not a remote/optimizable image. */}
+            <img
+              src={previewUrl}
+              alt="검색할 이미지 미리보기"
+              className="size-9 rounded-full border border-border object-cover"
+            />
+            <button
+              type="button"
+              onClick={handleRemoveImage}
+              disabled={pending}
+              aria-label="첨부한 사진 제거"
+              className="absolute -top-1 -right-1 flex size-4.5 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-50"
+            >
+              <XIcon className="size-2.5" strokeWidth={2.5} />
+            </button>
+          </div>
+        ) : (
+          <label
+            aria-label="검색할 사진 첨부 (선택사항)"
+            className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50"
+          >
+            <CameraIcon className="size-4.5" />
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              disabled={pending}
+              onChange={handleFileChange}
+              className="sr-only"
+            />
+          </label>
+        )}
+
         <input
           type="text"
           value={query}
@@ -132,63 +187,33 @@ export function AISearchPanel({ type }: AISearchPanelProps) {
             setQuery(event.target.value);
             setResults(null);
           }}
-          placeholder="예: 검은색 무선 이어폰을 잃어버렸어요"
+          placeholder={placeholder ?? "예: 검은색 무선 이어폰을 잃어버렸어요"}
           maxLength={MAX_SEARCH_QUERY_LENGTH}
           disabled={pending}
-          className="w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
+          className="w-full min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
         />
-        <p className="text-xs text-muted-foreground">검색어만, 사진만, 또는 검색어와 사진을 함께 입력할 수 있어요.</p>
-      </div>
 
-      <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
-        <div className="relative flex h-40 w-full shrink-0 items-center justify-center overflow-hidden rounded-card border border-dashed border-border bg-muted sm:w-40">
-          {previewUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- local blob: object URL preview, not a remote/optimizable image.
-            <img src={previewUrl} alt="검색할 이미지 미리보기" className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex flex-col items-center gap-1.5 px-4 text-center text-xs text-muted-foreground">
-              <ImageOffIcon className="size-5" />
-              <span>사진은 선택사항이에요</span>
-            </div>
-          )}
-        </div>
+        <button
+          type="submit"
+          disabled={!canSearch || pending}
+          aria-label="AI 검색"
+          className="flex shrink-0 items-center gap-1 rounded-full bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+        >
+          <SearchIcon className="size-3.5 sm:hidden" />
+          <span className="hidden sm:inline">{pending ? "검색 중..." : "검색"}</span>
+        </button>
+      </form>
 
-        <div className="flex w-full flex-col gap-2 sm:pt-1">
-          <div className="flex flex-wrap gap-2">
-            <label className="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-foreground/30 has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50">
-              {file ? "다른 사진으로 교체" : "사진 선택"}
-              <input
-                ref={inputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                disabled={pending}
-                onChange={handleFileChange}
-                className="sr-only"
-              />
-            </label>
-            {file && (
-              <button
-                type="button"
-                onClick={handleRemoveImage}
-                disabled={pending}
-                className="rounded-full border border-border px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-foreground/30 disabled:opacity-50"
-              >
-                사진 제거
-              </button>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">JPEG, PNG, WebP · 최대 10MB</p>
-          {hasImageTypeConflict && (
-            <p className="text-xs text-warning">
-              이미지가 포함된 AI 검색은 분실물 또는 습득물 게시판을 선택한 경우에만 사용할 수 있습니다.
-            </p>
-          )}
-
-          <Button type="button" size="sm" disabled={!canSearch || pending} onClick={handleSearch} className="w-fit">
-            {pending ? "검색 중..." : "AI로 검색"}
-          </Button>
-        </div>
-      </div>
+      {showOptionalHint && (
+        <p className="px-1 text-xs text-muted-foreground">
+          물건의 특징을 설명해주세요. 사진을 더하면 더 정확하게 찾을 수 있어요.
+        </p>
+      )}
+      {hasImageTypeConflict && (
+        <p className="px-1 text-xs text-warning">
+          사진을 포함한 AI 검색은 분실물 또는 습득물 게시판을 선택한 경우에만 사용할 수 있습니다.
+        </p>
+      )}
 
       {error && (
         <p className="rounded-card border border-destructive/30 bg-destructive-muted px-4 py-2.5 text-sm text-destructive">
