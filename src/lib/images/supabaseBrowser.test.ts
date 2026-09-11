@@ -36,4 +36,24 @@ describe("uploadToSignedUrl", () => {
 
     await expect(uploadFn("posts/lost/1/x.jpg", "tok", makeFile())).rejects.toBeTruthy();
   });
+
+  // 이미지 업로드 최적화 Phase: 이제 File뿐 아니라 client.ts의
+  // optimizeImageForUpload()가 만들어내는 순수 Blob(WebP로 재인코딩된
+  // 결과, File이 아님)도 그대로 넘길 수 있어야 한다 -- File은 이미
+  // Blob이므로 위 테스트는 그대로 통과하지만, 이 테스트는 File이 아닌
+  // 일반 Blob에 대해서도 blob.type이 contentType으로 정확히 전달됨을
+  // 별도로 고정한다.
+  it("accepts a plain Blob (not just File) and uses its own type as contentType", async () => {
+    uploadToSignedUrl.mockResolvedValueOnce({ data: { path: "posts/lost/1/x.webp" }, error: null });
+    const blob = new Blob([new Uint8Array(4)], { type: "image/webp" });
+
+    await uploadFn("posts/lost/1/x.webp", "tok", blob);
+
+    expect(uploadToSignedUrl).toHaveBeenCalledWith(
+      "posts/lost/1/x.webp",
+      "tok",
+      blob,
+      expect.objectContaining({ contentType: "image/webp" }),
+    );
+  });
 });
