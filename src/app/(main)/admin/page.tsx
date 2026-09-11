@@ -72,12 +72,20 @@ export default async function AdminDashboardPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {/* UI/UX 최종 개선: 지금 조치가 필요한 항목(대기 중인 신고/의견/
+            생성 신청)은 warning 색으로, 단순 현황 수치(전체 사용자/게시글/
+            공지/단체 수)는 기존처럼 foreground로 -- 7개 타일이 전부 같은
+            시각적 무게를 가져서 "지금 봐야 할 것"이 묻히던 문제를, 새 색을
+            추가하지 않고 이미 이 페이지의 "최근 신고" 배지가 쓰는 warning
+            토큰만 재사용해 해결한다. */}
         <Link
           href="/admin/reports?status=pending"
           className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"
         >
           <span className="text-xs text-muted-foreground">신고 대기</span>
-          <span className="text-2xl font-bold text-foreground">{pending.total}</span>
+          <span className={`text-2xl font-bold ${pending.total > 0 ? "text-warning" : "text-foreground"}`}>
+            {pending.total}
+          </span>
         </Link>
         <Link
           href="/admin/users"
@@ -121,7 +129,9 @@ export default async function AdminDashboardPage() {
           className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"
         >
           <span className="text-xs text-muted-foreground">서비스 의견 (접수)</span>
-          <span className="text-2xl font-bold text-foreground">{pendingFeedbackCount}</span>
+          <span className={`text-2xl font-bold ${pendingFeedbackCount > 0 ? "text-warning" : "text-foreground"}`}>
+            {pendingFeedbackCount}
+          </span>
         </Link>
         {/* Phase 12-3: new tile -- /admin/organization-requests. 동일한
             "새로운 탭을 추가하지 않는다" 원칙, 대시보드 타일로만 추가. */}
@@ -130,7 +140,11 @@ export default async function AdminDashboardPage() {
           className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"
         >
           <span className="text-xs text-muted-foreground">단체 생성 신청 (대기)</span>
-          <span className="text-2xl font-bold text-foreground">{pendingOrganizationRequestCount}</span>
+          <span
+            className={`text-2xl font-bold ${pendingOrganizationRequestCount > 0 ? "text-warning" : "text-foreground"}`}
+          >
+            {pendingOrganizationRequestCount}
+          </span>
         </Link>
         {/* Phase 12-6: new tile -- /admin/organizations. 동일한 "새로운
             탭을 추가하지 않는다" 원칙, 대시보드 타일로만 추가. */}

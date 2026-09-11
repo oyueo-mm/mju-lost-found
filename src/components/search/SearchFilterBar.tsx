@@ -131,22 +131,50 @@ export function SearchFilterBar({
   return (
     <>
     <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-card border border-border bg-card p-4">
-      <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+      {/* UI/UX 최종 개선: 기본 브라우저 라디오 버튼 3개를 한 줄에 늘어놓던
+          기존 모습은 이 앱의 다른 모든 "여러 선택지 중 하나" UI(단체 허브의
+          활성/폐쇄 필터, 탭 등)가 이미 쓰는 segmented pill 스타일과 어긋나
+          "이게 서로 배타적인 3가지 모드"라는 것이 한눈에 들어오지 않았다.
+          접근성/폼 제출 방식(name="mode" 라디오, controlled)은 그대로 두고
+          시각적 표현만 organizations/page.tsx의 기존 필터 pill과 동일한
+          외형으로 맞춘다 -- 새 색이나 컴포넌트 없이 기존 토큰만 재사용. */}
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="검색 방식">
         {SEARCH_MODES.map((m) => (
-          <label key={m} className="flex items-center gap-1.5">
+          <label
+            key={m}
+            className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+              mode === m
+                ? "border-primary bg-primary-muted text-primary"
+                : "border-border text-muted-foreground hover:border-foreground/30"
+            }`}
+          >
             <input
               type="radio"
               name="mode"
               value={m}
               checked={mode === m}
               onChange={() => setMode(m)}
+              className="sr-only"
             />
             {MODE_LABELS[m]}
           </label>
         ))}
         {imageSearchEnabled && (
-          <label className="flex items-center gap-1.5">
-            <input type="radio" name="mode" value="image" checked={mode === "image"} onChange={() => setMode("image")} />
+          <label
+            className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+              mode === "image"
+                ? "border-primary bg-primary-muted text-primary"
+                : "border-border text-muted-foreground hover:border-foreground/30"
+            }`}
+          >
+            <input
+              type="radio"
+              name="mode"
+              value="image"
+              checked={mode === "image"}
+              onChange={() => setMode("image")}
+              className="sr-only"
+            />
             이미지로 검색
           </label>
         )}

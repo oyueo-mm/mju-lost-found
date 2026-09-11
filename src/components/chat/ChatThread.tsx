@@ -663,7 +663,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
         )}
 
         <form onSubmit={handleSend} className="flex gap-2">
-          <label className="flex shrink-0 cursor-pointer items-center justify-center rounded-full border border-border px-3 text-sm text-foreground hover:border-foreground/30 has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50">
+          <label className="flex shrink-0 cursor-pointer items-center justify-center rounded-full border border-border px-3 py-2 text-sm text-foreground hover:border-foreground/30 has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50">
             사진
             <input
               ref={fileInputRef}
