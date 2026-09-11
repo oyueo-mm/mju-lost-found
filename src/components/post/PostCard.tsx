@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { PostDTO } from "@/lib/posts/service";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { AttributionLink } from "@/components/user/AttributionLink";
-import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
+import { PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
@@ -36,35 +36,37 @@ type PostCardProps = {
   showPercentage?: boolean;
 };
 
-// Phase 17 redesign: image-forward vertical card (was a small 64px
-// thumbnail + text row) -- per this phase's own "사진 중심의 UI" design
-// direction, since a lost/found item's photo is the single fastest way a
-// viewer identifies whether it's theirs. Fixed aspect ratio + object-cover
-// keeps every card in a grid the same height regardless of the source
-// photo's own aspect ratio (see post/[id]/page.tsx's own comment for why
-// the *detail* page deliberately does NOT crop -- a card grid and a
+// Phase 17 redesign history (image-forward vertical card) and Phase H-3/H-6
+// (aspect ratio tuned to 4:5 mobile / 4:3 desktop, then later reduced --
+// see the PostCard 이미지 영역 UX 개선 Phase note below) shaped the fixed
+// aspect-ratio + object-cover thumbnail this card still uses whenever a
+// post has an image; see post/[id]/page.tsx's own comment for why the
+// *detail* page deliberately does NOT crop the same way (a grid card and a
 // single full-size detail view have different needs).
 //
-// Phase H-3: aspect ratio changed from 4:3 (landscape) to 4:5 (portrait-
-// leaning, same crop ratio product photo grids like Instagram use for
-// exactly this reason) -- most lost/found item photos are taken vertically
-// on a phone, and a landscape 4:3 box was cropping away a large share of
-// a portrait photo's height (top of a bag, bottom of a shoe, etc.). 4:5
-// gives the photo more vertical room without introducing letterboxing
-// (still a fixed ratio + object-cover, so the grid stays perfectly
-// uniform) -- less of the subject is lost, and the image now makes up
-// more of the card's total height instead of stopping short of it.
-//
-// Phase H-6: 4:5 on its own made desktop cards read as too tall once the
-// grid grows past 2 columns (md:grid-cols-3/lg:grid-cols-4, see every
-// caller of this component) -- each card's fixed height compounds across a
-// wide multi-column row in a way it doesn't on a narrow single-column-ish
-// mobile view. `md:aspect-4/3` (same breakpoint BottomNav/Header already
-// use as this app's mobile/desktop line, see layout/BottomNav.tsx) switches
-// back to the original, more landscape ratio from `md:` up only -- mobile
-// keeps 4:5 unchanged. Still a fixed ratio + object-cover at every
-// breakpoint, so every card in a given row stays exactly the same height
-// (never distorted, never a mix of ratios within one grid).
+// PostCard 레이아웃 순서 개선 Phase: 카드가 항상 "이미지 -> 텍스트" 순서로
+// 쌓이던 이전 구조는 이미지 유무에 따라 제목/배지가 시작되는 세로 위치
+// 자체가 카드마다 달라지는 문제가 있었다(사진이 있으면 텍스트가 이미지
+// 높이만큼 아래에서 시작, 없으면 맨 위에서 시작). 이번 수정으로 순서를
+// "텍스트 -> 이미지(있을 때만)"로 뒤집었다:
+// - 유형/상태 배지, 작성자/단체, 제목, 위치/시간/조회수, 유사도 배지 등
+//   기존 게시글 정보는 이제 항상 카드 맨 위의 텍스트 영역에 먼저
+//   배치되고, 이미지 유무와 무관하게 시작 위치가 완전히 동일하다.
+// - 이미지가 있으면 텍스트 영역 *아래*에 기존과 같은 축소 비율(3:2,
+//   md:16:10) 썸네일이 이어서 나온다. 이미지가 없으면 그 자리에는(이후
+//   PostCard description 미리보기 Phase에서) description 미리보기를
+//   보여준다 -- 그마저 없으면(공백뿐인 description) 아무것도 렌더링하지
+//   않고(placeholder 없음) 카드는 텍스트 영역에서 그대로 끝난다.
+// - 유형/상태 배지가 이제 이미지 유무와 상관없이 항상 텍스트 영역의 같은
+//   자리에 있으므로, 예전에 이미지 위에 얹혀 있던 절대 위치 배지
+//   (bg-card/90 backdrop-blur 스타일)는 더 이상 필요 없어 제거했다 --
+//   같은 정보를 두 군데에 중복 표시하지 않는다.
+// - 카드 높이가 이미지 유무에 따라 자연히 달라지는 것은 이제 의도된
+//   동작이다(텍스트가 시작하는 위치는 항상 같고, 이미지가 있는 카드만 그
+//   아래로 더 길어진다) -- 그래서 이전에 높이를 억지로 맞추려 썼던 루트의
+//   `self-start` 제거/텍스트 영역의 `justify-center`는 더 이상 쓰지
+//   않는다. 텍스트는 항상 위에서부터 자연스러운 순서로 쌓인다(플레인
+//   flex-col, 별도 정렬 지정 없음).
 // Phase H-7: the card is no longer one giant <Link> -- adding a clickable
 // author nickname (this phase's own spec) inside it would otherwise nest
 // an <a> inside an <a>, which is invalid HTML and makes the inner link's
@@ -90,35 +92,21 @@ export function PostCard({ post, scoreLabel = "검색 유사도", showPercentage
     // that already covers all three instead. Kept short (existing
     // duration-150 default) and subtle -- a hint of depth, not a jump.
     <div className="group relative flex flex-col overflow-hidden rounded-card border border-border bg-card transition duration-150 hover:border-foreground/30 hover:shadow-md motion-safe:hover:-translate-y-0.5">
-      <div className="relative aspect-4/5 w-full shrink-0 overflow-hidden bg-muted md:aspect-4/3">
-        {post.imageUrl ? (
-          <Image
-            src={post.imageUrl}
-            alt={post.title}
-            fill
-            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
-            loading="lazy"
-            className="object-cover transition-transform motion-safe:group-hover:scale-[1.03]"
-          />
-        ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-muted-foreground">
-            <ImageOffIcon className="size-6" />
-            <span className="text-xs">이미지 없음</span>
-          </div>
-        )}
-        {/* Phase G-2: on /search (mixed 분실물+습득물 results), the status
-            badge alone ("찾는 중"/"보관 중") only implies which board a card
-            belongs to -- this makes it explicit. Harmless on /lost and
-            /found too (board is already fixed there by the page itself),
-            so it's added unconditionally rather than threading a new prop
-            through every PostCard call site just to hide it there. */}
-        <span className="absolute top-2 left-2 inline-flex shrink-0 items-center rounded-full bg-card/90 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm">
-          {TYPE_LABEL[post.type]}
-        </span>
-        <StatusBadge status={post.status} className="absolute top-2 right-2 shadow-sm" />
-      </div>
-
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-3.5">
+      <div className="flex min-w-0 flex-col gap-1.5 p-3.5">
+        {/* 유형/상태 배지 -- 이미지 유무와 상관없이 항상 텍스트 영역
+            맨 위에 있다. Phase G-2: on /search (mixed 분실물+습득물
+            results), the status badge alone ("찾는 중"/"보관 중") only
+            implies which board a card belongs to -- the type label makes
+            it explicit. Harmless on /lost and /found too (board is
+            already fixed there by the page itself), so it's shown
+            unconditionally rather than threading a new prop through every
+            PostCard call site just to hide it there. */}
+        <div className="flex items-center justify-between gap-2">
+          <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-foreground">
+            {TYPE_LABEL[post.type]}
+          </span>
+          <StatusBadge status={post.status} />
+        </div>
         {/* Phase 12-8 §2/§3: organization-attributed posts show ONLY the
             organization here -- the real author's nickname/publicId is
             never rendered for those (AttributionLink's own comment). A
@@ -168,6 +156,38 @@ export function PostCard({ post, scoreLabel = "검색 유사도", showPercentage
           </span>
         )}
       </div>
+
+      {/* PostCard description 미리보기 Phase: 이미지가 있으면 기존과
+          동일하게 텍스트 영역 아래에 축소 비율(3:2, md:16:10) 썸네일을
+          보여준다(placeholder 없음, 그대로 유지). 이미지가 없으면 그
+          자리를 비워두는 대신 description 미리보기로 채운다 -- 분실물
+          게시판처럼 사진 없는 글이 많은 목록에서 카드가 휑해 보이지 않고
+          물건의 특징/상황이 바로 보이도록 하기 위함이다. description도
+          없는(빈 문자열/공백만 있는) 극히 드문 경우는 억지 placeholder
+          문구 없이 그 영역을 그냥 비운다 -- "이미지 없음" 같은 자리
+          채우기 문구는 이전 Phase에서 이미 없앴고, 여기서도 새로 만들지
+          않는다. 카드 상단 텍스트 영역에는 원래 description이 전혀
+          렌더링되지 않았으므로(제목만 표시) 이 미리보기와 중복될 내용이
+          없다. line-clamp-4로 길이를 제한해 카드가 지나치게 길어지지
+          않게 한다. */}
+      {post.imageUrl ? (
+        <div className="relative aspect-3/2 w-full shrink-0 overflow-hidden bg-muted md:aspect-16/10">
+          <Image
+            src={post.imageUrl}
+            alt={post.title}
+            fill
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
+            loading="lazy"
+            className="object-cover transition-transform motion-safe:group-hover:scale-[1.03]"
+          />
+        </div>
+      ) : (
+        post.description.trim() && (
+          <p className="line-clamp-4 border-t border-border px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
+            {post.description}
+          </p>
+        )
+      )}
 
       <Link href={`/post/${post.id}?type=${post.type}`} aria-label={post.title} className="absolute inset-0" />
     </div>
