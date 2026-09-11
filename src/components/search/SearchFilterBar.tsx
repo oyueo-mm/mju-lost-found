@@ -3,9 +3,9 @@
 import { useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { CAMPUSES, CATEGORIES, SEARCH_MODES } from "@/lib/posts/schema";
-import type { PostListType, PostType, SearchMode, SortOption } from "@/lib/posts/schema";
-import { ImageSearchPanel } from "./ImageSearchPanel";
+import { CAMPUSES, CATEGORIES } from "@/lib/posts/schema";
+import type { PostListType, PostType, SortOption } from "@/lib/posts/schema";
+import { AISearchPanel } from "./AISearchPanel";
 
 type StatusOption = { value: string; label: string };
 
@@ -22,21 +22,24 @@ type SearchFilterBarProps = {
   // as this <select>'s default so it never lies about what's currently
   // filtered. Irrelevant (and unused) wherever statusOptions is omitted.
   defaultStatus?: string;
-  // Phase 32/33: /search, /lost, and /found all pass this now.
+  // Phase 32/33: /search, /lost, and /found all pass this now. AI 검색
+  // 고도화 Phase: same prop, now gates the unified "AI 검색" tab
+  // (AISearchPanel, text+image) instead of the old image-only tab -- every
+  // existing call site already passes this, so nothing else changed.
   imageSearchEnabled?: boolean;
   // Phase 33: /lost and /found each fix the board server-side (never
   // rendered as a selector -- see showTypeFilter's own comment), so
-  // ImageSearchPanel has no `type` state to read there the way /search's
-  // own type <select> provides. Only meaningful when showTypeFilter is
-  // false; ignored (the type <select>'s own state wins) otherwise.
+  // AISearchPanel has no `type` state to read there the way /search's own
+  // type <select> provides. Only meaningful when showTypeFilter is false;
+  // ignored (the type <select>'s own state wins) otherwise.
   fixedType?: PostType;
-  // Phase 32: the page's own (server-rendered) keyword/semantic results +
+  // Phase 32: the page's own (server-rendered) keyword results +
   // pagination, passed down so this component can hide them while
-  // ImageSearchPanel owns the results area instead (image mode never
-  // navigates, so the page itself has no way to know to hide them on its
-  // own). /lost and /found don't pass this (their results stay siblings of
-  // this component, exactly as before) -- omitted here renders nothing,
-  // so their layout is completely unaffected.
+  // AISearchPanel owns the results area instead (AI 검색 never navigates,
+  // so the page itself has no way to know to hide them on its own). /lost
+  // and /found don't pass this (their results stay siblings of this
+  // component, exactly as before) -- omitted here renders nothing, so
+  // their layout is completely unaffected.
   children?: ReactNode;
 };
 
@@ -51,15 +54,18 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "oldest", label: "오래된순" },
 ];
 
-// Legacy pages/1,2's exact two modes (st.radio(["키워드 검색", "AI 의미
-// 검색"])) -- see docs/AI_SEMANTIC_SEARCH_DESIGN.md section 5. Reuses
-// SEARCH_MODES (posts/schema.ts) rather than redeclaring the two values.
-const MODE_LABELS: Record<SearchMode, string> = {
+// AI 검색 고도화 Phase: 이 앱의 검색 방식은 이제 정확히 둘 -- "키워드
+// 검색"(기존 title/description contains 검색, AI 미사용, 텍스트 필수)과
+// "AI 검색"(텍스트/이미지 중 하나 이상, AISearchPanel). 예전에 별도
+// 라디오였던 "AI 의미 검색"과 "이미지로 검색"은 하나로 합쳐졌다 --
+// listQuerySchema의 mode="semantic"이나 POST .../mode=image 자체가 없어진
+// 것은 아니고(서버 쪽 함수는 그대로 재사용된다, aiService.ts 참고), 이
+// UI에서 그 둘을 따로 고를 필요가 없어졌을 뿐이다.
+type LocalMode = "keyword" | "ai";
+const MODE_LABELS: Record<LocalMode, string> = {
   keyword: "키워드 검색",
-  semantic: "AI 의미 검색",
+  ai: "AI 검색",
 };
-
-type LocalMode = SearchMode | "image";
 
 export function SearchFilterBar({
   basePath,
@@ -79,30 +85,27 @@ export function SearchFilterBar({
 
   // mode/type need to be tracked as component state (not left as plain
   // uncontrolled defaultValue selects like the rest of this form) because
-  // ImageSearchPanel (mode=image) needs the current `type` as a live
-  // value, not just at submit time -- image search never navigates (see
-  // handleSubmit's own comment), so it has no other way to read the
-  // selected board. mode=semantic + type=all used to need this same
-  // tracking to block the combination client-side; Phase 11-2 removed
-  // that restriction (see listQuerySchema's superRefine -- both boards'
-  // embedding scores are already on the same comparable scale, so the
-  // server now merges them instead of rejecting the combination), so
-  // semantic no longer reads `type` for anything.
-  const [mode, setMode] = useState<LocalMode>((searchParams.get("mode") as SearchMode | null) ?? "keyword");
+  // AISearchPanel (mode="ai") needs the current `type` as a live value,
+  // not just at submit time -- AI 검색 never navigates (see handleSubmit's
+  // own comment), so it has no other way to read the selected board. AI 검색
+  // 고도화 Phase: initial state only ever recognizes "ai" from the URL's
+  // own `mode` param (an old bookmarked `?mode=semantic`/`?mode=image` link
+  // simply falls back to "keyword", the safe default -- neither of those
+  // values is a valid LocalMode any more, see this file's own LocalMode
+  // comment).
+  const [mode, setMode] = useState<LocalMode>(searchParams.get("mode") === "ai" ? "ai" : "keyword");
   const [type, setType] = useState<PostListType>((searchParams.get("type") as PostListType | null) ?? "all");
-  // Phase 33: the board image search actually targets -- /search's own
-  // type <select> when present, otherwise the page's fixed board
-  // (/lost -> "lost", /found -> "found"). Never "all" once fixedType is
-  // given, so the "select a board" warning below never fires on those two
-  // pages.
-  const imageSearchType: PostListType = showTypeFilter ? type : (fixedType ?? "all");
+  // Phase 33: the board AI 검색 actually targets -- /search's own type
+  // <select> when present, otherwise the page's fixed board (/lost ->
+  // "lost", /found -> "found"). Never "all" once fixedType is given.
+  const aiSearchType: PostListType = showTypeFilter ? type : (fixedType ?? "all");
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // Phase 32: image mode never navigates -- ImageSearchPanel (rendered
-    // below in place of the usual query/filter fields) has its own submit
-    // button and does its own client-side fetch instead.
-    if (mode === "image") return;
+    // Phase 32/AI 검색 고도화: AI 검색 mode never navigates -- AISearchPanel
+    // (rendered below in place of the usual query/filter fields) has its
+    // own submit button and does its own client-side fetch instead.
+    if (mode === "ai") return;
 
     const formData = new FormData(event.currentTarget);
     const params = new URLSearchParams();
@@ -139,30 +142,27 @@ export function SearchFilterBar({
           시각적 표현만 organizations/page.tsx의 기존 필터 pill과 동일한
           외형으로 맞춘다 -- 새 색이나 컴포넌트 없이 기존 토큰만 재사용. */}
       <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="검색 방식">
-        {SEARCH_MODES.map((m) => (
-          <label
-            key={m}
-            className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-              mode === m
-                ? "border-primary bg-primary-muted text-primary"
-                : "border-border text-muted-foreground hover:border-foreground/30"
-            }`}
-          >
-            <input
-              type="radio"
-              name="mode"
-              value={m}
-              checked={mode === m}
-              onChange={() => setMode(m)}
-              className="sr-only"
-            />
-            {MODE_LABELS[m]}
-          </label>
-        ))}
+        <label
+          className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+            mode === "keyword"
+              ? "border-primary bg-primary-muted text-primary"
+              : "border-border text-muted-foreground hover:border-foreground/30"
+          }`}
+        >
+          <input
+            type="radio"
+            name="mode"
+            value="keyword"
+            checked={mode === "keyword"}
+            onChange={() => setMode("keyword")}
+            className="sr-only"
+          />
+          {MODE_LABELS.keyword}
+        </label>
         {imageSearchEnabled && (
           <label
             className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-              mode === "image"
+              mode === "ai"
                 ? "border-primary bg-primary-muted text-primary"
                 : "border-border text-muted-foreground hover:border-foreground/30"
             }`}
@@ -170,23 +170,18 @@ export function SearchFilterBar({
             <input
               type="radio"
               name="mode"
-              value="image"
-              checked={mode === "image"}
-              onChange={() => setMode("image")}
+              value="ai"
+              checked={mode === "ai"}
+              onChange={() => setMode("ai")}
               className="sr-only"
             />
-            이미지로 검색
+            {MODE_LABELS.ai}
           </label>
         )}
       </div>
 
-      {mode === "image" ? (
+      {mode === "ai" ? (
         <>
-          {imageSearchType === "all" && (
-            <p className="text-xs text-warning">
-              이미지 검색은 분실물 또는 습득물 게시판을 선택한 경우에만 사용할 수 있습니다.
-            </p>
-          )}
           {showTypeFilter && (
             <select
               value={type}
@@ -200,14 +195,14 @@ export function SearchFilterBar({
               ))}
             </select>
           )}
-          <ImageSearchPanel type={imageSearchType} />
+          <AISearchPanel type={aiSearchType} />
         </>
       ) : (
         <>
           <input
             name="q"
             type="text"
-            placeholder={mode === "semantic" ? "예: 검은색 에어팟을 도서관에서 잃어버렸어요" : "검색어를 입력하세요"}
+            placeholder="검색어를 입력하세요"
             defaultValue={searchParams.get("q") ?? ""}
             maxLength={100}
             className="w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
@@ -298,7 +293,7 @@ export function SearchFilterBar({
         </>
       )}
 
-      {mode !== "image" && hasActiveFilters && (
+      {mode !== "ai" && hasActiveFilters && (
         <button
           type="button"
           onClick={() => router.push(basePath)}
@@ -308,7 +303,7 @@ export function SearchFilterBar({
         </button>
       )}
     </form>
-    {mode !== "image" && children}
+    {mode !== "ai" && children}
     </>
   );
 }

@@ -82,6 +82,15 @@ export function PendingRecommendations({
       recommendations={recommendations}
       loadFailed={failed}
       pending={stillWaiting}
+      // AI 검색 고도화 Phase: hides the score badge for the entire
+      // "분실물/습득물 작성 직후" view (pollForResults=true), not just
+      // while stillWaiting -- once the polled recommendations arrive,
+      // pollForResults stays true for the rest of this same page load, so
+      // the score stays hidden there too (spec: "분실물 작성 직후
+      // 자동으로 표시되는 AI 추천에는 점수를 표시하지 않는다"). A later,
+      // ordinary revisit to the same post (pollForResults=false from the
+      // start) always shows the score.
+      showScore={!pollForResults}
     />
   );
 }

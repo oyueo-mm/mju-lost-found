@@ -85,8 +85,15 @@ vi.mock("@/lib/organization/service", () => ({ validateOrganizationPosting }));
 // see that file's own comment. Its searchPosts() delegates non-semantic
 // dispatch to the real (unmocked) ./service module, so this test file
 // exercises that delegation end-to-end rather than mocking it away.
-const { createFoundPost, createLostPost, updateFoundPost, updateLostPost, searchPosts, searchPostsByImage } =
-  await import("./aiService");
+const {
+  createFoundPost,
+  createLostPost,
+  updateFoundPost,
+  updateLostPost,
+  searchPosts,
+  searchPostsByImage,
+  searchPostsAI,
+} = await import("./aiService");
 
 // A minimal stand-in for the Prisma User type -- these tests only exercise
 // aiService.ts's own logic (author id, suspension check), never Prisma
@@ -1277,5 +1284,101 @@ describe("searchPostsByImage", () => {
       10,
       expect.objectContaining({ category: "지갑", campus: "인문캠퍼스", status: "보관 중" }),
     );
+  });
+});
+
+// AI 검색 고도화 Phase: searchPostsAI() is the one entry point behind
+// POST /api/posts?mode=ai -- these tests exercise its three input
+// combinations (text only, image only, text+image) and its two validation
+// invariants (at least one input required; an image forces a concrete
+// board), all delegating to the exact same collaborators already exercised
+// above (searchPosts's semantic branch, searchPostsByImage, and
+// findPostsBySemanticQuery/findPostsByImageQuery for the combined path).
+describe("searchPostsAI", () => {
+  it("text only: delegates to the same semantic search path as searchPosts(mode=semantic)", async () => {
+    embed.mockResolvedValueOnce([0.1, 0.2]);
+    findPostsBySemanticQuery.mockResolvedValueOnce([{ id: 1, score: 0.6 }]);
+    lostPost.findMany.mockResolvedValueOnce([row({ id: 1 })]);
+
+    const result = await searchPostsAI("lost", "검은색 에어팟", undefined, { page: 1, limit: 20 });
+
+    expect(embed).toHaveBeenCalledWith("검은색 에어팟");
+    expect(imageEmbed).not.toHaveBeenCalled();
+    expect(findPostsByImageQuery).not.toHaveBeenCalled();
+    expect(result.items.map((p) => p.id)).toEqual([1]);
+  });
+
+  it("text only + type=all: reaches both boards, same as searchPosts(mode=semantic, type=all)", async () => {
+    embed.mockResolvedValueOnce([0.1]);
+    findPostsBySemanticQuery.mockResolvedValueOnce([{ id: 5, score: 0.7 }]);
+    lostPost.findMany.mockResolvedValueOnce([row({ id: 5 })]);
+    foundPost.findMany.mockResolvedValueOnce([]);
+
+    const result = await searchPostsAI("all", "지갑", undefined, { page: 1, limit: 20 });
+
+    expect(lostPost.findMany).toHaveBeenCalled();
+    expect(result.items.map((p) => p.id)).toEqual([5]);
+  });
+
+  it("image only: delegates to searchPostsByImage() unchanged", async () => {
+    const fakeImage = new Blob([new Uint8Array([1])], { type: "image/jpeg" });
+    imageEmbed.mockResolvedValueOnce([0.3]);
+    findPostsByImageQuery.mockResolvedValueOnce([{ id: 9, score: 0.9 }]);
+    lostPost.findMany.mockResolvedValueOnce([row({ id: 9 })]);
+
+    const result = await searchPostsAI("lost", undefined, fakeImage, { page: 1, limit: 20 });
+
+    expect(embed).not.toHaveBeenCalled();
+    expect(findPostsBySemanticQuery).not.toHaveBeenCalled();
+    expect(result.items.map((p) => p.id)).toEqual([9]);
+  });
+
+  it("text + image: runs both vector searches and combines them via the shared rankFusion logic", async () => {
+    embed.mockResolvedValueOnce([0.1]);
+    imageEmbed.mockResolvedValueOnce([0.2]);
+    // Candidate 3 is present in both the text and image ranking (and is
+    // the best raw score in each), while 1 only has a text score and 2
+    // only has an image score -- min-max normalizing each signal over its
+    // own {low, high} pair maps 3 to 1 on both signals (averaging to 1),
+    // while 1 and 2 each normalize to 0 with no second signal to average
+    // against -- so 3 should rank first, 1 and 2 tied behind it.
+    findPostsBySemanticQuery.mockResolvedValueOnce([
+      { id: 1, score: 0.5 },
+      { id: 3, score: 0.9 },
+    ]);
+    findPostsByImageQuery.mockResolvedValueOnce([
+      { id: 2, score: 0.4 },
+      { id: 3, score: 0.9 },
+    ]);
+    lostPost.findMany.mockResolvedValueOnce([row({ id: 1 }), row({ id: 2 }), row({ id: 3 })]);
+
+    const result = await searchPostsAI("lost", "검은색 에어팟", new Blob([], { type: "image/jpeg" }), {
+      page: 1,
+      limit: 20,
+    });
+
+    expect(embed).toHaveBeenCalledWith("검은색 에어팟");
+    expect(imageEmbed).toHaveBeenCalled();
+    expect(result.items.map((p) => p.id)).toEqual([3, 1, 2]);
+    expect(result.items[0].score).toBeCloseTo(1);
+  });
+
+  it("rejects when neither text nor image is given", async () => {
+    await expect(searchPostsAI("lost", undefined, undefined, { page: 1, limit: 20 })).rejects.toThrow();
+    expect(embed).not.toHaveBeenCalled();
+    expect(imageEmbed).not.toHaveBeenCalled();
+  });
+
+  it("rejects an image-only search against type=all -- imageEmbedding has no cross-board query", async () => {
+    const fakeImage = new Blob([], { type: "image/jpeg" });
+    await expect(searchPostsAI("all", undefined, fakeImage, { page: 1, limit: 20 })).rejects.toThrow();
+    expect(imageEmbed).not.toHaveBeenCalled();
+  });
+
+  it("rejects a text+image search against type=all for the same reason", async () => {
+    const fakeImage = new Blob([], { type: "image/jpeg" });
+    await expect(searchPostsAI("all", "지갑", fakeImage, { page: 1, limit: 20 })).rejects.toThrow();
+    expect(embed).not.toHaveBeenCalled();
+    expect(imageEmbed).not.toHaveBeenCalled();
   });
 });

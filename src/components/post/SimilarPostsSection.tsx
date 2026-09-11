@@ -20,6 +20,15 @@ type SimilarPostsSectionProps = {
   // has no matches yet. Every existing caller omits this (defaults to
   // false) and renders exactly as before.
   pending?: boolean;
+  // AI 검색 고도화 Phase: false only for the "분실물/습득물 작성 직후"
+  // auto-recommendation view (PendingRecommendations passes
+  // `!pollForResults`'s own inverse -- see that component) -- this phase's
+  // spec explicitly requires that view to stay pure suggestions with no
+  // numeric score ("AI가 찾아본 비슷한 습득물"), while every other,
+  // *later* visit to the same post detail page shows "AI 유사도 0.xx" on
+  // each card (see PostCard's scoreDisplay). Every existing caller omits
+  // this (defaults to true) -- a plain page revisit is unaffected.
+  showScore?: boolean;
 };
 
 // Phase J-2: was an interactive client widget where the viewer picked a
@@ -37,6 +46,7 @@ export function SimilarPostsSection({
   recommendations,
   loadFailed,
   pending = false,
+  showScore = true,
 }: SimilarPostsSectionProps) {
   const targetType = OPPOSITE_TYPE[sourceType];
 
@@ -67,16 +77,20 @@ export function SimilarPostsSection({
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {recommendations.map((post) => (
-            // Phase 11-3: this score is a min-max-normalized rank within
-            // this one post's own small candidate pool (top 5), not a
-            // stable similarity percentage the way search's score is --
-            // showing it as "XX%" read as a confidence/accuracy claim it
-            // doesn't support (the top pick is ~100% almost by
-            // construction, see recommendation/service.ts's
-            // minMaxNormalize). showPercentage=false keeps the badge
-            // (existing visual language) but drops the number -- just the
-            // "AI 추천" label, matching this section's own heading.
-            <PostCard key={`${post.type}-${post.id}`} post={post} scoreLabel="AI 추천" showPercentage={false} />
+            // AI 검색 고도화 Phase: shows "AI 유사도 0.xx" (scoreDisplay=
+            // "decimal", see PostCard's own comment on why this is never
+            // ×100 -- it's recommendation/service.ts's min-max-normalized,
+            // then averaged score, the exact same shape AI 검색's combined
+            // text+image path produces via the shared rankFusion module),
+            // except on the just-created-post auto-recommendation view
+            // (showScore=false, see this component's own prop comment),
+            // where the badge is hidden entirely instead.
+            <PostCard
+              key={`${post.type}-${post.id}`}
+              post={post}
+              scoreLabel="AI 유사도"
+              scoreDisplay={showScore ? "decimal" : "hidden"}
+            />
           ))}
         </div>
       )}

@@ -6,6 +6,7 @@ import { EMBEDDING_INPUT_FIELDS, embedPostBestEffort } from "@/lib/ai/postEmbedd
 import { getEmbeddingProvider } from "@/lib/ai/embedding";
 import { getImageEmbeddingProvider } from "@/lib/ai/imageEmbedding";
 import { findPostsByImageQuery, findPostsBySemanticQuery } from "@/lib/ai/vectorSearch";
+import { combineRankings } from "@/lib/ai/rankFusion";
 import { invalidateRecommendationCache } from "@/lib/recommendation/service";
 import { validateOrganizationPosting } from "@/lib/organization/service";
 import type { User } from "@/generated/prisma/client";
@@ -442,6 +443,106 @@ export async function searchPostsByImage(
   // Re-order to match the similarity ranking and drop any id whose row
   // vanished between the two queries -- same reasoning as
   // searchPostsSemantic()'s own identical comment.
+  const items: PostDTO[] = ids
+    .map((id) => rowById.get(id))
+    .filter((row): row is NonNullable<typeof row> => row !== undefined)
+    .map((row) => {
+      const dto =
+        targetType === "lost"
+          ? toLostPostDTO(row as Parameters<typeof toLostPostDTO>[0])
+          : toFoundPostDTO(row as Parameters<typeof toFoundPostDTO>[0]);
+      return { ...dto, score: scoreById.get(row.id) };
+    });
+
+  const total = items.length;
+  const skip = (page - 1) * limit;
+  return { items: items.slice(skip, skip + limit), page, limit, total, totalPages: totalPagesFor(total, limit) };
+}
+
+// ---------- AI search: text + optional image (AI 검색 고도화 Phase) ----------
+
+// One entry point for "AI 검색" (텍스트 선택, 이미지 선택, 둘 중 하나 이상
+// 필요) -- deliberately built out of the exact pieces already above rather
+// than a new ranking algorithm:
+//   텍스트만        -> searchPostsSemantic()/searchPostsSemanticAll() 그대로
+//                       재사용 (type=all도 기존과 동일하게 가능).
+//   이미지만        -> searchPostsByImage() 그대로 재사용 (기존과 동일하게
+//                       type=all은 불가 -- 이미지 검색은 항상 특정 게시판
+//                       하나의 imageEmbedding 컬럼만 조회할 수 있다).
+//   텍스트 + 이미지 -> findPostsBySemanticQuery()/findPostsByImageQuery()를
+//                       병렬로 돌리고, src/lib/recommendation/service.ts의
+//                       게시글 상세 AI 추천이 쓰는 것과 완전히 동일한
+//                       rankFusion.combineRankings()로 합친다 -- 새 weighting/
+//                       threshold를 만들지 않는다. 이 경우 반환되는 score는
+//                       raw cosine similarity가 아니라 후보 풀 내에서
+//                       min-max 정규화한 뒤 평균한 값이다 (combineRankings의
+//                       own comment 참고) -- 즉 게시글 상세 AI 추천이 "AI
+//                       유사도"로 보여주는 값과 정확히 같은 의미이므로, 이
+//                       검색 결과에도 동일하게 "AI 유사도"라는 라벨을 써도
+//                       의미가 어긋나지 않는다.
+// 호출자(POST /api/posts?mode=ai)가 "텍스트/이미지 둘 다 없음"과 "이미지가
+// 있는데 type=all"을 이미 400으로 거른 뒤에만 이 함수를 부르므로, 그 두
+// 불변조건은 여기서 다시 검증하지 않는다(대신 방어적으로 assert만 한다).
+export async function searchPostsAI(
+  type: PostListType,
+  query: string | undefined,
+  image: Blob | undefined,
+  { page, limit, ...filters }: ListParams,
+): Promise<PagedResult<PostDTO>> {
+  const trimmedQuery = query?.trim();
+  const hasQuery = !!trimmedQuery;
+  const hasImage = !!image;
+
+  if (!hasQuery && !hasImage) {
+    throw new Error("searchPostsAI requires a query, an image, or both");
+  }
+
+  if (hasQuery && !hasImage) {
+    return type === "all"
+      ? searchPostsSemanticAll(trimmedQuery, { page, limit, ...filters })
+      : searchPostsSemantic(type, trimmedQuery, { page, limit, ...filters });
+  }
+
+  if (hasImage && !hasQuery) {
+    if (type === "all") throw new Error("Image search requires a specific board (lost or found)");
+    return searchPostsByImage(type, image, { page, limit, ...filters });
+  }
+
+  if (type === "all") throw new Error("Image search requires a specific board (lost or found)");
+  return searchPostsByTextAndImage(type, trimmedQuery as string, image as Blob, { page, limit, ...filters });
+}
+
+async function searchPostsByTextAndImage(
+  targetType: PostType,
+  query: string,
+  image: Blob,
+  { page, limit, ...filters }: ListParams,
+): Promise<PagedResult<PostDTO>> {
+  const [textVector, imageVector] = await Promise.all([
+    getEmbeddingProvider().embed(query),
+    getImageEmbeddingProvider().embed(image),
+  ]);
+  const [textRanked, imageRanked] = await Promise.all([
+    findPostsBySemanticQuery(targetType, textVector, SEMANTIC_SEARCH_TOP_K, filters),
+    findPostsByImageQuery(targetType, imageVector, IMAGE_SEARCH_TOP_K, filters),
+  ]);
+  const combined = combineRankings(textRanked, imageRanked);
+
+  if (combined.length === 0) {
+    return { items: [], page, limit, total: 0, totalPages: 1 };
+  }
+
+  const scoreById = new Map(combined.map((r) => [r.id, r.score]));
+  const ids = combined.map((r) => r.id);
+  const rows =
+    targetType === "lost"
+      ? await prisma.lostPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } })
+      : await prisma.foundPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } });
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+
+  // Re-order to match the combined ranking and drop any id whose row
+  // vanished between the vector searches and this fetch -- same reasoning
+  // as searchPostsByImage()'s own identical comment.
   const items: PostDTO[] = ids
     .map((id) => rowById.get(id))
     .filter((row): row is NonNullable<typeof row> => row !== undefined)

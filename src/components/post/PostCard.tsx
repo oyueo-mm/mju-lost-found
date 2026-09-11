@@ -14,26 +14,40 @@ const TYPE_LABEL: Record<PostDTO["type"], string> = { lost: "분실물", found: 
 
 type PostCardProps = {
   post: PostDTO;
-  // Phase 15-2: the same `post.score` field is reused by two different
-  // similarity contexts (Phase 12's text search, Phase 15-2's image
-  // similarity) that must never read as the same claim -- "검색 유사도"
-  // (this card matched your search terms) vs "이미지 유사도" (this card's
-  // photo looks visually similar). Defaulting to the original Phase 12
-  // wording keeps every existing call site (search results) unchanged.
+  // Phase 15-2: the same `post.score` field is reused by several different
+  // similarity contexts (keyword-era Phase 12 text search, Phase 15-2 image
+  // similarity, AI 검색 고도화 Phase's unified AI 검색/AI 추천) that must
+  // never read as the same claim -- "검색 유사도" (this card matched your
+  // search terms) vs "이미지 유사도" (this card's photo looks visually
+  // similar) vs "AI 유사도" (AI 검색/AI 추천's own wording, see
+  // scoreDisplay below). Defaulting to the original Phase 12 wording keeps
+  // every existing call site (keyword-era search results) unchanged.
   scoreLabel?: string;
-  // Phase 11-3: search/image-search's `score` is a direct, stable rescale
-  // of raw cosine similarity (aiService.ts's searchPostsSemantic ->
-  // normalizeScore, `(cosine+1)/2`) -- comparable across different
-  // searches, so showing it as a percentage is meaningful there. AI
-  // recommendation's `score` (SimilarPostsSection) goes through one more
-  // step first (recommendation/service.ts's minMaxNormalize): rescaled
-  // *again*, relative only to that one post's own small candidate pool
-  // (top 5) -- the best candidate in that pool is ~100% almost by
-  // construction, regardless of how similar it actually is in absolute
-  // terms. Showing "XX%" there reads as a confidence/accuracy claim the
-  // number doesn't support. Only SimilarPostsSection passes false; every
-  // other existing caller (search, image search) is unaffected.
-  showPercentage?: boolean;
+  // AI 검색 고도화 Phase: replaces the old boolean `showPercentage` with a
+  // three-way choice, since this project settled on two genuinely
+  // different display *shapes* for `score`, not just "percentage or not":
+  //
+  // - "percentage": search/image search's `score` is a direct, stable
+  //   rescale of raw cosine similarity (vectorSearch.ts's normalizeScore,
+  //   `(cosine+1)/2`) -- comparable across different searches, so "XX%"
+  //   is meaningful there. This is the default (every pre-existing caller
+  //   using the old default is unaffected).
+  // - "decimal": AI 검색 고도화 Phase's own requirement -- AI 검색 결과와
+  //   게시글 상세 AI 추천은 이제 "AI 유사도 0.87"처럼 소수 두 자리로
+  //   표시한다("87%"/"87점"/확률 표현 금지, see this phase's spec). Used
+  //   by both AI 검색(AISearchPanel) and the post-detail AI recommendation
+  //   (SimilarPostsSection) -- the latter's score, once combined with an
+  //   image signal, is recommendation/service.ts's (now shared via
+  //   rankFusion.ts) min-max-normalized-and-averaged value, not raw
+  //   cosine -- but that's the exact same shape searchPostsAI's combined
+  //   path produces (rankFusion.combineRankings), so "AI 유사도" reads
+  //   consistently in both places.
+  // - "hidden": no badge at all, even though `post.score` is present --
+  //   only the "분실물 작성 직후" auto-recommendation view uses this (see
+  //   PendingRecommendations/SimilarPostsSection's own `showScore`), so a
+  //   just-created post's recommendations read as pure suggestions
+  //   ("AI가 찾아본 비슷한 습득물"), never a numeric claim.
+  scoreDisplay?: "percentage" | "decimal" | "hidden";
 };
 
 // Phase 17 redesign history (image-forward vertical card) and Phase H-3/H-6
@@ -81,7 +95,7 @@ type PostCardProps = {
 // to their profile instead. `group`/`group-hover` (image zoom on hover)
 // still work unchanged -- :hover is based on the pointer being over the
 // element's box, independent of which descendant is topmost for clicks.
-export function PostCard({ post, scoreLabel = "검색 유사도", showPercentage = true }: PostCardProps) {
+export function PostCard({ post, scoreLabel = "검색 유사도", scoreDisplay = "percentage" }: PostCardProps) {
   return (
     // Phase P-4: `transition` (not `transition-colors`) so border-color,
     // box-shadow, and the small hover lift below all animate off the same
@@ -149,20 +163,20 @@ export function PostCard({ post, scoreLabel = "검색 유사도", showPercentage
             {post.viewCount}
           </span>
         </div>
-        {/* Phase 12/15-2: only present on a similarity-ranked result (search
-            results, or the post detail page's AI recommendations) -- a plain
-            keyword-search/list result never carries `score`, so this never
-            shows up outside those contexts. Always labeled by the caller
-            ("검색 유사도"/"이미지 유사도"/"AI 추천", see scoreLabel above).
-            Phase 11-3: the percentage itself is only shown when
-            showPercentage is true (search/image search, whose score is a
-            stable rescale of raw cosine similarity) -- recommendation's
-            score is a candidate-pool-relative rank, not a similarity
-            percentage (see showPercentage's own comment above), so it
-            shows only the label there, no number. */}
-        {typeof post.score === "number" && (
+        {/* Phase 12/15-2/AI 검색 고도화: only present on a similarity-ranked
+            result (search results, or the post detail page's AI
+            recommendations) -- a plain keyword-search/list result never
+            carries `score`, so this never shows up outside those contexts.
+            Always labeled by the caller ("검색 유사도"/"이미지 유사도"/
+            "AI 유사도", see scoreLabel above). scoreDisplay picks the
+            *shape*: "percentage" (search/image search's stable cosine
+            rescale), "decimal" (AI 검색/AI 추천's "AI 유사도 0.87" -- see
+            scoreDisplay's own comment above for why this is never ×100),
+            or "hidden" (no badge at all, regardless of scoreLabel --
+            the just-created-post auto-recommendation view). */}
+        {typeof post.score === "number" && scoreDisplay !== "hidden" && (
           <span className="mt-0.5 w-fit rounded-full bg-primary-muted px-2 py-0.5 text-[11px] font-medium text-primary">
-            {showPercentage ? `${scoreLabel} ${Math.round(post.score * 100)}%` : scoreLabel}
+            {scoreDisplay === "decimal" ? `${scoreLabel} ${post.score.toFixed(2)}` : `${scoreLabel} ${Math.round(post.score * 100)}%`}
           </span>
         )}
       </div>
