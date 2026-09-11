@@ -121,7 +121,17 @@ export function PostCard({ post, scoreLabel = "검색 유사도", showPercentage
               : "relative z-10 w-fit truncate text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
           }
         />
-        <h3 className="truncate text-sm font-semibold text-foreground">{post.title}</h3>
+        {/* 제목 시각적 위계 강화 Phase: 카드에서 제목이 가장 먼저 눈에
+            들어오도록 text-sm/font-semibold/1줄(truncate)에서 text-base/
+            font-bold/최대 2줄(line-clamp-2)로 강화했다 -- 색상은 이미
+            이 컴포넌트의 다른 모든 텍스트(text-muted-foreground)보다
+            진한 text-foreground를 쓰고 있어 그대로 유지(디자인
+            시스템에 이보다 더 강한 텍스트 색 토큰이 없다). 제목과 바로
+            아래 위치/시간/조회수 메타 블록 사이만 mb-1을 더해 간격을
+            넓혔다(다른 요소 간 gap-1.5는 그대로). 사진 유무 분기와
+            무관하게 이 h3 하나만 쓰이므로 두 카드 형태 모두 자동으로
+            같은 제목 스타일을 공유한다. */}
+        <h3 className="mb-1 line-clamp-2 text-base font-bold text-foreground">{post.title}</h3>
         <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
           <span className="flex items-center gap-1 truncate">
             <PinIcon className="size-3.5 shrink-0" />
