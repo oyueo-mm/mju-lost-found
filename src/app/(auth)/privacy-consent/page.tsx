@@ -112,9 +112,9 @@ export default async function PrivacyConsentPage({
               <section className="flex flex-col gap-1">
                 <h3 className="font-medium text-foreground">보유 및 이용 기간</h3>
                 <p>
-                  위 정보는 회원 탈퇴 또는 게시글/댓글/채팅 삭제 등으로 해당 데이터가 삭제될 때까지
-                  보유하며, 별도의 법적 보존 의무가 있는 경우는 이 서비스의 코드로 확인되지 않아
-                  안내하지 않습니다.
+                  위 정보는 게시글/댓글/채팅을 이용자가 직접 삭제하는 등으로 해당 데이터가 삭제될
+                  때까지 보유하며, 별도의 법적 보존 의무가 있는 경우는 이 서비스의 코드로 확인되지
+                  않아 안내하지 않습니다.
                 </p>
               </section>
             </div>

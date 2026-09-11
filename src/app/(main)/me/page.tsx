@@ -154,7 +154,7 @@ export default async function MePage() {
         href="/me/withdraw"
         className="text-center text-xs text-muted-foreground underline hover:text-destructive"
       >
-        회원 탈퇴
+        회원 비활성화
       </Link>
     </div>
   );

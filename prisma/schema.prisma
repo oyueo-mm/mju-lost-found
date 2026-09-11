@@ -270,14 +270,22 @@ model User {
   // like a brand-new user does.
   privacyConsentAt          DateTime? @map("privacy_consent_at")
   // Phase 10: NULL means this account is active; a timestamp means the
-  // user withdrew at that instant (auth/user.ts's withdrawUser -- the
-  // only place this is ever set, always by the account's own owner, never
-  // an admin). The User row itself is never hard-deleted (see that
+  // user deactivated it at that instant (auth/user.ts's withdrawUser --
+  // the only place this is ever set, always by the account's own owner,
+  // never an admin). The User row itself is never hard-deleted (see that
   // function's own long comment on why: almost every FK to User is
   // onDelete: Restrict specifically to protect other users' data), so
   // this flag is what actually makes the account unusable -- session.ts's
   // getCurrentUser() treats any row with this set as "not logged in",
   // regardless of how valid the session cookie still looks.
+  //
+  // Phase 비활성화: reversible, not a permanent state -- email/googleId/
+  // name/nickname are left completely untouched by withdrawUser() (unlike
+  // this column's original Phase 10 behavior), specifically so
+  // resolveOrCreateUser() (auth/user.ts) can match the same real Google
+  // account on a later sign-in and clear this column in place, reusing
+  // the exact same row with its nickname/posts/comments/chat history
+  // intact -- never a new row, never a data copy.
   deletedAt                 DateTime? @map("deleted_at")
   createdAt                 DateTime  @default(now()) @map("created_at")
   updatedAt                 DateTime  @updatedAt @map("updated_at")

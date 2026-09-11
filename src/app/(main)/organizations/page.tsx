@@ -50,10 +50,17 @@ export default async function OrganizationsHubPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5">
-          <h1 className="text-xl font-semibold text-foreground">단체</h1>
-          <OrganizationHelpTooltip />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1.5">
+            <h1 className="text-xl font-semibold text-foreground">단체</h1>
+            <OrganizationHelpTooltip />
+          </div>
+          {/* 계정 정책 Phase §3: "단체" 제목 바로 아래 짧은 설명 -- 기존
+              탭/기능은 변경하지 않고 문구 한 줄만 추가한다. */}
+          <p className="text-sm text-muted-foreground">
+            명지대학교 학생들이 활동하는 동아리, 학생회, 학과, 위원회 등의 단체입니다.
+          </p>
         </div>
         <LinkButton href="/organizations/create" variant="secondary" size="sm">
           <PlusIcon className="size-4" />

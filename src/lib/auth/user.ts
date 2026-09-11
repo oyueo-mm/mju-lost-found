@@ -5,24 +5,45 @@ import { prisma } from "@/lib/db/prisma";
 // actually prevents a duplicate User for the same Google account. googleId
 // is recorded/refreshed alongside it as the more stable identifier (see
 // the User.googleId comment in schema.prisma).
+//
+// Phase 비활성화: this upsert only ever runs from the jwt callback's
+// `account`-present branch -- i.e. a real Google sign-in exchange, never
+// a plain JWT-cookie refresh on a later request -- so `now()` here is a
+// true "last login" timestamp, not merely "session still valid" (see
+// User.lastLoginAt's own schema comment).
+//
+// A plain prisma.user.upsert() can't express "and also clear deletedAt,
+// but only if it was set" in one call -- upsert's `update` data is static,
+// not conditional on the row it matched. So this reads the row first: if
+// it already exists (matched by email, which deactivateUser() below never
+// changes) and is currently deactivated, this is exactly the "same Google
+// account signs in again" reactivation this phase's own spec asks for --
+// deletedAt is cleared, and nothing else about the row (nickname,
+// privacyConsentAt, posts/comments/chat history) is touched, so a
+// reactivated user keeps everything and is never re-prompted for
+// onboarding/consent. A never-deactivated existing row just refreshes
+// googleId/name/lastLoginAt exactly as before. No row is ever created for
+// an email that already exists -- only a genuinely new email creates a
+// new User.
 export async function resolveOrCreateUser(params: {
   email: string;
   name: string | null;
   googleId: string;
 }) {
-  // Phase P-1: this upsert only ever runs from the jwt callback's
-  // `account`-present branch -- i.e. a real Google sign-in exchange, never
-  // a plain JWT-cookie refresh on a later request -- so `now()` here is a
-  // true "last login" timestamp, not merely "session still valid" (see
-  // User.lastLoginAt's own schema comment).
-  return prisma.user.upsert({
-    where: { email: params.email },
-    update: {
-      googleId: params.googleId,
-      name: params.name ?? undefined,
-      lastLoginAt: new Date(),
-    },
-    create: {
+  const existing = await prisma.user.findUnique({ where: { email: params.email } });
+  if (existing) {
+    return prisma.user.update({
+      where: { id: existing.id },
+      data: {
+        googleId: params.googleId,
+        name: params.name ?? undefined,
+        lastLoginAt: new Date(),
+        ...(existing.deletedAt !== null ? { deletedAt: null } : {}),
+      },
+    });
+  }
+  return prisma.user.create({
+    data: {
       email: params.email,
       name: params.name ?? params.email.split("@")[0],
       googleId: params.googleId,
@@ -53,50 +74,45 @@ export async function recordPrivacyConsent(userId: number) {
   return prisma.user.findUniqueOrThrow({ where: { id: userId } });
 }
 
-// Phase 10: account withdrawal -- deliberately NOT prisma.user.delete().
-// Almost every FK from another table to User is onDelete: Restrict (see
-// schema.prisma: LostPost/FoundPost.user, Comment.author, Message.sender,
-// Report.reporter/processedBy, ModerationAction.adminUser,
+// Phase 비활성화: "회원 탈퇴" -> "회원 비활성화" -- deliberately NOT
+// prisma.user.delete(), and (as of this phase) no longer anonymizes the
+// row either. Almost every FK from another table to User is onDelete:
+// Restrict (see schema.prisma: LostPost/FoundPost.user, Comment.author,
+// Message.sender, Report.reporter/processedBy, ModerationAction.adminUser,
 // SuspensionAppeal.user/reviewedBy, ...) specifically so a real User row
 // can never be hard-deleted out from under content other people still
 // see (another user's chat thread, a report history, a moderation
 // record) -- a hard delete would either throw on the very first FK it
 // hits, or (if those constraints were loosened) silently cascade real
-// data away from other users, which this phase's own spec explicitly
-// forbids. Instead this anonymizes the row in place: the account becomes
-// permanently unusable (see session.ts's getCurrentUser, which now treats
-// any user with deletedAt set as logged-out) and personally-identifying
-// fields are scrubbed, while every row that references this user's id
-// (their own posts/comments/messages, and anyone else's reports/
-// moderation actions naming them) keeps working exactly as before --
-// those rows just render this user's new anonymized name/nickname, the
-// same "author no longer available" treatment AuthorLink already gives a
-// null nickname elsewhere, just spelled out explicitly here instead.
+// data away from other users.
 //
-// email/googleId are freed (not merely blanked) so the same real person
-// signing in again later with the same Google account is treated as a
-// brand-new user by resolveOrCreateUser()'s own email-based upsert above
-// -- a fresh row, fresh onboarding, fresh consent, no link back to the
-// withdrawn account's history.
+// Only `deletedAt` is set. email/googleId/name/nickname are left exactly
+// as they were: session.ts's getCurrentUser() still treats any user with
+// deletedAt set as logged-out (so ordinary browsing/login with a still-
+// valid session cookie is blocked while deactivated), but the row itself,
+// and everything it owns (posts/comments/messages/nickname), stays fully
+// intact -- this phase's own spec explicitly requires the account to be
+// reversible, not anonymized. Reactivation is resolveOrCreateUser()'s own
+// job (see that function's comment): the same Google account signing in
+// again matches this same row by its still-real email and clears
+// deletedAt, with no new row and no data copy.
 //
 // Idempotent via the same "only if still unset" updateMany guard
 // recordPrivacyConsent() above uses -- a second call (double-submit, or
 // hitting the API directly again) matches zero rows and leaves the
-// already-withdrawn row untouched.
+// already-deactivated row untouched.
 //
-// Phase 12-2: now also blocks withdrawal outright if this user is the
-// sole LEADER of any still-ACTIVE Organization -- withdrawing would
-// otherwise anonymize the only person who can manage that organization
-// (appoint another ADMIN, transfer leadership, deactivate it), leaving it
+// Phase 12-2: also blocks deactivation outright if this user is the sole
+// LEADER of any still-ACTIVE Organization -- deactivating would otherwise
+// leave the only person who can manage that organization (appoint another
+// ADMIN, transfer leadership, deactivate it) unable to log in, leaving it
 // permanently unmanageable. This mirrors organization/service.ts's own
 // leaveOrganization() last-leader protection exactly, including the same
 // `SELECT ... FOR UPDATE` row lock on this user's own LEADER rows first,
 // so a concurrent leaveOrganization()/transferLeadership() call for the
 // same organization can't race past this check (see leaveOrganization's
 // own comment for why a plain count-then-act isn't race-safe under
-// PostgreSQL's default READ COMMITTED). The existing anonymization policy
-// itself is unchanged -- this only adds an earlier, typed short-circuit
-// before any of it runs.
+// PostgreSQL's default READ COMMITTED).
 export type WithdrawUserResult =
   | { kind: "ok"; data: Awaited<ReturnType<typeof prisma.user.findUniqueOrThrow>> }
   | { kind: "sole_leader_block"; organizationNames: string[] };
@@ -117,7 +133,7 @@ export async function withdrawUser(userId: number): Promise<WithdrawUserResult> 
           where: { id: organizationId },
           select: { name: true, status: true },
         });
-        if (!organization || organization.status !== "ACTIVE") continue; // 이미 비활성화된 단체는 탈퇴를 막지 않는다
+        if (!organization || organization.status !== "ACTIVE") continue; // 이미 비활성화된 단체는 계정 비활성화를 막지 않는다
         const leaderCount = await tx.organizationMember.count({
           where: { organizationId, role: "LEADER" },
         });
@@ -132,18 +148,16 @@ export async function withdrawUser(userId: number): Promise<WithdrawUserResult> 
       where: { id: userId, deletedAt: null },
       data: {
         deletedAt: new Date(),
-        email: `deleted-user-${userId}@withdrawn.invalid`,
-        name: "탈퇴한 사용자",
-        nickname: "탈퇴한 사용자",
-        googleId: null,
+        // Phase 12-2's existing rule -- a Platform Admin must be reinstated
+        // by another admin after reactivating, never silently regained.
         isAdmin: false,
       },
     });
     if (count > 0) {
       // Notifications are private to this user alone -- nobody else's
       // data references them, unlike everything else this function
-      // deliberately leaves in place. No policy change to
-      // posts/comments/chat: those are untouched.
+      // deliberately leaves in place (posts/comments/chat/nickname
+      // untouched).
       await tx.notification.deleteMany({ where: { userId } });
     }
     const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });

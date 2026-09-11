@@ -26,7 +26,7 @@ export function WithdrawButton() {
       const res = await fetch("/api/me/withdraw", { method: "POST" });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(json.error ?? "회원 탈퇴를 처리하지 못했습니다. 다시 시도해주세요.");
+        setError(json.error ?? "회원 비활성화를 처리하지 못했습니다. 다시 시도해주세요.");
         return;
       }
       // The API already cleared the session cookie (signOut) -- landing
@@ -58,7 +58,7 @@ export function WithdrawButton() {
           disabled={submitting}
           className="mt-0.5 size-5 shrink-0 cursor-pointer rounded border-border text-destructive accent-destructive disabled:cursor-not-allowed disabled:opacity-60"
         />
-        <span>위 내용을 확인했으며, 계정 탈퇴에 동의합니다.</span>
+        <span>위 내용을 확인했으며, 계정 비활성화에 동의합니다.</span>
       </label>
 
       <Button
@@ -68,7 +68,7 @@ export function WithdrawButton() {
         disabled={submitting || !checked}
         className="w-full"
       >
-        {submitting ? "처리 중..." : "회원 탈퇴하기"}
+        {submitting ? "처리 중..." : "회원 비활성화하기"}
       </Button>
     </div>
   );

@@ -22,7 +22,7 @@ export const POST = withErrorHandling(async () => {
   if (result.kind === "sole_leader_block") {
     return jsonError(
       409,
-      `다음 단체의 유일한 대표 관리자이므로 탈퇴할 수 없습니다. 먼저 다른 구성원에게 대표 관리자 권한을 위임해주세요: ${result.organizationNames.join(", ")}`,
+      `다음 단체의 유일한 대표 관리자이므로 비활성화할 수 없습니다. 먼저 다른 구성원에게 대표 관리자 권한을 위임해주세요: ${result.organizationNames.join(", ")}`,
     );
   }
 

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-const upsert = vi.fn();
+const findUnique = vi.fn();
+const update = vi.fn();
+const create = vi.fn();
 const updateMany = vi.fn();
 const findUniqueOrThrow = vi.fn();
 const notificationDeleteMany = vi.fn();
@@ -28,7 +30,7 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
 );
 
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { user: { upsert, updateMany, findUniqueOrThrow }, $transaction },
+  prisma: { user: { findUnique, update, create, updateMany, findUniqueOrThrow }, $transaction },
 }));
 
 const { resolveOrCreateUser, recordPrivacyConsent, withdrawUser } = await import("./user");
@@ -37,11 +39,13 @@ queryRaw.mockResolvedValue([]);
 
 describe("resolveOrCreateUser", () => {
   it("looks up an existing user by email (login) -- get-or-create, not duplicate-create", async () => {
-    upsert.mockResolvedValueOnce({
+    findUnique.mockResolvedValueOnce({
       id: 1,
       email: "existing@mju.ac.kr",
       nickname: "기존닉네임",
+      deletedAt: null,
     });
+    update.mockResolvedValueOnce({ id: 1, email: "existing@mju.ac.kr", nickname: "기존닉네임" });
 
     const user = await resolveOrCreateUser({
       email: "existing@mju.ac.kr",
@@ -49,33 +53,32 @@ describe("resolveOrCreateUser", () => {
       googleId: "google-sub-1",
     });
 
-    expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { email: "existing@mju.ac.kr" } }),
-    );
-    // The existing row (with its already-set nickname) is what's returned,
-    // not a fresh one -- upsert's `update` branch, never `create`, runs
-    // for a row that already exists.
+    expect(findUnique).toHaveBeenCalledWith({ where: { email: "existing@mju.ac.kr" } });
+    // The existing row (with its already-set nickname) is what's updated,
+    // not a fresh one -- the update branch, never create, runs for a row
+    // that already exists.
+    expect(create).not.toHaveBeenCalled();
     expect(user).toEqual({ id: 1, email: "existing@mju.ac.kr", nickname: "기존닉네임" });
   });
 
   it("creates a new user with a name fallback when Google reports no name", async () => {
-    upsert.mockResolvedValueOnce({ id: 2, email: "new@mju.ac.kr", nickname: null });
+    findUnique.mockResolvedValueOnce(null);
+    create.mockResolvedValueOnce({ id: 2, email: "new@mju.ac.kr", nickname: null });
 
     await resolveOrCreateUser({ email: "new@mju.ac.kr", name: null, googleId: "google-sub-2" });
 
-    expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({
-          email: "new@mju.ac.kr",
-          name: "new", // falls back to the local part of the email
-          googleId: "google-sub-2",
-        }),
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        email: "new@mju.ac.kr",
+        name: "new", // falls back to the local part of the email
+        googleId: "google-sub-2",
       }),
-    );
+    });
   });
 
   it("records googleId on the update branch too, for a user re-linking/re-logging in", async () => {
-    upsert.mockResolvedValueOnce({ id: 1, email: "existing@mju.ac.kr", nickname: null });
+    findUnique.mockResolvedValueOnce({ id: 1, email: "existing@mju.ac.kr", nickname: null, deletedAt: null });
+    update.mockResolvedValueOnce({ id: 1, email: "existing@mju.ac.kr", nickname: null });
 
     await resolveOrCreateUser({
       email: "existing@mju.ac.kr",
@@ -83,9 +86,9 @@ describe("resolveOrCreateUser", () => {
       googleId: "google-sub-1",
     });
 
-    expect(upsert).toHaveBeenCalledWith(
+    expect(update).toHaveBeenCalledWith(
       expect.objectContaining({
-        update: expect.objectContaining({ googleId: "google-sub-1" }),
+        data: expect.objectContaining({ googleId: "google-sub-1" }),
       }),
     );
   });
@@ -94,7 +97,8 @@ describe("resolveOrCreateUser", () => {
   // `account`-present branch (a real sign-in exchange), so stamping
   // lastLoginAt here is a true "last login", not "session still valid".
   it("stamps lastLoginAt on both the create and update branches", async () => {
-    upsert.mockResolvedValueOnce({ id: 1, email: "existing@mju.ac.kr" });
+    findUnique.mockResolvedValueOnce({ id: 1, email: "existing@mju.ac.kr", deletedAt: null });
+    update.mockResolvedValueOnce({ id: 1, email: "existing@mju.ac.kr" });
 
     await resolveOrCreateUser({
       email: "existing@mju.ac.kr",
@@ -102,12 +106,57 @@ describe("resolveOrCreateUser", () => {
       googleId: "google-sub-1",
     });
 
-    expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        update: expect.objectContaining({ lastLoginAt: expect.any(Date) }),
-        create: expect.objectContaining({ lastLoginAt: expect.any(Date) }),
-      }),
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ lastLoginAt: expect.any(Date) }) }),
     );
+
+    findUnique.mockResolvedValueOnce(null);
+    create.mockResolvedValueOnce({ id: 3, email: "brandnew@mju.ac.kr" });
+
+    await resolveOrCreateUser({ email: "brandnew@mju.ac.kr", name: "New", googleId: "google-sub-3" });
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ lastLoginAt: expect.any(Date) }),
+    });
+  });
+
+  // Phase 비활성화: the entire point of this phase -- a previously
+  // deactivated account (deletedAt set) signing back in with the same
+  // Google account is reactivated in place, never re-created and never
+  // stripped of its nickname/history.
+  it("reactivates a deactivated user in place -- clears deletedAt, keeps nickname/history untouched", async () => {
+    findUnique.mockResolvedValueOnce({
+      id: 5,
+      email: "returning@mju.ac.kr",
+      nickname: "옛날닉네임",
+      deletedAt: new Date("2026-01-01T00:00:00Z"),
+    });
+    update.mockResolvedValueOnce({ id: 5, email: "returning@mju.ac.kr", nickname: "옛날닉네임", deletedAt: null });
+
+    const user = await resolveOrCreateUser({
+      email: "returning@mju.ac.kr",
+      name: "Returning User",
+      googleId: "google-sub-5",
+    });
+
+    expect(create).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 5 },
+      data: expect.objectContaining({ deletedAt: null }),
+    });
+    // nickname was never part of the update payload -- it's simply never
+    // touched, so whatever it already was survives reactivation as-is.
+    expect(update.mock.calls[0][0].data).not.toHaveProperty("nickname");
+    expect(user.deletedAt).toBeNull();
+  });
+
+  it("does not touch deletedAt at all for a user who was never deactivated", async () => {
+    findUnique.mockResolvedValueOnce({ id: 1, email: "active@mju.ac.kr", deletedAt: null });
+    update.mockResolvedValueOnce({ id: 1, email: "active@mju.ac.kr", deletedAt: null });
+
+    await resolveOrCreateUser({ email: "active@mju.ac.kr", name: "Active", googleId: "google-sub-1" });
+
+    expect(update.mock.calls[0][0].data).not.toHaveProperty("deletedAt");
   });
 });
 
@@ -151,7 +200,11 @@ describe("recordPrivacyConsent", () => {
 });
 
 describe("withdrawUser", () => {
-  it("anonymizes the row and frees email/googleId, only while still active", async () => {
+  // Phase 비활성화: only deletedAt/isAdmin are ever written -- email,
+  // googleId, name, and nickname are deliberately left untouched so the
+  // same account can be reactivated later with all of its identity/history
+  // intact (see resolveOrCreateUser's own reactivation branch).
+  it("only sets deletedAt (and resets isAdmin) -- never touches email/googleId/name/nickname", async () => {
     updateMany.mockResolvedValueOnce({ count: 1 });
     findUniqueOrThrow.mockResolvedValueOnce({ id: 5, deletedAt: new Date() });
 
@@ -161,10 +214,6 @@ describe("withdrawUser", () => {
       where: { id: 5, deletedAt: null },
       data: {
         deletedAt: expect.any(Date),
-        email: "deleted-user-5@withdrawn.invalid",
-        name: "탈퇴한 사용자",
-        nickname: "탈퇴한 사용자",
-        googleId: null,
         isAdmin: false,
       },
     });
@@ -182,30 +231,30 @@ describe("withdrawUser", () => {
     expect(notificationDeleteMany).toHaveBeenCalledWith({ where: { userId: 5 } });
   });
 
-  it("returns the fresh (anonymized) user row wrapped in an ok result", async () => {
+  it("returns the fresh (deactivated) user row wrapped in an ok result, nickname intact", async () => {
     updateMany.mockResolvedValueOnce({ count: 1 });
-    const anonymized = { id: 5, deletedAt: new Date("2026-01-01T00:00:00Z"), nickname: "탈퇴한 사용자" };
-    findUniqueOrThrow.mockResolvedValueOnce(anonymized);
+    const deactivated = { id: 5, deletedAt: new Date("2026-01-01T00:00:00Z"), nickname: "기존닉네임" };
+    findUniqueOrThrow.mockResolvedValueOnce(deactivated);
 
     const result = await withdrawUser(5);
 
     expect(findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 5 } });
-    expect(result).toEqual({ kind: "ok", data: anonymized });
+    expect(result).toEqual({ kind: "ok", data: deactivated });
   });
 
   // Idempotent, same "only if still unset" guard as recordPrivacyConsent
-  // above -- a second call must not touch an already-withdrawn row again
+  // above -- a second call must not touch an already-deactivated row again
   // (and, just as importantly, must not delete notifications a second
-  // time either, since there's nothing left to withdraw).
-  it("is a no-op (including no notification deletion) when already withdrawn", async () => {
+  // time either, since there's nothing left to deactivate).
+  it("is a no-op (including no notification deletion) when already deactivated", async () => {
     updateMany.mockResolvedValueOnce({ count: 0 });
-    const alreadyWithdrawn = { id: 5, deletedAt: new Date("2025-01-01T00:00:00Z") };
-    findUniqueOrThrow.mockResolvedValueOnce(alreadyWithdrawn);
+    const alreadyDeactivated = { id: 5, deletedAt: new Date("2025-01-01T00:00:00Z") };
+    findUniqueOrThrow.mockResolvedValueOnce(alreadyDeactivated);
 
     const result = await withdrawUser(5);
 
     expect(notificationDeleteMany).not.toHaveBeenCalled();
-    expect(result).toEqual({ kind: "ok", data: alreadyWithdrawn });
+    expect(result).toEqual({ kind: "ok", data: alreadyDeactivated });
   });
 
   // Phase 12-2: the sole-LEADER block. queryRaw's default (set at the top
