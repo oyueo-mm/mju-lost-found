@@ -229,6 +229,8 @@ const zh = {
   "notif.read": "已读",
   "brand.a": "明知",
   "brand.b": "失物招领",
+  "board.prev": "上一页",
+  "board.next": "下一页",
 };
 
 export default zh;

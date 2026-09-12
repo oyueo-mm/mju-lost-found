@@ -13,13 +13,17 @@ export async function listPosts(
     location = "",
     includeCompleted = false,
     sort = "newest", // "newest" | "oldest"
+    limit = 0, // 0 = 제한 없음 (관리자 등). 게시판은 반드시 넘길 것
+    offset = 0,
   } = {},
 ) {
   const cfg = KIND_CONFIG[kind];
   let query = supabase
     .from(cfg.table)
     .select("*, author:profiles!user_id(nickname)")
-    .order("created_at", { ascending: sort === "oldest" });
+    .order("created_at", { ascending: sort === "oldest" })
+    .order("id", { ascending: sort === "oldest" }); // 같은 시각 정렬 안정화
+  if (limit > 0) query = query.range(offset, offset + limit - 1);
 
   if (campus) query = query.eq("campus", campus);
   if (location) query = query.eq("location", location);

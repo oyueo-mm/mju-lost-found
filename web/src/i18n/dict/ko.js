@@ -245,6 +245,8 @@ const ko = {
   "notif.read": "읽음",
   "brand.a": "명지",
   "brand.b": "분실물센터",
+  "board.prev": "이전",
+  "board.next": "다음",
 };
 
 export default ko;

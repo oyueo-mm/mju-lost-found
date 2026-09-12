@@ -27,6 +27,8 @@ export default async function HomePage({ searchParams }) {
   const q = (sp?.q || "").toString().trim().slice(0, 100);
   const category = CATEGORIES.includes(sp?.category) ? sp.category : "";
   const sort = sp?.sort === "oldest" ? "oldest" : "newest";
+  const pageNum = Number.parseInt(sp?.page, 10);
+  const page = Number.isInteger(pageNum) && pageNum >= 1 && pageNum <= 1000 ? pageNum : 1;
 
   return (
     <UnifiedBoard
@@ -35,6 +37,7 @@ export default async function HomePage({ searchParams }) {
       q={q}
       category={category}
       sort={sort}
+      page={page}
     />
   );
 }

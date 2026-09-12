@@ -231,6 +231,8 @@ const mn = {
   "notif.read": "Уншсан",
   "brand.a": "MJU",
   "brand.b": "Гээгдсэн зүйл",
+  "board.prev": "Өмнөх",
+  "board.next": "Дараах",
 };
 
 export default mn;

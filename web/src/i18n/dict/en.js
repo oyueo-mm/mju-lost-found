@@ -231,6 +231,8 @@ const en = {
   "notif.read": "Read",
   "brand.a": "MJU",
   "brand.b": "Lost & Found",
+  "board.prev": "Previous",
+  "board.next": "Next",
 };
 
 export default en;

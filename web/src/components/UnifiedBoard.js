@@ -15,13 +15,16 @@ const TABS = [
   ["lost", "board.tabLost"],
 ];
 
-function tabHref(tab, { campus, q, category, sort }) {
+const PAGE_SIZE = 24; // 2열·3열 모두 딱 떨어지는 수
+
+function tabHref(tab, { campus, q, category, sort, page }) {
   const sp = new URLSearchParams();
   if (tab !== "found") sp.set("tab", tab);
   if (campus) sp.set("campus", campus);
   if (q) sp.set("q", q);
   if (category) sp.set("category", category);
   if (sort && sort !== "newest") sp.set("sort", sort);
+  if (page && page > 1) sp.set("page", String(page));
   const qs = sp.toString();
   return qs ? `/?${qs}` : "/";
 }
@@ -32,6 +35,7 @@ export default async function UnifiedBoard({
   q = "",
   category = "",
   sort = "newest",
+  page = 1,
 }) {
   const { user, profile, supabase } = await requireUser();
   const t = await getT();
@@ -41,12 +45,21 @@ export default async function UnifiedBoard({
   const kindItem = t(kind === "found" ? "kind.foundItem" : "kind.lostItem");
 
   let posts = [];
+  let hasMore = false;
   let loadError = null;
   let myLost = [];
   let chatUnread = 0;
   try {
     const [list, mine, unread] = await Promise.all([
-      listPosts(supabase, kind, { campus, q, category, sort }),
+      // 한 장 더 받아서 다음 페이지 유무 판단
+      listPosts(supabase, kind, {
+        campus,
+        q,
+        category,
+        sort,
+        limit: PAGE_SIZE + 1,
+        offset: (page - 1) * PAGE_SIZE,
+      }),
       supabase
         .from("lost_posts")
         .select("id, title, category, created_at, lost_at")
@@ -56,7 +69,8 @@ export default async function UnifiedBoard({
         .limit(4),
       unreadMessageCount(supabase, user.id),
     ]);
-    posts = list;
+    posts = list.slice(0, PAGE_SIZE);
+    hasMore = list.length > PAGE_SIZE;
     myLost = mine.data || [];
     chatUnread = unread;
   } catch {
@@ -226,11 +240,40 @@ export default async function UnifiedBoard({
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3">
-              {posts.map((p) => (
-                <PostTile key={p.id} post={p} kind={kind} />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3">
+                {posts.map((p) => (
+                  <PostTile key={p.id} post={p} kind={kind} />
+                ))}
+              </div>
+              {(page > 1 || hasMore) && (
+                <nav className="mt-6 flex items-center justify-between gap-2">
+                  {page > 1 ? (
+                    <Link
+                      href={tabHref(kind, { campus, q, category, sort, page: page - 1 })}
+                      className="btn btn-ghost gap-1 px-3 py-2 text-sm"
+                    >
+                      <Icon name="back" size={14} />
+                      {t("board.prev")}
+                    </Link>
+                  ) : (
+                    <span />
+                  )}
+                  <span className="num text-xs text-ink-faint">{page}</span>
+                  {hasMore ? (
+                    <Link
+                      href={tabHref(kind, { campus, q, category, sort, page: page + 1 })}
+                      className="btn btn-ghost gap-1 px-3 py-2 text-sm"
+                    >
+                      {t("board.next")}
+                      <Icon name="arrowRight" size={14} />
+                    </Link>
+                  ) : (
+                    <span />
+                  )}
+                </nav>
+              )}
+            </>
           )}
         </div>
       </section>

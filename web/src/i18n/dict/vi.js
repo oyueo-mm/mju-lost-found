@@ -231,6 +231,8 @@ const vi = {
   "notif.read": "Đã đọc",
   "brand.a": "MJU",
   "brand.b": "Đồ thất lạc",
+  "board.prev": "Trước",
+  "board.next": "Tiếp",
 };
 
 export default vi;
