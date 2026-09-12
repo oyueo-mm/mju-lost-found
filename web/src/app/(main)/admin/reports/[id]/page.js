@@ -57,7 +57,7 @@ async function loadContext(admin, report) {
 export default async function ReportDetailPage({ params }) {
   const { user: me } = await requireAdmin();
   const { id } = await params;
-  if (!/^\d+$/.test(id)) notFound();
+  if (!/^\d{1,15}$/.test(id)) notFound();
 
   const admin = createAdminClient();
   const { data: report } = await admin

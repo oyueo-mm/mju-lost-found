@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PostPage({ params }) {
   const { kind, id } = await params;
-  if (!KIND_CONFIG[kind] || !/^\d+$/.test(id)) notFound();
+  if (!KIND_CONFIG[kind] || !/^\d{1,15}$/.test(id)) notFound();
 
   return <PostDetail kind={kind} id={id} />;
 }

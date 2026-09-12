@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { KIND_CONFIG } from "@/lib/constants";
 import { createNotification } from "@/lib/notifications";
 import { rateLimited } from "@/lib/ratelimit";
+import { sniffImage } from "@/lib/image-sniff";
 
 async function getOrCreateRoom({ me, other, lostPostId, foundPostId, title }) {
   const admin = createAdminClient();
@@ -82,22 +83,19 @@ export async function openDirectChat(postKind, postId) {
   redirect(`/chat/${room.id}`);
 }
 
-const CHAT_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const CHAT_IMAGE_MAX = 5 * 1024 * 1024;
 
 async function uploadChatImage(file, userId) {
   if (file.size > CHAT_IMAGE_MAX) {
     throw new Error("이미지는 5MB 이하만 보낼 수 있어요.");
   }
-  if (file.type && !CHAT_IMAGE_TYPES.includes(file.type)) {
-    throw new Error("JPG, PNG, WEBP 이미지만 보낼 수 있어요.");
-  }
-  const ext = (file.name?.split(".").pop() || "jpg").toLowerCase();
-  const path = `chat/${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const kind = await sniffImage(file);
+  if (!kind) throw new Error("JPG, PNG, WEBP 이미지만 보낼 수 있어요.");
+  const path = `chat/${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${kind.ext}`;
   const admin = createAdminClient();
   const { error } = await admin.storage
     .from("post-images")
-    .upload(path, file, { contentType: file.type || "image/jpeg" });
+    .upload(path, file, { contentType: kind.type });
   if (error) throw new Error("이미지 업로드에 실패했어요.");
   return admin.storage.from("post-images").getPublicUrl(path).data.publicUrl;
 }

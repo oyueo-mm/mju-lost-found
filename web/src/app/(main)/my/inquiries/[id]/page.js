@@ -18,7 +18,7 @@ const STATUS = {
 export default async function MyInquiryDetailPage({ params }) {
   const { user } = await requireUser();
   const { id } = await params;
-  if (!/^\d+$/.test(id)) notFound();
+  if (!/^\d{1,15}$/.test(id)) notFound();
 
   const supabase = await createClient();
   const { data: inq } = await supabase

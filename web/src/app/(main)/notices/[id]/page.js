@@ -10,7 +10,7 @@ export const metadata = { title: "공지사항 · 명지 분실물 센터" };
 export default async function NoticeDetailPage({ params }) {
   await requireUser();
   const { id } = await params;
-  if (!/^\d+$/.test(id)) notFound();
+  if (!/^\d{1,15}$/.test(id)) notFound();
 
   const admin = createAdminClient();
   const { data: notice } = await admin

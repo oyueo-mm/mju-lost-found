@@ -9,7 +9,7 @@ import PostForm from "@/components/PostForm";
 export default async function EditPostPage({ params }) {
   const { kind, id } = await params;
   const cfg = KIND_CONFIG[kind];
-  if (!cfg || !/^\d+$/.test(id)) notFound();
+  if (!cfg || !/^\d{1,15}$/.test(id)) notFound();
 
   const { user } = await requireUser();
   const supabase = await createClient();

@@ -10,6 +10,7 @@ import { isCampus, campusLocationNames } from "@/lib/campus";
 import { kstLocalToISO } from "@/lib/format";
 import { rateLimited } from "@/lib/ratelimit";
 import { deletePostWithAssets, storagePathFromUrl } from "@/lib/post-cleanup";
+import { sniffImage } from "@/lib/image-sniff";
 
 // 응답을 보낸 뒤(사용자를 기다리게 하지 않고) 임베딩을 계산한다.
 function scheduleEmbedding(kind, id) {
@@ -21,23 +22,21 @@ function scheduleEmbedding(kind, id) {
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGES = 3;
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 async function uploadImage(file, userId) {
   if (!file || typeof file === "string" || file.size === 0) return null;
   if (file.size > MAX_IMAGE_BYTES) {
     throw new Error("이미지는 장당 5MB 이하만 올릴 수 있어요.");
   }
-  if (file.type && !ALLOWED_TYPES.includes(file.type)) {
-    throw new Error("JPG, PNG, WEBP 이미지만 올릴 수 있어요.");
-  }
-  const ext = (file.name?.split(".").pop() || "jpg").toLowerCase();
-  const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  // 실제 바이트로 종류 판별 — file.type·확장자는 위조 가능
+  const kind = await sniffImage(file);
+  if (!kind) throw new Error("JPG, PNG, WEBP 이미지만 올릴 수 있어요.");
+  const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${kind.ext}`;
 
   const admin = createAdminClient();
   const { error } = await admin.storage
     .from("post-images")
-    .upload(path, file, { contentType: file.type || "image/jpeg" });
+    .upload(path, file, { contentType: kind.type });
   if (error) throw new Error("이미지 업로드에 실패했어요.");
 
   return admin.storage.from("post-images").getPublicUrl(path).data.publicUrl;

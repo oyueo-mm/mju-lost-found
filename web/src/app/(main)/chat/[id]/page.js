@@ -13,7 +13,7 @@ import Icon from "@/components/Icon";
 
 export default async function ChatRoomPage({ params }) {
   const { id } = await params;
-  if (!/^\d+$/.test(id)) notFound();
+  if (!/^\d{1,15}$/.test(id)) notFound();
 
   const { user } = await requireUser();
   const supabase = await createClient();
