@@ -25,12 +25,57 @@ import { LogoMark } from "@/components/layout/Logo";
 // (main)/layout.tsx's own `<main>` already uses `pb-20 md:pb-0` for.
 const FOOTER_LINK_CLASS = "text-muted-foreground transition-colors hover:text-foreground";
 
+// Footer 구조 개선 Phase: 예전에는 링크 6개짜리 "바로가기" nav 하나와
+// 6개짜리 "도움말" nav 하나, 이렇게 라벨 없는 두 묶음이 나란히 있었다 --
+// 이제는 제목이 있는 여러 섹션으로 나눠 각 섹션이 무엇을 모아둔 것인지
+// 한눈에 보이게 한다. href/문구는 하나도 바꾸지 않았고("검색" ->
+// "AI 검색"은 라벨 텍스트만 바뀐 것, 여전히 /search 그대로), 순서만
+// 이 세 섹션으로 재배치했다. 새 링크는 "알림"(/notifications) 하나뿐 --
+// 이미 실제로 존재하는 페이지이고, 이 앱에 없는 정보(GitHub 저장소 링크,
+// 실제 연락처 등)를 지어내지는 않는다(아래 저작권 문구 옆 주석 참고,
+// 이 파일이 처음 만들어질 때부터 있던 원칙 그대로).
+const FOOTER_SECTIONS: { title: string; links: { href: string; label: string }[] }[] = [
+  {
+    title: "서비스",
+    links: [
+      { href: "/", label: "홈" },
+      { href: "/lost", label: "분실물 보기" },
+      { href: "/found", label: "습득물 보기" },
+      { href: "/search", label: "AI 검색" },
+      { href: "/organizations", label: "단체" },
+    ],
+  },
+  {
+    title: "커뮤니티",
+    links: [
+      { href: "/chat", label: "채팅" },
+      { href: "/notifications", label: "알림" },
+    ],
+  },
+  {
+    title: "안내",
+    links: [
+      { href: "/policy/terms", label: "이용약관" },
+      { href: "/policy/privacy", label: "개인정보처리방침" },
+      { href: "/policy/community", label: "운영정책" },
+      { href: "/account-guide", label: "계정 안내" },
+      { href: "/feedback", label: "서비스 개선 제안" },
+      { href: "/organizations/guide", label: "단체 이용 안내" },
+    ],
+  },
+];
+
 export function Footer() {
   return (
     <footer className="border-t border-border bg-background">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 pt-8 pb-20 md:px-6 md:pb-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex max-w-sm flex-col gap-2">
+        {/* Footer 구조 개선 Phase: 브랜드 블록 + 섹션들을 하나의 grid로 묶어
+            데스크톱(md 이상)에서는 4칸이 한 줄로 나란히("가로 배치"), 그보다
+            좁은 화면에서는 2칸씩 자연스럽게 다음 줄로 넘어간다("2열 또는
+            1열로 wrapping") -- 브랜드 블록만 모바일에서 2칸을 다 차지하게
+            해(col-span-2) 짧은 링크 묶음들과 나란히 눌리지 않도록 했다. */}
+        <div className="grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-4 md:gap-x-8">
+          <div className="col-span-2 flex max-w-sm flex-col gap-2 md:col-span-1">
             <div className="flex items-center gap-2">
               <LogoMark size={24} />
               <span className="text-sm font-semibold text-foreground">명지 스마트 분실물 센터</span>
@@ -53,60 +98,25 @@ export function Footer() {
             <p className="text-[11px] text-muted-foreground/80">Created by MJU students</p>
           </div>
 
-          {/* Phase 11-5: both nav blocks switch from a vertical stack to a
-              horizontal, wrapping row from md: up (desktop/tablet) -- was
-              flex-col at every width, which read as an unnecessarily tall
-              column of links once there was room for a single row. flex-wrap
-              keeps it from ever forcing horizontal scroll/overflow if the
-              viewport is narrower than the full link list; mobile (<md)
-              keeps the original vertical stack unchanged. */}
-          <nav aria-label="바로가기" className="flex flex-col gap-1.5 text-xs sm:items-end md:flex-row md:items-center md:flex-wrap md:gap-x-4 md:gap-y-1.5">
-            <Link href="/" className={FOOTER_LINK_CLASS}>
-              홈
-            </Link>
-            <Link href="/lost" className={FOOTER_LINK_CLASS}>
-              분실물
-            </Link>
-            <Link href="/found" className={FOOTER_LINK_CLASS}>
-              습득물
-            </Link>
-            <Link href="/search" className={FOOTER_LINK_CLASS}>
-              검색
-            </Link>
-            <Link href="/chat" className={FOOTER_LINK_CLASS}>
-              채팅
-            </Link>
-            {/* Phase 12-10 §10: "서비스" 그룹에 단체 추가 -- 기존 4개 링크는
-                그대로 두고 자연스럽게 통합한다. */}
-            <Link href="/organizations" className={FOOTER_LINK_CLASS}>
-              단체
-            </Link>
-          </nav>
-
-          {/* Phase 12-10 §9/§10: "도움말" 그룹 -- 기존 4개 링크(이용약관/
-              개인정보처리방침/운영정책/계정 안내)는 그대로 유지하고,
-              "서비스 개선 제안"(기존 /feedback 재사용, 새 접수 시스템 아님)과
-              "단체 이용 안내"(신규 정적 안내 페이지)만 추가한다. */}
-          <nav aria-label="도움말" className="flex flex-col gap-1.5 text-xs sm:items-end md:flex-row md:items-center md:flex-wrap md:gap-x-4 md:gap-y-1.5">
-            <Link href="/policy/terms" className={FOOTER_LINK_CLASS}>
-              이용약관
-            </Link>
-            <Link href="/policy/privacy" className={FOOTER_LINK_CLASS}>
-              개인정보처리방침
-            </Link>
-            <Link href="/policy/community" className={FOOTER_LINK_CLASS}>
-              운영정책
-            </Link>
-            <Link href="/account-guide" className={FOOTER_LINK_CLASS}>
-              계정 안내
-            </Link>
-            <Link href="/feedback" className={FOOTER_LINK_CLASS}>
-              서비스 개선 제안
-            </Link>
-            <Link href="/organizations/guide" className={FOOTER_LINK_CLASS}>
-              단체 이용 안내
-            </Link>
-          </nav>
+          {/* Footer 구조 개선 Phase: 섹션 제목(text-foreground, font-semibold)이
+              그 아래 링크(text-muted-foreground, 더 작은 굵기)보다 뚜렷하게
+              강조되도록 위계를 나눴다 -- 이전에는 두 nav 모두 제목 없이
+              링크만 나열돼 있었다. 링크는 항상 세로로 쌓인다(가로 wrap이던
+              이전 md: 레이아웃과 다른 점) -- 섹션 자체가 이미 grid로 가로
+              배치되므로, 섹션 "안" 링크까지 가로로 흐르면 어느 링크가 어느
+              섹션 소속인지 다시 헷갈리게 된다. */}
+          {FOOTER_SECTIONS.map((section) => (
+            <div key={section.title} className="flex flex-col gap-2.5">
+              <h3 className="text-xs font-semibold text-foreground">{section.title}</h3>
+              <nav aria-label={section.title} className="flex flex-col gap-1.5 text-xs">
+                {section.links.map((link) => (
+                  <Link key={link.href} href={link.href} className={FOOTER_LINK_CLASS}>
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
+            </div>
+          ))}
         </div>
 
         {/* No fabricated business registration number/address/phone/
