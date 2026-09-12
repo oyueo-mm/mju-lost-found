@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth";
+import { rateLimited } from "@/lib/ratelimit";
 import { createClient } from "@/lib/supabase/server";
 import { search } from "@/lib/search";
 import SearchForm from "@/components/SearchForm";
@@ -8,12 +9,16 @@ import StatusBadge from "@/components/StatusBadge";
 export const metadata = { title: "검색 · 명지 분실물 센터" };
 
 export default async function SearchPage({ searchParams }) {
-  await requireUser();
+  const { user } = await requireUser();
   const sp = await searchParams;
   const q = (sp.q || "").trim();
 
   let results = [];
+  let limitedMsg = null;
   if (q) {
+    limitedMsg = await rateLimited(user.id, "ai_search");
+  }
+  if (q && !limitedMsg) {
     const supabase = await createClient();
     results = await search(supabase, {
       q,
@@ -34,6 +39,10 @@ export default async function SearchPage({ searchParams }) {
         {!q ? (
           <p className="card-dashed p-10 text-center text-sm text-ink-faint">
             찾는 물건을 검색해 보세요.
+          </p>
+        ) : limitedMsg ? (
+          <p className="card-dashed p-10 text-center text-sm text-brand-deep">
+            {limitedMsg}
           </p>
         ) : results.length === 0 ? (
           <p className="card-dashed p-10 text-center text-sm text-ink-faint">

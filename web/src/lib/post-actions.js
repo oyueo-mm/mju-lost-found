@@ -8,6 +8,7 @@ import { requireUser, isSuspended, SUSPENDED_MSG } from "@/lib/auth";
 import { KIND_CONFIG } from "@/lib/constants";
 import { isCampus, campusLocationNames } from "@/lib/campus";
 import { kstLocalToISO } from "@/lib/format";
+import { rateLimited } from "@/lib/ratelimit";
 
 // 응답을 보낸 뒤(사용자를 기다리게 하지 않고) 임베딩을 계산한다.
 function scheduleEmbedding(kind, id) {
@@ -90,6 +91,8 @@ export async function createPost(kind, _prev, formData) {
   if (!cfg) throw new Error("알 수 없는 게시판입니다.");
   const { user, profile, supabase } = await requireUser();
   if (isSuspended(profile)) return { error: SUSPENDED_MSG };
+  const limited = await rateLimited(user.id, "post");
+  if (limited) return { error: limited };
 
   const v = readForm(formData, cfg);
   const err = validate(v, cfg);
@@ -137,6 +140,8 @@ export async function updatePost(kind, id, _prev, formData) {
   if (!cfg) throw new Error("알 수 없는 게시판입니다.");
   const { user, profile, supabase } = await requireUser();
   if (isSuspended(profile)) return { error: SUSPENDED_MSG };
+  const limited = await rateLimited(user.id, "post_edit");
+  if (limited) return { error: limited };
 
   const { data: existing } = await supabase
     .from(cfg.table)

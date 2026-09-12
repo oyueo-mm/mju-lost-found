@@ -3,11 +3,14 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { describeImage } from "@/lib/embedding";
 import { semanticOnly } from "@/lib/search";
+import { rateLimited } from "@/lib/ratelimit";
 
 export const maxDuration = 60;
 
 export async function POST(request) {
-  await requireUser();
+  const { user } = await requireUser();
+  const limited = await rateLimited(user.id, "image_search");
+  if (limited) return NextResponse.json({ error: limited }, { status: 429 });
 
   const form = await request.formData();
   const file = form.get("image");

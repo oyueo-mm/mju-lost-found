@@ -5,6 +5,7 @@ import { requireUser, requireAdmin } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notifications";
 import { INQUIRY_CATEGORIES } from "@/lib/inquiry";
+import { rateLimited } from "@/lib/ratelimit";
 
 async function notifyAdmins(admin, { title, body, excludeId }) {
   const { data: admins } = await admin
@@ -19,6 +20,8 @@ async function notifyAdmins(admin, { title, body, excludeId }) {
 
 export async function submitInquiry(_prev, formData) {
   const { user } = await requireUser();
+  const limited = await rateLimited(user.id, "inquiry");
+  if (limited) return { error: limited };
   const category = (formData.get("category") || "").toString();
   const message = (formData.get("message") || "").toString().trim();
 
@@ -68,6 +71,8 @@ export async function submitInquiry(_prev, formData) {
 // 이용자 후속 답장 → 문의 재오픈 + 관리자 알림
 export async function replyInquiry(id, bodyRaw) {
   const { user } = await requireUser();
+  const limited = await rateLimited(user.id, "inquiry_reply");
+  if (limited) return { error: limited };
   const body = (bodyRaw || "").toString().trim();
   if (body.length < 2) return { error: "내용을 입력해 주세요." };
   if (body.length > 2000) return { error: "2000자 이내로 적어주세요." };

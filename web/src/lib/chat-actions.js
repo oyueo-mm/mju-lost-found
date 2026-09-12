@@ -7,6 +7,7 @@ import { requireUser, isSuspended, SUSPENDED_MSG } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { KIND_CONFIG } from "@/lib/constants";
 import { createNotification } from "@/lib/notifications";
+import { rateLimited } from "@/lib/ratelimit";
 
 async function getOrCreateRoom({ me, other, lostPostId, foundPostId, title }) {
   const admin = createAdminClient();
@@ -48,6 +49,8 @@ export async function openDirectChat(postKind, postId) {
   if (!cfg) throw new Error("bad kind");
   const { user, profile } = await requireUser();
   if (isSuspended(profile)) return { error: SUSPENDED_MSG };
+  const limited = await rateLimited(user.id, "chat_open");
+  if (limited) return { error: limited };
   const admin = createAdminClient();
 
   const { data: post } = await admin
@@ -110,6 +113,8 @@ export async function sendMessage(roomId, _prev, formData) {
 
   const { user, profile, supabase } = await requireUser();
   if (isSuspended(profile)) return { error: SUSPENDED_MSG };
+  const limited = await rateLimited(user.id, "chat");
+  if (limited) return { error: limited };
 
   let imageUrl = null;
   if (hasImage) {
@@ -189,6 +194,8 @@ export async function toggleReaction(messageId, emoji) {
 export async function reportMessage(messageId, reason) {
   const { user, profile, supabase } = await requireUser();
   if (isSuspended(profile)) return { error: SUSPENDED_MSG };
+  const limited = await rateLimited(user.id, "report");
+  if (limited) return { error: limited };
 
   const { error } = await supabase.from("reports").insert({
     reporter_id: user.id,

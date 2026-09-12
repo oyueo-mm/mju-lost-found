@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser, isSuspended, SUSPENDED_MSG } from "@/lib/auth";
+import { rateLimited } from "@/lib/ratelimit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notifications";
 import { KIND_CONFIG } from "@/lib/constants";
@@ -16,6 +17,8 @@ export async function addComment(postType, postId, _prev, formData) {
 
   const { user, profile, supabase } = await requireUser();
   if (isSuspended(profile)) return { error: SUSPENDED_MSG };
+  const limited = await rateLimited(user.id, "comment");
+  if (limited) return { error: limited };
 
   const { error } = await supabase.from("comments").insert({
     post_type: postType,

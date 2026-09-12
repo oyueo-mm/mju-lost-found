@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSessionUser, isSuspended, isEmailPermitted } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notifications";
+import { rateLimited } from "@/lib/ratelimit";
 
 // 정지된 계정도 호출할 수 있는 유일한 쓰기 액션. isSuspended 가드를 두지 않는다.
 export async function submitAppeal(_prev, formData) {
@@ -21,6 +22,8 @@ export async function submitAppeal(_prev, formData) {
   if (!isSuspended(session.profile)) {
     return { error: "정지 상태가 아니에요." };
   }
+  const limited = await rateLimited(session.user.id, "appeal");
+  if (limited) return { error: limited };
 
   const admin = createAdminClient();
   await admin
