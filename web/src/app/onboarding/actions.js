@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { isEmailPermitted } from "@/lib/auth";
+import { isEmailPermitted, getOwnProfile } from "@/lib/auth";
 import { majorFromName } from "@/lib/profile";
 
 const NICK_RE = /^[가-힣a-zA-Z0-9]{2,20}$/;
@@ -21,11 +21,8 @@ export async function setNickname(_prevState, formData) {
   if (!user || !(await isEmailPermitted(user.email)))
     redirect("/login?error=domain");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("nickname, name, major")
-    .eq("id", user.id)
-    .maybeSingle();
+  // 본인 프로필은 service_role 로 (phase-32: authenticated 는 4개 컬럼만 읽음)
+  const profile = await getOwnProfile(user.id);
   if (profile?.nickname) redirect("/");
 
   // 학과는 구글 계정 이름에서 자동 추출

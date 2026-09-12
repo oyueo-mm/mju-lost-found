@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { hasAgreedToTerms } from "@/lib/legal";
 import { getBetaOpen } from "@/lib/settings";
 
@@ -39,6 +40,18 @@ export function isSuspended(profile) {
   return new Date(profile.suspended_until).getTime() > Date.now();
 }
 
+// 본인 프로필 전체(이메일·전공·정지 정보 포함).
+// profiles 는 authenticated 에게 id/nickname/trust_score/created_at 컬럼만 열려 있어서
+// (phase-32) 나머지는 service_role 로만 읽는다. userId 는 검증된 JWT 에서 온 값만 넣을 것.
+export async function getOwnProfile(userId) {
+  const { data } = await createAdminClient()
+    .from("profiles")
+    .select("*")
+    .eq("id", userId)
+    .maybeSingle();
+  return data;
+}
+
 // 현재 로그인한 유저 + profiles 행. 비로그인이면 null.
 export async function getSessionUser() {
   const supabase = await createClient();
@@ -47,12 +60,7 @@ export async function getSessionUser() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .maybeSingle();
-
+  const profile = await getOwnProfile(user.id);
   return { user, profile, supabase };
 }
 

@@ -31,13 +31,8 @@ export async function changeNickname(_prev, formData) {
     return { error: "닉네임은 한글/영문/숫자 2~20자여야 해요." };
   }
 
-  const { user, supabase } = await requireUser();
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("nickname, nickname_changed_at")
-    .eq("id", user.id)
-    .maybeSingle();
+  // requireUser 가 본인 프로필 전체를 service_role 로 이미 읽어 온다 (phase-32)
+  const { user, supabase, profile } = await requireUser();
 
   if (profile?.nickname === nickname) {
     return { error: "지금 닉네임과 같아요." };
