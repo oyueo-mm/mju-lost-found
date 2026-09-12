@@ -1,18 +1,17 @@
-# Python
-__pycache__/
-*.pyc
-.venv/
-venv/
+# Node / Next.js (web/)
+node_modules/
+web/.next/
+web/out/
+web/.vercel/
 
-# SQLite database (generated from db/schema.sql, not source of truth)
-db/*.db
+# env / secrets
+.env
+.env.*
+web/.env*
 
-# Uploaded images (user-generated content, not source code)
-uploads/*
-!uploads/.gitkeep
-
-# Streamlit
-.streamlit/secrets.toml
-
-# Contains team members' real names and student IDs -- keep local only
+# 팀원 실명·학번 포함 — 로컬 전용
 바이브코딩 경진대회 기획안.pdf
+
+# OS
+.DS_Store
+Thumbs.db
