@@ -6,6 +6,7 @@ import {
   markRoomRead,
   toggleReaction,
   reportMessage,
+  loadOlderMessages,
 } from "@/lib/chat-actions";
 import { formatDateTime } from "@/lib/format";
 import ChatComposer from "./ChatComposer";
@@ -13,12 +14,49 @@ import ImageViewer from "./ImageViewer";
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢"];
 
-export default function ChatRoomView({ roomId, meId, initialMessages }) {
+export default function ChatRoomView({
+  roomId,
+  meId,
+  initialMessages,
+  initialHasMore = false,
+}) {
   const [messages, setMessages] = useState(initialMessages || []);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const bottomRef = useRef(null);
+  const listRef = useRef(null);
   const supabaseRef = useRef(null);
+
+  // 이전 메시지 페이징 — 앞에 붙인 뒤 스크롤 위치를 유지하려고 이전 높이를 기억
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const keepScrollRef = useRef(null); // { height, top }
+
+  async function loadOlder() {
+    if (loadingOlder || !hasMore) return;
+    const oldest = messagesRef.current.find((m) => !m.optimistic);
+    if (!oldest) return;
+    setLoadingOlder(true);
+    try {
+      const el = listRef.current;
+      if (el) keepScrollRef.current = { height: el.scrollHeight, top: el.scrollTop };
+      const res = await loadOlderMessages(roomId, oldest.created_at);
+      const older = (res?.messages || []).map((m) => ({ ...m, reactions: m.reactions || [] }));
+      setHasMore(Boolean(res?.hasMore));
+      if (older.length > 0) {
+        setMessages((prev) => {
+          const seen = new Set(prev.map((m) => m.id));
+          return [...older.filter((m) => !seen.has(m.id)), ...prev];
+        });
+      } else {
+        keepScrollRef.current = null;
+      }
+    } catch {
+      keepScrollRef.current = null;
+    } finally {
+      setLoadingOlder(false);
+    }
+  }
 
   const sortMsgs = (list) =>
     [...list].sort(
@@ -219,6 +257,14 @@ export default function ChatRoomView({ roomId, meId, initialMessages }) {
   }, [roomId]);
 
   useEffect(() => {
+    // 앞에 붙인 직후엔 맨 아래로 튀지 않고 보던 자리를 유지
+    const keep = keepScrollRef.current;
+    const el = listRef.current;
+    if (keep && el) {
+      keepScrollRef.current = null;
+      el.scrollTop = el.scrollHeight - keep.height + keep.top;
+      return;
+    }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -250,7 +296,22 @@ export default function ChatRoomView({ roomId, meId, initialMessages }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-sunken">
-      <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain px-3 py-3">
+      <div
+        ref={listRef}
+        className="min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain px-3 py-3"
+      >
+        {hasMore && (
+          <div className="flex justify-center pb-1">
+            <button
+              type="button"
+              onClick={loadOlder}
+              disabled={loadingOlder}
+              className="btn btn-ghost px-3 py-1 text-xs disabled:opacity-60"
+            >
+              {loadingOlder ? "불러오는 중…" : "이전 메시지 보기"}
+            </button>
+          </div>
+        )}
         {messages.length === 0 && (
           <p className="card-dashed mx-auto mt-6 max-w-xs p-6 text-center text-sm text-ink-faint">
             첫 메시지를 보내보세요

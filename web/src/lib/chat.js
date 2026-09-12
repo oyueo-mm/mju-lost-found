@@ -87,19 +87,31 @@ export async function getRoom(supabase, roomId, userId) {
   return room;
 }
 
-export async function listMessages(supabase, roomId) {
-  const { data } = await supabase
+export const CHAT_PAGE = 50;
+
+// 최근 limit 건 (before 가 있으면 그 시각보다 오래된 것). 오래된→최신 순으로 돌려준다.
+// 반환: { messages, hasMore } — hasMore 면 더 이전 메시지가 있다.
+export async function listMessages(supabase, roomId, { limit = CHAT_PAGE, before = null } = {}) {
+  let q = supabase
     .from("messages")
     .select("id, sender_id, content, image_url, created_at, read_at, hidden_at")
     .eq("room_id", roomId)
-    .order("created_at", { ascending: true })
-    .limit(500);
-  const messages = (data || []).map((m) =>
-    m.hidden_at
-      ? { ...m, content: "[관리자가 가린 메시지입니다.]", image_url: null }
-      : m,
-  );
-  if (messages.length === 0) return messages;
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit + 1);
+  if (before) q = q.lt("created_at", before);
+  const { data } = await q;
+  const rows = data || [];
+  const hasMore = rows.length > limit;
+  const messages = rows
+    .slice(0, limit)
+    .reverse()
+    .map((m) =>
+      m.hidden_at
+        ? { ...m, content: "[관리자가 가린 메시지입니다.]", image_url: null }
+        : m,
+    );
+  if (messages.length === 0) return { messages, hasMore };
 
   const { data: reactions } = await supabase
     .from("message_reactions")
@@ -115,5 +127,5 @@ export async function listMessages(supabase, roomId) {
     byMsg.get(r.message_id).push(r);
   }
   for (const m of messages) m.reactions = byMsg.get(m.id) || [];
-  return messages;
+  return { messages, hasMore };
 }

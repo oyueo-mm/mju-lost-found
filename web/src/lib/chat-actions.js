@@ -297,6 +297,16 @@ export async function deleteRoom(roomId) {
   return { ok: true };
 }
 
+// 이전 메시지 더 불러오기 — RLS 로 참여자만 읽힌다 (user 클라이언트)
+export async function loadOlderMessages(roomId, beforeIso) {
+  const { supabase } = await requireUser();
+  if (!/^\d{1,15}$/.test(String(roomId))) return { messages: [], hasMore: false };
+  const before = new Date(beforeIso);
+  if (Number.isNaN(before.getTime())) return { messages: [], hasMore: false };
+  const { listMessages } = await import("@/lib/chat");
+  return listMessages(supabase, roomId, { before: before.toISOString() });
+}
+
 export async function markRoomRead(roomId) {
   const { user, supabase } = await requireUser();
   await supabase

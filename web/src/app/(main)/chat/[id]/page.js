@@ -20,7 +20,7 @@ export default async function ChatRoomPage({ params }) {
 
   const room = await getRoom(supabase, id, user.id);
   if (!room) notFound();
-  const messages = await listMessages(supabase, id);
+  const { messages, hasMore } = await listMessages(supabase, id);
 
   return (
     // 메인 레이아웃 여백을 상쇄하고 화면을 꽉 채우는 채팅 화면
@@ -66,7 +66,12 @@ export default async function ChatRoomPage({ params }) {
         />
       )}
 
-      <ChatRoomView roomId={id} meId={user.id} initialMessages={messages} />
+      <ChatRoomView
+        roomId={id}
+        meId={user.id}
+        initialMessages={messages}
+        initialHasMore={hasMore}
+      />
     </div>
   );
 }
