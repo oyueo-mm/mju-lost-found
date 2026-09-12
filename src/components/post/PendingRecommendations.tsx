@@ -30,7 +30,32 @@ const POLL_INTERVAL_MS = 2000;
 // semantic-search latency (~4.68s cold, ~2.41s warm) is the closest real
 // number available for how long that kind of inference call takes -- 3
 // attempts at 2s apart covers that range without polling indefinitely.
-const MAX_POLL_ATTEMPTS = 3;
+export const MAX_POLL_ATTEMPTS = 3;
+
+// 첫 게시글 AI 추천 무한 로딩 버그 수정: 이 결정 하나가 "스피너를 계속
+// 보여줄지"를 정하는 유일한 지점이라 별도의 순수 함수로 뽑아 테스트했다
+// (이 프로젝트에는 컴포넌트/훅 렌더링 테스트 도구(@testing-library 등)가
+// 전혀 설치돼 있지 않아 -- vitest.config.ts의 environment: "node" 참고 --
+// useEffect 자체를 직접 렌더링해 검증할 수는 없다. 대신 실제 버그였던
+// "결과 0개 상태가 attempt가 올라가도 언제 실제로 멈추는가"라는 종료
+// 조건 자체를 여기서 고정한다):
+//   추천 있음(recommendationCount > 0)      -> false (즉시 로딩 종료)
+//   오류(failed)                             -> false (즉시 로딩 종료)
+//   추천 없음 + 아직 재시도 예산 남음         -> true  (계속 polling)
+//   추천 없음 + 재시도 예산 소진(3회)         -> false (loading 종료 + empty state)
+export function shouldKeepPolling({
+  pollForResults,
+  recommendationCount,
+  failed,
+  attempt,
+}: {
+  pollForResults: boolean;
+  recommendationCount: number;
+  failed: boolean;
+  attempt: number;
+}): boolean {
+  return pollForResults && recommendationCount === 0 && !failed && attempt < MAX_POLL_ATTEMPTS;
+}
 
 export function PendingRecommendations({
   sourceType,
@@ -47,7 +72,12 @@ export function PendingRecommendations({
   // this to true. Only the initial server render can produce a real
   // failure state.
   const failed = initialFailed;
-  const stillWaiting = pollForResults && recommendations.length === 0 && !failed && attempt < MAX_POLL_ATTEMPTS;
+  const stillWaiting = shouldKeepPolling({
+    pollForResults,
+    recommendationCount: recommendations.length,
+    failed,
+    attempt,
+  });
 
   useEffect(() => {
     if (!stillWaiting) return;
@@ -72,9 +102,21 @@ export function PendingRecommendations({
       } finally {
         setAttempt((n) => n + 1);
       }
+      // 첫 게시글 AI 추천 무한 로딩 버그 수정: 이 effect의 의존성 배열이
+      // 예전에는 [stillWaiting, sourceId, sourceType]뿐이었다 -- 추천이
+      // 계속 0개인 상태로 남아 있는 동안 `stillWaiting`은 매 attempt마다
+      // 계속 true -> true로(값 자체는 안 바뀜) 유지되므로, attempt가
+      // 0에서 1로 올라가도 React가 "의존성이 안 바뀌었다"고 보고 이
+      // effect를 다시 실행하지 않았다 -- 즉 최초 1회 poll 이후로는 두
+      // 번째 setTimeout이 다시는 예약되지 않고, attempt는 1에서 영원히
+      // 멈춘 채 stillWaiting(=pending)만 계속 true로 남아 스피너가
+      // 끝없이 도는 것이 실제 원인이었다. attempt를 의존성에 추가하면
+      // attempt가 바뀔 때마다(추천이 여전히 0개라도) 이 effect가 다시
+      // 실행되어 다음 poll을 정상적으로 예약하고, MAX_POLL_ATTEMPTS에
+      // 도달하면(stillWaiting이 비로소 false가 되어) 정상적으로 멈춘다.
     }, POLL_INTERVAL_MS);
     return () => clearTimeout(timer);
-  }, [stillWaiting, sourceId, sourceType]);
+  }, [stillWaiting, sourceId, sourceType, attempt]);
 
   return (
     <SimilarPostsSection

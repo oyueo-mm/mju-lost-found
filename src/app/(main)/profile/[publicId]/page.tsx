@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 
+import { getCurrentUser } from "@/lib/auth/session";
 import { getPublicProfile } from "@/lib/user/service";
 import { listPostsByUser } from "@/lib/posts/service";
 import { DEFAULT_LIMIT, DEFAULT_PAGE } from "@/lib/posts/schema";
@@ -7,6 +8,7 @@ import { normalizeSearchParams } from "@/lib/posts/searchParams";
 import { PostCard } from "@/components/post/PostCard";
 import { Pagination } from "@/components/search/Pagination";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ReportButton } from "@/components/report/ReportButton";
 import { UserIcon, BoxIcon, ClockIcon } from "@/components/icons";
 
 function formatJoinDate(date: Date): string {
@@ -27,8 +29,20 @@ export default async function ProfilePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { publicId } = await params;
-  const profile = await getPublicProfile(publicId);
+  const [profile, currentUser] = await Promise.all([getPublicProfile(publicId), getCurrentUser()]);
   if (!profile) notFound();
+
+  // 사용자 신고 Phase: same isOwner-style gate post/[id]/page.tsx already
+  // uses for its own ReportButton -- only a logged-in viewer looking at
+  // someone *else's* profile ever sees the button. A self-report is also
+  // rejected server-side by createReport() regardless (see report/
+  // service.ts), but there is no reason to show the control at all on
+  // your own profile. Fully signed-out visitors don't see it either (same
+  // "currentUser &&" gate as the post detail page), even though they could
+  // technically submit and get a clean 401 -- matching this app's existing
+  // convention of hiding, not just rejecting, actions a logged-out viewer
+  // can never complete.
+  const canReport = currentUser !== null && currentUser.id !== profile.userId;
 
   // Phase H-8: same publicId->id lookup getPublicProfile() already did --
   // resolved a second time here (not threaded through as an extra return
@@ -49,16 +63,32 @@ export default async function ProfilePage({
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="flex items-center gap-4 rounded-card border border-border bg-card p-5">
-        <span className="flex size-16 shrink-0 items-center justify-center rounded-full bg-primary-muted text-primary">
-          <UserIcon className="size-8" />
-        </span>
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="truncate text-xl font-semibold text-foreground">{profile.nickname ?? "알 수 없음"}</h1>
-          {/* Phase H-7: "공개 사용자 ID" -- the opaque publicId itself, shown
-              as-is (not the internal numeric id, never exposed). */}
-          <span className="truncate text-xs text-muted-foreground">ID: {profile.publicId}</span>
+      <section className="flex items-start justify-between gap-4 rounded-card border border-border bg-card p-5">
+        <div className="flex min-w-0 items-center gap-4">
+          <span className="flex size-16 shrink-0 items-center justify-center rounded-full bg-primary-muted text-primary">
+            <UserIcon className="size-8" />
+          </span>
+          <div className="flex min-w-0 flex-col gap-1">
+            <h1 className="truncate text-xl font-semibold text-foreground">{profile.nickname ?? "알 수 없음"}</h1>
+            {/* Phase H-7: "공개 사용자 ID" -- the opaque publicId itself, shown
+                as-is (not the internal numeric id, never exposed). */}
+            <span className="truncate text-xs text-muted-foreground">ID: {profile.publicId}</span>
+          </div>
         </div>
+        {/* 사용자 신고 Phase: 기존 게시글 상세의 ReportButton 배치(상태
+            배지 옆, 소유자가 아닐 때만)와 같은 자리 감각 -- 프로필 헤더
+            우측 상단에 작게. 이 컴포넌트 자체는 이미 targetType="user"를
+            지원하고 있었다(REPORT_REASONS/createReport 모두 사전에
+            일반화돼 있었음 -- report/schema.ts, report/service.ts 참고),
+            빠져 있던 건 이 진입점 하나뿐이었다. */}
+        {canReport && (
+          <ReportButton
+            targetType="user"
+            targetId={profile.userId}
+            buttonLabel="신고"
+            triggerClassName="shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          />
+        )}
       </section>
 
       <section className="grid grid-cols-2 gap-3">

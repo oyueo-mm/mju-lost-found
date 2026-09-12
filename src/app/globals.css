@@ -7,6 +7,20 @@
    prefers-color-scheme (this app has no explicit light/dark toggle, so
    system preference is the only signal). */
 :root {
+  /* UI 다크모드 회귀 Phase: 브라우저 네이티브 위젯(<select> 드롭다운
+     팝업, <input type="datetime-local">의 달력/시계 아이콘 및 그 팝업,
+     스크롤바 등)은 이 파일의 --background/--foreground 같은 커스텀
+     프로퍼티를 전혀 읽지 않는다 -- 오직 CSS `color-scheme`만 보고 OS의
+     라이트/다크 위젯 세트 중 하나를 통째로 고른다. 이 선언이 없으면
+     브라우저는 기본값(라이트)만 쓰므로, 다크 테마에서 <select>의 옵션
+     목록이 여전히 흰 배경으로 뜨고 거기에 (앱 자체 CSS로 하얗게 바꿔둔)
+     --foreground 텍스트가 얹혀 사실상 안 보이게 된다(카테고리 select
+     버그의 실제 원인) -- 같은 이유로 datetime-local의 달력 아이콘도
+     밝은 배경을 기대하는 색으로 그려져 어두운 필드 위에서 안 보이게
+     된다. 아래 다크 오버라이드 두 곳과 정확히 같은 3-way 가드
+     (시스템 다크/명시적 다크)를 그대로 재사용한다 -- 새 분기 없음. */
+  color-scheme: light;
+
   --background: #ffffff;
   --foreground: #18181b;
   --card: #ffffff;
@@ -77,6 +91,7 @@
    system, which this media query alone could never reach. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --background: #0b0d12;
     --foreground: #f1f2f4;
     --card: #14161c;
@@ -106,6 +121,7 @@
    when the user has explicitly chosen "다크" regardless of what their OS
    preference actually is. */
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --background: #0b0d12;
   --foreground: #f1f2f4;
   --card: #14161c;

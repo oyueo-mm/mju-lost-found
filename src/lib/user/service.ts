@@ -24,13 +24,20 @@ export type PublicProfileDTO = {
   // *is* "공개 게시글 수" with no extra filtering needed.
   postCount: number;
   // Phase H-8: the internal numeric id -- deliberately NOT rendered
-  // anywhere (the profile page/UI still only ever shows `publicId`, same
-  // as H-7); included purely so the profile page's Server Component can
-  // pass it straight into listPostsByUser() (which, like every other
-  // posts/service.ts function, is keyed on the internal userId, per this
-  // phase's own "기존 사용자 식별은 계속 내부 userId를 사용" instruction)
-  // without a second publicId->id lookup. Never sent to a Client
-  // Component or serialized into a client-visible response.
+  // anywhere as visible text (the profile page/UI still only ever shows
+  // `publicId`, same as H-7); included purely so the profile page's Server
+  // Component can pass it straight into listPostsByUser() (which, like
+  // every other posts/service.ts function, is keyed on the internal
+  // userId, per this phase's own "기존 사용자 식별은 계속 내부 userId를
+  // 사용" instruction) without a second publicId->id lookup.
+  // 사용자 신고 Phase: also passed as `targetId` to <ReportButton
+  // targetType="user"> on the profile page -- the same "raw internal id
+  // flows to a Client Component as a report target" pattern
+  // CommentActionMenu/MessageActionMenu already use for comment/message
+  // ids (see report/targets.ts's resolveCommentTarget/resolveMessageTarget,
+  // neither of which sign-encodes its id either -- only post ids need that,
+  // see resolvePostTarget's own comment). Not a new exposure: createReport()
+  // re-validates this id server-side regardless of what a client sends.
   userId: number;
 };
 

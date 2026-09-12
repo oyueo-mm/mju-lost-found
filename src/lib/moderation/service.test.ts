@@ -159,6 +159,47 @@ describe("listReportsForAdmin / getReportForAdmin", () => {
     }
   });
 
+  // 사용자 신고 Phase: mirrors "identifies a comment report..." above --
+  // targetType="USER" in place of "COMMENT", asserting the admin-facing
+  // targetInfo shape getReportForAdmin's own switch already produces for
+  // it (report/[id]/page.tsx's final targetInfo.kind === "user" branch
+  // renders exactly this shape).
+  it("identifies a user report and surfaces the target user's nickname for the admin", async () => {
+    report.findUnique.mockResolvedValueOnce({
+      ...reportRow({ targetType: "USER", targetId: 88 }),
+      reporter: { nickname: "신고자" },
+      processedBy: null,
+      moderationAction: null,
+    });
+    userTable.findUnique.mockResolvedValueOnce({ nickname: "신고대상자" });
+
+    const result = await getReportForAdmin(admin, 10);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.targetDeleted).toBe(false);
+      expect(result.data.targetInfo).toEqual({ kind: "user", nickname: "신고대상자" });
+    }
+  });
+
+  it("marks a user report's target as deleted when the reported user no longer exists", async () => {
+    report.findUnique.mockResolvedValueOnce({
+      ...reportRow({ targetType: "USER", targetId: 88 }),
+      reporter: { nickname: "신고자" },
+      processedBy: null,
+      moderationAction: null,
+    });
+    userTable.findUnique.mockResolvedValueOnce(null);
+
+    const result = await getReportForAdmin(admin, 10);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.targetDeleted).toBe(true);
+      expect(result.data.targetInfo).toBeNull();
+    }
+  });
+
   it("marks the target as deleted when the underlying post is gone", async () => {
     report.findUnique.mockResolvedValueOnce({
       ...reportRow(),

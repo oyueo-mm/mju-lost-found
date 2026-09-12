@@ -186,6 +186,33 @@ describe("createReport", () => {
     expect(result).toEqual({ kind: "self_report" });
   });
 
+  // 사용자 신고 Phase: the two positive/duplicate cases the existing
+  // targetType="user" coverage above (target_not_found, self_report) never
+  // exercised -- mirrors "creates a report for someone else's comment" and
+  // "relies on the same UNIQUE constraint (P2002) for a duplicate comment
+  // report" above exactly, targetType="user" in place of "comment".
+  it("creates a report for another user (non-self, existing target)", async () => {
+    userTable.findUnique.mockResolvedValueOnce({ id: 999 });
+    report.create.mockResolvedValueOnce(reportRow({ targetType: "USER", targetId: 999 }));
+
+    const result = await createReport(reporter, { targetType: "user", targetId: 999, reason: "욕설/비방" });
+
+    expect(result.kind).toBe("ok");
+    expect(userTable.findUnique).toHaveBeenCalledWith({ where: { id: 999 }, select: { id: true } });
+    expect(report.create).toHaveBeenCalledWith({
+      data: { reporterUserId: reporter.id, targetType: "USER", targetId: 999, reason: "욕설/비방", detail: null },
+    });
+  });
+
+  it("relies on the same UNIQUE constraint (P2002) for a duplicate user report", async () => {
+    userTable.findUnique.mockResolvedValueOnce({ id: 999 });
+    report.create.mockRejectedValueOnce(new FakePrismaClientKnownRequestError("P2002"));
+
+    const result = await createReport(reporter, { targetType: "user", targetId: 999, reason: "기타" });
+
+    expect(result).toEqual({ kind: "duplicate" });
+  });
+
   it("rejects reporting a nonexistent comment", async () => {
     comment.findUnique.mockResolvedValueOnce(null);
 
