@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createNotification } from "@/lib/notifications";
 import { setBetaOpen } from "@/lib/settings";
 import { hardDeleteUser } from "@/lib/account-delete";
+import { deletePostWithAssets } from "@/lib/post-cleanup";
 
 // ── 신고 처리 ────────────────────────────────────────────────
 // action: "resolve" | "dismiss" | "delete_target" | "suspend_author"
@@ -66,7 +67,10 @@ export async function handleReport(reportId, action) {
 
   if (action === "delete_target") {
     if (postTable) {
-      await admin.from(postTable).delete().eq("id", report.target_id);
+      await deletePostWithAssets(
+        report.target_type === "lost_post" ? "lost" : "found",
+        report.target_id,
+      );
     } else if (report.target_type === "message") {
       // 내용은 보존하고 숨김 처리만 (감사 목적)
       await admin
@@ -157,10 +161,9 @@ export async function approveTranscript(reportId) {
 // ── 게시글 강제 삭제 ─────────────────────────────────────────
 export async function adminDeletePost(kind, id) {
   await requireAdmin();
-  const table = kind === "lost" ? "lost_posts" : "found_posts";
-  const admin = createAdminClient();
-  const { error } = await admin.from(table).delete().eq("id", id);
-  if (error) return { error: "삭제에 실패했어요." };
+  if (kind !== "lost" && kind !== "found") return { error: "잘못된 요청이에요." };
+  const res = await deletePostWithAssets(kind, id);
+  if (!res.ok) return { error: "삭제에 실패했어요." };
   revalidatePath("/admin/posts");
   revalidatePath(`/${kind}`);
   return { ok: true };

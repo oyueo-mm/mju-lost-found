@@ -9,6 +9,7 @@ import { KIND_CONFIG } from "@/lib/constants";
 import { isCampus, campusLocationNames } from "@/lib/campus";
 import { kstLocalToISO } from "@/lib/format";
 import { rateLimited } from "@/lib/ratelimit";
+import { deletePostWithAssets, storagePathFromUrl } from "@/lib/post-cleanup";
 
 // 응답을 보낸 뒤(사용자를 기다리게 하지 않고) 임베딩을 계산한다.
 function scheduleEmbedding(kind, id) {
@@ -162,6 +163,11 @@ export async function updatePost(kind, id, _prev, formData) {
       : [];
   const keptUrls = formData.getAll("keep").map(String).filter(Boolean);
   const kept = existingUrls.filter((u) => keptUrls.includes(u));
+  // 사용자가 뺀 사진은 Storage 에서도 제거 (공개 URL 잔존 방지)
+  const droppedPaths = existingUrls
+    .filter((u) => !keptUrls.includes(u))
+    .map(storagePathFromUrl)
+    .filter(Boolean);
 
   let imageUrls = kept;
   try {
@@ -188,6 +194,15 @@ export async function updatePost(kind, id, _prev, formData) {
     .eq("id", id);
 
   if (error) return { error: "수정에 실패했어요." };
+
+  if (droppedPaths.length > 0) {
+    after(async () => {
+      const { error: rmErr } = await createAdminClient()
+        .storage.from("post-images")
+        .remove(droppedPaths);
+      if (rmErr) console.error("[updatePost] 사진 정리 실패:", rmErr.message);
+    });
+  }
 
   scheduleEmbedding(kind, id);
   revalidatePath("/");
@@ -226,8 +241,9 @@ export async function deletePost(kind, id) {
     return { error: "본인 게시글만 삭제할 수 있어요." };
   }
 
-  const { error } = await supabase.from(cfg.table).delete().eq("id", id);
-  if (error) return { error: "삭제에 실패했어요." };
+  // 사진·댓글·조회기록까지 함께 정리 (본인 확인은 위에서 끝남)
+  const res = await deletePostWithAssets(kind, id);
+  if (!res.ok) return { error: "삭제에 실패했어요." };
 
   revalidatePath("/");
   redirect(kind === "lost" ? "/?tab=lost" : "/");
