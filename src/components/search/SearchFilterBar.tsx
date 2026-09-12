@@ -43,6 +43,19 @@ type SearchFilterBarProps = {
   // component, exactly as before) -- omitted here renders nothing, so
   // their layout is completely unaffected.
   children?: ReactNode;
+  // 검색 기본 모드 UX 수정 Phase: URL에 `mode`가 전혀 없는 첫 방문에서
+  // 이 토글이 시작할 모드. 기본값 "ai"는 /search의 기존 동작 그대로다
+  // (이 prop을 생략하는 유일한 호출자). /lost, /found는 "keyword"를
+  // 넘긴다 -- 두 페이지는 listQuerySchema의 `mode` 필드 자체가 이미
+  // "keyword"를 기본값으로 두고 있어(schema.ts 참고) 서버가 방금
+  // 렌더링해 children으로 내려준 결과가 항상 키워드 검색 결과인데,
+  // 이 토글의 클라이언트 쪽 초기 상태가 그것과 무관하게 "ai"였던 것이
+  // 문제였다 -- mode="ai"인 동안은 `{mode !== "ai" && children}`이
+  // children을 숨기므로, 게시판에 처음 들어갔을 때 이미 불러온 목록
+  // 대신 텅 빈 AI 검색창이 보이는 결과가 됐다. 서버가 이미 내려준
+  // 기본값과 클라이언트 초기 상태를 일치시키는 것뿐, 두 모드의 실제
+  // 검색 로직/우선순위(URL의 명시적 mode가 항상 최우선)는 그대로다.
+  defaultMode?: SearchUiMode;
 };
 
 // 검색 대상 및 게시글 목록 UX 개선 Phase: 습득물이 먼저 나오는 순서로
@@ -81,6 +94,7 @@ export function SearchFilterBar({
   imageSearchEnabled = false,
   fixedType,
   children,
+  defaultMode = "ai",
 }: SearchFilterBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -94,13 +108,18 @@ export function SearchFilterBar({
   // AISearchPanel (mode="ai") needs the current `type` as a live value,
   // not just at submit time -- AI 검색 never navigates (see handleSubmit's
   // own comment), so it has no other way to read the selected board.
-  // AI 검색 UI 시안 개선 Phase: AI 검색이 이 서비스의 기본 검색 경험이므로
-  // URL에 mode가 전혀 없을 때(첫 방문)는 "ai"가 기본값이다 -- 명시적으로
-  // `mode=keyword`가 있을 때만 키워드로 시작한다(키워드로 검색해서 이
-  // 페이지로 돌아온 경우 등). 예전에 유효했던 `mode=semantic`/`mode=image`
-  // 북마크는 더 이상 유효한 값이 아니므로 마찬가지로 기본값(ai)으로
-  // 떨어진다.
-  const [mode, setMode] = useState<SearchUiMode>(searchParams.get("mode") === "keyword" ? "keyword" : "ai");
+  // AI 검색 UI 시안 개선 Phase: /search에서는 AI 검색이 이 서비스의 기본
+  // 검색 경험이므로 URL에 mode가 전혀 없을 때(첫 방문) "ai"가 기본값이다.
+  // 검색 기본 모드 UX 수정 Phase: 그 기본값을 호출자가 고를 수 있도록
+  // `defaultMode` prop으로 뺐다 -- /lost, /found는 "keyword"를 넘긴다(위
+  // defaultMode 자체의 comment 참고). URL에 `mode=ai`나 `mode=keyword`가
+  // 명시돼 있으면 항상 그 값이 defaultMode보다 우선한다 -- 예전에 유효
+  // 했던 `mode=semantic`/`mode=image` 북마크처럼 둘 다 아닌 값은
+  // defaultMode로 떨어진다.
+  const urlMode = searchParams.get("mode");
+  const [mode, setMode] = useState<SearchUiMode>(
+    urlMode === "ai" || urlMode === "keyword" ? urlMode : defaultMode,
+  );
   // 검색 대상 및 게시글 목록 UX 개선 Phase §1/§6: URL에 `type`이 전혀 없는
   // 첫 방문(/search를 바로 열었을 때)의 기본 검색 대상은 습득물이다 --
   // 잃어버린 물건을 찾으려고 검색하는 서비스이므로 "찾고 있는 물건이

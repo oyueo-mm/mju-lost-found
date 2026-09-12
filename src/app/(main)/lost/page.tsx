@@ -72,6 +72,10 @@ export default async function LostListPage({
         defaultStatus={LOST_STATUSES[0]}
         imageSearchEnabled
         fixedType="lost"
+        // 검색 기본 모드 UX 수정 Phase: 게시판에 처음 들어왔을 때는 이미
+        // 서버가 불러온 게시글 목록(children)이 바로 보여야 한다 -- AI
+        // 검색은 여전히 토글로 켤 수 있지만 기본은 키워드다.
+        defaultMode="keyword"
       >
         <SemanticSearchNotice mode={mode} />
         {posts.items.length === 0 ? (
