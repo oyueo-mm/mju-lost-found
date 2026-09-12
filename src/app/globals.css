@@ -280,6 +280,28 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
+/* Dark mode native form control 진단 Phase: :root의 color-scheme(위) 만으로
+   브라우저가 OS의 라이트/다크 위젯 세트 중 하나를 고르게는 됐지만, 그건
+   "어떤 팔레트를 쓸지"의 선택일 뿐 이 앱이 실제로 쓰는 정확한 색은
+   아니다 -- 예를 들어 Windows의 Chrome은 <option> 목록 자체를 Chromium
+   내부 UI로 그리면서 background-color/color를 그대로 받아들이는데(다른
+   브라우저/OS는 이 두 속성을 무시하고 순수 OS 네이티브 회색만 쓰기도
+   한다 -- 그런 곳은 color-scheme만으로도 이미 읽을 만하다), 지정하지
+   않으면 "적당히 어두운 회색"이 나와 이 앱의 실제 --card/--foreground
+   톤과 미묘하게 어긋난다. 이 앱의 다른 모든 플로팅 메뉴/팝오버
+   (MessageActionMenu, CommentActionMenu, PostManageMenu 등)가 이미 쓰는
+   것과 정확히 같은 표면 색 조합(bg-card/text-foreground)을 <option>에도
+   그대로 준다 -- 새 토큰이나 하드코딩된 색 없이, color-scheme을
+   대체하는 게 아니라 그 위에 얹는 보강 규칙이다. <select> 자신의 닫힌
+   상태 배경은 이미 각 컴포넌트가 bg-transparent/bg-card 클래스로
+   명시하고 있으므로(클래스 선택자가 이 태그 선택자보다 우선순위가
+   높다) 여기서 건드리지 않는다 -- 오직 열렸을 때의 옵션 목록만
+   대상이다. */
+option {
+  background-color: var(--card);
+  color: var(--card-foreground);
+}
+
 /* Horizontal scroll snap strip -- used by Home's "최근 분실물/습득물" card
    rails on small screens where a full grid would force a page-wide
    horizontal scroll (forbidden by this phase's own responsive-design
