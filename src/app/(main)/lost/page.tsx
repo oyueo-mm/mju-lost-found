@@ -9,8 +9,8 @@ import { searchPosts } from "@/lib/posts/service";
 import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, LOST_STATUSES, listQuerySchema } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
-
-const STATUS_OPTIONS = LOST_STATUSES.map((s) => ({ value: s, label: s }));
+import { getTranslator } from "@/lib/i18n/server";
+import { statusLabelKey } from "@/lib/i18n/labels";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -20,6 +20,11 @@ export default async function LostListPage({
   searchParams: Promise<SearchParams>;
 }) {
   const raw = normalizeSearchParams(await searchParams);
+  const t = await getTranslator();
+  // 다국어(i18n) Phase: `value`는 언제나 DB에 저장된 한국어 원문 그대로다
+  // (listQuerySchema가 검증하는 값이므로 절대 번역하지 않는다) -- 화면에
+  // 보이는 `label`만 현재 언어로 바뀐다.
+  const statusOptions = LOST_STATUSES.map((s) => ({ value: s, label: t(statusLabelKey(s)) }));
   // `type` is always "lost" here regardless of the URL -- this board's
   // identity isn't user-controlled the way it is on /search.
   const parsed = listQuerySchema.safeParse({ ...raw, type: "lost" });
@@ -50,9 +55,9 @@ export default async function LostListPage({
     console.error("Failed to load lost posts", error);
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-xl font-semibold text-foreground">분실물 게시판</h1>
+        <h1 className="text-xl font-semibold text-foreground">{t("board.lost.title")}</h1>
         <div className="rounded-card border border-destructive/30 bg-destructive-muted p-10 text-center text-sm text-destructive">
-          게시글을 불러오지 못했어요. 잠시 후 다시 시도해주세요.
+          {t("board.loadError")}
         </div>
       </div>
     );
@@ -61,14 +66,14 @@ export default async function LostListPage({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-foreground">분실물 게시판</h1>
+        <h1 className="text-xl font-semibold text-foreground">{t("board.lost.title")}</h1>
         <LinkButton href="/lost/new" size="sm">
-          분실물 등록
+          {t("board.lost.new")}
         </LinkButton>
       </div>
       <SearchFilterBar
         basePath="/lost"
-        statusOptions={STATUS_OPTIONS}
+        statusOptions={statusOptions}
         defaultStatus={LOST_STATUSES[0]}
         imageSearchEnabled
         fixedType="lost"
@@ -81,15 +86,19 @@ export default async function LostListPage({
         {posts.items.length === 0 ? (
           <div className="flex flex-col gap-4">
             <EmptyState
-              title={raw.q || raw.category || raw.campus || raw.status ? "검색 결과가 없어요." : "아직 등록된 분실물이 없어요."}
+              title={
+                raw.q || raw.category || raw.campus || raw.status
+                  ? t("search.empty.title")
+                  : t("board.lost.empty.title")
+              }
               description={
                 raw.q || raw.category || raw.campus || raw.status
-                  ? "다른 검색어나 필터로 다시 시도해보세요."
-                  : "가장 먼저 물건을 등록해보세요."
+                  ? t("search.empty.description")
+                  : t("board.lost.empty.description")
               }
               action={
                 !(raw.q || raw.category || raw.campus || raw.status) && (
-                  <LinkButton href="/lost/new">분실물 등록하기</LinkButton>
+                  <LinkButton href="/lost/new">{t("board.lost.newCta")}</LinkButton>
                 )
               }
             />

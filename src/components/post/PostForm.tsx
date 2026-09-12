@@ -18,6 +18,9 @@ import {
 import { PostImageManager } from "./PostImageManager";
 import { Button } from "@/components/ui/Button";
 import { PostAsSelector } from "@/components/organization/PostAsSelector";
+import { useI18n } from "@/lib/i18n/client";
+import { campusLabelKey, categoryLabelKey } from "@/lib/i18n/labels";
+import type { TranslationKey } from "@/lib/i18n/translate";
 
 const FIELD_CLASS =
   "rounded-lg border border-border bg-transparent px-3 py-2.5 text-sm text-foreground disabled:opacity-60";
@@ -71,15 +74,17 @@ type PostFormProps = {
 };
 
 const DATE_FIELD = { lost: "lostAt", found: "foundAt" } as const;
-const DATE_LABEL = { lost: "분실 일시", found: "습득 일시" } as const;
-const TITLE_PLACEHOLDER = {
-  lost: "예: 학생회관 앞에서 검정색 우산을 잃어버렸어요",
-  found: "예: 도서관 열람실에서 우산을 주웠어요",
-} as const;
-const DESCRIPTION_PLACEHOLDER = {
-  lost: "색상, 브랜드, 특징 등을 자세히 적어주시면 찾는 데 도움이 돼요.",
-  found: "색상, 브랜드, 특징 등을 자세히 적어주시면 주인을 찾는 데 도움이 돼요.",
-} as const;
+// 다국어(i18n) Phase: 폼이 서버로 보내는 필드 이름(DATE_FIELD)은 그대로
+// 두고, 사람이 읽는 라벨/placeholder만 번역 키로 바꿨다.
+const DATE_LABEL_KEY: Record<PostType, TranslationKey> = { lost: "post.lostAt", found: "post.foundAt" };
+const TITLE_PLACEHOLDER_KEY: Record<PostType, TranslationKey> = {
+  lost: "form.lost.titlePlaceholder",
+  found: "form.found.titlePlaceholder",
+};
+const DESCRIPTION_PLACEHOLDER_KEY: Record<PostType, TranslationKey> = {
+  lost: "form.lost.descriptionPlaceholder",
+  found: "form.found.descriptionPlaceholder",
+};
 
 // datetime-local wants "YYYY-MM-DDTHH:mm" in local time, not UTC -- same
 // conversion the edit page already does for an existing post's date
@@ -114,6 +119,7 @@ function fieldIfChanged<T>(isEdit: boolean, key: string, current: T, initial: T 
 
 export function PostForm({ type, postId, initialValues, myOrganizations = [] }: PostFormProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   // Phase 12-5 §13: "개인" (null) or one of myOrganizations's ids -- only
@@ -169,6 +175,10 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
   // in edit mode, DEFAULT_CAMPUS for a brand-new one), and the toggle
   // buttons below no longer allow deselecting back to "none".
   const [campus, setCampus] = useState<string>(initialValues?.campus ?? DEFAULT_CAMPUS);
+  // 다국어(i18n) Phase: 폼이 실제로 제출하는 값은 항상 위 `campus` 원문
+  // (DB/zod가 아는 한국어 문자열)이고, 이 키는 화면에 보여줄 라벨을
+  // 고를 때만 쓴다.
+  const campusKey = campusLabelKey(campus);
   // Phase P-5: "미상" toggles -- initialized from whether the existing post
   // (edit mode) actually has a null location/date, never guessed from an
   // empty string. Create mode has no initialValues at all, so both default
@@ -224,7 +234,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
     }
 
     if (rejectedForCount > 0) {
-      setError(`최대 ${MAX_IMAGES_PER_POST}장까지 등록할 수 있어요. ${rejectedForCount}장은 추가되지 않았습니다.`);
+      setError(t("form.imageLimit", { max: MAX_IMAGES_PER_POST, rejected: rejectedForCount }));
     } else if (validationError) {
       setError(validationError);
     }
@@ -256,12 +266,12 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
       const res = await fetch(`/api/posts/${postId}/image?type=${type}&imageId=${imageId}`, { method: "DELETE" });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        setError(json.error ?? "이미지를 삭제하지 못했습니다.");
+        setError(json.error ?? t("form.imageDeleteFailed"));
         return;
       }
       setItems((prev) => prev.filter((item) => !(item.kind === "existing" && item.id === imageId)));
     } catch {
-      setError("이미지를 삭제하지 못했습니다.");
+      setError(t("form.imageDeleteFailed"));
     } finally {
       setDeletingExistingId(null);
     }
@@ -314,13 +324,13 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
           });
           if (!res.ok) {
             const json = await res.json().catch(() => ({}));
-            return json.error ?? "이미지를 게시물에 연결하지 못했습니다.";
+            return json.error ?? t("form.imageAttachFailed");
           }
           const json = await res.json();
           const createdImages: { id: number; imageUrl: string }[] = json.data.images;
           succeeded.forEach((s, i) => attachedByLocalId.set(s.localId, createdImages[i]));
         } catch {
-          return "이미지를 게시물에 연결하지 못했습니다.";
+          return t("form.imageAttachFailed");
         }
       }
 
@@ -350,10 +360,10 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
           });
           if (!res.ok) {
             const json = await res.json().catch(() => ({}));
-            return json.error ?? "이미지 순서를 저장하지 못했습니다.";
+            return json.error ?? t("form.imageOrderFailed");
           }
         } catch {
-          return "이미지 순서를 저장하지 못했습니다.";
+          return t("form.imageOrderFailed");
         }
       }
       setReordered(false);
@@ -413,7 +423,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
       const json = await res.json();
 
       if (!res.ok) {
-        setError(json.error ?? "요청을 처리하지 못했습니다.");
+        setError(json.error ?? t("form.requestFailed"));
         setPending(false);
         return;
       }
@@ -440,7 +450,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
       router.push(`/post/${id}?type=${type}${postId === undefined ? "&created=1" : ""}`);
       router.refresh();
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
       setPending(false);
     }
   }
@@ -487,24 +497,24 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
           // rather not (게시물 페이지로 이동, where PostImageManager is
           // available again on the edit form).
           <div className="flex flex-col gap-2 rounded-card border border-destructive/30 bg-destructive-muted px-4 py-3 text-sm text-destructive">
-            <p>게시물은 정상적으로 저장되었습니다. 다만 {error}</p>
+            <p>{t("form.savedButImageFailed", { error })}</p>
             <div className="flex flex-wrap items-center gap-3">
               <Button type="button" variant="secondary" size="sm" onClick={handleRetryImage} disabled={pending}>
-                {pending ? "다시 시도하는 중..." : "사진 다시 시도"}
+                {pending ? t("form.retrying") : t("form.retryPhotos")}
               </Button>
               <Link href={`/post/${savedPostId}/edit?type=${type}`} className="text-sm font-medium underline">
-                게시물 수정 페이지로 이동
+                {t("form.goToEdit")}
               </Link>
             </div>
           </div>
         ))}
 
       <section className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
-        <h2 className="text-sm font-semibold text-foreground">기본 정보</h2>
+        <h2 className="text-sm font-semibold text-foreground">{t("form.basicInfo")}</h2>
 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-foreground">
-            제목
+            {t("form.title")}
             <RequiredMark />
           </span>
           <input
@@ -512,7 +522,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             type="text"
             required
             maxLength={200}
-            placeholder={TITLE_PLACEHOLDER[type]}
+            placeholder={t(TITLE_PLACEHOLDER_KEY[type])}
             defaultValue={initialValues?.title}
             disabled={pending}
             className={FIELD_CLASS}
@@ -521,7 +531,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-foreground">
-            설명
+            {t("form.description")}
             <RequiredMark />
           </span>
           <textarea
@@ -529,7 +539,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             required
             rows={5}
             maxLength={5000}
-            placeholder={DESCRIPTION_PLACEHOLDER[type]}
+            placeholder={t(DESCRIPTION_PLACEHOLDER_KEY[type])}
             defaultValue={initialValues?.description}
             disabled={pending}
             className={FIELD_CLASS}
@@ -543,8 +553,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             돕는 텍스트일 뿐이다. */}
         {type === "found" && (
           <p className="rounded-lg bg-primary-muted px-3.5 py-3 text-xs text-primary">
-            💡 반환 전 확인 -- 물건의 고유한 특징이나 내부 내용 등 결정적인 정보는 설명에 모두 공개하지 않는
-            것이 좋아요. 나중에 문의가 오면 공개하지 않은 특징을 물어보고 실제 소유자인지 확인할 수 있어요.
+            {t("form.foundNotice")}
           </p>
         )}
       </section>
@@ -558,7 +567,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
           renders null in that case. */}
       {(myOrganizations.length > 0 || initialValues?.organizationId != null) && (
         <section className="flex flex-col gap-3 rounded-card border border-border bg-card p-5">
-          <h2 className="text-sm font-semibold text-foreground">게시 주체</h2>
+          <h2 className="text-sm font-semibold text-foreground">{t("form.attribution")}</h2>
           <PostAsSelector
             organizations={myOrganizations}
             value={organizationId}
@@ -566,7 +575,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             disabled={pending}
             currentOrganizationIfUnlisted={
               initialValues?.organizationId != null
-                ? { organizationId: initialValues.organizationId, organizationName: initialValues.organizationName ?? "알 수 없는 단체" }
+                ? { organizationId: initialValues.organizationId, organizationName: initialValues.organizationName ?? t("form.unknownOrganization") }
                 : null
             }
           />
@@ -574,12 +583,12 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
       )}
 
       <section className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
-        <h2 className="text-sm font-semibold text-foreground">분류 및 장소</h2>
+        <h2 className="text-sm font-semibold text-foreground">{t("form.classification")}</h2>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-foreground">
-              카테고리
+              {t("form.category")}
               <RequiredMark />
             </span>
             <select
@@ -597,11 +606,14 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
               {initialValues?.category && !(CATEGORIES as readonly string[]).includes(initialValues.category) && (
                 <option value={initialValues.category}>{initialValues.category}</option>
               )}
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
+              {CATEGORIES.map((c) => {
+                const key = categoryLabelKey(c);
+                return (
+                  <option key={c} value={c}>
+                    {key ? t(key) : c}
+                  </option>
+                );
+              })}
             </select>
           </label>
 
@@ -614,24 +626,27 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
                 selected -- exactly one, always (no deselect-to-none), now
                 that campus is required. */}
             <span className="font-medium text-foreground">
-              캠퍼스
+              {t("form.campus")}
               <RequiredMark />
             </span>
-            <div className="flex gap-1.5" role="group" aria-label="캠퍼스 선택">
-              {CAMPUSES.map((c) => (
-                <Button
-                  key={c}
-                  type="button"
-                  variant={campus === c ? "primary" : "secondary"}
-                  size="sm"
-                  aria-pressed={campus === c}
-                  disabled={pending}
-                  onClick={() => setCampus(c)}
-                  className="h-8 px-3 text-xs"
-                >
-                  {c}
-                </Button>
-              ))}
+            <div className="flex gap-1.5" role="group" aria-label={t("form.campusSelect")}>
+              {CAMPUSES.map((c) => {
+                const key = campusLabelKey(c);
+                return (
+                  <Button
+                    key={c}
+                    type="button"
+                    variant={campus === c ? "primary" : "secondary"}
+                    size="sm"
+                    aria-pressed={campus === c}
+                    disabled={pending}
+                    onClick={() => setCampus(c)}
+                    className="h-8 px-3 text-xs"
+                  >
+                    {key ? t(key) : c}
+                  </Button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -639,7 +654,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="flex items-center justify-between gap-2">
             <span className="font-medium text-foreground">
-              위치
+              {t("form.location")}
               {!locationUnknown && <RequiredMark />}
             </span>
             {/* Phase P-5: a single toggle, not a two-button segmented
@@ -662,7 +677,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
               disabled={pending}
               className="shrink-0 text-xs font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline disabled:opacity-60"
             >
-              {locationUnknown ? "위치를 알고 있어요" : "위치를 몰라요"}
+              {locationUnknown ? t("form.locationKnown") : t("form.locationUnknown")}
             </button>
           </span>
           {/* Phase P-2: the popover now follows the `campus` toggle above
@@ -682,7 +697,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
               type="text"
               required={!locationUnknown}
               maxLength={200}
-              placeholder={locationUnknown ? "위치 미상으로 등록돼요" : "예: 학생회관 3층 카페"}
+              placeholder={locationUnknown ? t("form.locationUnknownPlaceholder") : t("form.locationPlaceholder")}
               defaultValue={initialValues?.location ?? undefined}
               disabled={pending || locationUnknown}
               className={`${FIELD_CLASS} flex-1`}
@@ -693,10 +708,10 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
               onClick={() => setLocationMenuOpen((open) => !open)}
               aria-haspopup="menu"
               aria-expanded={locationMenuOpen}
-              aria-label={`${campus} 추천 장소 목록 열기`}
+              aria-label={t("form.suggestedPlacesOpen", { campus: campusKey ? t(campusKey) : campus })}
               className="shrink-0 rounded-lg border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary disabled:opacity-60"
             >
-              추천 장소
+              {t("form.suggestedPlaces")}
             </button>
 
             {locationMenuOpen && (
@@ -731,7 +746,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="flex items-center justify-between gap-2">
             <span className="font-medium text-foreground">
-              {DATE_LABEL[type]}
+              {t(DATE_LABEL_KEY[type])}
               {!dateUnknown && <RequiredMark />}
             </span>
             {/* Phase P-5: same single-toggle pattern as 위치 above. */}
@@ -742,7 +757,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
               disabled={pending}
               className="shrink-0 text-xs font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline disabled:opacity-60"
             >
-              {dateUnknown ? "시간을 알고 있어요" : "시간을 몰라요"}
+              {dateUnknown ? t("form.timeKnown") : t("form.timeUnknown")}
             </button>
           </span>
           <input
@@ -758,7 +773,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
 
       <section className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
         <h2 className="text-sm font-semibold text-foreground">
-          사진 <span className="font-normal text-muted-foreground">(선택)</span>
+          {t("form.photos")} <span className="font-normal text-muted-foreground">{t("form.photosOptional")}</span>
         </h2>
         <PostImageManager
           items={items}
@@ -772,7 +787,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
       </section>
 
       <Button type="submit" disabled={pending} className="w-full sm:w-auto sm:self-start">
-        {pending ? "저장 중..." : postId ? "수정하기" : "등록하기"}
+        {pending ? t("form.saving") : postId ? t("form.update") : t("form.create")}
       </Button>
     </form>
   );

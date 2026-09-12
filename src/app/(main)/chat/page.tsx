@@ -4,6 +4,8 @@ import { requireReadyUser } from "@/lib/auth/session";
 import { listChatRoomsForUser, type ChatRoomListItemDTO } from "@/lib/chat/service";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ChatIcon, ShieldIcon } from "@/components/icons";
+import { getLocale, getTranslator } from "@/lib/i18n/server";
+import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
 
 // Phase 12-11 §13/§14: a personal room shows the counterpart's nickname,
 // unchanged. An organization room is context-aware -- the inquirer's own
@@ -12,22 +14,29 @@ import { ChatIcon, ShieldIcon } from "@/components/icons";
 // shows "문의자 → 단체명" instead so they can tell inquiries apart without
 // opening each one. Never renders any manager's own identity here (there
 // can be several, and the room isn't "about" any one of them).
-function roomTitle(room: ChatRoomListItemDTO, viewerId: number): string {
+function roomTitle(room: ChatRoomListItemDTO, viewerId: number, unknown: string): string {
   if (room.counterpart.kind === "organization") {
     if (room.inquirer && room.inquirer.id !== viewerId) {
-      return `${room.inquirer.nickname ?? "알 수 없음"} → ${room.counterpart.name}`;
+      return `${room.inquirer.nickname ?? unknown} → ${room.counterpart.name}`;
     }
     return room.counterpart.name;
   }
-  return room.counterpart.nickname ?? "알 수 없음";
+  return room.counterpart.nickname ?? unknown;
 }
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
+// 다국어(i18n) Phase: 하드코딩된 "ko-KR" 대신 현재 언어의 Intl 태그.
+// 타임존은 언제나 Asia/Seoul 그대로다.
+function formatDate(date: Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Seoul",
+  }).format(date);
 }
 
 export default async function ChatListPage() {
   const user = await requireReadyUser("chat", "/chat"); // redirects to /login or /onboarding as needed
+  const [t, locale] = await Promise.all([getTranslator(), getLocale()]);
 
   let rooms;
   try {
@@ -36,9 +45,9 @@ export default async function ChatListPage() {
     console.error("Failed to load chat rooms", error);
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-xl font-semibold text-foreground">채팅</h1>
+        <h1 className="text-xl font-semibold text-foreground">{t("chat.title")}</h1>
         <div className="rounded-card border border-destructive/30 bg-destructive-muted p-10 text-center text-sm text-destructive">
-          채팅 목록을 불러오지 못했어요. 잠시 후 다시 시도해주세요.
+          {t("chat.loadError")}
         </div>
       </div>
     );
@@ -46,12 +55,12 @@ export default async function ChatListPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-foreground">채팅</h1>
+      <h1 className="text-xl font-semibold text-foreground">{t("chat.title")}</h1>
 
       {rooms.length === 0 ? (
         <EmptyState
-          title="아직 채팅방이 없어요."
-          description="게시글 상세 화면에서 채팅하기 또는 단체에 문의하기를 누르면 채팅을 시작할 수 있어요."
+          title={t("chat.empty.title")}
+          description={t("chat.empty.description")}
         />
       ) : (
         <div className="flex flex-col gap-2.5">
@@ -70,16 +79,16 @@ export default async function ChatListPage() {
               </span>
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-semibold text-foreground">{roomTitle(room, user.id)}</span>
+                  <span className="truncate font-semibold text-foreground">{roomTitle(room, user.id, t("common.unknown"))}</span>
                   {room.lastMessage && (
                     <span className="shrink-0 text-xs text-muted-foreground">
-                      {formatDate(room.lastMessage.createdAt)}
+                      {formatDate(room.lastMessage.createdAt, locale)}
                     </span>
                   )}
                 </div>
                 <span className="truncate text-xs text-muted-foreground">{room.post.title}</span>
                 <p className="truncate text-muted-foreground">
-                  {room.lastMessage ? room.lastMessage.content : "아직 주고받은 메시지가 없어요."}
+                  {room.lastMessage ? room.lastMessage.content : t("chat.noMessages")}
                 </p>
               </div>
             </Link>

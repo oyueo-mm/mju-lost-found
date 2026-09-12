@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { REPORT_REASONS, type ReportTargetType } from "@/lib/report/schema";
+import { useI18n } from "@/lib/i18n/client";
 
 type ReportButtonProps = {
   targetType: ReportTargetType;
@@ -41,11 +42,12 @@ type ReportButtonProps = {
 export function ReportButton({
   targetType,
   targetId,
-  buttonLabel = "신고하기",
+  buttonLabel,
   autoOpen = false,
   onSuccess,
   triggerClassName,
 }: ReportButtonProps) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(autoOpen);
   const [done, setDone] = useState(false);
   const [reason, setReason] = useState<string>(REPORT_REASONS[0]);
@@ -54,7 +56,7 @@ export function ReportButton({
   const [submitting, setSubmitting] = useState(false);
 
   if (done) {
-    return <p className="text-sm text-success">신고가 접수되었습니다.</p>;
+    return <p className="text-sm text-success">{t("report.submitted")}</p>;
   }
 
   if (!open) {
@@ -64,7 +66,11 @@ export function ReportButton({
         onClick={() => setOpen(true)}
         className={triggerClassName ?? "text-sm text-muted-foreground underline hover:text-foreground"}
       >
-        {buttonLabel}
+        {/* 다국어(i18n) Phase: 호출자가 라벨을 넘기지 않으면 기본
+            "신고하기"를 현재 언어로 보여준다 -- 예전 기본값의 의미
+            그대로다(게시글 상세/프로필은 여전히 짧은 "신고"를 직접
+            넘긴다). */}
+        {buttonLabel ?? t("report.button")}
       </button>
     );
   }
@@ -82,13 +88,13 @@ export function ReportButton({
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "신고를 접수하지 못했습니다.");
+        setError(json.error ?? t("report.failed"));
         return;
       }
       setDone(true);
       onSuccess?.();
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
     } finally {
       setSubmitting(false);
     }
@@ -101,7 +107,7 @@ export function ReportButton({
     >
       {error && <p className="text-destructive">{error}</p>}
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">신고 사유</span>
+        <span className="text-xs text-muted-foreground">{t("report.reason")}</span>
         <select
           value={reason}
           onChange={(e) => setReason(e.target.value)}
@@ -115,7 +121,7 @@ export function ReportButton({
         </select>
       </label>
       <label className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">상세 내용 (선택)</span>
+        <span className="text-xs text-muted-foreground">{t("report.detail")}</span>
         <textarea
           value={detail}
           onChange={(e) => setDetail(e.target.value)}
@@ -129,7 +135,7 @@ export function ReportButton({
           disabled={submitting}
           className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-60"
         >
-          {submitting ? "제출 중..." : "신고 제출"}
+          {submitting ? t("report.submitting") : t("report.submit")}
         </button>
         <button
           type="button"
@@ -137,7 +143,7 @@ export function ReportButton({
           disabled={submitting}
           className="rounded-full border border-border px-3 py-1 text-xs text-foreground disabled:opacity-60"
         >
-          취소
+          {t("common.cancel")}
         </button>
       </div>
     </form>

@@ -8,6 +8,9 @@ import type { PostListType, PostType, SortOption } from "@/lib/posts/schema";
 import { AISearchPanel } from "./AISearchPanel";
 import { SearchModeToggle, type SearchUiMode } from "./SearchModeToggle";
 import { SearchIcon } from "@/components/icons";
+import { useI18n } from "@/lib/i18n/client";
+import { campusLabelKey, categoryLabelKey } from "@/lib/i18n/labels";
+import type { TranslationKey } from "@/lib/i18n/translate";
 
 type StatusOption = { value: string; label: string };
 
@@ -65,15 +68,18 @@ type SearchFilterBarProps = {
 // listQuerySchema 등)은 전혀 바뀌지 않았다 -- 순서만 바뀌었다. export한
 // 이유는 HomeSearchBar도 정확히 같은 3개 선택지를 같은 순서로 보여줘야
 // 하기 때문(§3) -- 새 목록을 따로 만들지 않고 이 배열 하나를 공유한다.
-export const TYPE_OPTIONS: { value: PostListType; label: string }[] = [
-  { value: "found", label: "습득물" },
-  { value: "lost", label: "분실물" },
-  { value: "all", label: "전체" },
+// 다국어(i18n) Phase: value(all/lost/found)는 listQuerySchema가 검증하는
+// 값이라 그대로 두고, 화면에 보이는 라벨만 번역 키로 바꿨다 -- 순서도
+// 그대로다(습득물 먼저).
+export const TYPE_OPTIONS: { value: PostListType; labelKey: TranslationKey }[] = [
+  { value: "found", labelKey: "search.type.found" },
+  { value: "lost", labelKey: "search.type.lost" },
+  { value: "all", labelKey: "search.type.all" },
 ];
 
-const SORT_OPTIONS: { value: SortOption; label: string }[] = [
-  { value: "latest", label: "최신순" },
-  { value: "oldest", label: "오래된순" },
+const SORT_OPTIONS: { value: SortOption; labelKey: TranslationKey }[] = [
+  { value: "latest", labelKey: "search.sort.latest" },
+  { value: "oldest", labelKey: "search.sort.oldest" },
 ];
 
 // AI 검색 고도화 Phase: 이 앱의 검색 방식은 정확히 둘 -- "키워드 검색"
@@ -98,6 +104,7 @@ export function SearchFilterBar({
 }: SearchFilterBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useI18n();
 
   const hasActiveFilters = ["q", "category", "campus", "status", "sort", "mode"].some((key) =>
     searchParams.get(key),
@@ -199,7 +206,7 @@ export function SearchFilterBar({
             >
               {TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {t(option.labelKey)}
                 </option>
               ))}
             </select>
@@ -220,7 +227,7 @@ export function SearchFilterBar({
             <input
               name="q"
               type="text"
-              placeholder="검색어를 입력하세요"
+              placeholder={t("search.placeholder")}
               defaultValue={searchParams.get("q") ?? ""}
               maxLength={100}
               className="w-full min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
@@ -229,7 +236,7 @@ export function SearchFilterBar({
               type="submit"
               className="shrink-0 rounded-full bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
             >
-              검색
+              {t("common.search")}
             </button>
           </div>
 
@@ -243,7 +250,7 @@ export function SearchFilterBar({
               >
                 {TYPE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.label}
+                    {t(option.labelKey)}
                   </option>
                 ))}
               </select>
@@ -251,19 +258,27 @@ export function SearchFilterBar({
 
             <select
               name="category"
-              aria-label="카테고리"
+              aria-label={t("search.filter.category")}
               defaultValue={currentCategory}
               className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
             >
-              <option value="">카테고리 전체</option>
+              <option value="">{t("search.filter.categoryAll")}</option>
               {currentCategory && !(CATEGORIES as readonly string[]).includes(currentCategory) && (
                 <option value={currentCategory}>{currentCategory}</option>
               )}
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
+              {/* 다국어(i18n) Phase: value는 항상 DB에 저장된 한국어
+                  원문이고(그래야 검색/필터가 그대로 동작한다), 표시
+                  라벨만 번역한다 -- labels.ts의 categoryLabelKey가
+                  목록에 없는 값에는 null을 돌려주므로 예전 자유 입력
+                  카테고리는 원문 그대로 보인다. */}
+              {CATEGORIES.map((c) => {
+                const key = categoryLabelKey(c);
+                return (
+                  <option key={c} value={c}>
+                    {key ? t(key) : c}
+                  </option>
+                );
+              })}
             </select>
 
             {statusOptions && (
@@ -272,7 +287,7 @@ export function SearchFilterBar({
                 defaultValue={currentStatus}
                 className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
               >
-                <option value="">상태 전체</option>
+                <option value="">{t("search.filter.statusAll")}</option>
                 {statusOptions.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
@@ -283,27 +298,30 @@ export function SearchFilterBar({
 
             <select
               name="campus"
-              aria-label="캠퍼스"
+              aria-label={t("search.filter.campus")}
               defaultValue={currentCampus}
               className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
             >
-              <option value="">캠퍼스 전체</option>
-              {CAMPUSES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
+              <option value="">{t("search.filter.campusAll")}</option>
+              {CAMPUSES.map((c) => {
+                const key = campusLabelKey(c);
+                return (
+                  <option key={c} value={c}>
+                    {key ? t(key) : c}
+                  </option>
+                );
+              })}
             </select>
 
             <select
               name="sort"
-              aria-label="정렬"
+              aria-label={t("search.filter.sort")}
               defaultValue={searchParams.get("sort") ?? "latest"}
               className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
             >
               {SORT_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {t(option.labelKey)}
                 </option>
               ))}
             </select>
@@ -314,7 +332,7 @@ export function SearchFilterBar({
                 onClick={() => router.push(basePath)}
                 className="self-center text-xs text-muted-foreground underline hover:text-foreground"
               >
-                필터 초기화
+                {t("search.resetFilters")}
               </button>
             )}
           </div>

@@ -9,6 +9,7 @@ import { PostRail } from "@/components/post/PostRail";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LinkButton } from "@/components/ui/Button";
 import { BoxIcon, HandboxIcon } from "@/components/icons";
+import { getTranslator } from "@/lib/i18n/server";
 
 const RECENT_LIMIT = 6;
 
@@ -27,7 +28,7 @@ const RECENT_LIMIT = 6;
 // search bar, recent-posts rails, etc.) is exactly what a logged-in user
 // already saw before this phase; nothing there changed.
 export default async function Home() {
-  const user = await getCurrentUser();
+  const [user, t] = await Promise.all([getCurrentUser(), getTranslator()]);
   if (!user) {
     return <LandingHero />;
   }
@@ -51,12 +52,13 @@ export default async function Home() {
           most important action. */}
       <section className="flex flex-col items-center gap-5 py-4 text-center md:py-8">
         <h1 className="text-2xl leading-snug font-bold text-balance text-foreground md:text-3xl">
-          명지대학교 분실물 센터
+          {t("home.hero.title1")}
           <br />
-          <span className="text-primary">잃어버린 물건</span>, 여기서 찾아보세요
+          <span className="text-primary">{t("home.hero.title2Highlight")}</span>
+          {t("home.hero.title2Rest")}
         </h1>
         <p className="text-sm text-muted-foreground md:text-base">
-          물건의 특징을 자유롭게 설명해보세요. 사진을 더하면 더 정확해져요.
+          {t("home.hero.subtitle")}
         </p>
         {/* Phase K: same hero search as before, plus a compact copy that
             slides in under the Header once this one scrolls away -- so
@@ -67,10 +69,10 @@ export default async function Home() {
         </div>
         <div className="flex flex-wrap items-center justify-center gap-2">
           <LinkButton href="/lost" variant="secondary" size="sm" className="gap-1.5">
-            <BoxIcon className="size-4" /> 분실물 보기
+            <BoxIcon className="size-4" /> {t("home.viewLost")}
           </LinkButton>
           <LinkButton href="/found" variant="secondary" size="sm" className="gap-1.5">
-            <HandboxIcon className="size-4" /> 습득물 보기
+            <HandboxIcon className="size-4" /> {t("home.viewFound")}
           </LinkButton>
         </div>
       </section>
@@ -79,19 +81,19 @@ export default async function Home() {
           scrolled to (ScrollReveal -- no-op for content already on screen
           and for prefers-reduced-motion). Contents are unchanged. */}
       <ScrollReveal className="flex flex-col gap-4">
-        <h2 className="text-lg font-semibold text-foreground">어떤 물건을 찾고 있나요?</h2>
+        <h2 className="text-lg font-semibold text-foreground">{t("home.categories.title")}</h2>
         <CategoryShortcuts />
       </ScrollReveal>
 
       <ScrollReveal className="flex flex-col gap-4">
-        <SectionHeader title="최근 분실물" href="/lost" />
+        <SectionHeader title={t("home.recentLost")} href="/lost" />
         {recentLost === null ? (
-          <p className="text-sm text-muted-foreground">최근 분실물을 불러오지 못했습니다.</p>
+          <p className="text-sm text-muted-foreground">{t("home.recentLost.error")}</p>
         ) : recentLost.items.length === 0 ? (
           <EmptyState
-            title="아직 등록된 분실물이 없어요."
-            description="가장 먼저 물건을 등록해보세요."
-            action={<LinkButton href="/lost/new">분실물 등록하기</LinkButton>}
+            title={t("board.lost.empty.title")}
+            description={t("board.lost.empty.description")}
+            action={<LinkButton href="/lost/new">{t("board.lost.newCta")}</LinkButton>}
           />
         ) : (
           <PostRail posts={recentLost.items} />
@@ -99,14 +101,14 @@ export default async function Home() {
       </ScrollReveal>
 
       <ScrollReveal className="flex flex-col gap-4">
-        <SectionHeader title="최근 습득물" href="/found" />
+        <SectionHeader title={t("home.recentFound")} href="/found" />
         {recentFound === null ? (
-          <p className="text-sm text-muted-foreground">최근 습득물을 불러오지 못했습니다.</p>
+          <p className="text-sm text-muted-foreground">{t("home.recentFound.error")}</p>
         ) : recentFound.items.length === 0 ? (
           <EmptyState
-            title="아직 등록된 습득물이 없어요."
-            description="주운 물건을 등록해서 주인을 찾아주세요."
-            action={<LinkButton href="/found/new">습득물 등록하기</LinkButton>}
+            title={t("board.found.empty.title")}
+            description={t("board.found.empty.description")}
+            action={<LinkButton href="/found/new">{t("board.found.newCta")}</LinkButton>}
           />
         ) : (
           <PostRail posts={recentFound.items} />

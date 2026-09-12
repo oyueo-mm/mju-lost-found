@@ -11,6 +11,7 @@ import { PostCard } from "@/components/post/PostCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Lost112Notice } from "@/components/search/Lost112Notice";
 import { CameraIcon, SearchIcon, XIcon } from "@/components/icons";
+import { useI18n } from "@/lib/i18n/client";
 
 type AISearchPanelProps = {
   // AI 검색 고도화 Phase: replaces the old ImageSearchPanel (이미지 전용)
@@ -44,6 +45,7 @@ type AISearchPanelProps = {
 // 로직(handleSearch 이하)은 이전과 완전히 동일 -- 이번 Phase는 시안(UI)
 // 변경이며 API/알고리즘을 건드리지 않는다.
 export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -120,14 +122,16 @@ export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
       const json = await res.json().catch(() => null);
 
       if (!res.ok) {
-        setError(json?.error ?? "AI 검색에 실패했습니다. 다시 시도해주세요.");
+        // 서버가 돌려준 메시지는 아직 한국어다(API 계층은 이번 번역
+        // 범위 밖) -- 서버 메시지가 없을 때의 기본 문구만 번역된다.
+        setError(json?.error ?? t("aiSearch.failed"));
         return;
       }
 
       const items = ((json?.data ?? []) as Record<string, unknown>[]).map(reviveDates);
       setResults(items);
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
     } finally {
       setPending(false);
     }
@@ -150,14 +154,14 @@ export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
             {/* eslint-disable-next-line @next/next/no-img-element -- local blob: object URL preview, not a remote/optimizable image. */}
             <img
               src={previewUrl}
-              alt="검색할 이미지 미리보기"
+              alt={t("aiSearch.previewAlt")}
               className="size-9 rounded-full border border-border object-cover"
             />
             <button
               type="button"
               onClick={handleRemoveImage}
               disabled={pending}
-              aria-label="첨부한 사진 제거"
+              aria-label={t("aiSearch.removePhoto")}
               className="absolute -top-1 -right-1 flex size-4.5 items-center justify-center rounded-full bg-foreground text-background disabled:opacity-50"
             >
               <XIcon className="size-2.5" strokeWidth={2.5} />
@@ -165,7 +169,7 @@ export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
           </div>
         ) : (
           <label
-            aria-label="검색할 사진 첨부 (선택사항)"
+            aria-label={t("aiSearch.attachPhoto")}
             className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50"
           >
             <CameraIcon className="size-4.5" />
@@ -187,7 +191,7 @@ export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
             setQuery(event.target.value);
             setResults(null);
           }}
-          placeholder={placeholder ?? "예: 검은색 무선 이어폰을 잃어버렸어요"}
+          placeholder={placeholder ?? t("aiSearch.placeholder")}
           maxLength={MAX_SEARCH_QUERY_LENGTH}
           disabled={pending}
           className="w-full min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
@@ -196,22 +200,22 @@ export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
         <button
           type="submit"
           disabled={!canSearch || pending}
-          aria-label="AI 검색"
+          aria-label={t("aiSearch.label")}
           className="flex shrink-0 items-center gap-1 rounded-full bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           <SearchIcon className="size-3.5 sm:hidden" />
-          <span className="hidden sm:inline">{pending ? "검색 중..." : "검색"}</span>
+          <span className="hidden sm:inline">{pending ? t("common.searching") : t("common.search")}</span>
         </button>
       </form>
 
       {showOptionalHint && (
         <p className="px-1 text-xs text-muted-foreground">
-          물건의 특징을 설명해주세요. 사진을 더하면 더 정확하게 찾을 수 있어요.
+          {t("aiSearch.hint")}
         </p>
       )}
       {hasImageTypeConflict && (
         <p className="px-1 text-xs text-warning">
-          사진을 포함한 AI 검색은 분실물 또는 습득물 게시판을 선택한 경우에만 사용할 수 있습니다.
+          {t("aiSearch.typeConflict")}
         </p>
       )}
 
@@ -225,19 +229,18 @@ export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
         <div className="flex flex-col gap-3">
           {results.length > 0 && (
             <p className="rounded-lg bg-primary-muted px-3 py-2 text-xs text-primary">
-              AI가 가장 유사한 상위 10건을 보여드립니다. AI 유사도는 AI가 계산한 유사도 점수로, 값이 높을수록 검색
-              조건과 더 유사한 결과예요.
+              {t("aiSearch.resultNotice")}
             </p>
           )}
           {results.length === 0 ? (
             <div className="flex flex-col gap-4">
-              <EmptyState title="비슷한 게시글을 찾지 못했어요." description="다른 검색어나 사진으로 다시 시도해보세요." />
+              <EmptyState title={t("aiSearch.empty.title")} description={t("aiSearch.empty.description")} />
               <Lost112Notice />
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {results.map((post) => (
-                <PostCard key={`${post.type}-${post.id}`} post={post} scoreLabel="AI 유사도" scoreDisplay="decimal" />
+                <PostCard key={`${post.type}-${post.id}`} post={post} scoreLabel={t("post.score.ai")} scoreDisplay="decimal" />
               ))}
             </div>
           )}

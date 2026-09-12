@@ -8,6 +8,7 @@ import { searchPosts } from "@/lib/posts/service";
 import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, listQuerySchema } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
+import { getTranslator } from "@/lib/i18n/server";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -17,6 +18,7 @@ export default async function SearchPage({
   searchParams: Promise<SearchParams>;
 }) {
   const raw = normalizeSearchParams(await searchParams);
+  const t = await getTranslator();
 
   // Unlike /lost and /found, `type` here is user-selectable. 검색 대상 및
   // 게시글 목록 UX 개선 Phase §1/§6: 기본값은 "all"이 아니라 "found" --
@@ -45,9 +47,9 @@ export default async function SearchPage({
     console.error("Failed to search posts", error);
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-xl font-semibold text-foreground">통합 검색</h1>
+        <h1 className="text-xl font-semibold text-foreground">{t("search.title")}</h1>
         <div className="rounded-card border border-destructive/30 bg-destructive-muted p-10 text-center text-sm text-destructive">
-          검색 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.
+          {t("search.error")}
         </div>
       </div>
     );
@@ -55,7 +57,7 @@ export default async function SearchPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-foreground">통합 검색</h1>
+      <h1 className="text-xl font-semibold text-foreground">{t("search.title")}</h1>
       {/* Phase 32: results+pagination passed as children so SearchFilterBar
           can hide them while its own "이미지로 검색" mode is active
           (ImageSearchPanel owns the results area then instead) -- see that
@@ -65,7 +67,7 @@ export default async function SearchPage({
         <SemanticSearchNotice mode={mode} />
         {results.items.length === 0 ? (
           <div className="flex flex-col gap-4">
-            <EmptyState title="검색 결과가 없어요." description="다른 검색어나 필터로 다시 시도해보세요." />
+            <EmptyState title={t("search.empty.title")} description={t("search.empty.description")} />
             <Lost112Notice />
           </div>
         ) : (

@@ -1,10 +1,13 @@
 import { LinkButton } from "@/components/ui/Button";
+import { getTranslator } from "@/lib/i18n/server";
 
 // Phase 30: the page's first viewport -- a soft, blurred blue glow behind
 // the copy (pure decoration, `pointer-events-none` + `-z-10`) is the only
 // "visual flourish" here, kept faint (10% opacity) per this phase's own
 // "no heavy gradients" rule. Everything else is just large type + one CTA.
-export function Hero() {
+export async function Hero() {
+  const t = await getTranslator();
+
   return (
     <section className="relative flex flex-col items-center gap-6 overflow-hidden px-2 pt-10 pb-4 text-center md:gap-8 md:pt-16">
       <div
@@ -13,17 +16,18 @@ export function Hero() {
       />
 
       <span className="rounded-full bg-primary-muted px-3 py-1 text-xs font-medium text-primary">
-        명지대학교 전용 서비스
+        {t("landing.badge")}
       </span>
 
       <h1 className="max-w-2xl text-3xl leading-tight font-bold text-balance text-foreground md:text-5xl">
-        잃어버린 물건,
+        {t("landing.headline1")}
         <br />
-        <span className="text-primary">AI</span>가 대신 찾아드립니다
+        <span className="text-primary">{t("landing.headlineAi")}</span>
+        {t("landing.headline2")}
       </h1>
 
       <p className="max-w-md text-sm text-muted-foreground md:max-w-lg md:text-base">
-        명지대학교 캠퍼스 전용 분실물 · 습득물 서비스입니다. 등록만 하면 AI가 비슷한 물건을 자동으로 찾아 연결해드립니다.
+        {t("landing.subtitle")}
       </p>
 
       {/* Phase K: the id is what LandingStickyCta watches to know this CTA
@@ -31,7 +35,7 @@ export function Hero() {
           Wrapper only -- the button itself is unchanged. */}
       <div id="landing-hero-cta" className="mt-2">
         <LinkButton href="/login" size="md" className="px-8">
-          로그인하고 시작하기
+          {t("landing.cta")}
         </LinkButton>
       </div>
     </section>

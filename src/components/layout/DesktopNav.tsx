@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { ADMIN_NAV_ITEM, NAV_ITEMS, isNavActive } from "./NavLinks";
+import { useI18n } from "@/lib/i18n/client";
 import { onChatUnreadCount } from "./chatUnreadEvent";
 
 // Phase 17: Header's own horizontal nav (md+ only -- BottomNav takes over
@@ -18,6 +19,7 @@ import { onChatUnreadCount } from "./chatUnreadEvent";
 // component's comment and chatUnreadEvent.ts for why.
 export function DesktopNav({ unreadChatCount, isAdmin = false }: { unreadChatCount: number; isAdmin?: boolean }) {
   const pathname = usePathname();
+  const { t } = useI18n();
   const [prevUnreadChatCount, setPrevUnreadChatCount] = useState(unreadChatCount);
   const [liveUnreadChatCount, setLiveUnreadChatCount] = useState(unreadChatCount);
   // "Adjusting state when a prop changes" during render -- see
@@ -33,7 +35,7 @@ export function DesktopNav({ unreadChatCount, isAdmin = false }: { unreadChatCou
   const items = isAdmin ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
 
   return (
-    <nav aria-label="주요 메뉴" className="hidden items-center gap-1 md:flex">
+    <nav aria-label={t("nav.primary")} className="hidden items-center gap-1 md:flex">
       {items.map((item) => {
         const active = isNavActive(item.key, item.href, pathname);
         const badge = item.key === "chat" && liveUnreadChatCount > 0 ? liveUnreadChatCount : null;
@@ -42,14 +44,14 @@ export function DesktopNav({ unreadChatCount, isAdmin = false }: { unreadChatCou
             key={item.key}
             href={item.href}
             aria-current={active ? "page" : undefined}
-            className={`relative rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+            className={`relative rounded-full px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
               active ? "bg-primary-muted text-primary" : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {item.label}
+            {t(item.labelKey)}
             {badge && (
               <span
-                aria-label={`읽지 않은 채팅 ${badge}개`}
+                aria-label={t("nav.unreadChat", { count: badge })}
                 className="absolute -top-1 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
               >
                 {badge > 9 ? "9+" : badge}

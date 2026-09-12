@@ -5,6 +5,7 @@ import Image from "next/image";
 
 import { uploadChatImage, validateImageFile } from "@/lib/images/client";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/time/relativeTime";
+import { useI18n } from "@/lib/i18n/client";
 import { MessageActionMenu } from "@/components/chat/MessageActionMenu";
 import { useChatRoomRealtime } from "@/components/chat/useChatRoomRealtime";
 import { dispatchChatUnreadCount } from "@/components/layout/chatUnreadEvent";
@@ -55,6 +56,7 @@ type MessageItem = {
 // section 16. `isMine` comes pre-computed from the server (relative to
 // the authenticated session), never derived from anything client-side.
 export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; currentUserId: number }) {
+  const { t, locale } = useI18n();
   const [messages, setMessages] = useState<MessageItem[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +101,18 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
   // position back down to the bottom.
   const stickToBottomRef = useRef(true);
 
+  // 다국어(i18n) Phase: 아래 "채팅방을 처음 열 때 한 번" 로딩 effect는
+  // chatRoomId가 바뀔 때만 다시 돌아야 한다 -- 그런데 그 안에서 실패
+  // 문구를 만들 때 t()를 쓰므로, t를 의존성 배열에 그대로 넣으면 사용자가
+  // Footer에서 언어를 바꿀 때마다 메시지 목록 전체를 다시 불러오고
+  // 스크롤 위치까지 초기화된다. ref에 최신 번역기를 담아두고 effect는
+  // 그걸 읽게 해서, 재실행 조건은 예전 그대로 두면서도 에러 문구는 항상
+  // 현재 언어로 나오게 한다.
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -109,7 +123,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
         const json = await res.json();
         if (cancelled) return;
         if (!res.ok) {
-          setError(json.error ?? "메시지를 불러오지 못했습니다.");
+          setError(json.error ?? tRef.current("chatThread.loadFailed"));
           return;
         }
         setMessages(json.data);
@@ -128,7 +142,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
         // to the two components that render it, no cache-timing guesswork.
         if (typeof json.unreadChatCount === "number") dispatchChatUnreadCount(json.unreadChatCount);
       } catch {
-        if (!cancelled) setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+        if (!cancelled) setError(tRef.current("common.networkError"));
       }
     }
 
@@ -249,7 +263,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
       const res = await fetch(`/api/chat/${chatRoomId}/messages?before=${oldestId}`);
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "이전 메시지를 불러오지 못했습니다.");
+        setError(json.error ?? t("chatThread.loadOlderFailed"));
         return;
       }
       setMessages((prev) => [...json.data, ...(prev ?? [])]);
@@ -308,7 +322,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
           const uploaded = await uploadChatImage(chatRoomId, selectedFile);
           imagePath = uploaded.path;
         } catch {
-          setError("이미지 업로드에 실패했습니다.");
+          setError(t("chatThread.uploadFailed"));
           return;
         }
       }
@@ -324,7 +338,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "메시지를 보내지 못했습니다.");
+        setError(json.error ?? t("chatThread.sendFailed"));
         return;
       }
       setMessages((prev) => [...(prev ?? []), json.data]);
@@ -360,7 +374,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
     });
     const json = await res.json();
     if (!res.ok) {
-      throw new Error(json.error ?? "반응을 남기지 못했습니다.");
+      throw new Error(json.error ?? t("chatThread.reactionFailed"));
     }
     handleReactionChange(messageId, json.data.reactions);
   }
@@ -399,13 +413,13 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
       });
       const json = await res.json();
       if (!res.ok) {
-        setEditError(json.error ?? "메시지를 수정하지 못했습니다.");
+        setEditError(json.error ?? t("chatThread.editFailed"));
         return;
       }
       setMessages((prev) => (prev ? prev.map((m) => (m.id === messageId ? { ...m, ...json.data } : m)) : prev));
       cancelEditing();
     } catch {
-      setEditError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setEditError(t("common.networkError"));
     } finally {
       setEditSaving(false);
     }
@@ -422,7 +436,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
     const res = await fetch(`/api/chat/${chatRoomId}/messages?messageId=${messageId}`, { method: "DELETE" });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(json.error ?? "메시지를 삭제하지 못했습니다.");
+      throw new Error(json.error ?? t("chatThread.deleteFailed"));
     }
     await syncLatest();
   }
@@ -462,21 +476,21 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
             disabled={loadingMore}
             className="self-center rounded-full border border-border px-4 py-1 text-xs text-foreground disabled:opacity-60"
           >
-            {loadingMore ? "불러오는 중..." : "이전 메시지 불러오기"}
+            {loadingMore ? t("common.loading") : t("chatThread.loadOlder")}
           </button>
         )}
 
         {messages === null ? (
-          <p className="text-center text-sm text-muted-foreground">메시지를 불러오는 중...</p>
+          <p className="text-center text-sm text-muted-foreground">{t("chatThread.loading")}</p>
         ) : messages.length === 0 ? (
           <p className="text-center text-sm text-muted-foreground">
-            아직 주고받은 메시지가 없어요. 첫 메시지를 보내보세요.
+            {t("chatThread.empty")}
           </p>
         ) : (
           messages.map((m) => (
             <div key={m.id} className={`flex flex-col ${m.isMine ? "items-end" : "items-start"}`}>
               {!m.isMine && (
-                <span className="mb-0.5 text-xs text-muted-foreground">{m.senderNickname ?? "알 수 없음"}</span>
+                <span className="mb-0.5 text-xs text-muted-foreground">{m.senderNickname ?? t("common.unknown")}</span>
               )}
               {editingMessageId === m.id ? (
                 // Phase P-6: inline editing replaces the normal bubble in
@@ -500,7 +514,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
                       disabled={editSaving}
                       className="rounded-full border border-border px-3 py-1 text-xs text-foreground disabled:opacity-60"
                     >
-                      취소
+                      {t("common.cancel")}
                     </button>
                     <button
                       type="button"
@@ -508,7 +522,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
                       disabled={editSaving || !editDraft.trim()}
                       className="rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-60"
                     >
-                      {editSaving ? "저장 중..." : "저장"}
+                      {editSaving ? t("common.saving") : t("common.save")}
                     </button>
                   </div>
                 </div>
@@ -543,16 +557,16 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
                     <div
                       className={`mb-1 max-w-full truncate rounded-lg border-l-2 border-border bg-muted/60 px-2 py-1 text-xs text-muted-foreground`}
                     >
-                      <span className="font-medium">{m.replyTo.senderNickname ?? "알 수 없음"}</span>
+                      <span className="font-medium">{m.replyTo.senderNickname ?? t("common.unknown")}</span>
                       {": "}
-                      {m.replyTo.content || (m.replyTo.hasImage ? "사진" : "")}
+                      {m.replyTo.content || (m.replyTo.hasImage ? t("chatThread.photo") : "")}
                     </div>
                   )}
                   {m.imageUrl && (
                     <div className="mb-1 max-w-[240px] overflow-hidden rounded-2xl border border-border">
                       <Image
                         src={m.imageUrl}
-                        alt="전송된 이미지"
+                        alt={t("chatThread.sentImageAlt")}
                         width={480}
                         height={480}
                         className="h-auto w-full"
@@ -585,7 +599,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
                     <button
                       key={r.emoji}
                       type="button"
-                      onClick={() => toggleReaction(m.id, r.emoji).catch(() => setError("반응을 남기지 못했습니다."))}
+                      onClick={() => toggleReaction(m.id, r.emoji).catch(() => setError(t("chatThread.reactionFailed")))}
                       className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
                         r.reactedByMe
                           ? "border-primary bg-primary-muted text-primary"
@@ -601,13 +615,13 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
               {/* title: the exact date/time on hover/long-press -- this
                   phase's own "필요한 경우 오래된 메시지는 정확한 날짜/시간을
                   확인할 수 있게 한다". */}
-              <span className="mt-0.5 text-xs text-muted-foreground" title={formatAbsoluteTime(new Date(m.createdAt))}>
-                {formatRelativeTime(new Date(m.createdAt))}
+              <span className="mt-0.5 text-xs text-muted-foreground" title={formatAbsoluteTime(new Date(m.createdAt), locale)}>
+                {formatRelativeTime(new Date(m.createdAt), t)}
                 {/* Phase P-6: never shown for a hidden/deleted message --
                     m.editedAt is already forced to null for those server-
                     side (see chat/service.ts's listMessages own comment). */}
-                {m.editedAt ? " · (수정됨)" : ""}
-                {m.isMine ? ` · ${isReadByCounterpart(m) ? "읽음" : "안 읽음"}` : ""}
+                {m.editedAt ? t("comment.edited") : ""}
+                {m.isMine ? ` · ${isReadByCounterpart(m) ? t("chatThread.read") : t("chatThread.unread")}` : ""}
               </span>
             </div>
           ))
@@ -630,7 +644,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
         {previewUrl && (
           <div className="relative w-fit">
             {/* eslint-disable-next-line @next/next/no-img-element -- local blob: object URL preview, not a remote/optimizable image. */}
-            <img src={previewUrl} alt="선택한 이미지 미리보기" className="h-20 w-20 rounded-lg object-cover" />
+            <img src={previewUrl} alt={t("chatThread.previewAlt")} className="h-20 w-20 rounded-lg object-cover" />
             <button
               type="button"
               onClick={clearSelectedFile}
@@ -645,16 +659,16 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
         {replyingTo && (
           <div className="flex items-center gap-2 rounded-lg border-l-2 border-primary bg-muted/60 px-3 py-1.5 text-xs">
             <div className="min-w-0 flex-1 truncate">
-              <span className="font-medium text-foreground">{replyingTo.senderNickname ?? "알 수 없음"}</span>
+              <span className="font-medium text-foreground">{replyingTo.senderNickname ?? t("common.unknown")}</span>
               <span className="text-muted-foreground">
                 {": "}
-                {replyingTo.content || (replyingTo.hasImage ? "사진" : "")}
+                {replyingTo.content || (replyingTo.hasImage ? t("chatThread.photo") : "")}
               </span>
             </div>
             <button
               type="button"
               onClick={() => setReplyingTo(null)}
-              aria-label="답장 취소"
+              aria-label={t("chatThread.cancelReply")}
               className="shrink-0 text-muted-foreground hover:text-foreground"
             >
               ×
@@ -664,7 +678,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
 
         <form onSubmit={handleSend} className="flex gap-2">
           <label className="flex shrink-0 cursor-pointer items-center justify-center rounded-full border border-border px-3 py-2 text-sm text-foreground hover:border-foreground/30 has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50">
-            사진
+            {t("chatThread.photo")}
             <input
               ref={fileInputRef}
               type="file"
@@ -678,7 +692,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
             type="text"
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="메시지를 입력하세요"
+            placeholder={t("chatThread.placeholder")}
             maxLength={2000}
             disabled={sending}
             className="flex-1 rounded-full border border-border bg-transparent px-4 py-2 text-sm text-foreground disabled:opacity-60"
@@ -688,7 +702,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
             disabled={sending || (!content.trim() && !selectedFile)}
             className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
           >
-            {sending ? "전송 중..." : "전송"}
+            {sending ? t("chatThread.sending") : t("chatThread.send")}
           </button>
         </form>
       </div>

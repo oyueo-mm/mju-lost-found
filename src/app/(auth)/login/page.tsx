@@ -6,26 +6,30 @@ import { getCurrentUser, sanitizeCallbackUrl, type LoginReason } from "@/lib/aut
 import { isGoogleTestModeEnabled } from "@/lib/settings/service";
 import { LogoMark } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/Button";
+import { getTranslator } from "@/lib/i18n/server";
+import type { TranslationKey } from "@/lib/i18n/translate";
 
-const ERROR_MESSAGES: Record<string, string> = {
-  AccessDenied: "명지대학교 계정(@mju.ac.kr)만 이용할 수 있습니다.",
-  Default: "로그인 중 문제가 발생했습니다. 다시 시도해주세요.",
+// 다국어(i18n) Phase: 문구 대신 번역 키를 담는다 -- 키/분기 구조는
+// 그대로이고, 실제 문장만 현재 언어로 바뀐다.
+const ERROR_MESSAGE_KEYS: Record<string, TranslationKey> = {
+  AccessDenied: "auth.login.error.accessDenied",
+  Default: "auth.login.error.default",
 };
 
 // Phase 14: the one-line explanation shown above the Google button when a
 // protected page redirected here with a `reason` (see
 // src/lib/auth/session.ts's requireReadyUser()). Purely informational --
 // login itself doesn't change based on this.
-const REASON_MESSAGES: Record<LoginReason, string> = {
-  write: "게시글을 작성하거나 수정하려면 로그인해주세요.",
-  chat: "채팅을 이용하려면 로그인해주세요.",
-  match: "매칭 정보를 보려면 로그인해주세요.",
-  mypost: "내 게시글을 보려면 로그인해주세요.",
-  notification: "알림을 확인하려면 로그인해주세요.",
+const REASON_MESSAGE_KEYS: Record<LoginReason, TranslationKey> = {
+  write: "auth.login.reason.write",
+  chat: "auth.login.reason.chat",
+  match: "auth.login.reason.match",
+  mypost: "auth.login.reason.mypost",
+  notification: "auth.login.reason.notification",
 };
 
 function isLoginReason(value: string): value is LoginReason {
-  return value in REASON_MESSAGES;
+  return value in REASON_MESSAGE_KEYS;
 }
 
 export default async function LoginPage({
@@ -33,6 +37,7 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ error?: string; reason?: string; callbackUrl?: string }>;
 }) {
+  const t = await getTranslator();
   const { error, reason, callbackUrl: rawCallbackUrl } = await searchParams;
   const callbackUrl = sanitizeCallbackUrl(rawCallbackUrl);
 
@@ -55,8 +60,8 @@ export default async function LoginPage({
     redirect(user.nickname ? (callbackUrl ?? "/") : "/onboarding");
   }
 
-  const errorMessage = error ? ERROR_MESSAGES[error] ?? ERROR_MESSAGES.Default : null;
-  const reasonMessage = reason && isLoginReason(reason) ? REASON_MESSAGES[reason] : null;
+  const errorMessage = error ? t(ERROR_MESSAGE_KEYS[error] ?? ERROR_MESSAGE_KEYS.Default) : null;
+  const reasonMessage = reason && isLoginReason(reason) ? t(REASON_MESSAGE_KEYS[reason]) : null;
 
   return (
     // Phase P-4: a very soft, low-opacity glow behind the card (same
@@ -82,8 +87,8 @@ export default async function LoginPage({
         <div className="flex flex-col items-center gap-3.5">
           <LogoMark size={56} />
           <div className="flex flex-col items-center gap-1.5">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">명지 스마트 분실물 센터</h1>
-            <p className="text-sm text-muted-foreground">캠퍼스에서 잃어버린 물건을 빠르게 찾아드려요</p>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">{t("auth.login.title")}</h1>
+            <p className="text-sm text-muted-foreground">{t("auth.login.subtitle")}</p>
           </div>
         </div>
 
@@ -129,7 +134,7 @@ export default async function LoginPage({
           }}
         >
           <Button type="submit" variant="secondary" className="w-full">
-            Google로 로그인
+            {t("auth.login.google")}
           </Button>
         </form>
 
@@ -141,14 +146,14 @@ export default async function LoginPage({
             purely about not showing two contradictory sentences at once. */}
         {!googleTestModeEnabled && (
           <p className="text-xs text-muted-foreground">
-            학교 계정(@mju.ac.kr)이 아닌 계정은 로그인할 수 없습니다.
+            {t("auth.login.domainNotice")}
           </p>
         )}
 
         <div className="flex w-full flex-col items-center gap-1.5 border-t border-border/60 pt-6">
-          <p className="text-sm text-muted-foreground">명지대 계정이 없으신가요?</p>
+          <p className="text-sm text-muted-foreground">{t("auth.login.noAccount")}</p>
           <Link href="/account-guide" className="text-sm font-medium text-primary hover:opacity-80">
-            명지대 계정 생성 방법 보기
+            {t("auth.login.accountGuide")}
           </Link>
         </div>
       </div>

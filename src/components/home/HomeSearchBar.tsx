@@ -8,6 +8,7 @@ import { AISearchPanel } from "@/components/search/AISearchPanel";
 import { SearchModeToggle, type SearchUiMode } from "@/components/search/SearchModeToggle";
 import { TYPE_OPTIONS } from "@/components/search/SearchFilterBar";
 import type { PostListType } from "@/lib/posts/schema";
+import { useI18n } from "@/lib/i18n/client";
 
 // AI 검색 UI 시안 개선 Phase: Home의 히어로 검색창을 이 서비스의 기본
 // 검색 경험(AI 검색)으로 바꾼다 -- 새 검색 API/알고리즘은 전혀 만들지
@@ -30,6 +31,7 @@ import type { PostListType } from "@/lib/posts/schema";
 // /search로 이동)을 그대로 유지한다.
 export function HomeSearchBar({ compact = false }: { compact?: boolean } = {}) {
   const router = useRouter();
+  const { t } = useI18n();
   const [value, setValue] = useState("");
   const [mode, setMode] = useState<SearchUiMode>("ai");
   const [type, setType] = useState<PostListType>("found");
@@ -52,16 +54,16 @@ export function HomeSearchBar({ compact = false }: { compact?: boolean } = {}) {
             type="text"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder="에어팟, 지갑, 학생증 등을 검색해보세요"
+            placeholder={t("home.searchPlaceholder")}
             maxLength={100}
-            aria-label="분실물·습득물 검색"
+            aria-label={t("home.searchAriaLabel")}
             className="w-full min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
           />
           <button
             type="submit"
             className="shrink-0 rounded-full bg-primary px-3.5 py-1 text-sm font-medium text-primary-foreground hover:opacity-90"
           >
-            검색
+            {t("common.search")}
           </button>
         </div>
       </form>
@@ -79,12 +81,12 @@ export function HomeSearchBar({ compact = false }: { compact?: boolean } = {}) {
         <select
           value={type}
           onChange={(e) => setType(e.target.value as PostListType)}
-          aria-label="검색 대상"
+          aria-label={t("home.searchTargetLabel")}
           className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-foreground shadow-sm"
         >
           {TYPE_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
-              {option.label}에서 찾기
+              {t("home.searchIn", { board: t(option.labelKey) })}
             </option>
           ))}
         </select>
@@ -95,7 +97,7 @@ export function HomeSearchBar({ compact = false }: { compact?: boolean } = {}) {
         // 히어로 섹션 전체에 걸린 text-center가 상속되지 않도록 이 블록만
         // 다시 text-left로 되돌린다.
         <div className="w-full text-left">
-          <AISearchPanel type={type} placeholder="검은색 에어팟을 도서관에서 잃어버렸어요" />
+          <AISearchPanel type={type} placeholder={t("home.aiPlaceholder")} />
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="w-full">
@@ -105,16 +107,16 @@ export function HomeSearchBar({ compact = false }: { compact?: boolean } = {}) {
               type="text"
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              placeholder="에어팟, 지갑, 학생증 등을 검색해보세요"
+              placeholder={t("home.searchPlaceholder")}
               maxLength={100}
-              aria-label="분실물·습득물 검색"
+              aria-label={t("home.searchAriaLabel")}
               className="w-full min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
             <button
               type="submit"
               className="shrink-0 rounded-full bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
             >
-              검색
+              {t("common.search")}
             </button>
           </div>
         </form>

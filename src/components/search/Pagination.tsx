@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { getTranslator } from "@/lib/i18n/server";
+
 type PaginationProps = {
   basePath: string;
   currentSearchParams: Record<string, string | undefined>;
@@ -10,8 +12,9 @@ type PaginationProps = {
 // Server Component: URL query params are the only source of truth for
 // page state (see Phase 6 spec section 13), so page links are plain
 // <Link>s that preserve every other current filter, not client state.
-export function Pagination({ basePath, currentSearchParams, page, totalPages }: PaginationProps) {
+export async function Pagination({ basePath, currentSearchParams, page, totalPages }: PaginationProps) {
   if (totalPages <= 1) return null;
+  const t = await getTranslator();
 
   function hrefFor(targetPage: number): string {
     const params = new URLSearchParams();
@@ -33,10 +36,10 @@ export function Pagination({ basePath, currentSearchParams, page, totalPages }: 
     <nav className="flex items-center justify-center gap-2 text-sm">
       {page > 1 ? (
         <Link href={hrefFor(page - 1)} className="rounded-lg px-3 py-1.5 text-foreground hover:bg-muted">
-          ← 이전
+          {t("search.pagination.prev")}
         </Link>
       ) : (
-        <span className="px-3 py-1.5 text-muted-foreground/50">← 이전</span>
+        <span className="px-3 py-1.5 text-muted-foreground/50">{t("search.pagination.prev")}</span>
       )}
 
       {pageNumbers.map((n) =>
@@ -53,10 +56,10 @@ export function Pagination({ basePath, currentSearchParams, page, totalPages }: 
 
       {page < totalPages ? (
         <Link href={hrefFor(page + 1)} className="rounded-lg px-3 py-1.5 text-foreground hover:bg-muted">
-          다음 →
+          {t("search.pagination.next")}
         </Link>
       ) : (
-        <span className="px-3 py-1.5 text-muted-foreground/50">다음 →</span>
+        <span className="px-3 py-1.5 text-muted-foreground/50">{t("search.pagination.next")}</span>
       )}
     </nav>
   );

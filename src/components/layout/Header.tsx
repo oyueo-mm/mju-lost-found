@@ -9,6 +9,7 @@ import { NotificationBell } from "./NotificationBell";
 import { LogoMark } from "./Logo";
 import { UserIcon } from "@/components/icons";
 import { LinkButton } from "@/components/ui/Button";
+import { getTranslator } from "@/lib/i18n/server";
 
 // A Server Component, not a client one: the current user is read here and
 // only its nickname/email/unread count ever reach the rendered HTML -- no
@@ -19,7 +20,7 @@ import { LinkButton } from "@/components/ui/Button";
 // also renders BottomNav's sibling desktop nav and the chat-unread badge
 // (countUnreadMessagesForUser, Phase 17) both surfaces share.
 export async function Header() {
-  const user = await getCurrentUser();
+  const [user, t] = await Promise.all([getCurrentUser(), getTranslator()]);
 
   let unreadNotifications = 0;
   let unreadChat = 0;
@@ -41,7 +42,7 @@ export async function Header() {
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3 md:px-6">
         <Link href="/" className="flex shrink-0 items-center gap-2 font-semibold text-foreground">
           <LogoMark size={32} />
-          <span className="hidden sm:inline">명지 스마트 분실물 센터</span>
+          <span className="hidden sm:inline">{t("brand.name")}</span>
         </Link>
 
         <DesktopNav unreadChatCount={unreadChat} isAdmin={Boolean(user && isAdmin(user))} />
@@ -62,7 +63,7 @@ export async function Header() {
             </>
           ) : (
             <LinkButton href="/login" size="sm">
-              로그인
+              {t("nav.login")}
             </LinkButton>
           )}
         </div>

@@ -1,12 +1,15 @@
+"use client";
+
 import type { PostType } from "@/lib/posts/schema";
 import type { PostDTO } from "@/lib/posts/service";
 import { PostCard } from "@/components/post/PostCard";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { useI18n } from "@/lib/i18n/client";
+import { postTypeLabelKey } from "@/lib/i18n/labels";
 
 // Lost 게시글에는 습득물을, 습득물 게시글에는 분실물을 -- 이 앱의 모든
 // AI 랭킹 기능이 이미 쓰는 교차 게시판 관례 그대로.
 const OPPOSITE_TYPE: Record<PostType, PostType> = { lost: "found", found: "lost" };
-const BOARD_LABEL: Record<PostType, string> = { lost: "분실물", found: "습득물" };
 
 type SimilarPostsSectionProps = {
   sourceType: PostType;
@@ -48,31 +51,34 @@ export function SimilarPostsSection({
   pending = false,
   showScore = true,
 }: SimilarPostsSectionProps) {
+  const { t } = useI18n();
   const targetType = OPPOSITE_TYPE[sourceType];
+  // 다국어(i18n) Phase: 예전 BOARD_LABEL 상수(하드코딩된 "분실물"/"습득물")
+  // 대신 PostCard/게시글 상세와 같은 postTypeLabelKey를 쓴다 -- 같은 두
+  // 단어가 화면마다 다르게 번역되지 않도록 매핑을 한 곳에만 둔다.
+  const boardLabel = t(postTypeLabelKey(targetType));
 
   return (
     <div className="flex flex-col gap-3 border-t border-border pt-6">
       <div className="flex flex-col gap-1">
-        <h2 className="font-semibold text-foreground">AI 추천</h2>
-        <p className="text-xs text-muted-foreground">
-          이 게시글과 관련된 {BOARD_LABEL[targetType]}을 AI가 추천해요. 실제 동일 물건 여부를 보장하지는 않아요.
-        </p>
+        <h2 className="font-semibold text-foreground">{t("recommend.title")}</h2>
+        <p className="text-xs text-muted-foreground">{t("recommend.description", { board: boardLabel })}</p>
       </div>
 
       {loadFailed ? (
-        <p className="text-sm text-destructive">추천을 불러오는 중 문제가 발생했습니다.</p>
+        <p className="text-sm text-destructive">{t("recommend.error")}</p>
       ) : recommendations.length === 0 && pending ? (
         <div className="flex items-center gap-2 rounded-card border border-border bg-muted/30 px-4 py-6 text-sm text-muted-foreground">
           <span
             aria-hidden="true"
             className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground motion-reduce:animate-none"
           />
-          AI 추천을 준비하고 있어요. 잠시 후 이 화면에 자동으로 표시돼요.
+          {t("recommend.pending")}
         </div>
       ) : recommendations.length === 0 ? (
         <EmptyState
-          title={`추천할 ${BOARD_LABEL[targetType]}이 아직 없어요.`}
-          description={`관련된 ${BOARD_LABEL[targetType]} 게시글이 등록되면 여기에 표시돼요.`}
+          title={t("recommend.empty.title", { board: boardLabel })}
+          description={t("recommend.empty.description", { board: boardLabel })}
         />
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -88,7 +94,7 @@ export function SimilarPostsSection({
             <PostCard
               key={`${post.type}-${post.id}`}
               post={post}
-              scoreLabel="AI 유사도"
+              scoreLabel={t("post.score.ai")}
               scoreDisplay={showScore ? "decimal" : "hidden"}
             />
           ))}

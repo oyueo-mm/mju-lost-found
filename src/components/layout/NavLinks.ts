@@ -8,20 +8,26 @@
 // NAV_ITEMS itself (rather than added as a 6th, always-present entry)
 // since it must only ever render for an admin user; Header/DesktopNav/
 // BottomNav each append it conditionally instead.
+import type { TranslationKey } from "@/lib/i18n/translate";
+
 export type NavKey = "home" | "lost" | "found" | "chat" | "me" | "admin";
 
-export const NAV_ITEMS: { key: NavKey; href: string; label: string }[] = [
-  { key: "home", href: "/", label: "홈" },
-  { key: "lost", href: "/lost", label: "분실물" },
-  { key: "found", href: "/found", label: "습득물" },
-  { key: "chat", href: "/chat", label: "채팅" },
-  { key: "me", href: "/me", label: "내 정보" },
+// 다국어(i18n) Phase: 라벨을 하드코딩된 한국어 문자열 대신 번역 키로
+// 둔다 -- 탭의 개수/순서/href/활성화 규칙(isNavActive)은 전혀 바뀌지
+// 않았다. 실제 문구는 Header(DesktopNav)와 BottomNav가 각각 t()로
+// 읽는다.
+export const NAV_ITEMS: { key: NavKey; href: string; labelKey: TranslationKey }[] = [
+  { key: "home", href: "/", labelKey: "nav.home" },
+  { key: "lost", href: "/lost", labelKey: "nav.lost" },
+  { key: "found", href: "/found", labelKey: "nav.found" },
+  { key: "chat", href: "/chat", labelKey: "nav.chat" },
+  { key: "me", href: "/me", labelKey: "nav.me" },
 ];
 
-export const ADMIN_NAV_ITEM: { key: NavKey; href: string; label: string } = {
+export const ADMIN_NAV_ITEM: { key: NavKey; href: string; labelKey: TranslationKey } = {
   key: "admin",
   href: "/admin",
-  label: "관리자",
+  labelKey: "nav.admin",
 };
 
 // "내 정보" is a hub over several pre-existing routes (/posts/mine,

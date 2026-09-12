@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { onNotificationUnreadCount } from "@/components/notification/notificationUnreadEvent";
+import { useI18n } from "@/lib/i18n/client";
 import { BellIcon } from "@/components/icons";
 
 // Phase P-3: split out of Header.tsx (previously inline, server-rendered
@@ -16,6 +17,7 @@ import { BellIcon } from "@/components/icons";
 // layout update. Header itself stays a Server Component -- only this one
 // small badge needs to be a Client Component now, not the whole header.
 export function NotificationBell({ unreadCount }: { unreadCount: number }) {
+  const { t } = useI18n();
   const [prevUnreadCount, setPrevUnreadCount] = useState(unreadCount);
   const [liveUnreadCount, setLiveUnreadCount] = useState(unreadCount);
   // "Adjusting state when a prop changes" during render, not inside an
@@ -29,7 +31,11 @@ export function NotificationBell({ unreadCount }: { unreadCount: number }) {
   return (
     <Link
       href="/notifications"
-      aria-label={`알림${liveUnreadCount > 0 ? ` (읽지 않음 ${liveUnreadCount}개)` : ""}`}
+      aria-label={
+        liveUnreadCount > 0
+          ? `${t("nav.notifications")} (${t("nav.unreadNotifications", { count: liveUnreadCount })})`
+          : t("nav.notifications")
+      }
       className="relative flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
     >
       <BellIcon className="size-5" />

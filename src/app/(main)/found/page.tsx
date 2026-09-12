@@ -9,8 +9,8 @@ import { searchPosts } from "@/lib/posts/service";
 import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, FOUND_STATUSES, listQuerySchema } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
-
-const STATUS_OPTIONS = FOUND_STATUSES.map((s) => ({ value: s, label: s }));
+import { getTranslator } from "@/lib/i18n/server";
+import { statusLabelKey } from "@/lib/i18n/labels";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -20,6 +20,10 @@ export default async function FoundListPage({
   searchParams: Promise<SearchParams>;
 }) {
   const raw = normalizeSearchParams(await searchParams);
+  const t = await getTranslator();
+  // 다국어(i18n) Phase: lost/page.tsx의 같은 주석 참고 -- value는 DB의
+  // 한국어 원문, label만 번역된다.
+  const statusOptions = FOUND_STATUSES.map((s) => ({ value: s, label: t(statusLabelKey(s)) }));
   const parsed = listQuerySchema.safeParse({ ...raw, type: "found" });
   const baseQuery = parsed.success ? parsed.data : { type: "found" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
   // Phase 31: see the matching comment in lost/page.tsx -- no explicit
@@ -40,9 +44,9 @@ export default async function FoundListPage({
     console.error("Failed to load found posts", error);
     return (
       <div className="flex flex-col gap-6">
-        <h1 className="text-xl font-semibold text-foreground">습득물 게시판</h1>
+        <h1 className="text-xl font-semibold text-foreground">{t("board.found.title")}</h1>
         <div className="rounded-card border border-destructive/30 bg-destructive-muted p-10 text-center text-sm text-destructive">
-          게시글을 불러오지 못했어요. 잠시 후 다시 시도해주세요.
+          {t("board.loadError")}
         </div>
       </div>
     );
@@ -51,14 +55,14 @@ export default async function FoundListPage({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-foreground">습득물 게시판</h1>
+        <h1 className="text-xl font-semibold text-foreground">{t("board.found.title")}</h1>
         <LinkButton href="/found/new" size="sm">
-          습득물 등록
+          {t("board.found.new")}
         </LinkButton>
       </div>
       <SearchFilterBar
         basePath="/found"
-        statusOptions={STATUS_OPTIONS}
+        statusOptions={statusOptions}
         defaultStatus={FOUND_STATUSES[0]}
         imageSearchEnabled
         fixedType="found"
@@ -71,15 +75,19 @@ export default async function FoundListPage({
         {posts.items.length === 0 ? (
           <div className="flex flex-col gap-4">
             <EmptyState
-              title={raw.q || raw.category || raw.campus || raw.status ? "검색 결과가 없어요." : "아직 등록된 습득물이 없어요."}
+              title={
+                raw.q || raw.category || raw.campus || raw.status
+                  ? t("search.empty.title")
+                  : t("board.found.empty.title")
+              }
               description={
                 raw.q || raw.category || raw.campus || raw.status
-                  ? "다른 검색어나 필터로 다시 시도해보세요."
-                  : "주운 물건을 등록해서 주인을 찾아주세요."
+                  ? t("search.empty.description")
+                  : t("board.found.empty.description")
               }
               action={
                 !(raw.q || raw.category || raw.campus || raw.status) && (
-                  <LinkButton href="/found/new">습득물 등록하기</LinkButton>
+                  <LinkButton href="/found/new">{t("board.found.newCta")}</LinkButton>
                 )
               }
             />

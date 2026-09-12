@@ -11,6 +11,9 @@ import { AttributionLink } from "@/components/user/AttributionLink";
 import { CommentActionMenu } from "@/components/comment/CommentActionMenu";
 import { CommentChatButton } from "@/components/comment/CommentChatButton";
 import { PostAsSelector } from "@/components/organization/PostAsSelector";
+import { useI18n } from "@/lib/i18n/client";
+import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
+import type { Translator } from "@/lib/i18n/translate";
 
 type CommentAuthor = { id: number; nickname: string | null; publicId: string };
 type CommentDTO = {
@@ -51,19 +54,26 @@ type CommentSectionProps = {
 // dependency for a handful of buckets). Exported (Phase H-8) so
 // MyCommentList (내가 쓴 댓글, /me/comments) can show the same "n분 전" style
 // timestamp instead of re-implementing this.
-export function formatRelativeTime(date: Date): string {
+// 다국어(i18n) Phase: 버킷 경계(1분/60분/24시간/7일)는 그대로이고
+// 라벨만 번역된다. 7일이 넘으면 기존과 같이 절대 날짜로 떨어지는데,
+// 그 형식도 이제 현재 언어의 Intl 태그를 쓴다(타임존은 Asia/Seoul 고정).
+export function formatRelativeTime(date: Date, t: Translator, locale: Locale): string {
   const diffMs = Date.now() - date.getTime();
   const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return "방금 전";
-  if (minutes < 60) return `${minutes}분 전`;
+  if (minutes < 1) return t("time.justNow");
+  if (minutes < 60) return t("time.minutesAgo", { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}시간 전`;
+  if (hours < 24) return t("time.hoursAgo", { count: hours });
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}일 전`;
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
+  if (days < 7) return t("time.daysAgo", { count: days });
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], {
+    dateStyle: "medium",
+    timeZone: "Asia/Seoul",
+  }).format(date);
 }
 
 const COMMENT_MAX_LENGTH = 1000;
+
 // Phase H-3: the actual reply chain depth is unbounded (parentId can point
 // arbitrarily deep, see comment/service.ts), but indentation stops growing
 // past this many visual levels so a very deep thread never runs a reply off
@@ -110,6 +120,7 @@ export function CommentSection({
   myOrganizations,
 }: CommentSectionProps) {
   const router = useRouter();
+  const { t, locale } = useI18n();
   const [comments, setComments] = useState(initialComments);
   const [newContent, setNewContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -145,7 +156,7 @@ export function CommentSection({
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "댓글을 작성하지 못했습니다.");
+        setError(json.error ?? t("comment.createFailed"));
         return;
       }
       setComments((prev) => [...prev, { ...json.data, createdAt: new Date(json.data.createdAt), updatedAt: new Date(json.data.updatedAt) }]);
@@ -178,7 +189,7 @@ export function CommentSection({
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "답글을 작성하지 못했습니다.");
+        setError(json.error ?? t("comment.replyFailed"));
         return;
       }
       setComments((prev) => [...prev, { ...json.data, createdAt: new Date(json.data.createdAt), updatedAt: new Date(json.data.updatedAt) }]);
@@ -210,7 +221,7 @@ export function CommentSection({
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "댓글을 수정하지 못했습니다.");
+        setError(json.error ?? t("comment.updateFailed"));
         return;
       }
       setComments((prev) =>
@@ -235,7 +246,7 @@ export function CommentSection({
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(json.error ?? "댓글을 삭제하지 못했습니다.");
+      throw new Error(json.error ?? t("comment.deleteFailed"));
     }
     // Phase H-3: the server cascades the deleted comment's entire reply
     // subtree (Comment.parentId's onDelete: Cascade) -- mirrored here so
@@ -289,7 +300,7 @@ export function CommentSection({
               author={comment.author}
               className="font-medium text-foreground hover:underline"
             />
-            <span className="text-xs text-muted-foreground">{formatRelativeTime(comment.createdAt)}</span>
+            <span className="text-xs text-muted-foreground">{formatRelativeTime(comment.createdAt, t, locale)}</span>
           </div>
           <textarea
             value={editContent}
@@ -301,7 +312,7 @@ export function CommentSection({
           />
           <div className="flex gap-2">
             <Button type="button" size="sm" onClick={() => handleSaveEdit(comment.id)} disabled={pendingId !== null}>
-              {pendingId === comment.id ? "저장 중..." : "저장"}
+              {pendingId === comment.id ? t("common.saving") : t("common.save")}
             </Button>
             <Button type="button" variant="secondary" size="sm" onClick={() => setEditingId(null)}>
               취소
@@ -339,8 +350,8 @@ export function CommentSection({
               className="font-medium text-foreground hover:underline"
             />
             <span className="text-xs text-muted-foreground">
-              {formatRelativeTime(comment.createdAt)}
-              {wasEdited ? " · (수정됨)" : ""}
+              {formatRelativeTime(comment.createdAt, t, locale)}
+              {wasEdited ? t("comment.edited") : ""}
             </span>
           </div>
           <p className="whitespace-pre-wrap text-foreground">
@@ -366,7 +377,7 @@ export function CommentSection({
               }}
               className="text-muted-foreground underline hover:text-foreground"
             >
-              답글
+              {t("comment.reply")}
             </button>
             {/* Phase 12-9 §3/§4: only for a logged-in viewer who isn't the
                 comment's own author -- never shown to the author viewing
@@ -393,13 +404,13 @@ export function CommentSection({
             after the fact on the posted reply -- answers "누구에게 답글하는지"
             at the moment of writing, not only in the result. */}
         <span className="text-xs text-muted-foreground">
-          <span className="font-medium text-primary">@{comment.author.nickname ?? "알 수 없음"}</span>
-          님에게 답글
+          <span className="font-medium text-primary">@{comment.author.nickname ?? t("common.unknown")}</span>
+          {t("comment.replyingTo")}
         </span>
         <textarea
           value={replyContent}
           onChange={(e) => setReplyContent(e.target.value)}
-          placeholder="답글을 입력하세요..."
+          placeholder={t("comment.replyPlaceholder")}
           maxLength={COMMENT_MAX_LENGTH}
           rows={2}
           disabled={replySubmitting}
@@ -411,11 +422,11 @@ export function CommentSection({
           value={replyOrganizationId}
           onChange={setReplyOrganizationId}
           disabled={replySubmitting}
-          ariaLabel="답글 작성 주체 선택"
+          ariaLabel={t("comment.replyAuthorSelect")}
         />
         <div className="flex gap-2">
           <Button type="submit" size="sm" disabled={replySubmitting || !replyContent.trim()}>
-            {replySubmitting ? "작성 중..." : "답글 작성"}
+            {replySubmitting ? t("comment.submitting") : t("comment.replySubmit")}
           </Button>
           <Button type="button" variant="secondary" size="sm" onClick={() => setReplyingToId(null)}>
             취소
@@ -464,13 +475,13 @@ export function CommentSection({
     <div className="flex flex-col gap-4 border-t border-border pt-6">
       <h2 className="flex items-center gap-1.5 font-semibold text-foreground">
         <ChatBubbleIcon className="size-4.5" />
-        댓글 {comments.length}
+        {t("comment.count", { count: comments.length })}
       </h2>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {tree.length === 0 ? (
-        <p className="text-sm text-muted-foreground">아직 댓글이 없어요. 첫 댓글을 남겨보세요.</p>
+        <p className="text-sm text-muted-foreground">{t("comment.empty")}</p>
       ) : (
         <div className="flex flex-col gap-3">{tree.map((node) => renderCommentNode(node, 0))}</div>
       )}
@@ -480,7 +491,7 @@ export function CommentSection({
           <textarea
             value={newContent}
             onChange={(e) => setNewContent(e.target.value)}
-            placeholder="댓글을 입력하세요..."
+            placeholder={t("comment.placeholder")}
             maxLength={COMMENT_MAX_LENGTH}
             rows={3}
             disabled={submitting}
@@ -491,18 +502,19 @@ export function CommentSection({
             value={organizationId}
             onChange={setOrganizationId}
             disabled={submitting}
-            ariaLabel="댓글 작성 주체 선택"
+            ariaLabel={t("comment.authorSelect")}
           />
           <Button type="submit" size="sm" disabled={submitting || !newContent.trim()} className="self-start">
-            {submitting ? "작성 중..." : "댓글 작성"}
+            {submitting ? t("comment.submitting") : t("comment.submit")}
           </Button>
         </form>
       ) : (
         <p className="text-sm text-muted-foreground">
+          {t("comment.loginRequiredPrefix")}
           <Link href="/login" className="font-medium text-primary hover:opacity-80">
-            로그인
+            {t("nav.login")}
           </Link>
-          이 필요합니다.
+          {t("comment.loginRequiredSuffix")}
         </p>
       )}
     </div>

@@ -10,6 +10,7 @@ import { Pagination } from "@/components/search/Pagination";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ReportButton } from "@/components/report/ReportButton";
 import { UserIcon, BoxIcon, ClockIcon } from "@/components/icons";
+import { getTranslator } from "@/lib/i18n/server";
 
 function formatJoinDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
@@ -28,6 +29,7 @@ export default async function ProfilePage({
   params: Promise<{ publicId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const t = await getTranslator();
   const { publicId } = await params;
   const [profile, currentUser] = await Promise.all([getPublicProfile(publicId), getCurrentUser()]);
   if (!profile) notFound();
@@ -69,7 +71,7 @@ export default async function ProfilePage({
             <UserIcon className="size-8" />
           </span>
           <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="truncate text-xl font-semibold text-foreground">{profile.nickname ?? "알 수 없음"}</h1>
+            <h1 className="truncate text-xl font-semibold text-foreground">{profile.nickname ?? t("common.unknown")}</h1>
             {/* Phase H-7: "공개 사용자 ID" -- the opaque publicId itself, shown
                 as-is (not the internal numeric id, never exposed). */}
             <span className="truncate text-xs text-muted-foreground">ID: {profile.publicId}</span>
@@ -85,7 +87,7 @@ export default async function ProfilePage({
           <ReportButton
             targetType="user"
             targetId={profile.userId}
-            buttonLabel="신고"
+            buttonLabel={t("report.short")}
             triggerClassName="shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           />
         )}
@@ -95,12 +97,12 @@ export default async function ProfilePage({
         <div className="flex flex-col items-center gap-1.5 rounded-card border border-border bg-card p-4 text-center">
           <BoxIcon className="size-5 text-muted-foreground" />
           <span className="text-lg font-semibold text-foreground">{profile.postCount}</span>
-          <span className="text-xs text-muted-foreground">공개 게시글</span>
+          <span className="text-xs text-muted-foreground">{t("profile.publicPosts")}</span>
         </div>
         <div className="flex flex-col items-center gap-1.5 rounded-card border border-border bg-card p-4 text-center">
           <ClockIcon className="size-5 text-muted-foreground" />
           <span className="text-sm font-semibold text-foreground">{formatJoinDate(profile.createdAt)}</span>
-          <span className="text-xs text-muted-foreground">가입일</span>
+          <span className="text-xs text-muted-foreground">{t("profile.joinedAt")}</span>
         </div>
       </section>
 
@@ -111,13 +113,13 @@ export default async function ProfilePage({
           permission check beyond what those public list pages already
           have). */}
       <section className="flex flex-col gap-4">
-        <h2 className="text-sm font-semibold text-foreground">작성 게시글</h2>
+        <h2 className="text-sm font-semibold text-foreground">{t("profile.posts")}</h2>
         {!posts ? (
           <div className="rounded-card border border-destructive/30 bg-destructive-muted p-10 text-center text-sm text-destructive">
-            게시글을 불러오지 못했어요. 잠시 후 다시 시도해주세요.
+            {t("profile.loadError")}
           </div>
         ) : posts.items.length === 0 ? (
-          <EmptyState title="작성한 게시글이 없어요." />
+          <EmptyState title={t("profile.empty")} />
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">

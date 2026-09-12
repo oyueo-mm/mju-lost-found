@@ -5,18 +5,23 @@ import { useActionState } from "react";
 import { setNicknameAction } from "./actions";
 import { NICKNAME_MAX_LENGTH, NICKNAME_MIN_LENGTH } from "@/lib/auth/nickname";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 export function NicknameForm() {
+  const { t } = useI18n();
   const [state, formAction, pending] = useActionState(setNicknameAction, null);
 
   return (
     <form action={formAction} className="flex w-full flex-col gap-3">
       <label className="flex flex-col gap-1.5 text-sm">
-        <span className="font-medium text-foreground">닉네임</span>
+        <span className="font-medium text-foreground">{t("auth.onboarding.nickname")}</span>
         <input
           type="text"
           name="nickname"
-          placeholder={`한글/영문/숫자 ${NICKNAME_MIN_LENGTH}~${NICKNAME_MAX_LENGTH}자`}
+          placeholder={t("auth.onboarding.placeholder", {
+            min: NICKNAME_MIN_LENGTH,
+            max: NICKNAME_MAX_LENGTH,
+          })}
           maxLength={NICKNAME_MAX_LENGTH}
           required
           disabled={pending}
@@ -29,7 +34,7 @@ export function NicknameForm() {
         </p>
       )}
       <Button type="submit" disabled={pending} className="w-full">
-        {pending ? "설정 중..." : "닉네임 설정하기"}
+        {pending ? t("auth.onboarding.submitting") : t("auth.onboarding.submit")}
       </Button>
     </form>
   );

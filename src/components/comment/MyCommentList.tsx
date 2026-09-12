@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import type { PostType } from "@/lib/posts/schema";
 import { formatRelativeTime } from "./CommentSection";
+import { useI18n } from "@/lib/i18n/client";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 type MyCommentDTO = {
@@ -31,6 +32,7 @@ const TYPE_LABEL: Record<PostType, string> = { lost: "분실물", found: "습득
 // deleteComment) -- this just passes comment.post.id the same way every
 // other caller passes *some* post id there.
 export function MyCommentList({ comments: initialComments }: { comments: MyCommentDTO[] }) {
+  const { t, locale } = useI18n();
   const [comments, setComments] = useState(initialComments);
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +94,7 @@ export function MyCommentList({ comments: initialComments }: { comments: MyComme
           <p className="whitespace-pre-wrap text-foreground">{comment.content}</p>
 
           <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span>{formatRelativeTime(comment.createdAt)}</span>
+            <span>{formatRelativeTime(comment.createdAt, t, locale)}</span>
             <div className="flex items-center gap-3">
               <Link
                 href={`/post/${comment.post.id}?type=${comment.post.type}#comment-${comment.id}`}

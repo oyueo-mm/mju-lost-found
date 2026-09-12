@@ -1,6 +1,9 @@
 import Link from "next/link";
 
 import { LogoMark } from "@/components/layout/Logo";
+import { LocaleSwitcher } from "@/components/layout/LocaleSwitcher";
+import { getTranslator } from "@/lib/i18n/server";
+import type { TranslationKey } from "@/lib/i18n/translate";
 
 // Phase 9: this app's first Footer -- there was none before (checked
 // before writing this). Placed in (main)/layout.tsx, after <main> and
@@ -34,38 +37,46 @@ const FOOTER_LINK_CLASS = "text-muted-foreground transition-colors hover:text-fo
 // 이미 실제로 존재하는 페이지이고, 이 앱에 없는 정보(GitHub 저장소 링크,
 // 실제 연락처 등)를 지어내지는 않는다(아래 저작권 문구 옆 주석 참고,
 // 이 파일이 처음 만들어질 때부터 있던 원칙 그대로).
-const FOOTER_SECTIONS: { title: string; links: { href: string; label: string }[] }[] = [
+//
+// 다국어(i18n) Phase: 섹션 제목/링크 라벨이 이제 하드코딩된 한국어
+// 문자열이 아니라 번역 키다 -- href와 순서, 섹션 구성은 하나도 바꾸지
+// 않았다(이번 작업의 "Footer의 기존 링크와 안내 문구는 임의로 삭제하거나
+// 변경하지 않는다" 제약 그대로). 한국어로 볼 때 나오는 문구도 예전과
+// 글자 하나까지 동일하다(messages/ko.ts).
+const FOOTER_SECTIONS: { titleKey: TranslationKey; links: { href: string; labelKey: TranslationKey }[] }[] = [
   {
-    title: "서비스",
+    titleKey: "footer.section.service",
     links: [
-      { href: "/", label: "홈" },
-      { href: "/lost", label: "분실물 보기" },
-      { href: "/found", label: "습득물 보기" },
-      { href: "/search", label: "AI 검색" },
-      { href: "/organizations", label: "단체" },
+      { href: "/", labelKey: "footer.link.home" },
+      { href: "/lost", labelKey: "footer.link.lost" },
+      { href: "/found", labelKey: "footer.link.found" },
+      { href: "/search", labelKey: "footer.link.aiSearch" },
+      { href: "/organizations", labelKey: "footer.link.organizations" },
     ],
   },
   {
-    title: "커뮤니티",
+    titleKey: "footer.section.community",
     links: [
-      { href: "/chat", label: "채팅" },
-      { href: "/notifications", label: "알림" },
+      { href: "/chat", labelKey: "footer.link.chat" },
+      { href: "/notifications", labelKey: "footer.link.notifications" },
     ],
   },
   {
-    title: "안내",
+    titleKey: "footer.section.guide",
     links: [
-      { href: "/policy/terms", label: "이용약관" },
-      { href: "/policy/privacy", label: "개인정보처리방침" },
-      { href: "/policy/community", label: "운영정책" },
-      { href: "/account-guide", label: "계정 안내" },
-      { href: "/feedback", label: "서비스 개선 제안" },
-      { href: "/organizations/guide", label: "단체 이용 안내" },
+      { href: "/policy/terms", labelKey: "footer.link.terms" },
+      { href: "/policy/privacy", labelKey: "footer.link.privacy" },
+      { href: "/policy/community", labelKey: "footer.link.community" },
+      { href: "/account-guide", labelKey: "footer.link.accountGuide" },
+      { href: "/feedback", labelKey: "footer.link.feedback" },
+      { href: "/organizations/guide", labelKey: "footer.link.organizationGuide" },
     ],
   },
 ];
 
-export function Footer() {
+export async function Footer() {
+  const t = await getTranslator();
+
   return (
     <footer className="border-t border-border bg-background">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 pt-8 pb-20 md:px-6 md:pb-8">
@@ -78,24 +89,20 @@ export function Footer() {
           <div className="col-span-2 flex max-w-sm flex-col gap-2 md:col-span-1">
             <div className="flex items-center gap-2">
               <LogoMark size={24} />
-              <span className="text-sm font-semibold text-foreground">명지 스마트 분실물 센터</span>
+              <span className="text-sm font-semibold text-foreground">{t("brand.name")}</span>
             </div>
             {/* Deliberately never claims official university operation
                 (this phase's own explicit rule) -- describes only what the
                 service actually does. */}
-            <p className="text-xs text-muted-foreground">
-              명지대학교 학생을 위한 분실물 등록·검색·연락 서비스입니다.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("footer.tagline")}</p>
             {/* Phase 12-9 §5: explicit "이 학교 공식 서비스가 아니다" +
                 "학생이 자발적으로 만들었다" 고지 -- 학교 로고/브랜드는 이
                 텍스트 한 줄 외에 새로 추가하지 않는다. 실제로 확인된 팀원
                 이름/연락처가 없으므로(현재 프로젝트에 공개하기로 정해진
                 정보 없음) 구체적인 개인정보는 넣지 않고, "학생이 만들었다"는
                 사실만 표시한다. */}
-            <p className="text-xs text-muted-foreground">
-              명지대학교 학생들이 자발적으로 제작한 프로젝트이며, 명지대학교가 공식적으로 운영하는 서비스가 아닙니다.
-            </p>
-            <p className="text-[11px] text-muted-foreground/80">Created by MJU students</p>
+            <p className="text-xs text-muted-foreground">{t("footer.disclaimer")}</p>
+            <p className="text-[11px] text-muted-foreground/80">{t("footer.createdBy")}</p>
           </div>
 
           {/* Footer 구조 개선 Phase: 섹션 제목(text-foreground, font-semibold)이
@@ -106,17 +113,28 @@ export function Footer() {
               배치되므로, 섹션 "안" 링크까지 가로로 흐르면 어느 링크가 어느
               섹션 소속인지 다시 헷갈리게 된다. */}
           {FOOTER_SECTIONS.map((section) => (
-            <div key={section.title} className="flex flex-col gap-2.5">
-              <h3 className="text-xs font-semibold text-foreground">{section.title}</h3>
-              <nav aria-label={section.title} className="flex flex-col gap-1.5 text-xs">
+            <div key={section.titleKey} className="flex flex-col gap-2.5">
+              <h3 className="text-xs font-semibold text-foreground">{t(section.titleKey)}</h3>
+              <nav aria-label={t(section.titleKey)} className="flex flex-col gap-1.5 text-xs">
                 {section.links.map((link) => (
                   <Link key={link.href} href={link.href} className={FOOTER_LINK_CLASS}>
-                    {link.label}
+                    {t(link.labelKey)}
                   </Link>
                 ))}
               </nav>
             </div>
           ))}
+        </div>
+
+        {/* 다국어(i18n) Phase §8: 언어 선택 UI는 Footer에 둔다 -- 이 앱의
+            Header는 이미 로고/5탭 내비/알림/내 정보로 가로 폭이 꽉 차 있고,
+            언어는 한 번 고르면 계속 유지되는(쿠키) 설정이라 매 화면 상단에
+            상주할 필요가 없다. 기존 섹션들과 같은 grid 안에 5번째 칸으로
+            끼워 넣지 않고 그 아래 별도 줄에 둔 이유: 위 세 묶음은 "링크
+            목록"이고 이건 "설정 컨트롤"이라, 같은 줄에 두면 언어 이름들이
+            링크처럼 보인다. */}
+        <div className="border-t border-border pt-4">
+          <LocaleSwitcher />
         </div>
 
         {/* No fabricated business registration number/address/phone/
@@ -126,8 +144,7 @@ export function Footer() {
             content is the existing 신고 기능 (Report), pointed to from
             운영정책 instead of repeated here. */}
         <p className="border-t border-border pt-4 text-[11px] text-muted-foreground">
-          © {new Date().getFullYear()} 명지 스마트 분실물 센터. 특정 게시물·메시지·사용자에 대한 문의는
-          해당 화면의 신고 기능을 이용해주세요.
+          {t("footer.copyright", { year: new Date().getFullYear() })}
         </p>
       </div>
     </footer>

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useI18n } from "@/lib/i18n/client";
+
 // Phase K: the landing page's floating "로그인하고 시작하기".
 //
 // The landing page is long (hero -> features -> two showcases -> how it
@@ -20,6 +22,7 @@ const HERO_CTA_ID = "landing-hero-cta";
 const FINAL_CTA_ID = "landing-final-cta";
 
 export function LandingStickyCta() {
+  const { t } = useI18n();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -68,7 +71,7 @@ export function LandingStickyCta() {
           visible ? "pointer-events-auto" : ""
         }`}
       >
-        로그인하고 시작하기
+        {t("landing.cta")}
       </Link>
     </div>
   );

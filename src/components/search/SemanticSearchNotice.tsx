@@ -1,4 +1,5 @@
 import type { SearchMode } from "@/lib/posts/schema";
+import { getTranslator } from "@/lib/i18n/server";
 
 // Phase 13-2: semantic search is a top-K=10 *recommendation*, not a
 // paginated "all matching results" list (see docs/AI_SEMANTIC_SEARCH_DESIGN.md
@@ -11,12 +12,13 @@ import type { SearchMode } from "@/lib/posts/schema";
 // list was capped -- so this always renders in semantic mode, independent
 // of item count, and never in keyword mode (where the existing Pagination
 // component's total/totalPages already reflect a real, uncapped count).
-export function SemanticSearchNotice({ mode }: { mode: SearchMode }) {
+export async function SemanticSearchNotice({ mode }: { mode: SearchMode }) {
   if (mode !== "semantic") return null;
+  const t = await getTranslator();
 
   return (
     <p className="rounded-lg bg-primary-muted px-3 py-2 text-xs text-primary">
-      AI가 검색어와 가장 관련성이 높은 상위 10건을 보여드립니다.
+      {t("search.semanticNotice")}
     </p>
   );
 }

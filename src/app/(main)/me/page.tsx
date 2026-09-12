@@ -10,6 +10,7 @@ import { InstallAppPrompt } from "@/components/settings/InstallAppPrompt";
 import { NicknameSettings } from "@/components/settings/NicknameSettings";
 import { CopyPublicId } from "@/components/settings/CopyPublicId";
 import type { ReactNode } from "react";
+import { getTranslator } from "@/lib/i18n/server";
 
 // Phase 17: "내 정보" -- the hub this phase's Navigation redesign
 // consolidates every personal-account feature into (내 게시물/알림/
@@ -41,6 +42,7 @@ export default async function MePage() {
   // hub -- no new reason was added just for this page (see
   // src/lib/auth/session.ts's own comment on why that union stays closed).
   const user = await requireReadyUser("mypost", "/me");
+  const t = await getTranslator();
 
   let unreadNotifications = 0;
   try {
@@ -53,14 +55,14 @@ export default async function MePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-foreground">내 정보</h1>
+      <h1 className="text-xl font-semibold text-foreground">{t("me.title")}</h1>
 
       <section className="flex items-center gap-4 rounded-card border border-border bg-card p-5">
         <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary-muted text-primary">
           <UserIcon className="size-7" />
         </span>
         <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="font-semibold text-foreground">{user.nickname ?? "닉네임 미설정"}</span>
+          <span className="font-semibold text-foreground">{user.nickname ?? t("me.noNickname")}</span>
           <span className="text-sm text-muted-foreground">{user.email}</span>
           {/* Phase I section 6: same publicId /profile/[publicId] already
               shows -- User.id itself is never rendered anywhere, here or
@@ -85,26 +87,26 @@ export default async function MePage() {
       {/* Phase H-8: "내 활동" -- 내가 쓴 게시글(기존 /posts/mine, 라벨만 통일) +
           내가 쓴 댓글(신규 /me/comments). 두 페이지 모두 세션의 본인 id만 사용,
           기존 권한/데이터는 그대로. */}
-      <p className="px-1 text-xs font-medium text-muted-foreground">내 활동</p>
+      <p className="px-1 text-xs font-medium text-muted-foreground">{t("me.activity")}</p>
       <section className="overflow-hidden rounded-card border border-border bg-card">
-        <MenuRow href="/posts/mine" icon={<UserIcon className="size-4.5" />} label="내가 쓴 게시글" />
-        <MenuRow href="/me/comments" icon={<ChatBubbleIcon className="size-4.5" />} label="내가 쓴 댓글" />
+        <MenuRow href="/posts/mine" icon={<UserIcon className="size-4.5" />} label={t("me.myPosts")} />
+        <MenuRow href="/me/comments" icon={<ChatBubbleIcon className="size-4.5" />} label={t("me.myComments")} />
         {/* Phase 11-5: "서비스 개선 제안" -- 제출 폼과 "내가 보낸 의견" 목록이
             함께 있는 /feedback으로 연결. Report(신고)와 혼동하지 않도록
             별도 아이콘/문구를 쓴다. */}
-        <MenuRow href="/feedback" icon={<ChatBubbleIcon className="size-4.5" />} label="서비스 개선 제안" />
+        <MenuRow href="/feedback" icon={<ChatBubbleIcon className="size-4.5" />} label={t("me.feedback")} />
         {/* Phase 12-10 §2: 기존 "단체 목록"/"단체 생성 신청"/"내 단체" 3개
             메뉴를 "단체 허브"(/organizations, ?tab=my가 기본으로 열림) 하나로
             통합한다. 각 개별 기능은 삭제되지 않고 허브 안의 탭/버튼으로
             재구조화되었을 뿐이다(hub page.tsx 자체 코멘트 참고). */}
-        <MenuRow href="/organizations?tab=my" icon={<ShieldIcon className="size-4.5" />} label="단체" />
+        <MenuRow href="/organizations?tab=my" icon={<ShieldIcon className="size-4.5" />} label={t("me.organizations")} />
       </section>
 
       <section className="overflow-hidden rounded-card border border-border bg-card">
         <MenuRow
           href="/notifications"
           icon={<BellIcon className="size-4.5" />}
-          label="알림"
+          label={t("me.notifications")}
           meta={
             unreadNotifications > 0 && (
               <span className="rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold text-destructive-foreground">
@@ -117,7 +119,7 @@ export default async function MePage() {
 
       {admin && (
         <section className="overflow-hidden rounded-card border border-primary/30 bg-card">
-          <MenuRow href="/admin" icon={<ShieldIcon className="size-4.5 text-primary" />} label="관리자 센터" />
+          <MenuRow href="/admin" icon={<ShieldIcon className="size-4.5 text-primary" />} label={t("me.adminCenter")} />
         </section>
       )}
 
@@ -142,7 +144,7 @@ export default async function MePage() {
           className="flex w-full items-center justify-center gap-2 rounded-card border border-border bg-card px-4 py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive"
         >
           <LogoutIcon className="size-4.5" />
-          로그아웃
+          {t("me.logout")}
         </button>
       </form>
 
@@ -154,7 +156,7 @@ export default async function MePage() {
         href="/me/withdraw"
         className="text-center text-xs text-muted-foreground underline hover:text-destructive"
       >
-        회원 비활성화
+        {t("me.deactivate")}
       </Link>
     </div>
   );

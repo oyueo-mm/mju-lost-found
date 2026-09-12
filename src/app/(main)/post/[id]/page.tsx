@@ -20,15 +20,20 @@ import { ReportButton } from "@/components/report/ReportButton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { AttributionLink } from "@/components/user/AttributionLink";
 import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
+import { getLocale, getTranslator } from "@/lib/i18n/server";
+import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
+import { campusLabelKey, categoryLabelKey, postTypeLabelKey } from "@/lib/i18n/labels";
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
-}
-
-// Phase P-5: null means the poster marked the time as unknown -- see
-// schema.prisma's own comment on LostPost.lostAt/FoundPost.foundAt.
-function formatDateOrUnknown(date: Date | null): string {
-  return date ? formatDate(date) : "시간 미상";
+// 다국어(i18n) Phase: 하드코딩된 "ko-KR" 대신 현재 언어의 Intl 태그를
+// 쓴다. 타임존은 언제나 Asia/Seoul 그대로 -- 캠퍼스에서 실제로 일어난
+// 일의 시각이므로, 보는 사람의 언어가 바뀐다고 기준 시간대까지 바뀌면
+// 오히려 틀린 정보가 된다.
+function formatDate(date: Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Seoul",
+  }).format(date);
 }
 
 export default async function PostDetailPage({
@@ -38,6 +43,10 @@ export default async function PostDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ type?: string; created?: string }>;
 }) {
+  const [t, locale] = await Promise.all([getTranslator(), getLocale()]);
+  const formatDateOrUnknown = (date: Date | null): string =>
+    date ? formatDate(date, locale) : t("post.timeUnknown");
+
   const { id: idParam } = await params;
   const { type: typeParam, created } = await searchParams;
   // Phase 11-2: set only by PostForm's own post-creation redirect (never
@@ -71,7 +80,7 @@ export default async function PostDetailPage({
 
   const isOwner = currentUser?.id === post.author.id;
   const viewerIsAdmin = currentUser ? isAdmin(currentUser) : false;
-  const dateLabel = post.type === "lost" ? "분실 일시" : "습득 일시";
+  const dateLabel = post.type === "lost" ? t("post.lostAt") : t("post.foundAt");
   const dateValue = post.type === "lost" ? post.lostAt : post.foundAt;
 
   // Phase 23: plain Prisma reads (comments, view count already on `post`)
@@ -154,6 +163,9 @@ export default async function PostDetailPage({
     }
   }
 
+  const categoryKey = categoryLabelKey(post.category);
+  const campusKey = campusLabelKey(post.campus);
+
   const [comments, { recommendations, recommendationsFailed }, myOrganizations, organizationChat] = await Promise.all([
     loadComments(),
     loadRecommendations(),
@@ -166,7 +178,7 @@ export default async function PostDetailPage({
       <ViewTracker type={type} postId={post.id} />
       {justCreated && (
         <p className="rounded-card bg-success-muted px-4 py-2.5 text-sm font-medium text-success">
-          게시글이 등록되었습니다.
+          {t("post.created")}
         </p>
       )}
       {/* Phase 11-4D: post.images (ordered by displayOrder, see
@@ -207,7 +219,7 @@ export default async function PostDetailPage({
       ) : (
         <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-card border border-dashed border-border text-sm text-muted-foreground">
           <ImageOffIcon className="size-7" />
-          등록된 이미지가 없습니다.
+          {t("post.noImage")}
         </div>
       )}
 
@@ -266,7 +278,7 @@ export default async function PostDetailPage({
                 <ReportButton
                   targetType="post"
                   targetId={encodePostTargetId(type, post.id)}
-                  buttonLabel="신고"
+                  buttonLabel={t("report.short")}
                   triggerClassName="flex h-9 shrink-0 items-center rounded-full px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 />
               )
@@ -275,15 +287,18 @@ export default async function PostDetailPage({
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
           <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
-            {type === "lost" ? "분실물" : "습득물"}
+            {t(postTypeLabelKey(type))}
           </span>
-          <span>{post.category}</span>
+          {/* 다국어(i18n) Phase: 카테고리/캠퍼스는 DB에 한국어 원문으로
+              저장돼 있다 -- 표시용 라벨만 번역하고, 목록에 없는 값(예전
+              자유 입력으로 들어간 카테고리 등)은 원문을 그대로 보여준다. */}
+          <span>{categoryKey ? t(categoryKey) : post.category}</span>
           <span className="rounded-full bg-primary-muted px-2.5 py-0.5 text-xs font-medium text-primary">
-            {post.campus}
+            {campusKey ? t(campusKey) : post.campus}
           </span>
           <span className="flex items-center gap-1">
             <PinIcon className="size-3.5" />
-            {post.location ?? "위치 미상"}
+            {post.location ?? t("post.locationUnknown")}
           </span>
           <span className="flex items-center gap-1">
             <ClockIcon className="size-3.5" />
@@ -298,7 +313,10 @@ export default async function PostDetailPage({
           {post.description}
         </p>
         <p className="text-xs text-muted-foreground/70">
-          작성일 {formatDate(post.createdAt)} · 수정일 {formatDate(post.updatedAt)}
+          {t("post.createdAt", {
+            created: formatDate(post.createdAt, locale),
+            updated: formatDate(post.updatedAt, locale),
+          })}
         </p>
       </div>
 
@@ -326,14 +344,13 @@ export default async function PostDetailPage({
           구조를 분리하지 않고 두 경우 모두 동일하게 보인다. */}
       {post.type === "found" && (post.organizationId !== null ? organizationChat.show : !isOwner) && (
         <p className="rounded-lg bg-primary-muted px-3.5 py-3 text-xs text-primary">
-          💡 물건의 특징을 함께 알려주세요 -- 게시글에 공개되지 않은 특징이나 분실 장소·시기 등을
-          전달하면 소유자 확인과 안전한 반환에 도움이 돼요.
+          {t("post.foundContactNotice")}
         </p>
       )}
       {(post.organizationId !== null ? organizationChat.show : !isOwner) &&
         (organizationChat.disabled ? (
           <span className="w-fit rounded-full border border-border px-4 py-2 text-sm font-medium text-muted-foreground opacity-60">
-            폐쇄된 단체입니다
+            {t("post.closedOrganization")}
           </span>
         ) : currentUser ? (
           <DirectChatButton postType={type} postId={post.id} isOrganizationPost={post.organizationId !== null} />
@@ -342,7 +359,7 @@ export default async function PostDetailPage({
             href={`/login?reason=chat&callbackUrl=${encodeURIComponent(`/post/${post.id}?type=${type}`)}`}
             className="w-fit rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-foreground/30"
           >
-            {post.organizationId !== null ? "단체에 문의하기" : "채팅하기"}
+            {post.organizationId !== null ? t("post.contactOrganization") : t("post.startChat")}
           </Link>
         ))}
 

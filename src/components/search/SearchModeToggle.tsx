@@ -7,6 +7,9 @@
 // 결정한다(검색 기본 모드 UX 수정 Phase: Home/`/search`는 AI 검색, `/lost`
 // `/found`는 키워드 검색이 기본 -- SearchFilterBar의 `defaultMode` prop
 // 참고).
+import { useI18n } from "@/lib/i18n/client";
+import type { TranslationKey } from "@/lib/i18n/translate";
+
 export type SearchUiMode = "ai" | "keyword";
 
 type SearchModeToggleProps = {
@@ -14,9 +17,11 @@ type SearchModeToggleProps = {
   onChange: (mode: SearchUiMode) => void;
 };
 
-const OPTIONS: { value: SearchUiMode; label: string }[] = [
-  { value: "ai", label: "AI 검색" },
-  { value: "keyword", label: "키워드 검색" },
+// 다국어(i18n) Phase: 라벨만 번역 키로 바뀌었고 값/순서는 그대로다
+// (AI 검색이 항상 먼저).
+const OPTIONS: { value: SearchUiMode; labelKey: TranslationKey }[] = [
+  { value: "ai", labelKey: "search.mode.ai" },
+  { value: "keyword", labelKey: "search.mode.keyword" },
 ];
 
 // 다크모드 토글 UI Phase: 이전에는 선택된 pill이 `bg-card`(트랙의
@@ -29,8 +34,10 @@ const OPTIONS: { value: SearchUiMode; label: string }[] = [
 // 검증된 조합(ThemeSettings의 다크/라이트 토글 등 19곳에서 재사용 중)으로
 // 맞췄다 -- 새 토큰이나 새 컴포넌트를 만들지 않았다.
 export function SearchModeToggle({ mode, onChange }: SearchModeToggleProps) {
+  const { t } = useI18n();
+
   return (
-    <div className="flex w-fit flex-wrap gap-1.5" role="radiogroup" aria-label="검색 방식">
+    <div className="flex w-fit flex-wrap gap-1.5" role="radiogroup" aria-label={t("search.mode.label")}>
       {OPTIONS.map((option) => (
         <button
           key={option.value}
@@ -44,7 +51,7 @@ export function SearchModeToggle({ mode, onChange }: SearchModeToggleProps) {
               : "border-border text-muted-foreground hover:border-foreground/30"
           }`}
         >
-          {option.label}
+          {t(option.labelKey)}
         </button>
       ))}
     </div>

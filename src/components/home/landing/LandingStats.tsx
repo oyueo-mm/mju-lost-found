@@ -1,6 +1,7 @@
 import { getPostStats } from "@/lib/posts/service";
 import { LinkButton } from "@/components/ui/Button";
 import { BoxIcon, HandboxIcon } from "@/components/icons";
+import { getTranslator } from "@/lib/i18n/server";
 
 // Phase P-4: real DB counts (getPostStats(), never a hardcoded/mock
 // number -- see this phase's own spec), placed right after the Hero so a
@@ -10,6 +11,7 @@ import { BoxIcon, HandboxIcon } from "@/components/icons";
 // FeatureGrid.tsx's own comment already follows, so this doesn't read as
 // a fourth boxed section in a row.
 export async function LandingStats() {
+  const t = await getTranslator();
   let stats: Awaited<ReturnType<typeof getPostStats>> | null = null;
   try {
     stats = await getPostStats();
@@ -30,29 +32,32 @@ export async function LandingStats() {
       <div className="grid w-full max-w-md grid-cols-3 gap-4">
         <div className="flex flex-col gap-1">
           <span className="text-2xl font-bold text-foreground md:text-3xl">{lostCount.toLocaleString()}</span>
-          <span className="text-xs text-muted-foreground md:text-sm">등록된 분실물</span>
+          <span className="text-xs text-muted-foreground md:text-sm">{t("landing.stats.lost")}</span>
         </div>
         <div className="flex flex-col gap-1 border-x border-border">
           <span className="text-2xl font-bold text-foreground md:text-3xl">{foundCount.toLocaleString()}</span>
-          <span className="text-xs text-muted-foreground md:text-sm">등록된 습득물</span>
+          <span className="text-xs text-muted-foreground md:text-sm">{t("landing.stats.found")}</span>
         </div>
         <div className="flex flex-col gap-1">
           <span className="text-2xl font-bold text-primary md:text-3xl">{recentCount.toLocaleString()}</span>
-          <span className="text-xs text-muted-foreground md:text-sm">최근 7일 신규 등록</span>
+          <span className="text-xs text-muted-foreground md:text-sm">{t("landing.stats.recent")}</span>
         </div>
       </div>
 
       <p className="max-w-sm text-sm text-muted-foreground md:text-base">
-        지금까지 <span className="font-semibold text-foreground">{totalCount.toLocaleString()}건</span>의 물건이
-        등록됐어요. 혹시 내 물건도 여기 있지 않을까요?
+        {t("landing.stats.summaryPrefix")}
+        <span className="font-semibold text-foreground">
+          {t("landing.stats.summaryCount", { count: totalCount.toLocaleString() })}
+        </span>
+        {t("landing.stats.summarySuffix")}
       </p>
 
       <div className="flex flex-wrap items-center justify-center gap-2">
         <LinkButton href="/lost" variant="secondary" size="sm" className="gap-1.5">
-          <BoxIcon className="size-4" /> 분실물 둘러보기
+          <BoxIcon className="size-4" /> {t("landing.stats.browseLost")}
         </LinkButton>
         <LinkButton href="/found" variant="secondary" size="sm" className="gap-1.5">
-          <HandboxIcon className="size-4" /> 습득물 둘러보기
+          <HandboxIcon className="size-4" /> {t("landing.stats.browseFound")}
         </LinkButton>
       </div>
     </section>

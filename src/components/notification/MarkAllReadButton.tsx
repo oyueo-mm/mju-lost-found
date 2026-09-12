@@ -4,9 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { dispatchNotificationUnreadCount } from "@/components/notification/notificationUnreadEvent";
+import { useI18n } from "@/lib/i18n/client";
 
 export function MarkAllReadButton({ disabled }: { disabled: boolean }) {
   const router = useRouter();
+  const { t } = useI18n();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,7 +20,7 @@ export function MarkAllReadButton({ disabled }: { disabled: boolean }) {
       const res = await fetch("/api/notifications/read-all", { method: "POST" });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
-        setError(json?.error ?? "처리하지 못했습니다.");
+        setError(json?.error ?? t("notification.markAllFailed"));
         return;
       }
       // Phase P-3: pushes the header bell badge to 0 immediately -- same
@@ -31,7 +33,7 @@ export function MarkAllReadButton({ disabled }: { disabled: boolean }) {
       }
       router.refresh();
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
     } finally {
       setPending(false);
     }
@@ -46,7 +48,7 @@ export function MarkAllReadButton({ disabled }: { disabled: boolean }) {
         disabled={disabled || pending}
         className="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-foreground/30 disabled:opacity-60"
       >
-        {pending ? "처리 중..." : "모두 읽음 처리"}
+        {pending ? t("notification.processing") : t("notification.markAllRead")}
       </button>
     </div>
   );

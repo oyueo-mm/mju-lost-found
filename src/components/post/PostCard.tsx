@@ -1,3 +1,5 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 
@@ -5,12 +7,17 @@ import type { PostDTO } from "@/lib/posts/service";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { AttributionLink } from "@/components/user/AttributionLink";
 import { PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
+import { useI18n } from "@/lib/i18n/client";
+import { LOCALE_INTL_TAG } from "@/lib/i18n/config";
+import { postTypeLabelKey } from "@/lib/i18n/labels";
+import type { Locale } from "@/lib/i18n/config";
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
+function formatDate(date: Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], {
+    dateStyle: "medium",
+    timeZone: "Asia/Seoul",
+  }).format(date);
 }
-
-const TYPE_LABEL: Record<PostDTO["type"], string> = { lost: "분실물", found: "습득물" };
 
 type PostCardProps = {
   post: PostDTO;
@@ -95,7 +102,12 @@ type PostCardProps = {
 // to their profile instead. `group`/`group-hover` (image zoom on hover)
 // still work unchanged -- :hover is based on the pointer being over the
 // element's box, independent of which descendant is topmost for clicks.
-export function PostCard({ post, scoreLabel = "검색 유사도", scoreDisplay = "percentage" }: PostCardProps) {
+export function PostCard({ post, scoreLabel, scoreDisplay = "percentage" }: PostCardProps) {
+  const { locale, t } = useI18n();
+  // 기본 라벨("검색 유사도")은 이제 호출자가 문자열을 넘기지 않았을 때
+  // 여기서 번역해 채운다 -- 기존 기본값의 의미는 그대로다.
+  const resolvedScoreLabel = scoreLabel ?? t("post.score.search");
+
   return (
     // Phase P-4: `transition` (not `transition-colors`) so border-color,
     // box-shadow, and the small hover lift below all animate off the same
@@ -117,7 +129,7 @@ export function PostCard({ post, scoreLabel = "검색 유사도", scoreDisplay =
             PostCard call site just to hide it there. */}
         <div className="flex items-center justify-between gap-2">
           <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-foreground">
-            {TYPE_LABEL[post.type]}
+            {t(postTypeLabelKey(post.type))}
           </span>
           <StatusBadge status={post.status} />
         </div>
@@ -149,11 +161,11 @@ export function PostCard({ post, scoreLabel = "검색 유사도", scoreDisplay =
         <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
           <span className="flex items-center gap-1 truncate">
             <PinIcon className="size-3.5 shrink-0" />
-            <span className="truncate">{post.location ?? "위치 미상"}</span>
+            <span className="truncate">{post.location ?? t("post.locationUnknown")}</span>
           </span>
           <span className="flex items-center gap-1">
             <ClockIcon className="size-3.5 shrink-0" />
-            {formatDate(post.createdAt)}
+            {formatDate(post.createdAt, locale)}
           </span>
           {/* Phase 31: same EyeIcon+count pattern as post/[id]/page.tsx's
               own view-count display -- reuses the existing viewCount DTO
@@ -176,7 +188,9 @@ export function PostCard({ post, scoreLabel = "검색 유사도", scoreDisplay =
             the just-created-post auto-recommendation view). */}
         {typeof post.score === "number" && scoreDisplay !== "hidden" && (
           <span className="mt-0.5 w-fit rounded-full bg-primary-muted px-2 py-0.5 text-[11px] font-medium text-primary">
-            {scoreDisplay === "decimal" ? `${scoreLabel} ${post.score.toFixed(2)}` : `${scoreLabel} ${Math.round(post.score * 100)}%`}
+            {scoreDisplay === "decimal"
+              ? `${resolvedScoreLabel} ${post.score.toFixed(2)}`
+              : `${resolvedScoreLabel} ${Math.round(post.score * 100)}%`}
           </span>
         )}
       </div>

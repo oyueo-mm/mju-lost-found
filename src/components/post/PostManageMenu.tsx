@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 
 import type { PostType } from "@/lib/posts/schema";
 import { MoreIcon } from "@/components/icons";
+import { useI18n } from "@/lib/i18n/client";
+import { statusLabelKeyOrNull } from "@/lib/i18n/labels";
 
 type PostManageMenuProps = {
   id: number;
@@ -28,6 +30,7 @@ type PostManageMenuProps = {
 // UI-only consolidation, no permission logic changed or duplicated here).
 export function PostManageMenu({ id, type, currentStatus, statuses }: PostManageMenuProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<"status" | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +38,10 @@ export function PostManageMenu({ id, type, currentStatus, statuses }: PostManage
 
   const [initial, final] = statuses;
   const isFinal = currentStatus === final;
+  // 다국어(i18n) Phase: PATCH로 서버에 보내는 값(`final`)은 언제나 DB의
+  // 한국어 원문 그대로다 -- 메뉴에 보이는 글자만 번역한다.
+  const finalKey = statusLabelKeyOrNull(final);
+  const finalLabel = finalKey ? t(finalKey) : final;
 
   // No dropdown/popover library in this project (see icons.tsx's own
   // "no new dependency" convention) -- a plain outside-click listener is
@@ -62,13 +69,13 @@ export function PostManageMenu({ id, type, currentStatus, statuses }: PostManage
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "상태를 변경하지 못했습니다.");
+        setError(json.error ?? t("post.statusChangeFailed"));
         return;
       }
       setOpen(false);
       router.refresh();
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
     } finally {
       setPending(null);
     }
@@ -76,7 +83,7 @@ export function PostManageMenu({ id, type, currentStatus, statuses }: PostManage
 
   async function handleDelete() {
     if (pending !== null) return;
-    if (!confirm("정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) return;
+    if (!confirm(t("post.deleteConfirm"))) return;
 
     setPending("delete");
     setError(null);
@@ -84,14 +91,14 @@ export function PostManageMenu({ id, type, currentStatus, statuses }: PostManage
       const res = await fetch(`/api/posts/${id}?type=${type}`, { method: "DELETE" });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "삭제하지 못했습니다.");
+        setError(json.error ?? t("post.deleteFailed"));
         setPending(null);
         return;
       }
       router.push(type === "lost" ? "/lost" : "/found");
       router.refresh();
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
       setPending(null);
     }
   }
@@ -103,7 +110,7 @@ export function PostManageMenu({ id, type, currentStatus, statuses }: PostManage
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="게시글 관리 메뉴"
+        aria-label={t("post.manageMenu")}
         className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       >
         <MoreIcon className="size-5" />
@@ -120,7 +127,7 @@ export function PostManageMenu({ id, type, currentStatus, statuses }: PostManage
             className="block px-4 py-2.5 text-sm text-foreground hover:bg-muted"
             onClick={() => setOpen(false)}
           >
-            수정
+            {t("common.edit")}
           </Link>
           {!isFinal && (
             <button
@@ -130,7 +137,7 @@ export function PostManageMenu({ id, type, currentStatus, statuses }: PostManage
               disabled={pending !== null}
               className="block w-full px-4 py-2.5 text-left text-sm text-foreground hover:bg-muted disabled:opacity-60"
             >
-              {pending === "status" ? "변경 중..." : `'${final}'(으)로 상태 변경`}
+              {pending === "status" ? t("post.changingStatus") : t("post.changeStatusTo", { status: finalLabel })}
             </button>
           )}
           <button
@@ -140,7 +147,7 @@ export function PostManageMenu({ id, type, currentStatus, statuses }: PostManage
             disabled={pending !== null}
             className="block w-full px-4 py-2.5 text-left text-sm text-destructive hover:bg-destructive-muted disabled:opacity-60"
           >
-            {pending === "delete" ? "삭제 중..." : "삭제"}
+            {pending === "delete" ? t("common.deleting") : t("common.delete")}
           </button>
         </div>
       )}
@@ -156,7 +163,9 @@ export function PostManageMenu({ id, type, currentStatus, statuses }: PostManage
           plain text under the trigger only in the rare final-state
           all-actions-done case, not inside the menu itself. */}
       {isFinal && open === false && (
-        <span className="sr-only">현재 상태: {initial === final ? initial : final}</span>
+        <span className="sr-only">
+          {t("post.currentStatus", { status: initial === final ? initial : finalLabel })}
+        </span>
       )}
     </div>
   );

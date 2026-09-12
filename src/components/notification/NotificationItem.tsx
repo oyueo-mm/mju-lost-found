@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { dispatchNotificationUnreadCount } from "@/components/notification/notificationUnreadEvent";
 import { AlertIcon, BellIcon, ChatBubbleIcon, ChatIcon, HandboxIcon, ShieldIcon } from "@/components/icons";
+import { useI18n } from "@/lib/i18n/client";
 
 // Phase E-2: one icon per NotificationType's lowercase string (see
 // notification/service.ts's own NOTIFICATION_TYPE_FROM_DB/
@@ -55,6 +56,7 @@ export function NotificationItem({
   href,
 }: NotificationItemProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const [isRead, setIsRead] = useState(initialIsRead);
   const [pending, setPending] = useState(false);
   // Phase E-2: local-only -- once a DELETE actually succeeds, this item
@@ -116,7 +118,7 @@ export function NotificationItem({
       const res = await fetch(`/api/notifications/${id}`, { method: "DELETE" });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
-        setDeleteError(json?.error ?? "삭제하지 못했습니다.");
+        setDeleteError(json?.error ?? t("notification.deleteFailed"));
         return;
       }
       setRemoved(true);
@@ -127,7 +129,7 @@ export function NotificationItem({
       }
       router.refresh();
     } catch {
-      setDeleteError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setDeleteError(t("common.networkError"));
     } finally {
       setDeleting(false);
     }
@@ -161,7 +163,7 @@ export function NotificationItem({
         type="button"
         onClick={handleDelete}
         disabled={deleting}
-        aria-label="알림 삭제"
+        aria-label={t("notification.delete")}
         className="absolute top-3 right-3 rounded-full px-1.5 py-0.5 text-xs text-muted-foreground hover:text-destructive disabled:opacity-60"
       >
         ×

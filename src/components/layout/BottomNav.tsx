@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { ADMIN_NAV_ITEM, NAV_ITEMS, isNavActive } from "./NavLinks";
+import { useI18n } from "@/lib/i18n/client";
 import { onChatUnreadCount } from "./chatUnreadEvent";
 import { HomeIcon, BoxIcon, HandboxIcon, ChatIcon, UserIcon, ShieldIcon } from "@/components/icons";
 
@@ -31,6 +32,7 @@ const ICONS = {
 // wasn't reliable for this same-URL shared-layout case).
 export function BottomNav({ unreadChatCount, isAdmin = false }: { unreadChatCount: number; isAdmin?: boolean }) {
   const pathname = usePathname();
+  const { t } = useI18n();
   const [prevUnreadChatCount, setPrevUnreadChatCount] = useState(unreadChatCount);
   const [liveUnreadChatCount, setLiveUnreadChatCount] = useState(unreadChatCount);
   // "Adjusting state when a prop changes" during render (not inside an
@@ -49,7 +51,7 @@ export function BottomNav({ unreadChatCount, isAdmin = false }: { unreadChatCoun
 
   return (
     <nav
-      aria-label="주요 메뉴"
+      aria-label={t("nav.primary")}
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur-sm md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
@@ -71,14 +73,14 @@ export function BottomNav({ unreadChatCount, isAdmin = false }: { unreadChatCoun
                   <Icon className="size-6" />
                   {badge && (
                     <span
-                      aria-label={`읽지 않은 채팅 ${badge}개`}
+                      aria-label={t("nav.unreadChat", { count: badge })}
                       className="absolute -top-1 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-destructive-foreground"
                     >
                       {badge > 9 ? "9+" : badge}
                     </span>
                   )}
                 </span>
-                {item.label}
+                {t(item.labelKey)}
               </Link>
             </li>
           );
