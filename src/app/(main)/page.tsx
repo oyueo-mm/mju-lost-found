@@ -33,8 +33,8 @@ const RECENT_LIMIT = 6;
 // 해야 했다. 이제 홈 검색은 AI + 습득물로 고정되고(HomeSearchBar 자체
 // 주석 참고) 사용자는 바로 입력만 하면 된다.
 //
-// 그 외 홈의 구조는 예전 그대로다 -- 검색 -> "어떤 물건을 찾고
-// 있나요?" 카테고리 탐색 -> 최근 분실물 -> 최근 습득물. 카테고리
+// 그 외 홈의 구조는 예전 그대로다 -- 검색 -> 카테고리 탐색 -> 최근
+// 분실물 -> 최근 습득물. 카테고리
 // 9칸도 그대로 있고, 달라진 건 각 칸의 이모지가 icons.tsx의 선형
 // 아이콘으로 바뀐 것뿐이다(CategoryShortcuts 참고). 두 모드 선택과
 // 게시판 선택은 /search·/lost·/found의 SearchFilterBar에 그대로 남아
@@ -60,12 +60,12 @@ export default async function Home() {
   }
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="flex flex-col gap-10">
       {/* 검색 -- 이 페이지에서 가장 중요한 동작이므로 맨 위에서 가장 큰
           타이포그래피를 가져간다. 예전 히어로와 같은 자리, 같은 여백이고
-          (py-4/md:py-8, gap-5) 그 안에서 토글과 select 두 줄만 사라졌다.
+          그 안에서 토글과 select 두 줄만 사라졌다.
           거대한 히어로로 키우거나 그라데이션/배지를 새로 넣지 않는다. */}
-      <section className="flex flex-col items-center gap-5 py-4 text-center md:py-8">
+      <section className="flex flex-col items-center gap-4 py-2 text-center md:py-4">
         <h1 className="text-2xl leading-snug font-bold text-balance text-foreground md:text-3xl">
           {t("home.searchHeading")}
         </h1>

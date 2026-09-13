@@ -105,7 +105,7 @@ export const ko = {
   "home.hero.subtitle": "물건의 특징을 자유롭게 설명해보세요. 사진을 더하면 더 정확해져요.",
   "home.viewLost": "분실물 보기",
   "home.viewFound": "습득물 보기",
-  "home.categories.title": "어떤 물건을 찾고 있나요?",
+  "home.categories.title": "카테고리로 찾아보기",
   "home.searchHeading": "무엇을 찾고 있나요?",
   "home.recentLost": "최근 분실물",
   "home.recentFound": "최근 습득물",

@@ -91,7 +91,7 @@ export const vi: Dictionary = {
   "home.hero.subtitle": "Chỉ cần mô tả đặc điểm món đồ. Thêm ảnh sẽ tìm chính xác hơn.",
   "home.viewLost": "Xem đồ thất lạc",
   "home.viewFound": "Xem đồ nhặt được",
-  "home.categories.title": "Bạn đang tìm món đồ nào?",
+  "home.categories.title": "Tìm theo danh mục",
   "home.searchHeading": "Bạn đang tìm gì?",
   "home.recentLost": "Đồ thất lạc gần đây",
   "home.recentFound": "Đồ nhặt được gần đây",

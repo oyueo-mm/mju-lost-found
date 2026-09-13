@@ -93,7 +93,7 @@ export const en: Dictionary = {
   "home.hero.subtitle": "Just describe the item in your own words. Adding a photo makes it even more accurate.",
   "home.viewLost": "Browse lost items",
   "home.viewFound": "Browse found items",
-  "home.categories.title": "What are you looking for?",
+  "home.categories.title": "Browse by category",
   "home.searchHeading": "What are you looking for?",
   "home.recentLost": "Recent lost items",
   "home.recentFound": "Recent found items",

@@ -89,7 +89,7 @@ export const zh: Dictionary = {
   "home.hero.subtitle": "用自己的话描述物品特征即可。加上照片会更准确。",
   "home.viewLost": "查看失物",
   "home.viewFound": "查看招领",
-  "home.categories.title": "您在找什么物品？",
+  "home.categories.title": "按类别查找",
   "home.searchHeading": "您在找什么物品？",
   "home.recentLost": "最新失物",
   "home.recentFound": "最新招领",

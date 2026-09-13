@@ -92,7 +92,7 @@ export const mn: Dictionary = {
   "home.hero.subtitle": "Эд зүйлийнхээ онцлогийг чөлөөтэй тайлбарлаарай. Зураг нэмбэл илүү оновчтой болно.",
   "home.viewLost": "Гээгдсэн эд зүйл харах",
   "home.viewFound": "Олдсон эд зүйл харах",
-  "home.categories.title": "Ямар эд зүйл хайж байна вэ?",
+  "home.categories.title": "Ангиллаар хайх",
   "home.searchHeading": "Юу хайж байна вэ?",
   "home.recentLost": "Сүүлийн гээгдсэн эд зүйл",
   "home.recentFound": "Сүүлийн олдсон эд зүйл",
