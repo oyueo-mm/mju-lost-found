@@ -94,6 +94,7 @@ export const en: Dictionary = {
   "home.viewLost": "Browse lost items",
   "home.viewFound": "Browse found items",
   "home.categories.title": "What are you looking for?",
+  "home.searchHeading": "What are you looking for?",
   "home.recentLost": "Recent lost items",
   "home.recentFound": "Recent found items",
   "home.recentLost.error": "Could not load recent lost items.",

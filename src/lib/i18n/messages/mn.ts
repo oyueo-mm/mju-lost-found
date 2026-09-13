@@ -93,6 +93,7 @@ export const mn: Dictionary = {
   "home.viewLost": "Гээгдсэн эд зүйл харах",
   "home.viewFound": "Олдсон эд зүйл харах",
   "home.categories.title": "Ямар эд зүйл хайж байна вэ?",
+  "home.searchHeading": "Юу хайж байна вэ?",
   "home.recentLost": "Сүүлийн гээгдсэн эд зүйл",
   "home.recentFound": "Сүүлийн олдсон эд зүйл",
   "home.recentLost.error": "Сүүлийн гээгдсэн эд зүйлийг ачаалж чадсангүй.",

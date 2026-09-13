@@ -106,6 +106,7 @@ export const ko = {
   "home.viewLost": "분실물 보기",
   "home.viewFound": "습득물 보기",
   "home.categories.title": "어떤 물건을 찾고 있나요?",
+  "home.searchHeading": "무엇을 찾고 있나요?",
   "home.recentLost": "최근 분실물",
   "home.recentFound": "최근 습득물",
   "home.recentLost.error": "최근 분실물을 불러오지 못했습니다.",

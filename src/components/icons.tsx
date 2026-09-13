@@ -253,3 +253,113 @@ export function InfoIcon(props: IconProps) {
     </svg>
   );
 }
+
+// 카테고리 아이콘 UI 개선 Phase: 홈의 카테고리 탐색이 쓰던 이모지
+// (🎧✏️📚👛💳👕🎒💍📦)를 대체하는 9개 글리프. 새 아이콘 라이브러리를
+// 넣지 않고(이 파일 맨 위 주석의 "의존성 없이 직접 그린다" 원칙 그대로)
+// 이 파일의 기존 시각 언어 -- 24x24 viewBox, 1.75px stroke, round join,
+// currentColor -- 를 하나도 벗어나지 않게 그렸다. 그래서 카테고리
+// 아이콘 9개끼리도, 그리고 앱의 나머지 아이콘과도 굵기/크기감이 같다.
+//
+// 기타(GridIcon)에 기존 MoreIcon(⋯)을 재사용하지 않은 이유: MoreIcon은
+// 이 파일에서 유일하게 fill 기반(stroke="none")이라, 외곽선으로 그린
+// 나머지 8개 옆에 두면 혼자 굵고 진하게 보여 "아이콘 스타일을 서로
+// 통일한다"는 요구와 어긋난다.
+//
+// BoxIcon/HandboxIcon(분실물/습득물 탭)의 3D 상자 실루엣도 의도적으로
+// 피했다 -- 그 둘은 게시판 정체성을 가리키는 아이콘이라, 카테고리
+// 하나("기타")가 같은 모양을 쓰면 의미가 겹친다.
+
+// 전자기기 -- 헤드폰
+export function HeadphonesIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4.5 15v-3a7.5 7.5 0 0 1 15 0v3" />
+      <path d="M4.5 14.5h2a1 1 0 0 1 1 1v3.5a1 1 0 0 1-1 1h-1a2 2 0 0 1-2-2z" />
+      <path d="M19.5 14.5h-2a1 1 0 0 0-1 1v3.5a1 1 0 0 0 1 1h1a2 2 0 0 0 2-2z" />
+    </svg>
+  );
+}
+
+// 필기구 -- 연필
+export function PenIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7.5 18.5l-4 1 1-4z" />
+      <path d="m14.5 5.5 3 3" />
+    </svg>
+  );
+}
+
+// 책
+export function BookIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M19.5 16.5V4.5A1.5 1.5 0 0 0 18 3H7.5A2.5 2.5 0 0 0 5 5.5v13A2.5 2.5 0 0 0 7.5 21H18a1.5 1.5 0 0 0 1.5-1.5v-3" />
+      <path d="M5 18.5A2.5 2.5 0 0 1 7.5 16h12" />
+    </svg>
+  );
+}
+
+// 지갑 -- 오른쪽 걸쇠로 카드와 구분된다
+export function WalletIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3.5 8.5A2.5 2.5 0 0 1 6 6h10.5a1 1 0 0 1 1 1v1.5" />
+      <rect x="3.5" y="8.5" width="17" height="11" rx="2.5" />
+      <path d="M20.5 12.5h-3.25a2.25 2.25 0 0 0 0 4.5h3.25" />
+    </svg>
+  );
+}
+
+// 카드 -- 자기띠 한 줄로 지갑과 구분된다
+export function CardIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" />
+      <path d="M2.5 10h19" />
+      <path d="M6 14.5h3.5" />
+    </svg>
+  );
+}
+
+// 의류 -- 티셔츠
+export function ShirtIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M9 3.5 12 6.2l3-2.7 4.4 2.1a1 1 0 0 1 .54 1.13l-.83 3.32a1 1 0 0 1-1.3.71L16.5 10.2v9.3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-9.3l-1.31.46a1 1 0 0 1-1.3-.71L4.06 6.63A1 1 0 0 1 4.6 5.5z" />
+    </svg>
+  );
+}
+
+// 가방
+export function BagIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M5.6 8.5h12.8a1.5 1.5 0 0 1 1.49 1.66l-.82 7.5A2.5 2.5 0 0 1 16.59 20H7.41a2.5 2.5 0 0 1-2.48-2.24l-.82-7.5A1.5 1.5 0 0 1 5.6 8.5z" />
+      <path d="M9 8.5V7a3 3 0 0 1 6 0v1.5" />
+    </svg>
+  );
+}
+
+// 액세서리 -- 반지
+export function RingIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="15" r="5" />
+      <path d="M9.6 6.8 12 3.5l2.4 3.3-2.4 3.2z" />
+    </svg>
+  );
+}
+
+// 기타 -- 2x2 격자("그 외 분류")
+export function GridIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+      <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+      <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}

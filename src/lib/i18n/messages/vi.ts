@@ -92,6 +92,7 @@ export const vi: Dictionary = {
   "home.viewLost": "Xem đồ thất lạc",
   "home.viewFound": "Xem đồ nhặt được",
   "home.categories.title": "Bạn đang tìm món đồ nào?",
+  "home.searchHeading": "Bạn đang tìm gì?",
   "home.recentLost": "Đồ thất lạc gần đây",
   "home.recentFound": "Đồ nhặt được gần đây",
   "home.recentLost.error": "Không tải được đồ thất lạc gần đây.",

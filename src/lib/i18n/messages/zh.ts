@@ -90,6 +90,7 @@ export const zh: Dictionary = {
   "home.viewLost": "查看失物",
   "home.viewFound": "查看招领",
   "home.categories.title": "您在找什么物品？",
+  "home.searchHeading": "您在找什么物品？",
   "home.recentLost": "最新失物",
   "home.recentFound": "最新招领",
   "home.recentLost.error": "无法加载最新失物。",
