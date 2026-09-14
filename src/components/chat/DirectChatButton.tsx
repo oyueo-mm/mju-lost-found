@@ -66,7 +66,7 @@ export function DirectChatButton({ postType, postId, isOrganizationPost = false 
         type="button"
         onClick={handleClick}
         disabled={pending}
-        className="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-foreground/30 disabled:opacity-60"
+        className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60"
       >
         {pending ? t("common.loading") : isOrganizationPost ? t("post.contactOrganization") : t("post.startChat")}
       </button>

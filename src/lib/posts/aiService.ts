@@ -228,6 +228,18 @@ export async function updateFoundPost(
 // general search box), so the two aren't unified into one shared value.
 const SEMANTIC_SEARCH_TOP_K = 10;
 
+// Vector search returns normalized cosine similarity, not pgvector distance:
+// vectorSearch.ts converts `1 - (embedding <=> query)` through normalizeScore
+// into the shared [0, 1] scale. The measured semantic pairs in the project
+// were about 0.63 cosine for a relevant pair and 0.28 for an unrelated pair;
+// 0.70 on the normalized scale (cosine about 0.40) keeps relevant candidates
+// while suppressing weak recommendations. Keyword search never uses this.
+export const AI_SEARCH_MIN_SIMILARITY = 0.7;
+
+export function filterAiSearchResults<T extends { score: number }>(results: T[]): T[] {
+  return results.filter((result) => result.score >= AI_SEARCH_MIN_SIMILARITY);
+}
+
 // Phase 13-2: Phase 13-1's real-DB evaluation surfaced a systematic "hard
 // negative" failure -- pure cosine similarity sometimes ranks a post whose
 // *description* merely mentions the query's subject word above the post
@@ -270,7 +282,7 @@ async function rankSemanticCandidates(
   query: string,
   filters: Omit<ListParams, "page" | "limit">,
 ): Promise<(PostDTO & { score: number })[]> {
-  const ranked = await findPostsBySemanticQuery(type, queryVector, SEMANTIC_SEARCH_TOP_K, filters);
+  const ranked = filterAiSearchResults(await findPostsBySemanticQuery(type, queryVector, SEMANTIC_SEARCH_TOP_K, filters));
   if (ranked.length === 0) return [];
 
   const scoreById = new Map(ranked.map((r) => [r.id, r.score]));
@@ -426,7 +438,7 @@ export async function searchPostsByImage(
   { page, limit, ...filters }: ListParams,
 ): Promise<PagedResult<PostDTO>> {
   const vector = await getImageEmbeddingProvider().embed(image);
-  const ranked = await findPostsByImageQuery(targetType, vector, IMAGE_SEARCH_TOP_K, filters);
+  const ranked = filterAiSearchResults(await findPostsByImageQuery(targetType, vector, IMAGE_SEARCH_TOP_K, filters));
 
   if (ranked.length === 0) {
     return { items: [], page, limit, total: 0, totalPages: 1 };
@@ -472,8 +484,9 @@ export async function searchPostsByImage(
 //   텍스트 + 이미지 -> findPostsBySemanticQuery()/findPostsByImageQuery()를
 //                       병렬로 돌리고, src/lib/recommendation/service.ts의
 //                       게시글 상세 AI 추천이 쓰는 것과 완전히 동일한
-//                       rankFusion.combineRankings()로 합친다 -- 새 weighting/
-//                       threshold를 만들지 않는다. 이 경우 반환되는 score는
+//                       rankFusion.combineRankings()로 합친다. 각 raw vector
+//                       candidate는 먼저 동일한 normalized-score threshold를
+//                       통과해야 한다. 이 경우 반환되는 score는
 //                       raw cosine similarity가 아니라 후보 풀 내에서
 //                       min-max 정규화한 뒤 평균한 값이다 (combineRankings의
 //                       own comment 참고) -- 즉 게시글 상세 AI 추천이 "AI
@@ -523,8 +536,8 @@ async function searchPostsByTextAndImage(
     getImageEmbeddingProvider().embed(image),
   ]);
   const [textRanked, imageRanked] = await Promise.all([
-    findPostsBySemanticQuery(targetType, textVector, SEMANTIC_SEARCH_TOP_K, filters),
-    findPostsByImageQuery(targetType, imageVector, IMAGE_SEARCH_TOP_K, filters),
+    findPostsBySemanticQuery(targetType, textVector, SEMANTIC_SEARCH_TOP_K, filters).then(filterAiSearchResults),
+    findPostsByImageQuery(targetType, imageVector, IMAGE_SEARCH_TOP_K, filters).then(filterAiSearchResults),
   ]);
   const combined = combineRankings(textRanked, imageRanked);
 

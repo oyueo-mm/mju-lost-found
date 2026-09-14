@@ -66,7 +66,7 @@ export function ThemeSettings() {
   }
 
   return (
-    <section className="flex flex-col gap-5 rounded-card border border-border bg-card p-5">
+    <section id="display-settings" className="flex flex-col gap-5 rounded-card border border-border bg-card p-5">
       <h2 className="font-semibold text-foreground">{t("theme.title")}</h2>
 
       <div className="flex flex-col gap-2">

@@ -344,26 +344,28 @@ export default async function PostDetailPage({
           방향(분실자 -> 습득자)이다. 기존 채팅하기/단체에 문의하기 버튼은
           그대로 두고, 그 위에 순수 안내 문구만 추가한다 -- 개인/단체 채팅
           구조를 분리하지 않고 두 경우 모두 동일하게 보인다. */}
-      {post.type === "found" && (post.organizationId !== null ? organizationChat.show : !isOwner) && (
-        <p className="rounded-lg bg-primary-muted px-3.5 py-3 text-xs text-primary">
-          {t("post.foundContactNotice")}
-        </p>
-      )}
       {(post.organizationId !== null ? organizationChat.show : !isOwner) &&
-        (organizationChat.disabled ? (
-          <span className="w-fit rounded-full border border-border px-4 py-2 text-sm font-medium text-muted-foreground opacity-60">
-            {t("post.closedOrganization")}
-          </span>
-        ) : currentUser ? (
-          <DirectChatButton postType={type} postId={post.id} isOrganizationPost={post.organizationId !== null} />
-        ) : (
-          <Link
-            href={`/login?reason=chat&callbackUrl=${encodeURIComponent(`/post/${post.id}?type=${type}`)}`}
-            className="w-fit rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-foreground/30"
-          >
-            {post.organizationId !== null ? t("post.contactOrganization") : t("post.startChat")}
-          </Link>
-        ))}
+        <div className="flex flex-col gap-2">
+          {post.type === "found" && (
+            <p className="rounded-lg bg-primary-muted px-3.5 py-3 text-xs text-primary">
+              {t("post.foundContactNotice")}
+            </p>
+          )}
+          {organizationChat.disabled ? (
+            <span className="w-fit rounded-full border border-border px-4 py-2 text-sm font-medium text-muted-foreground opacity-60">
+              {t("post.closedOrganization")}
+            </span>
+          ) : currentUser ? (
+            <DirectChatButton postType={type} postId={post.id} isOrganizationPost={post.organizationId !== null} />
+          ) : (
+            <Link
+              href={`/login?reason=chat&callbackUrl=${encodeURIComponent(`/post/${post.id}?type=${type}`)}`}
+              className="w-fit rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              {post.organizationId !== null ? t("post.contactOrganization") : t("post.startChat")}
+            </Link>
+          )}
+        </div>}
 
       {/* Phase J-2: one automatic "AI 추천" section replaces both the
           owner-only MatchPanel (매칭 후보 찾기 -> 매칭하기) and Phase I's

@@ -11,12 +11,41 @@
 import type { TranslationKey } from "@/lib/i18n/translate";
 
 export type NavKey = "home" | "lost" | "found" | "chat" | "me" | "admin";
+export type DesktopNavKey = NavKey | "search";
+
+export type NavIconName =
+  | "box"
+  | "handbox"
+  | "plus"
+  | "search"
+  | "chat"
+  | "user"
+  | "bell"
+  | "chatBubble"
+  | "logout"
+  | "shield"
+  | "info";
+
+export type NavChild = {
+  href?: string;
+  labelKey: TranslationKey;
+  icon: NavIconName;
+  action?: "signOut";
+};
+
+export type NavItem<Key extends DesktopNavKey = DesktopNavKey> = {
+  key: Key;
+  href: string;
+  labelKey: TranslationKey;
+  children?: NavChild[];
+  menuAlign?: "start" | "end";
+};
 
 // 다국어(i18n) Phase: 라벨을 하드코딩된 한국어 문자열 대신 번역 키로
 // 둔다 -- 탭의 개수/순서/href/활성화 규칙(isNavActive)은 전혀 바뀌지
 // 않았다. 실제 문구는 Header(DesktopNav)와 BottomNav가 각각 t()로
 // 읽는다.
-export const NAV_ITEMS: { key: NavKey; href: string; labelKey: TranslationKey }[] = [
+export const NAV_ITEMS: NavItem<NavKey>[] = [
   { key: "home", href: "/", labelKey: "nav.home" },
   { key: "lost", href: "/lost", labelKey: "nav.lost" },
   { key: "found", href: "/found", labelKey: "nav.found" },
@@ -24,10 +53,58 @@ export const NAV_ITEMS: { key: NavKey; href: string; labelKey: TranslationKey }[
   { key: "me", href: "/me", labelKey: "nav.me" },
 ];
 
-export const ADMIN_NAV_ITEM: { key: NavKey; href: string; labelKey: TranslationKey } = {
+export const ADMIN_NAV_ITEM: NavItem<NavKey> = {
   key: "admin",
   href: "/admin",
   labelKey: "nav.admin",
+};
+
+// Desktop navigation groups the two existing boards and search modes without
+// changing BottomNav's established five-tab layout.
+export const DESKTOP_NAV_ITEMS: NavItem[] = [
+  { key: "home", href: "/", labelKey: "nav.home" },
+  { key: "lost", href: "/lost", labelKey: "nav.lost" },
+  { key: "found", href: "/found", labelKey: "nav.found" },
+  {
+    key: "search",
+    href: "/search",
+    labelKey: "nav.search",
+    children: [
+      { href: "/search?mode=semantic&type=found", labelKey: "nav.searchAi", icon: "search" },
+      { href: "/search?mode=keyword&type=found", labelKey: "nav.searchKeyword", icon: "search" },
+    ],
+  },
+  { key: "chat", href: "/chat", labelKey: "nav.chat" },
+];
+
+export const DESKTOP_PROFILE_NAV_ITEM: NavItem<"me"> = {
+  key: "me",
+  href: "/me",
+  labelKey: "nav.me",
+  children: [
+    { href: "/me", labelKey: "nav.me", icon: "user" },
+    { href: "/posts/mine", labelKey: "me.myPosts", icon: "box" },
+    { href: "/notifications", labelKey: "nav.notifications", icon: "bell" },
+    { href: "/feedback", labelKey: "me.feedback", icon: "chatBubble" },
+    { href: "/me#display-settings", labelKey: "theme.title", icon: "info" },
+    { labelKey: "me.logout", icon: "logout", action: "signOut" },
+  ],
+  menuAlign: "end",
+};
+
+export const DESKTOP_ADMIN_NAV_ITEM: NavItem = {
+  ...ADMIN_NAV_ITEM,
+  menuAlign: "end",
+  children: [
+    { href: "/admin/reports", labelKey: "nav.adminReports", icon: "shield" },
+    { href: "/admin/feedback", labelKey: "nav.adminFeedback", icon: "chatBubble" },
+    { href: "/admin/posts", labelKey: "nav.adminPosts", icon: "box" },
+    { href: "/admin/users", labelKey: "nav.adminUsers", icon: "user" },
+    { href: "/admin/announcements", labelKey: "nav.adminAnnouncements", icon: "bell" },
+    { href: "/admin/organizations", labelKey: "nav.adminOrganizations", icon: "user" },
+    { href: "/admin/organization-requests", labelKey: "nav.adminOrganizationRequests", icon: "chatBubble" },
+    { href: "/admin/sanctions", labelKey: "nav.adminSanctions", icon: "shield" },
+  ],
 };
 
 // "내 정보" is a hub over several pre-existing routes (/posts/mine,
@@ -49,7 +126,7 @@ const ME_ASSOCIATED_PREFIXES = ["/me", "/posts/mine", "/notifications"];
 // intentionally highlights neither tab -- there's no reliable way to know
 // which board a viewer arrived from without threading extra state through
 // every link into it.
-export function isNavActive(key: NavKey, href: string, pathname: string): boolean {
+export function isNavActive(key: DesktopNavKey, href: string, pathname: string): boolean {
   if (key === "home") return pathname === "/";
   if (key === "me") {
     return ME_ASSOCIATED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));

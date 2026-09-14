@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { User } from "@/generated/prisma/client";
+import { normalizeScore } from "@/lib/ai/matching";
 
 const lostPost = {
   findMany: vi.fn(),
@@ -93,6 +94,8 @@ const {
   searchPosts,
   searchPostsByImage,
   searchPostsAI,
+  filterAiSearchResults,
+  AI_SEARCH_MIN_SIMILARITY,
 } = await import("./aiService");
 
 // A minimal stand-in for the Prisma User type -- these tests only exercise
@@ -921,7 +924,7 @@ describe("searchPosts -- mode=semantic (Phase 12)", () => {
     embed.mockResolvedValueOnce([0.1]);
     findPostsBySemanticQuery.mockResolvedValueOnce([
       { id: 2, score: 0.9 },
-      { id: 1, score: 0.4 },
+      { id: 1, score: 0.8 },
     ]);
     // findMany({id:{in:[2,1]}}) -- deliberately returned out of that order,
     // to prove the service re-sorts by the similarity ranking rather than
@@ -939,7 +942,7 @@ describe("searchPosts -- mode=semantic (Phase 12)", () => {
 
     expect(result.items.map((p) => p.id)).toEqual([2, 1]);
     expect(result.items[0].score).toBeCloseTo(0.9);
-    expect(result.items[1].score).toBeCloseTo(0.4);
+    expect(result.items[1].score).toBeCloseTo(0.8);
     expect(result.total).toBe(2);
   });
 
@@ -992,7 +995,7 @@ describe("searchPosts -- mode=semantic (Phase 12)", () => {
     embed.mockResolvedValueOnce([0.1]);
     findPostsBySemanticQuery.mockResolvedValueOnce([
       { id: 1, score: 0.9 },
-      { id: 2, score: 0.5 }, // this one will "not be found" below
+      { id: 2, score: 0.75 }, // this one will "not be found" below
     ]);
     lostPost.findMany.mockResolvedValueOnce([row({ id: 1 })]); // id 2 missing
 
@@ -1029,7 +1032,7 @@ describe("searchPosts -- mode=semantic, type=all (Phase 11-2)", () => {
   it("queries both boards with the same embedding and merges by score", async () => {
     embed.mockResolvedValueOnce([0.1, 0.2]);
     findPostsBySemanticQuery.mockImplementation(async (type: string) =>
-      type === "lost" ? [{ id: 1, score: 0.4 }] : [{ id: 1, score: 0.9 }],
+      type === "lost" ? [{ id: 1, score: 0.8 }] : [{ id: 1, score: 0.9 }],
     );
     lostPost.findMany.mockResolvedValueOnce([row({ id: 1, title: "지갑 분실" })]);
     foundPost.findMany.mockResolvedValueOnce([foundRow({ id: 1, title: "지갑 습득" })]);
@@ -1074,7 +1077,7 @@ describe("searchPosts -- mode=semantic, type=all (Phase 11-2)", () => {
     embed.mockResolvedValueOnce([0.1]);
     findPostsBySemanticQuery.mockImplementation(async (type: string) => {
       if (type === "lost") throw new Error("db blip");
-      return [{ id: 9, score: 0.6 }];
+      return [{ id: 9, score: 0.8 }];
     });
     foundPost.findMany.mockResolvedValueOnce([foundRow({ id: 9 })]);
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -1147,7 +1150,7 @@ describe("searchPosts -- semantic hard-negative tie-breaker (Phase 13-2)", () =>
     embed.mockResolvedValueOnce([0.1]);
     findPostsBySemanticQuery.mockResolvedValueOnce([
       { id: 1, score: 0.95 }, // clearly the best semantic match, title doesn't match query tokens
-      { id: 2, score: 0.6 }, // far behind, but its title literally contains a query token
+      { id: 2, score: 0.75 }, // far behind, but its title literally contains a query token
     ]);
     lostPost.findMany.mockResolvedValueOnce([
       row({ id: 1, title: "무선 이어폰 분실", description: "회색 무선 이어폰을 잃어버렸습니다" }),
@@ -1162,7 +1165,7 @@ describe("searchPosts -- semantic hard-negative tie-breaker (Phase 13-2)", () =>
       limit: 20,
     });
 
-    // 0.6 + 0.03 bonus (0.63) is still nowhere close to 0.95 -- the bonus
+    // 0.75 + 0.03 bonus (0.78) is still below 0.95 -- the bonus
     // is a tie-breaker, not a general keyword override.
     expect(result.items.map((p) => p.id)).toEqual([1, 2]);
   });
@@ -1170,8 +1173,8 @@ describe("searchPosts -- semantic hard-negative tie-breaker (Phase 13-2)", () =>
   it("leaves ranking unchanged when neither title matches a query token", async () => {
     embed.mockResolvedValueOnce([0.1]);
     findPostsBySemanticQuery.mockResolvedValueOnce([
-      { id: 2, score: 0.7 },
-      { id: 1, score: 0.6 },
+      { id: 2, score: 0.8 },
+      { id: 1, score: 0.75 },
     ]);
     lostPost.findMany.mockResolvedValueOnce([
       row({ id: 1, title: "지갑 분실", description: "갈색 지갑을 잃어버렸어요" }),
@@ -1181,8 +1184,8 @@ describe("searchPosts -- semantic hard-negative tie-breaker (Phase 13-2)", () =>
     const result = await searchPosts({ type: "lost", mode: "semantic", q: "학생증", page: 1, limit: 20 });
 
     expect(result.items.map((p) => p.id)).toEqual([2, 1]);
-    expect(result.items[0].score).toBeCloseTo(0.7);
-    expect(result.items[1].score).toBeCloseTo(0.6);
+    expect(result.items[0].score).toBeCloseTo(0.8);
+    expect(result.items[1].score).toBeCloseTo(0.75);
   });
 });
 
@@ -1210,7 +1213,7 @@ describe("searchPostsByImage", () => {
   it("searches LostPost when targetType is lost", async () => {
     const fakeImage = new Blob([new Uint8Array([1])], { type: "image/jpeg" });
     imageEmbed.mockResolvedValueOnce([0.1]);
-    findPostsByImageQuery.mockResolvedValueOnce([{ id: 1, score: 0.5 }]);
+    findPostsByImageQuery.mockResolvedValueOnce([{ id: 1, score: 0.75 }]);
     lostPost.findMany.mockResolvedValueOnce([row({ id: 1 })]);
 
     const result = await searchPostsByImage("lost", fakeImage, { page: 1, limit: 20 });
@@ -1236,7 +1239,7 @@ describe("searchPostsByImage", () => {
     imageEmbed.mockResolvedValueOnce([0.1]);
     findPostsByImageQuery.mockResolvedValueOnce([
       { id: 2, score: 0.9 },
-      { id: 1, score: 0.4 },
+      { id: 1, score: 0.8 },
     ]);
     // Deliberately out of ranked order, to prove re-sorting happens.
     lostPost.findMany.mockResolvedValueOnce([row({ id: 1 }), row({ id: 2 })]);
@@ -1245,7 +1248,7 @@ describe("searchPostsByImage", () => {
 
     expect(result.items.map((p) => p.id)).toEqual([2, 1]);
     expect(result.items[0].score).toBeCloseTo(0.9);
-    expect(result.items[1].score).toBeCloseTo(0.4);
+    expect(result.items[1].score).toBeCloseTo(0.8);
   });
 
   it("paginates the ranked results using page/limit", async () => {
@@ -1297,7 +1300,7 @@ describe("searchPostsByImage", () => {
 describe("searchPostsAI", () => {
   it("text only: delegates to the same semantic search path as searchPosts(mode=semantic)", async () => {
     embed.mockResolvedValueOnce([0.1, 0.2]);
-    findPostsBySemanticQuery.mockResolvedValueOnce([{ id: 1, score: 0.6 }]);
+    findPostsBySemanticQuery.mockResolvedValueOnce([{ id: 1, score: 0.75 }]);
     lostPost.findMany.mockResolvedValueOnce([row({ id: 1 })]);
 
     const result = await searchPostsAI("lost", "검은색 에어팟", undefined, { page: 1, limit: 20 });
@@ -1310,7 +1313,7 @@ describe("searchPostsAI", () => {
 
   it("text only + type=all: reaches both boards, same as searchPosts(mode=semantic, type=all)", async () => {
     embed.mockResolvedValueOnce([0.1]);
-    findPostsBySemanticQuery.mockResolvedValueOnce([{ id: 5, score: 0.7 }]);
+    findPostsBySemanticQuery.mockResolvedValueOnce([{ id: 5, score: 0.75 }]);
     lostPost.findMany.mockResolvedValueOnce([row({ id: 5 })]);
     foundPost.findMany.mockResolvedValueOnce([]);
 
@@ -1343,11 +1346,11 @@ describe("searchPostsAI", () => {
     // while 1 and 2 each normalize to 0 with no second signal to average
     // against -- so 3 should rank first, 1 and 2 tied behind it.
     findPostsBySemanticQuery.mockResolvedValueOnce([
-      { id: 1, score: 0.5 },
+      { id: 1, score: 0.75 },
       { id: 3, score: 0.9 },
     ]);
     findPostsByImageQuery.mockResolvedValueOnce([
-      { id: 2, score: 0.4 },
+      { id: 2, score: 0.75 },
       { id: 3, score: 0.9 },
     ]);
     lostPost.findMany.mockResolvedValueOnce([row({ id: 1 }), row({ id: 2 }), row({ id: 3 })]);
@@ -1380,5 +1383,34 @@ describe("searchPostsAI", () => {
     await expect(searchPostsAI("all", "지갑", fakeImage, { page: 1, limit: 20 })).rejects.toThrow();
     expect(embed).not.toHaveBeenCalled();
     expect(imageEmbed).not.toHaveBeenCalled();
+  });
+});
+
+describe("AI search similarity threshold", () => {
+  it("applies the threshold to normalized similarity from pgvector distance", () => {
+    const relevantScore = normalizeScore(1 - 0.37); // cosine 0.63 -> 0.815
+    const unrelatedScore = normalizeScore(1 - 0.72); // cosine 0.28 -> 0.64
+
+    expect(relevantScore).toBeCloseTo(0.815);
+    expect(unrelatedScore).toBeCloseTo(0.64);
+    expect(filterAiSearchResults([{ id: 1, score: relevantScore }, { id: 2, score: unrelatedScore }])).toEqual([
+      { id: 1, score: relevantScore },
+    ]);
+  });
+
+  it("keeps the inclusive boundary and removes weaker candidates", () => {
+    expect(AI_SEARCH_MIN_SIMILARITY).toBe(0.7);
+    expect(filterAiSearchResults([{ id: 1, score: 0.7 }, { id: 2, score: 0.69 }])).toEqual([{ id: 1, score: 0.7 }]);
+  });
+
+  it("returns no candidates when every similarity is below the threshold", () => {
+    expect(filterAiSearchResults([{ id: 1, score: 0.2 }, { id: 2, score: 0.69 }])).toEqual([]);
+  });
+
+  it("keeps only candidates that meet the threshold", () => {
+    expect(filterAiSearchResults([{ id: 1, score: 0.82 }, { id: 2, score: 0.31 }, { id: 3, score: 0.7 }])).toEqual([
+      { id: 1, score: 0.82 },
+      { id: 3, score: 0.7 },
+    ]);
   });
 });

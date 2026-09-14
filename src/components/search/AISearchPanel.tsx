@@ -37,6 +37,7 @@ type AISearchPanelProps = {
   quickSearchLabel?: string;
   quickSearchItems?: readonly { label: string; query: string }[];
   controlsClassName?: string;
+  animatedPlaceholders?: readonly string[];
 };
 
 export function resolveAiSearchQuery(currentQuery: string, quickSearchQuery?: string): string {
@@ -58,6 +59,7 @@ export function AISearchPanel({
   quickSearchLabel,
   quickSearchItems,
   controlsClassName,
+  animatedPlaceholders,
 }: AISearchPanelProps) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
@@ -70,6 +72,50 @@ export function AISearchPanel({
   const [results, setResults] = useState<PostDTO[] | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const requestInFlightRef = useRef(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const [animatedPlaceholderText, setAnimatedPlaceholderText] = useState("");
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updateMotionPreference = () => setReducedMotion(mediaQuery.matches);
+    updateMotionPreference();
+    mediaQuery.addEventListener("change", updateMotionPreference);
+    return () => mediaQuery.removeEventListener("change", updateMotionPreference);
+  }, []);
+
+  useEffect(() => {
+    const phrases = animatedPlaceholders?.filter(Boolean) ?? [];
+    if (phrases.length === 0 || reducedMotion || query) {
+      return;
+    }
+
+    let phraseIndex = 0;
+    let index = 0;
+    let deleting = false;
+    let timer: number;
+    const tick = () => {
+      const phrase = phrases[phraseIndex];
+      if (!deleting) {
+        index += 1;
+        setAnimatedPlaceholderText(phrase.slice(0, index));
+        if (index >= phrase.length) {
+          deleting = true;
+          timer = window.setTimeout(tick, 1500);
+          return;
+        }
+      } else {
+        index -= 1;
+        setAnimatedPlaceholderText(phrase.slice(0, index));
+        if (index <= 0) {
+          deleting = false;
+          phraseIndex = (phraseIndex + 1) % phrases.length;
+        }
+      }
+      timer = window.setTimeout(tick, deleting ? 45 : 75);
+    };
+    timer = window.setTimeout(tick, 75);
+    return () => window.clearTimeout(timer);
+  }, [animatedPlaceholders, query, reducedMotion]);
 
   useEffect(() => {
     return () => {
@@ -222,7 +268,7 @@ export function AISearchPanel({
             setQuery(event.target.value);
             setResults(null);
           }}
-          placeholder={placeholder ?? t("aiSearch.placeholder")}
+          placeholder={animatedPlaceholders && !reducedMotion && !query ? animatedPlaceholderText : placeholder ?? t("aiSearch.placeholder")}
           maxLength={MAX_SEARCH_QUERY_LENGTH}
           disabled={pending}
           className="w-full min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"

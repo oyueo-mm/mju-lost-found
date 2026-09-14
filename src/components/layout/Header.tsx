@@ -7,9 +7,16 @@ import { isAdmin } from "@/lib/moderation/service";
 import { DesktopNav } from "./DesktopNav";
 import { NotificationBell } from "./NotificationBell";
 import { LogoMark } from "./Logo";
-import { UserIcon } from "@/components/icons";
 import { LinkButton } from "@/components/ui/Button";
 import { getTranslator } from "@/lib/i18n/server";
+import { signOut } from "@/lib/auth/auth";
+import { DesktopProfileDropdown } from "./DesktopNavDropdown";
+
+async function signOutFromDesktopNav(formData: FormData) {
+  "use server";
+  void formData;
+  await signOut({ redirectTo: "/" });
+}
 
 // A Server Component, not a client one: the current user is read here and
 // only its nickname/email/unread count ever reach the rendered HTML -- no
@@ -45,21 +52,21 @@ export async function Header() {
           <span className="hidden sm:inline">{t("brand.name")}</span>
         </Link>
 
-        <DesktopNav unreadChatCount={unreadChat} isAdmin={Boolean(user && isAdmin(user))} />
+        <DesktopNav
+          unreadChatCount={unreadChat}
+          isAdmin={Boolean(user && isAdmin(user))}
+          onSignOut={signOutFromDesktopNav}
+        />
 
         <div className="flex shrink-0 items-center gap-1.5">
           {user ? (
             <>
               <NotificationBell unreadCount={unreadNotifications} />
-              <Link
-                href="/me"
-                className="flex items-center gap-2 rounded-full py-1 pr-3 pl-1 text-sm font-medium text-foreground hover:bg-muted"
-              >
-                <span className="flex size-7 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                  <UserIcon className="size-4" />
-                </span>
-                <span className="hidden max-w-24 truncate sm:inline">{user.nickname ?? user.email}</span>
-              </Link>
+              <DesktopProfileDropdown
+                nickname={user.nickname ?? user.email}
+                active={false}
+                onSignOut={signOutFromDesktopNav}
+              />
             </>
           ) : (
             <LinkButton href="/login" size="sm">

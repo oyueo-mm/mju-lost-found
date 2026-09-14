@@ -44,7 +44,7 @@ export function InstallAppPrompt() {
   if (!deferredPrompt && !isIos) return null; // nothing this browser can offer -- stay silent, not broken
 
   return (
-    <div className="flex flex-col gap-2 rounded-card border border-border bg-card p-4 text-sm">
+    <div className="flex flex-col gap-2 rounded-card border border-border bg-card p-4 text-sm md:hidden">
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-1">
           <span className="font-medium text-foreground">{t("install.title")}</span>

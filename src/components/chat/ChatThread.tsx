@@ -9,6 +9,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { MessageActionMenu } from "@/components/chat/MessageActionMenu";
 import { useChatRoomRealtime } from "@/components/chat/useChatRoomRealtime";
 import { dispatchChatUnreadCount } from "@/components/layout/chatUnreadEvent";
+import { CameraIcon } from "@/components/icons";
 
 // Phase D-3: mirrors chat/service.ts's MessageReplyPreview -- no
 // createdAt/etc, just enough to render an inline quote (sender + a short
@@ -91,6 +92,8 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
   // itself has server-side.
   const [otherUserLastReadId, setOtherUserLastReadId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<HTMLInputElement>(null);
+  const refocusInputAfterSendRef = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   // Whether the view should follow along to the newest message -- starts
@@ -100,6 +103,13 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
   // prepending history, or a stray state update) never yanks their
   // position back down to the bottom.
   const stickToBottomRef = useRef(true);
+
+  useEffect(() => {
+    if (sending || !refocusInputAfterSendRef.current) return;
+    refocusInputAfterSendRef.current = false;
+    const frame = window.requestAnimationFrame(() => messageInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [sending]);
 
   // 다국어(i18n) Phase: 아래 "채팅방을 처음 열 때 한 번" 로딩 effect는
   // chatRoomId가 바뀔 때만 다시 돌아야 한다 -- 그런데 그 안에서 실패
@@ -345,6 +355,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
       setContent("");
       clearSelectedFile();
       setReplyingTo(null);
+      refocusInputAfterSendRef.current = true;
     } catch {
       setError(t("common.networkError"));
     } finally {
@@ -487,7 +498,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
             {t("chatThread.empty")}
           </p>
         ) : (
-          messages.map((m) => (
+          messages.map((m, index) => (
             <div key={m.id} className={`flex flex-col ${m.isMine ? "items-end" : "items-start"}`}>
               {!m.isMine && (
                 <span className="mb-0.5 text-xs text-muted-foreground">{m.senderNickname ?? t("common.unknown")}</span>
@@ -616,7 +627,9 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
                   phase's own "필요한 경우 오래된 메시지는 정확한 날짜/시간을
                   확인할 수 있게 한다". */}
               <span className="mt-0.5 text-xs text-muted-foreground" title={formatAbsoluteTime(new Date(m.createdAt), locale)}>
-                {formatRelativeTime(new Date(m.createdAt), t)}
+                {index === messages.length - 1
+                  ? formatRelativeTime(new Date(m.createdAt), t)
+                  : formatAbsoluteTime(new Date(m.createdAt), locale)}
                 {/* Phase P-6: never shown for a hidden/deleted message --
                     m.editedAt is already forced to null for those server-
                     side (see chat/service.ts's listMessages own comment). */}
@@ -677,8 +690,12 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
         )}
 
         <form onSubmit={handleSend} className="flex gap-2">
-          <label className="flex shrink-0 cursor-pointer items-center justify-center rounded-full border border-border px-3 py-2 text-sm text-foreground hover:border-foreground/30 has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50">
-            {t("chatThread.photo")}
+          <label
+            aria-label={t("chatThread.photo")}
+            className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border text-foreground hover:border-primary hover:bg-primary-muted has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50"
+          >
+            <CameraIcon className="size-4.5" />
+            <span className="sr-only">{t("chatThread.photo")}</span>
             <input
               ref={fileInputRef}
               type="file"
@@ -689,6 +706,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
             />
           </label>
           <input
+            ref={messageInputRef}
             type="text"
             value={content}
             onChange={(e) => setContent(e.target.value)}

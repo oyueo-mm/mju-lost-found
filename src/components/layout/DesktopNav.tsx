@@ -4,9 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { ADMIN_NAV_ITEM, NAV_ITEMS, isNavActive } from "./NavLinks";
+import { DESKTOP_ADMIN_NAV_ITEM, DESKTOP_NAV_ITEMS, isNavActive, type DesktopNavKey } from "./NavLinks";
+import { DesktopNavDropdown } from "./DesktopNavDropdown";
 import { useI18n } from "@/lib/i18n/client";
 import { onChatUnreadCount } from "./chatUnreadEvent";
+
+type ServerAction = (formData: FormData) => void | Promise<void>;
 
 // Phase 17: Header's own horizontal nav (md+ only -- BottomNav takes over
 // below that breakpoint). Split out from Header itself only because
@@ -17,11 +20,20 @@ import { onChatUnreadCount } from "./chatUnreadEvent";
 //
 // Phase P-3: same live-count mirroring as BottomNav's own -- see that
 // component's comment and chatUnreadEvent.ts for why.
-export function DesktopNav({ unreadChatCount, isAdmin = false }: { unreadChatCount: number; isAdmin?: boolean }) {
+export function DesktopNav({
+  unreadChatCount,
+  isAdmin = false,
+  onSignOut,
+}: {
+  unreadChatCount: number;
+  isAdmin?: boolean;
+  onSignOut: ServerAction;
+}) {
   const pathname = usePathname();
   const { t } = useI18n();
   const [prevUnreadChatCount, setPrevUnreadChatCount] = useState(unreadChatCount);
   const [liveUnreadChatCount, setLiveUnreadChatCount] = useState(unreadChatCount);
+  const [openDropdown, setOpenDropdown] = useState<DesktopNavKey | null>(null);
   // "Adjusting state when a prop changes" during render -- see
   // BottomNav.tsx's own (identical) comment for why this isn't a
   // useEffect.
@@ -32,19 +44,32 @@ export function DesktopNav({ unreadChatCount, isAdmin = false }: { unreadChatCou
   useEffect(() => onChatUnreadCount(setLiveUnreadChatCount), []);
   // Phase 31: appended, never a permanent member of NAV_ITEMS -- see
   // ADMIN_NAV_ITEM's own comment in NavLinks.ts for why.
-  const items = isAdmin ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
+  const items = isAdmin ? [...DESKTOP_NAV_ITEMS, DESKTOP_ADMIN_NAV_ITEM] : DESKTOP_NAV_ITEMS;
 
   return (
     <nav aria-label={t("nav.primary")} className="hidden items-center gap-1 md:flex">
       {items.map((item) => {
         const active = isNavActive(item.key, item.href, pathname);
         const badge = item.key === "chat" && liveUnreadChatCount > 0 ? liveUnreadChatCount : null;
+        if (item.children) {
+          return (
+            <DesktopNavDropdown
+              key={item.key}
+              item={item}
+              active={active}
+              open={openDropdown === item.key}
+              onOpen={() => setOpenDropdown(item.key)}
+              onClose={() => setOpenDropdown((current) => (current === item.key ? null : current))}
+              onSignOut={onSignOut}
+            />
+          );
+        }
         return (
           <Link
             key={item.key}
             href={item.href}
             aria-current={active ? "page" : undefined}
-            className={`relative rounded-full px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
+              className={`relative flex h-10 items-center rounded-full px-4 text-sm font-medium whitespace-nowrap transition-colors ${
               active ? "bg-primary-muted text-primary" : "text-muted-foreground hover:text-foreground"
             }`}
           >

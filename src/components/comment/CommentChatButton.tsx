@@ -59,7 +59,7 @@ export function CommentChatButton({ postType, postId, commentId }: CommentChatBu
         type="button"
         onClick={handleClick}
         disabled={pending}
-        className="text-muted-foreground underline hover:text-foreground disabled:opacity-60"
+        className="rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60"
       >
         {pending ? t("common.loading") : t("post.startChat")}
       </button>

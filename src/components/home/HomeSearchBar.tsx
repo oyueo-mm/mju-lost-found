@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+
 import { AISearchPanel } from "@/components/search/AISearchPanel";
 import { useI18n } from "@/lib/i18n/client";
 
@@ -41,14 +43,26 @@ export function HomeSearchBar() {
     { query: HOME_POPULAR_SEARCHES[2], label: t("home.popular.wirelessEarbuds") },
     { query: HOME_POPULAR_SEARCHES[3], label: t("home.popular.phone") },
   ];
+  const animatedPlaceholders = useMemo(
+    () => [
+      t("home.aiPlaceholder.1"),
+      t("home.aiPlaceholder.2"),
+      t("home.aiPlaceholder.3"),
+      t("home.aiPlaceholder.4"),
+      t("home.aiPlaceholder.5"),
+      t("home.aiPlaceholder.6"),
+    ].flatMap((phraseGroup) => phraseGroup.split("\n").filter(Boolean)),
+    [t],
+  );
 
   return (
     <AISearchPanel
       type="found"
-      placeholder={t("home.aiPlaceholder")}
+      placeholder={animatedPlaceholders[0] ?? t("home.aiPlaceholder")}
       quickSearchLabel={t("home.popularSearches")}
       quickSearchItems={quickSearchItems}
       controlsClassName="mx-auto w-full max-w-xl text-center [&>div]:justify-center [&>p]:text-center"
+      animatedPlaceholders={animatedPlaceholders}
     />
   );
 }
