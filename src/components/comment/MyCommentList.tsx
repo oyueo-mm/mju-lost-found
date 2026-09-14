@@ -58,7 +58,7 @@ export function MyCommentList({ comments: initialComments }: { comments: MyComme
       }
       setComments((prev) => prev.filter((c) => c.id !== comment.id));
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
     } finally {
       setPendingId(null);
     }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { updateOrganizationProfileAction } from "@/app/(main)/organizations/[id]/settings/actions";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 const FIELD_CLASS =
   "rounded-lg border border-border bg-transparent px-3.5 py-2.5 text-sm text-foreground disabled:opacity-60";
@@ -25,6 +26,7 @@ export function OrganizationProfileEditForm({
     contactEmail: string | null;
   };
 }) {
+  const { t } = useI18n();
   const router = useRouter();
   const [name, setName] = useState(organization.name);
   const [organizationType, setOrganizationType] = useState(organization.organizationType);
@@ -62,7 +64,7 @@ export function OrganizationProfileEditForm({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
       <label className="flex flex-col gap-1.5 text-sm">
-        <span className="font-medium text-foreground">단체명</span>
+        <span className="font-medium text-foreground">{t("organization.name")}</span>
         <input
           type="text"
           value={name}
@@ -75,7 +77,7 @@ export function OrganizationProfileEditForm({
       </label>
 
       <label className="flex flex-col gap-1.5 text-sm">
-        <span className="font-medium text-foreground">단체 유형</span>
+        <span className="font-medium text-foreground">{t("organization.type")}</span>
         <input
           type="text"
           value={organizationType}
@@ -88,7 +90,7 @@ export function OrganizationProfileEditForm({
       </label>
 
       <label className="flex flex-col gap-1.5 text-sm">
-        <span className="font-medium text-foreground">활동 범위 (선택)</span>
+        <span className="font-medium text-foreground">{t("organization.scope")} ({t("organization.optional")})</span>
         <input
           type="text"
           value={scope}
@@ -100,7 +102,7 @@ export function OrganizationProfileEditForm({
       </label>
 
       <label className="flex flex-col gap-1.5 text-sm">
-        <span className="font-medium text-foreground">연락 이메일 (선택)</span>
+        <span className="font-medium text-foreground">{t("organization.email")} ({t("organization.optional")})</span>
         <input
           type="email"
           value={contactEmail}
@@ -112,7 +114,7 @@ export function OrganizationProfileEditForm({
       </label>
 
       <label className="flex flex-col gap-1.5 text-sm">
-        <span className="font-medium text-foreground">설명 (선택)</span>
+        <span className="font-medium text-foreground">{t("organization.description")} ({t("organization.optional")})</span>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -124,10 +126,10 @@ export function OrganizationProfileEditForm({
       </label>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-      {saved && !error && <p className="text-sm text-success">저장되었습니다.</p>}
+      {saved && !error && <p className="text-sm text-success">{t("organization.saved")}</p>}
 
       <Button type="submit" size="sm" disabled={pending || !name.trim() || !organizationType.trim()} className="self-start">
-        {pending ? "저장 중..." : "저장"}
+        {pending ? t("organization.saving") : t("organization.save")}
       </Button>
     </form>
   );

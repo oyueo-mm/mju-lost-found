@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { PostType } from "@/lib/posts/schema";
+import { useI18n } from "@/lib/i18n/client";
 
 type DirectChatButtonProps = {
   postType: PostType;
@@ -31,6 +32,7 @@ type DirectChatButtonProps = {
 // organization, not the post's own (hidden) real author.
 export function DirectChatButton({ postType, postId, isOrganizationPost = false }: DirectChatButtonProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,13 +48,13 @@ export function DirectChatButton({ postType, postId, isOrganizationPost = false 
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "채팅방을 여는 데 실패했습니다.");
+        setError(json.error ?? t("common.networkError"));
         setPending(false);
         return;
       }
       router.push(`/chat/${json.data.id}`);
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
       setPending(false);
     }
   }
@@ -66,7 +68,7 @@ export function DirectChatButton({ postType, postId, isOrganizationPost = false 
         disabled={pending}
         className="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-foreground/30 disabled:opacity-60"
       >
-        {pending ? "여는 중..." : isOrganizationPost ? "단체에 문의하기" : "채팅하기"}
+        {pending ? t("common.loading") : isOrganizationPost ? t("post.contactOrganization") : t("post.startChat")}
       </button>
     </div>
   );

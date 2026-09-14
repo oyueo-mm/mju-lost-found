@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 const SELECT_CLASS =
   "rounded-lg border border-border bg-transparent px-3.5 py-2.5 text-sm text-foreground disabled:opacity-60";
@@ -25,7 +26,7 @@ export function PostAsSelector({
   // selectable-back-to option instead of silently losing track of it --
   // see PostForm's own comment for the full rationale.
   currentOrganizationIfUnlisted,
-  ariaLabel = "게시 주체 선택",
+  ariaLabel,
 }: {
   organizations: OrganizationOption[];
   value: number | null;
@@ -34,6 +35,7 @@ export function PostAsSelector({
   currentOrganizationIfUnlisted?: OrganizationOption | null;
   ariaLabel?: string;
 }) {
+  const { t } = useI18n();
   const options =
     currentOrganizationIfUnlisted &&
     !organizations.some((org) => org.organizationId === currentOrganizationIfUnlisted.organizationId)
@@ -50,7 +52,7 @@ export function PostAsSelector({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex gap-1.5" role="group" aria-label={ariaLabel}>
+      <div className="flex gap-1.5" role="group" aria-label={ariaLabel ?? t("postAs.selectAria")}>
         <Button
           type="button"
           variant={mode === "personal" ? "primary" : "secondary"}
@@ -60,7 +62,7 @@ export function PostAsSelector({
           onClick={() => onChange(null)}
           className="h-8 px-3 text-xs"
         >
-          개인
+          {t("postAs.personal")}
         </Button>
         <Button
           type="button"
@@ -71,12 +73,12 @@ export function PostAsSelector({
           onClick={() => onChange(value ?? options[0].organizationId)}
           className="h-8 px-3 text-xs"
         >
-          단체
+          {t("postAs.organization")}
         </Button>
       </div>
       {mode === "organization" && (
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-muted-foreground">대표 단체</span>
+          <span className="text-xs font-medium text-muted-foreground">{t("postAs.representative")}</span>
           <select
             value={value ?? options[0].organizationId}
             onChange={(e) => onChange(Number(e.target.value))}

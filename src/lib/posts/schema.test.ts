@@ -10,6 +10,8 @@ import {
   DEFAULT_PAGE,
   listQuerySchema,
   MAX_LIMIT,
+  POST_DESCRIPTION_MAX_LENGTH,
+  POST_TITLE_MAX_LENGTH,
   updateFoundPostSchema,
   updateLostPostSchema,
 } from "./schema";
@@ -22,6 +24,29 @@ const validLost = {
   campus: "인문캠퍼스",
   lostAt: "2026-01-01T10:00",
 };
+
+describe("post content length limits", () => {
+  it("uses the same shared limits for creation and updates", () => {
+    expect(POST_TITLE_MAX_LENGTH).toBe(200);
+    expect(POST_DESCRIPTION_MAX_LENGTH).toBe(5000);
+
+    expect(
+      createLostPostSchema.safeParse({
+        ...validLost,
+        title: "a".repeat(POST_TITLE_MAX_LENGTH),
+        description: "a".repeat(POST_DESCRIPTION_MAX_LENGTH),
+      }).success,
+    ).toBe(true);
+    expect(
+      updateLostPostSchema.safeParse({ title: "a".repeat(POST_TITLE_MAX_LENGTH + 1) }).success,
+    ).toBe(false);
+    expect(
+      updateFoundPostSchema.safeParse({
+        description: "a".repeat(POST_DESCRIPTION_MAX_LENGTH + 1),
+      }).success,
+    ).toBe(false);
+  });
+});
 
 describe("createLostPostSchema", () => {
   it("accepts a valid payload", () => {

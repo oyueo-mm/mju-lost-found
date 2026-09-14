@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 
 import { cancelOrganizationCreationRequestAction } from "@/app/(main)/organizations/create/actions";
 import { Button } from "@/components/ui/Button";
+import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
+import { useI18n } from "@/lib/i18n/client";
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
+function formatDate(date: Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 type PendingOrganizationRequestCardProps = {
@@ -26,6 +28,7 @@ type PendingOrganizationRequestCardProps = {
 // 사용자에게 이미 PENDING 상태인 신청이 있을 때뿐 -- 새 신청을 만들 수
 // 없는 이유(§6 중복 신청 정책)를 그대로 보여주고, 취소만 가능하게 한다.
 export function PendingOrganizationRequestCard({ request }: PendingOrganizationRequestCardProps) {
+  const { locale, t } = useI18n();
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,18 +52,18 @@ export function PendingOrganizationRequestCard({ request }: PendingOrganizationR
   return (
     <div className="flex flex-col gap-3 rounded-card border border-border bg-card p-4">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-foreground">검토 대기 중인 신청이 있어요</h2>
-        <span className="shrink-0 rounded-full bg-warning-muted px-2.5 py-1 text-xs font-medium text-warning">대기 중</span>
+        <h2 className="text-sm font-semibold text-foreground">{t("organization.createRequest")}</h2>
+        <span className="shrink-0 rounded-full bg-warning-muted px-2.5 py-1 text-xs font-medium text-warning">{t("organization.pending")}</span>
       </div>
 
       <div className="flex flex-col gap-1 text-sm">
         <span className="font-medium text-foreground">
           {request.organizationType} · {request.organizationName}
         </span>
-        {request.scope && <span className="text-muted-foreground">활동 범위: {request.scope}</span>}
-        <span className="text-muted-foreground">연락 이메일: {request.contactEmail}</span>
+        {request.scope && <span className="text-muted-foreground">{t("organization.scope")}: {request.scope}</span>}
+        <span className="text-muted-foreground">{t("organization.email")}: {request.contactEmail}</span>
         <span className="whitespace-pre-wrap text-muted-foreground">{request.purpose}</span>
-        <span className="text-xs text-muted-foreground/70">신청일: {formatDate(request.createdAt)}</span>
+        <span className="text-xs text-muted-foreground/70">{t("organization.requestDate", { date: formatDate(request.createdAt, locale) })}</span>
       </div>
 
       <p className="text-xs text-muted-foreground">
@@ -74,7 +77,7 @@ export function PendingOrganizationRequestCard({ request }: PendingOrganizationR
       )}
 
       <Button type="button" variant="secondary" size="sm" onClick={handleCancel} disabled={pending} className="self-start">
-        {pending ? "취소하는 중..." : "신청 취소"}
+        {pending ? t("organization.canceling") : t("organization.cancelRequest")}
       </Button>
     </div>
   );

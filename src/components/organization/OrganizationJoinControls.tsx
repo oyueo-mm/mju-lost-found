@@ -9,6 +9,7 @@ import {
   leaveOrganizationAction,
 } from "@/app/(main)/organizations/[id]/actions";
 import { Button, LinkButton } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 // Phase 12-4 §9/§21: 단체 프로필 페이지의 "가입/탈퇴" 상태 전이를 하나의
 // 클라이언트 컴포넌트에서 담당한다 -- 서버가 내려준 초기 상태(myRole/
@@ -28,6 +29,7 @@ export function OrganizationJoinControls({
   myRole: "leader" | "admin" | "member" | null;
   pendingRequestId: number | null;
 }) {
+  const { t } = useI18n();
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
@@ -59,7 +61,7 @@ export function OrganizationJoinControls({
   }
 
   async function handleLeave() {
-    if (!window.confirm("정말 이 단체에서 탈퇴하시겠습니까?")) return;
+    if (!window.confirm(t("organization.leave"))) return;
     setPending(true);
     setError(null);
     const result = await leaveOrganizationAction(organizationId);
@@ -85,10 +87,10 @@ export function OrganizationJoinControls({
   if (myRole !== null) {
     return (
       <div className="flex flex-col gap-2 rounded-card border border-border bg-card p-4">
-        <p className="text-sm font-medium text-foreground">가입 완료</p>
+        <p className="text-sm font-medium text-foreground">{t("organization.joined")}</p>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <Button variant="secondary" size="sm" className="self-start" disabled={pending} onClick={handleLeave}>
-          {pending ? "처리 중..." : "단체 탈퇴"}
+          {pending ? t("organization.processing") : t("organization.leave")}
         </Button>
       </div>
     );
@@ -97,10 +99,10 @@ export function OrganizationJoinControls({
   if (pendingRequestId !== null) {
     return (
       <div className="flex flex-col gap-2 rounded-card border border-border bg-card p-4">
-        <p className="text-sm font-medium text-foreground">가입 신청 처리 중</p>
+        <p className="text-sm font-medium text-foreground">{t("organization.pending")}</p>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <Button variant="secondary" size="sm" className="self-start" disabled={pending} onClick={handleCancel}>
-          {pending ? "처리 중..." : "신청 취소"}
+          {pending ? t("organization.processing") : t("organization.cancelRequest")}
         </Button>
       </div>
     );
@@ -116,7 +118,7 @@ export function OrganizationJoinControls({
 
   return (
     <div className="flex flex-col gap-3 rounded-card border border-border bg-card p-4">
-      <p className="text-sm font-semibold text-foreground">단체 가입 신청</p>
+      <p className="text-sm font-semibold text-foreground">{t("organization.join")}</p>
       <textarea
         value={message}
         onChange={(e) => setMessage(e.target.value)}
@@ -128,7 +130,7 @@ export function OrganizationJoinControls({
       />
       {error && <p className="text-sm text-destructive">{error}</p>}
       <Button size="sm" className="self-start" disabled={pending} onClick={handleJoin}>
-        {pending ? "제출 중..." : "가입 신청"}
+        {pending ? t("organization.submitting") : t("organization.join")}
       </Button>
     </div>
   );

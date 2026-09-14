@@ -5,7 +5,8 @@ import { DEFAULT_LOCALE, LOCALES, isLocale, parseAcceptLanguage, resolveLocale }
 describe("isLocale", () => {
   it("accepts every supported locale and nothing else", () => {
     for (const locale of LOCALES) expect(isLocale(locale)).toBe(true);
-    expect(isLocale("ja")).toBe(false);
+    expect(isLocale("ja")).toBe(true);
+    expect(isLocale("fr")).toBe(true);
     expect(isLocale("")).toBe(false);
     expect(isLocale(undefined)).toBe(false);
     expect(isLocale(42)).toBe(false);
@@ -24,6 +25,8 @@ describe("parseAcceptLanguage", () => {
     expect(parseAcceptLanguage("zh-Hans-CN")).toBe("zh");
     expect(parseAcceptLanguage("en-GB")).toBe("en");
     expect(parseAcceptLanguage("mn-Cyrl-MN")).toBe("mn");
+    expect(parseAcceptLanguage("ja-JP")).toBe("ja");
+    expect(parseAcceptLanguage("fr-CA")).toBe("fr");
   });
 
   it("honors q-values rather than header order", () => {
@@ -32,11 +35,11 @@ describe("parseAcceptLanguage", () => {
   });
 
   it("skips unsupported languages and falls through to a supported one", () => {
-    expect(parseAcceptLanguage("ja,fr;q=0.9,ko;q=0.5")).toBe("ko");
+    expect(parseAcceptLanguage("ja,fr;q=0.9,ko;q=0.5")).toBe("ja");
   });
 
   it("returns null when nothing in the header is supported", () => {
-    expect(parseAcceptLanguage("ja,fr;q=0.9,de;q=0.5")).toBeNull();
+    expect(parseAcceptLanguage("de,es;q=0.9")).toBeNull();
   });
 
   it("ignores entries explicitly refused with q=0", () => {
@@ -63,7 +66,7 @@ describe("resolveLocale", () => {
 
   it("falls back to Korean when neither signal is usable", () => {
     expect(resolveLocale(undefined, undefined)).toBe(DEFAULT_LOCALE);
-    expect(resolveLocale(undefined, "ja,de;q=0.8")).toBe(DEFAULT_LOCALE);
+    expect(resolveLocale(undefined, "de,es;q=0.8")).toBe(DEFAULT_LOCALE);
     expect(resolveLocale("", null)).toBe(DEFAULT_LOCALE);
   });
 });

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { deactivateOrganizationAction } from "@/app/(main)/organizations/[id]/settings/actions";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 // Phase 12-4 §22 / Phase 12-9 §7/§8: 삭제가 아니라 ACTIVE -> INACTIVE
 // 전환(사용자 화면 표현은 "폐쇄" -- 내부적으로는 기존 deactivateOrganization()
@@ -13,6 +14,7 @@ import { Button } from "@/components/ui/Button";
 // Phase 12-6의 Platform Admin 단체 관리 페이지 전용) 확인 대화상자를 반드시
 // 거친다.
 export function OrganizationDeactivateControl({ organizationId }: { organizationId: number }) {
+  const { t } = useI18n();
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +44,7 @@ export function OrganizationDeactivateControl({ organizationId }: { organization
       </p>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <Button variant="destructive" size="sm" disabled={pending} onClick={handleDeactivate} className="self-start">
-        {pending ? "처리 중..." : "단체 폐쇄"}
+        {pending ? t("organization.processing") : t("organization.deactivate")}
       </Button>
     </div>
   );

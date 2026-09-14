@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 type PrivacyConsentButtonProps = {
   // Already sanitized server-side (see page.tsx's own sanitizeCallbackUrl
@@ -22,6 +23,7 @@ type PrivacyConsentButtonProps = {
 // the box and never clicking the button leaves privacyConsentAt exactly
 // as it was (still NULL for a first-time user).
 export function PrivacyConsentButton({ callbackUrl }: PrivacyConsentButtonProps) {
+  const { t } = useI18n();
   const router = useRouter();
   const checkboxId = useId();
   const [checked, setChecked] = useState(false);
@@ -46,7 +48,7 @@ export function PrivacyConsentButton({ callbackUrl }: PrivacyConsentButtonProps)
       router.push(callbackUrl ?? "/");
       router.refresh();
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
     } finally {
       setSubmitting(false);
     }

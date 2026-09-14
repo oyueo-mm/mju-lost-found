@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
-import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n/config";
+import { LOCALES, LOCALE_HTML_LANG, LOCALE_LABELS, type Locale } from "@/lib/i18n/config";
 import { persistLocale, useI18n } from "@/lib/i18n/client";
 
 // 다국어(i18n) Phase: Footer의 언어 선택 UI. 각 언어는 그 언어 자신의
@@ -44,7 +44,7 @@ export function LocaleSwitcher() {
             // lang: 이 버튼의 글자만큼은 그 언어라고 알려준다 -- 한국어
             // 페이지 안의 "Монгол" 한 단어를 스크린 리더가 한국어로
             // 읽어버리지 않게 한다.
-            lang={locale}
+            lang={LOCALE_HTML_LANG[locale]}
             disabled={pending}
             onClick={() => handleSelect(locale)}
             className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-60 ${

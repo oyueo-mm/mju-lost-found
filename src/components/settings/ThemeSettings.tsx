@@ -13,6 +13,22 @@ import {
   type AccentColor,
   type ThemeMode,
 } from "@/lib/theme/constants";
+import { useI18n } from "@/lib/i18n/client";
+import type { TranslationKey } from "@/lib/i18n/translate";
+
+const THEME_MODE_KEYS: Record<ThemeMode, TranslationKey> = {
+  system: "theme.mode.system",
+  light: "theme.mode.light",
+  dark: "theme.mode.dark",
+};
+
+const ACCENT_COLOR_KEYS: Record<AccentColor, TranslationKey> = {
+  blue: "theme.accent.blue",
+  green: "theme.accent.green",
+  purple: "theme.accent.purple",
+  rose: "theme.accent.rose",
+  amber: "theme.accent.amber",
+};
 
 // Phase H-3: purely client-side preference (localStorage), same as this
 // project's other per-viewer UI conveniences -- no User schema/API change
@@ -34,6 +50,7 @@ import {
 // snapshot, and useSyncExternalStore's own subscription is what turns that
 // into this component's re-render.
 export function ThemeSettings() {
+  const { t } = useI18n();
   const { mode, accent, highContrast, mounted } = useSyncExternalStore(
     subscribeThemeState,
     getThemeSnapshot,
@@ -50,11 +67,11 @@ export function ThemeSettings() {
 
   return (
     <section className="flex flex-col gap-5 rounded-card border border-border bg-card p-5">
-      <h2 className="font-semibold text-foreground">화면 설정</h2>
+      <h2 className="font-semibold text-foreground">{t("theme.title")}</h2>
 
       <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium text-foreground">테마 모드</span>
-        <div className="flex gap-2" role="group" aria-label="테마 모드 선택">
+        <span className="text-sm font-medium text-foreground">{t("theme.mode")}</span>
+        <div className="flex gap-2" role="group" aria-label={t("theme.modeAria")}>
           {THEME_MODES.map((m) => (
             <button
               key={m.value}
@@ -68,21 +85,21 @@ export function ThemeSettings() {
                   : "border-border text-muted-foreground hover:border-foreground/30"
               }`}
             >
-              {m.label}
+              {t(THEME_MODE_KEYS[m.value])}
             </button>
           ))}
         </div>
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium text-foreground">강조 색상</span>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="강조 색상 선택">
+        <span className="text-sm font-medium text-foreground">{t("theme.accent")}</span>
+        <div className="flex flex-wrap gap-2" role="group" aria-label={t("theme.accentAria")}>
           {ACCENT_COLORS.map((a) => (
             <button
               key={a.value}
               type="button"
               aria-pressed={accent === a.value}
-              aria-label={a.label}
+              aria-label={t(ACCENT_COLOR_KEYS[a.value])}
               disabled={!mounted}
               onClick={() => update(mode, a.value, highContrast)}
               className={`flex size-9 items-center justify-center rounded-full border-2 transition-colors disabled:opacity-60 ${
@@ -97,8 +114,8 @@ export function ThemeSettings() {
 
       <label className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm">
         <span className="flex flex-col gap-0.5">
-          <span className="font-medium text-foreground">고대비 모드</span>
-          <span className="text-xs text-muted-foreground">텍스트·배경·버튼의 대비를 높여 더 뚜렷하게 표시합니다.</span>
+          <span className="font-medium text-foreground">{t("theme.highContrast")}</span>
+          <span className="text-xs text-muted-foreground">{t("theme.highContrastDescription")}</span>
         </span>
         <input
           type="checkbox"

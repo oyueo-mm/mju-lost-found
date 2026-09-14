@@ -4,9 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-import { CAMPUSES, CATEGORIES, DEFAULT_CAMPUS } from "@/lib/posts/schema";
+import {
+  CAMPUSES,
+  CATEGORIES,
+  DEFAULT_CAMPUS,
+  POST_DESCRIPTION_MAX_LENGTH,
+  POST_TITLE_MAX_LENGTH,
+} from "@/lib/posts/schema";
 import type { PostType } from "@/lib/posts/schema";
-import { getLocationSuggestions } from "@/lib/posts/campusLocations";
+import { getLocalizedLocationSuggestions } from "@/lib/posts/campusLocations";
 import { uploadPostImage } from "@/lib/images/client";
 import { MAX_IMAGES_PER_POST } from "@/lib/images/config";
 import {
@@ -521,7 +527,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             name="title"
             type="text"
             required
-            maxLength={200}
+            maxLength={POST_TITLE_MAX_LENGTH}
             placeholder={t(TITLE_PLACEHOLDER_KEY[type])}
             defaultValue={initialValues?.title}
             disabled={pending}
@@ -538,7 +544,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             name="description"
             required
             rows={5}
-            maxLength={5000}
+            maxLength={POST_DESCRIPTION_MAX_LENGTH}
             placeholder={t(DESCRIPTION_PLACEHOLDER_KEY[type])}
             defaultValue={initialValues?.description}
             disabled={pending}
@@ -719,22 +725,22 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
                 role="menu"
                 className="absolute top-full right-0 z-10 mt-1 max-h-80 w-64 overflow-y-auto rounded-card border border-border bg-card p-3 shadow-lg"
               >
-                <span className="mb-1.5 block text-xs font-semibold text-foreground">{campus}</span>
+                <span className="mb-1.5 block text-xs font-semibold text-foreground">{campusKey ? t(campusKey) : campus}</span>
                 <div className="flex flex-wrap gap-1.5">
-                  {getLocationSuggestions(campus).map((place) => (
+                  {getLocalizedLocationSuggestions(campus, t.locale).map((place) => (
                     <button
-                      key={place}
+                      key={place.value}
                       type="button"
                       onClick={() => {
                         if (locationInputRef.current) {
-                          locationInputRef.current.value = place;
+                          locationInputRef.current.value = place.value;
                           locationInputRef.current.focus();
                         }
                         setLocationMenuOpen(false);
                       }}
                       className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
                     >
-                      {place}
+                      {place.label}
                     </button>
                   ))}
                 </div>

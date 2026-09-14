@@ -10,9 +10,11 @@ import {
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ORGANIZATION_REQUEST_STATUS_LABELS, type OrganizationRequestStatusValue } from "@/lib/organization/schema";
+import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
+import { useI18n } from "@/lib/i18n/client";
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
+function formatDate(date: Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 type JoinRequest = {
@@ -28,6 +30,7 @@ type JoinRequest = {
 // 표시는 닉네임만(publicId는 표시하지 않음 -- 단체 구성원 목록과 동일하게
 // 여기서도 인증/식별 정보를 최소화).
 export function OrganizationJoinRequestQueue({ organizationId, requests }: { organizationId: number; requests: JoinRequest[] }) {
+  const { locale, t } = useI18n();
   const router = useRouter();
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +66,7 @@ export function OrganizationJoinRequestQueue({ organizationId, requests }: { org
   }
 
   if (requests.length === 0) {
-    return <EmptyState title="가입 신청이 없습니다" />;
+    return <EmptyState title={t("organization.noRequests")} />;
   }
 
   return (
@@ -79,9 +82,9 @@ export function OrganizationJoinRequestQueue({ organizationId, requests }: { org
               </span>
             </div>
             {request.message && <p className="whitespace-pre-wrap text-sm text-muted-foreground">{request.message}</p>}
-            <span className="text-xs text-muted-foreground/70">신청일: {formatDate(request.createdAt)}</span>
+            <span className="text-xs text-muted-foreground/70">{t("organization.requestDate", { date: formatDate(request.createdAt, locale) })}</span>
             {request.status === "rejected" && request.rejectionReason && (
-              <span className="text-xs text-destructive">거절 사유: {request.rejectionReason}</span>
+              <span className="text-xs text-destructive">{t("organization.rejectionReason")}: {request.rejectionReason}</span>
             )}
 
             {request.status === "pending" && (
@@ -93,7 +96,7 @@ export function OrganizationJoinRequestQueue({ organizationId, requests }: { org
                       value={rejectionReason}
                       onChange={(e) => setRejectionReason(e.target.value)}
                       maxLength={1000}
-                      placeholder="거절 사유 (선택)"
+                      placeholder={`${t("organization.rejectionReason")} (${t("organization.optional")})`}
                       disabled={pendingId === request.id}
                       className="rounded-lg border border-border bg-transparent px-3.5 py-2 text-sm text-foreground disabled:opacity-60"
                     />
@@ -104,7 +107,7 @@ export function OrganizationJoinRequestQueue({ organizationId, requests }: { org
                         disabled={pendingId === request.id}
                         onClick={() => handleReject(request.id)}
                       >
-                        {pendingId === request.id ? "처리 중..." : "거절 확정"}
+                        {pendingId === request.id ? t("organization.processing") : t("organization.confirmReject")}
                       </Button>
                       <Button
                         variant="ghost"
@@ -122,7 +125,7 @@ export function OrganizationJoinRequestQueue({ organizationId, requests }: { org
                 ) : (
                   <div className="flex gap-2">
                     <Button size="sm" disabled={pendingId === request.id} onClick={() => handleApprove(request.id)}>
-                      {pendingId === request.id ? "처리 중..." : "승인"}
+                      {pendingId === request.id ? t("organization.processing") : t("organization.approve")}
                     </Button>
                     <Button
                       variant="secondary"
@@ -130,7 +133,7 @@ export function OrganizationJoinRequestQueue({ organizationId, requests }: { org
                       disabled={pendingId === request.id}
                       onClick={() => setRejectingId(request.id)}
                     >
-                      거절
+                      {t("organization.reject")}
                     </Button>
                   </div>
                 )}

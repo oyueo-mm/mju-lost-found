@@ -269,7 +269,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
       setMessages((prev) => [...json.data, ...(prev ?? [])]);
       setHasMore(json.pagination.hasMore);
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
     } finally {
       setLoadingMore(false);
     }
@@ -346,7 +346,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
       clearSelectedFile();
       setReplyingTo(null);
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
     } finally {
       setSending(false);
     }

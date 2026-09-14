@@ -16,27 +16,29 @@ export async function SectionHeader({
   href,
   hrefLabel,
   action,
+  centered = false,
 }: {
   title: string;
   href?: string;
   hrefLabel?: string;
   action?: ReactNode;
+  centered?: boolean;
 }) {
   const t = await getTranslator();
 
   return (
-    <div className="flex items-center justify-between gap-2">
-      <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+    <div className={centered ? "grid grid-cols-[1fr_auto_1fr] items-center gap-2" : "flex items-center justify-between gap-2"}>
+      <h2 className={`text-lg font-semibold text-foreground${centered ? " col-start-2" : ""}`}>{title}</h2>
       {href ? (
         <Link
           href={href}
-          className="flex shrink-0 items-center gap-0.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className={`flex shrink-0 items-center gap-0.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground${centered ? " col-start-3 justify-self-end" : ""}`}
         >
           {hrefLabel ?? t("common.viewAll")}
           <ChevronRightIcon className="size-4" />
         </Link>
       ) : (
-        action
+        centered ? <div className="col-start-3 justify-self-end">{action}</div> : action
       )}
     </div>
   );

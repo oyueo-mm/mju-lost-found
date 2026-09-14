@@ -1,4 +1,5 @@
 import { ShieldIcon } from "@/components/icons";
+import { getTranslator } from "@/lib/i18n/server";
 
 function GuideSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -15,14 +16,15 @@ function GuideSection({ title, children }: { title: string; children: React.Reac
 // 한다 -- 실제로 없는 기능(단체 물리 삭제, 보관 장소 등)은 설명하지 않는다.
 // 인증/데이터 조회가 필요 없는 순수 정적 페이지라 로그인 여부와 무관하게
 // 누구나 볼 수 있다(/policy/* 페이지들과 동일한 posture).
-export default function OrganizationGuidePage() {
+export default async function OrganizationGuidePage() {
+  const t = await getTranslator();
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center gap-3">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary-muted text-primary">
           <ShieldIcon className="size-5" />
         </span>
-        <h1 className="text-lg font-semibold text-foreground">단체 이용 안내</h1>
+        <h1 className="text-lg font-semibold text-foreground">{t("organization.guide")}</h1>
       </div>
 
       <GuideSection title="단체란?">

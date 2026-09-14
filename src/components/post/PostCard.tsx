@@ -73,21 +73,16 @@ type PostCardProps = {
 // - 유형/상태 배지, 작성자/단체, 제목, 위치/시간/조회수, 유사도 배지 등
 //   기존 게시글 정보는 이제 항상 카드 맨 위의 텍스트 영역에 먼저
 //   배치되고, 이미지 유무와 무관하게 시작 위치가 완전히 동일하다.
-// - 이미지가 있으면 텍스트 영역 *아래*에 기존과 같은 축소 비율(3:2,
-//   md:16:10) 썸네일이 이어서 나온다. 이미지가 없으면 그 자리에는(이후
-//   PostCard description 미리보기 Phase에서) description 미리보기를
-//   보여준다 -- 그마저 없으면(공백뿐인 description) 아무것도 렌더링하지
-//   않고(placeholder 없음) 카드는 텍스트 영역에서 그대로 끝난다.
+// - 이미지가 있으면 텍스트 영역 아래에 썸네일이, 없으면 같은 크기의 muted
+//   영역이 이어진다. 데스크톱 목록에서는 카드의 본문과 하단 위치를
+//   일관되게 유지하면서도 별도 placeholder 문구는 노출하지 않는다.
 // - 유형/상태 배지가 이제 이미지 유무와 상관없이 항상 텍스트 영역의 같은
 //   자리에 있으므로, 예전에 이미지 위에 얹혀 있던 절대 위치 배지
 //   (bg-card/90 backdrop-blur 스타일)는 더 이상 필요 없어 제거했다 --
 //   같은 정보를 두 군데에 중복 표시하지 않는다.
-// - 카드 높이가 이미지 유무에 따라 자연히 달라지는 것은 이제 의도된
-//   동작이다(텍스트가 시작하는 위치는 항상 같고, 이미지가 있는 카드만 그
-//   아래로 더 길어진다) -- 그래서 이전에 높이를 억지로 맞추려 썼던 루트의
-//   `self-start` 제거/텍스트 영역의 `justify-center`는 더 이상 쓰지
-//   않는다. 텍스트는 항상 위에서부터 자연스러운 순서로 쌓인다(플레인
-//   flex-col, 별도 정렬 지정 없음).
+// - 모바일에서는 정보량에 맞는 자연 높이를 유지한다. 데스크톱에서는 본문
+//   최소 높이와 공통 미디어 영역을 사용해 이미지 유무에 따른 행 높이 차이를
+//   없앤다.
 // Phase H-7: the card is no longer one giant <Link> -- adding a clickable
 // author nickname (this phase's own spec) inside it would otherwise nest
 // an <a> inside an <a>, which is invalid HTML and makes the inner link's
@@ -117,8 +112,8 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage" }: Post
     // one written last in this className), so this uses the one utility
     // that already covers all three instead. Kept short (existing
     // duration-150 default) and subtle -- a hint of depth, not a jump.
-    <div className="group relative flex flex-col overflow-hidden rounded-card border border-border bg-card transition duration-150 hover:border-foreground/30 hover:shadow-md motion-safe:hover:-translate-y-0.5">
-      <div className="flex min-w-0 flex-col gap-1.5 p-3.5">
+    <div className="group relative flex min-w-0 self-start flex-col overflow-hidden rounded-card border border-border bg-card transition duration-150 hover:border-foreground/30 hover:shadow-md motion-safe:hover:-translate-y-0.5 md:self-auto md:h-full">
+      <div className="flex min-w-0 flex-col gap-1 p-3">
         {/* 유형/상태 배지 -- 이미지 유무와 상관없이 항상 텍스트 영역
             맨 위에 있다. Phase G-2: on /search (mixed 분실물+습득물
             results), the status badge alone ("찾는 중"/"보관 중") only
@@ -157,7 +152,9 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage" }: Post
             넓혔다(다른 요소 간 gap-1.5는 그대로). 사진 유무 분기와
             무관하게 이 h3 하나만 쓰이므로 두 카드 형태 모두 자동으로
             같은 제목 스타일을 공유한다. */}
-        <h3 className="mb-1 line-clamp-2 text-base font-bold text-foreground">{post.title}</h3>
+        <h3 className="mb-1 line-clamp-2 text-base font-bold text-foreground [overflow-wrap:anywhere]">
+          {post.title}
+        </h3>
         <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
           <span className="flex items-center gap-1 truncate">
             <PinIcon className="size-3.5 shrink-0" />
@@ -195,21 +192,10 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage" }: Post
         )}
       </div>
 
-      {/* PostCard description 미리보기 Phase: 이미지가 있으면 기존과
-          동일하게 텍스트 영역 아래에 축소 비율(3:2, md:16:10) 썸네일을
-          보여준다(placeholder 없음, 그대로 유지). 이미지가 없으면 그
-          자리를 비워두는 대신 description 미리보기로 채운다 -- 분실물
-          게시판처럼 사진 없는 글이 많은 목록에서 카드가 휑해 보이지 않고
-          물건의 특징/상황이 바로 보이도록 하기 위함이다. description도
-          없는(빈 문자열/공백만 있는) 극히 드문 경우는 억지 placeholder
-          문구 없이 그 영역을 그냥 비운다 -- "이미지 없음" 같은 자리
-          채우기 문구는 이전 Phase에서 이미 없앴고, 여기서도 새로 만들지
-          않는다. 카드 상단 텍스트 영역에는 원래 description이 전혀
-          렌더링되지 않았으므로(제목만 표시) 이 미리보기와 중복될 내용이
-          없다. line-clamp-4로 길이를 제한해 카드가 지나치게 길어지지
-          않게 한다. */}
+      {/* The preview follows the body at its natural height: an image when
+          present, otherwise the existing text preview on the card surface. */}
       {post.imageUrl ? (
-        <div className="relative aspect-3/2 w-full shrink-0 overflow-hidden bg-muted md:aspect-16/10">
+        <div className="relative aspect-3/2 w-full shrink-0 overflow-hidden bg-muted md:aspect-4/3">
           <Image
             src={post.imageUrl}
             alt={post.title}
@@ -220,11 +206,11 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage" }: Post
           />
         </div>
       ) : (
-        post.description.trim() && (
-          <p className="line-clamp-4 border-t border-border px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
-            {post.description}
-          </p>
-        )
+        post.description.trim() ? (
+          <div className="border-t border-border px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
+            <p className="line-clamp-4 [overflow-wrap:anywhere]">{post.description}</p>
+          </div>
+        ) : null
       )}
 
       <Link href={`/post/${post.id}?type=${post.type}`} aria-label={post.title} className="absolute inset-0" />

@@ -1,4 +1,5 @@
 import { InfoIcon } from "@/components/icons";
+import { useI18n } from "@/lib/i18n/client";
 
 // Phase 12-10 §7: "단체 ⓘ" 도움말. 새 클라이언트 팝오버 컴포넌트 대신
 // <details>/<summary>를 쓴다 -- JS 없이 동작하고, 네이티브 키보드/스크린
@@ -6,16 +7,17 @@ import { InfoIcon } from "@/components/icons";
 // 이 프로젝트의 "불필요한 컴포넌트 금지" 원칙에 맞는다. 텍스트는 스펙 §7의
 // 문구를 그대로 사용한다 -- 실제 기능과 다르게 각색하지 않는다.
 export function OrganizationHelpTooltip() {
+  const { t } = useI18n();
   return (
     <details className="group relative">
       <summary
         className="flex size-6 cursor-pointer list-none items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden"
-        aria-label="단체란 무엇인가요?"
+        aria-label={t("organization.guide")}
       >
         <InfoIcon className="size-5" />
       </summary>
       <div className="absolute left-0 top-full z-10 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-card border border-border bg-card p-4 text-sm text-foreground shadow-lg">
-        <p className="font-semibold">단체란?</p>
+        <p className="font-semibold">{t("organization.title")}</p>
         <p className="mt-2 whitespace-pre-line text-muted-foreground">
           {`명지대학교 학생들이 활동하는 동아리,
 학생회, 학과, 위원회 등의 단체를 의미합니다.

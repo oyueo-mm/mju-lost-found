@@ -3,6 +3,8 @@
 import { AISearchPanel } from "@/components/search/AISearchPanel";
 import { useI18n } from "@/lib/i18n/client";
 
+export const HOME_POPULAR_SEARCHES = ["카드", "지갑", "무선 이어폰", "휴대폰"] as const;
+
 // Home UX 단순화 Phase: 홈의 검색은 이제 고를 것이 없다 -- AI 검색으로,
 // 습득물 게시판을 대상으로 고정된다. 사용자는 검색창에 찾는 물건을
 // 문장으로 적기만 하면 된다.
@@ -28,12 +30,25 @@ import { useI18n } from "@/lib/i18n/client";
 //   반영되지 않고 사라졌다 -- 이번에 그 경로 자체가 없어지며 함께
 //   해소됐다.
 //
-// AISearchPanel은 전혀 수정하지 않는다 -- /search, /lost, /found가
-// 공유하는 컴포넌트라, 여기서 손대면 그 세 화면이 함께 바뀐다. 사진
-// 첨부(이미지 검색)도 그 패널이 이미 갖고 있는 카메라 버튼 그대로이고,
-// 홈에 새 선택 UI를 얹지 않는다(§1).
+// 사진 첨부(이미지 검색)는 공유 AISearchPanel이 이미 갖고 있는 카메라
+// 버튼을 그대로 쓴다. 인기 검색어도 선택적 prop으로만 전달하므로 이
+// 화면에서만 보이고 /search, /lost, /found의 패널은 바뀌지 않는다.
 export function HomeSearchBar() {
   const { t } = useI18n();
+  const quickSearchItems = [
+    { query: HOME_POPULAR_SEARCHES[0], label: t("home.popular.card") },
+    { query: HOME_POPULAR_SEARCHES[1], label: t("home.popular.wallet") },
+    { query: HOME_POPULAR_SEARCHES[2], label: t("home.popular.wirelessEarbuds") },
+    { query: HOME_POPULAR_SEARCHES[3], label: t("home.popular.phone") },
+  ];
 
-  return <AISearchPanel type="found" placeholder={t("home.aiPlaceholder")} />;
+  return (
+    <AISearchPanel
+      type="found"
+      placeholder={t("home.aiPlaceholder")}
+      quickSearchLabel={t("home.popularSearches")}
+      quickSearchItems={quickSearchItems}
+      controlsClassName="mx-auto w-full max-w-xl text-center [&>div]:justify-center [&>p]:text-center"
+    />
+  );
 }

@@ -255,7 +255,9 @@ export default async function PostDetailPage({
               className="w-fit truncate text-sm font-medium text-primary hover:underline"
               iconClassName="size-4 shrink-0"
             />
-            <h1 className="text-xl font-semibold text-foreground md:text-2xl">{post.title}</h1>
+            <h1 className="text-xl font-semibold text-foreground [overflow-wrap:anywhere] md:text-2xl">
+              {post.title}
+            </h1>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <StatusBadge status={post.status} />
@@ -309,7 +311,7 @@ export default async function PostDetailPage({
             {post.viewCount}
           </span>
         </div>
-        <p className="whitespace-pre-wrap border-t border-border pt-4 text-sm leading-relaxed text-foreground">
+        <p className="min-w-0 whitespace-pre-wrap border-t border-border pt-4 text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
           {post.description}
         </p>
         <p className="text-xs text-muted-foreground/70">

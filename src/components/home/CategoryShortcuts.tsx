@@ -121,7 +121,7 @@ export async function CategoryShortcuts() {
           <Link
             key={category}
             href={categorySearchHref(category)}
-            className="group flex flex-col items-center gap-2 rounded-lg border border-border bg-muted/60 px-2 py-3 text-center transition-colors hover:border-primary/40 hover:bg-primary-muted"
+            className="group flex flex-col items-center gap-2 rounded-lg border border-border bg-muted/60 px-2 py-3 text-center transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:border-primary/40 hover:bg-primary-muted hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-safe:md:hover:-translate-y-1 motion-reduce:transition-none"
           >
             <Icon className="size-5 text-primary/70 transition-colors group-hover:text-primary" />
             <span className="text-xs font-medium text-foreground">{labelKey ? t(labelKey) : category}</span>

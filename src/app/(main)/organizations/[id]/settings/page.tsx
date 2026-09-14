@@ -12,6 +12,7 @@ import { OrganizationJoinRequestQueue } from "@/components/organization/Organiza
 import { OrganizationMemberManagement } from "@/components/organization/OrganizationMemberManagement";
 import { OrganizationLeadershipTransfer } from "@/components/organization/OrganizationLeadershipTransfer";
 import { OrganizationDeactivateControl } from "@/components/organization/OrganizationDeactivateControl";
+import { getTranslator } from "@/lib/i18n/server";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -31,6 +32,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 // redirect -- requireAdmin()이 비관리자를 처리하는 것과 동일한 관례("접근
 // 거부" 전용 페이지가 이 앱에 없음).
 export default async function OrganizationSettingsPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = await getTranslator();
   const user = await requireActiveUser();
 
   const { id: idParam } = await params;
@@ -63,26 +65,26 @@ export default async function OrganizationSettingsPage({ params }: { params: Pro
         )}
       </div>
 
-      <Section title="단체 기본 정보">
+      <Section title={t("organization.title")}>
         <OrganizationProfileEditForm organizationId={id} organization={organization} />
       </Section>
 
-      <Section title="가입 신청 관리">
+      <Section title={t("organization.join")}>
         <OrganizationJoinRequestQueue organizationId={id} requests={joinRequests} />
       </Section>
 
-      <Section title="구성원 관리">
+      <Section title={t("organization.members")}>
         <OrganizationMemberManagement organizationId={id} members={members} myRole={myRole} myUserId={user.id} />
       </Section>
 
       {myRole === "leader" && (
-        <Section title="대표 관리자 위임">
+        <Section title={t("organization.transferLeadership")}>
           <OrganizationLeadershipTransfer organizationId={id} members={members} myUserId={user.id} />
         </Section>
       )}
 
       {myRole === "leader" && organization.status === "active" && (
-        <Section title="단체 폐쇄">
+        <Section title={t("organization.deactivate")}>
           <OrganizationDeactivateControl organizationId={id} />
         </Section>
       )}

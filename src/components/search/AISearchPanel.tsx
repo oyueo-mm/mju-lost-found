@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Lost112Notice } from "@/components/search/Lost112Notice";
 import { CameraIcon, SearchIcon, XIcon } from "@/components/icons";
 import { useI18n } from "@/lib/i18n/client";
+import { SEARCH_RESULTS_GRID_CLASS } from "@/components/search/resultsLayout";
 
 type AISearchPanelProps = {
   // AI 검색 고도화 Phase: replaces the old ImageSearchPanel (이미지 전용)
@@ -33,7 +34,14 @@ type AISearchPanelProps = {
   // 입장에서는 /search·/lost·/found와 똑같이 그냥 호출자가 넘겨준 type을
   // 그대로 쓸 뿐이다.)
   placeholder?: string;
+  quickSearchLabel?: string;
+  quickSearchItems?: readonly { label: string; query: string }[];
+  controlsClassName?: string;
 };
+
+export function resolveAiSearchQuery(currentQuery: string, quickSearchQuery?: string): string {
+  return (quickSearchQuery ?? currentQuery).trim();
+}
 
 // AI 검색 UI 시안 개선 Phase: 이 컴포넌트의 입력 영역을 "검색어 입력 +
 // 사진 선택(선택사항) + 검색"이 한 줄의 압축된 바(bar)에 자연스럽게 녹아
@@ -44,7 +52,13 @@ type AISearchPanelProps = {
 // 그 자리가 작은 thumbnail chip(제거 버튼 포함)으로 바뀐다. 검색/랭킹
 // 로직(handleSearch 이하)은 이전과 완전히 동일 -- 이번 Phase는 시안(UI)
 // 변경이며 API/알고리즘을 건드리지 않는다.
-export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
+export function AISearchPanel({
+  type,
+  placeholder,
+  quickSearchLabel,
+  quickSearchItems,
+  controlsClassName,
+}: AISearchPanelProps) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -55,6 +69,7 @@ export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
   // [] vs non-empty distinguishes "searched, no matches" from "has results".
   const [results, setResults] = useState<PostDTO[] | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const requestInFlightRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -102,9 +117,16 @@ export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
   const hasImageTypeConflict = file !== null && type === "all";
   const canSearch = (trimmedQuery !== "" || file !== null) && !hasImageTypeConflict;
 
-  async function handleSearch(event?: React.FormEvent) {
-    event?.preventDefault();
-    if (!canSearch) return;
+  async function runSearch(submittedQuery: string) {
+    if (
+      requestInFlightRef.current ||
+      (submittedQuery === "" && file === null) ||
+      hasImageTypeConflict
+    ) return;
+
+    requestInFlightRef.current = true;
+
+    if (submittedQuery !== query) setQuery(submittedQuery);
 
     setPending(true);
     setError(null);
@@ -112,7 +134,7 @@ export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
 
     try {
       const formData = new FormData();
-      if (trimmedQuery !== "") formData.append("q", trimmedQuery);
+      if (submittedQuery !== "") formData.append("q", submittedQuery);
       if (file) formData.append("image", file);
 
       const res = await fetch(`/api/posts?mode=ai&type=${type}`, {
@@ -133,8 +155,14 @@ export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
     } catch {
       setError(t("common.networkError"));
     } finally {
+      requestInFlightRef.current = false;
       setPending(false);
     }
+  }
+
+  function handleSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void runSearch(resolveAiSearchQuery(query));
   }
 
   // 사진이 없고 아직 검색하지 않은 상태에서만 "사진은 선택이다"를 한 줄로
@@ -145,10 +173,13 @@ export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <form
-        onSubmit={handleSearch}
-        className="flex items-center gap-2 rounded-full border border-border bg-card px-2 py-1.5 shadow-sm transition-colors focus-within:border-primary sm:px-2.5 sm:py-2"
-      >
+      <div className={`flex flex-col gap-3 ${controlsClassName ?? ""}`}>
+        <form
+          onSubmit={handleSearch}
+          className="flex items-center gap-2 rounded-full border border-border bg-card px-2 py-1.5 shadow-sm transition-colors focus-within:border-primary sm:px-2.5 sm:py-2"
+          data-search-mode="ai"
+          data-search-type={type}
+        >
         {previewUrl ? (
           <div className="relative shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element -- local blob: object URL preview, not a remote/optimizable image. */}
@@ -206,24 +237,42 @@ export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
           <SearchIcon className="size-3.5 sm:hidden" />
           <span className="hidden sm:inline">{pending ? t("common.searching") : t("common.search")}</span>
         </button>
-      </form>
+        </form>
 
-      {showOptionalHint && (
-        <p className="px-1 text-xs text-muted-foreground">
-          {t("aiSearch.hint")}
-        </p>
-      )}
-      {hasImageTypeConflict && (
-        <p className="px-1 text-xs text-warning">
-          {t("aiSearch.typeConflict")}
-        </p>
-      )}
+        {showOptionalHint && (
+          <p className="px-1 text-xs text-muted-foreground">
+            {t("aiSearch.hint")}
+          </p>
+        )}
+        {quickSearchLabel && quickSearchItems && quickSearchItems.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 px-1">
+            <span className="text-xs font-medium text-muted-foreground">{quickSearchLabel}</span>
+            {quickSearchItems.map((item) => (
+              <button
+                key={item.query}
+                type="button"
+                value={item.query}
+                onClick={() => void runSearch(resolveAiSearchQuery(query, item.query))}
+                disabled={pending}
+                className="rounded-full border border-border bg-background/70 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50"
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
+        {hasImageTypeConflict && (
+          <p className="px-1 text-xs text-warning">
+            {t("aiSearch.typeConflict")}
+          </p>
+        )}
 
-      {error && (
-        <p className="rounded-card border border-destructive/30 bg-destructive-muted px-4 py-2.5 text-sm text-destructive">
-          {error}
-        </p>
-      )}
+        {error && (
+          <p className="rounded-card border border-destructive/30 bg-destructive-muted px-4 py-2.5 text-sm text-destructive">
+            {error}
+          </p>
+        )}
+      </div>
 
       {results !== null && (
         <div className="flex flex-col gap-3">
@@ -238,7 +287,7 @@ export function AISearchPanel({ type, placeholder }: AISearchPanelProps) {
               <Lost112Notice />
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            <div className={SEARCH_RESULTS_GRID_CLASS}>
               {results.map((post) => (
                 <PostCard key={`${post.type}-${post.id}`} post={post} scoreLabel={t("post.score.ai")} scoreDisplay="decimal" />
               ))}

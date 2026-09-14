@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import { updateNicknameAction } from "@/app/(main)/me/actions";
 import { NICKNAME_MAX_LENGTH, NICKNAME_MIN_LENGTH } from "@/lib/auth/nickname";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
+import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
+import type { Translator } from "@/lib/i18n/translate";
 
 type NicknameSettingsProps = {
   currentNickname: string;
@@ -15,8 +18,8 @@ type NicknameSettingsProps = {
   nicknameChangeAvailableAt: Date | null;
 };
 
-function formatDateTime(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
+function formatDateTime(date: Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 // Phase I: pulled out to a plain top-level function (not inlined in the
@@ -31,13 +34,13 @@ function isInFuture(date: Date): boolean {
 
 // Coarse remaining-time text, same bucket style CommentSection's own
 // formatRelativeTime/the redesigned /suspended page's formatRemaining use.
-function formatRemaining(until: Date): string {
+function formatRemaining(until: Date, t: Translator): string {
   const diffMs = until.getTime() - Date.now();
-  if (diffMs <= 0) return "곧 가능";
+  if (diffMs <= 0) return t("nickname.availableSoon");
   const hours = Math.ceil(diffMs / 3600000);
-  if (hours < 24) return `약 ${hours}시간 후`;
+  if (hours < 24) return t("nickname.hoursRemaining", { count: hours });
   const days = Math.ceil(hours / 24);
-  return `약 ${days}일 후`;
+  return t("nickname.daysRemaining", { count: days });
 }
 
 // Phase H-7: direct server-action call inside useTransition (not
@@ -48,6 +51,7 @@ function formatRemaining(until: Date): string {
 // ThemeSettings/useSyncExternalStore workaround for that same rule), so
 // this shape sidesteps it entirely rather than fighting it again.
 export function NicknameSettings({ currentNickname, nicknameChangeAvailableAt }: NicknameSettingsProps) {
+  const { locale, t } = useI18n();
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(currentNickname);
@@ -86,10 +90,10 @@ export function NicknameSettings({ currentNickname, nicknameChangeAvailableAt }:
   if (!editing) {
     return (
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">현재 닉네임: {currentNickname}</span>
+        <span className="text-xs text-muted-foreground">{t("nickname.current", { name: currentNickname })}</span>
         {onCooldown ? (
           <p className="text-xs text-muted-foreground">
-            다음 변경 가능: {formatDateTime(effectiveCooldown!)} ({formatRemaining(effectiveCooldown!)})
+            {t("nickname.nextChange", { date: formatDateTime(effectiveCooldown!, locale), remaining: formatRemaining(effectiveCooldown!, t) })}
           </p>
         ) : (
           <button
@@ -101,7 +105,7 @@ export function NicknameSettings({ currentNickname, nicknameChangeAvailableAt }:
             }}
             className="w-fit text-sm font-medium text-primary hover:opacity-80"
           >
-            닉네임 변경
+            {t("nickname.change")}
           </button>
         )}
       </div>
@@ -111,12 +115,12 @@ export function NicknameSettings({ currentNickname, nicknameChangeAvailableAt }:
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-2 rounded-card border border-border bg-card p-4">
       <label className="flex flex-col gap-1.5 text-sm">
-        <span className="font-medium text-foreground">새 닉네임</span>
+        <span className="font-medium text-foreground">{t("nickname.new")}</span>
         <input
           type="text"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder={`한글/영문/숫자 ${NICKNAME_MIN_LENGTH}~${NICKNAME_MAX_LENGTH}자`}
+          placeholder={t("nickname.placeholder", { min: NICKNAME_MIN_LENGTH, max: NICKNAME_MAX_LENGTH })}
           maxLength={NICKNAME_MAX_LENGTH}
           required
           disabled={pending}
@@ -130,10 +134,10 @@ export function NicknameSettings({ currentNickname, nicknameChangeAvailableAt }:
       )}
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={pending || !value.trim()}>
-          {pending ? "변경 중..." : "저장"}
+          {pending ? t("nickname.changing") : t("common.save")}
         </Button>
         <Button type="button" variant="secondary" size="sm" onClick={() => setEditing(false)} disabled={pending}>
-          취소
+          {t("common.cancel")}
         </Button>
       </div>
     </form>

@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { REPORT_REASONS, type ReportTargetType } from "@/lib/report/schema";
 import { useI18n } from "@/lib/i18n/client";
+import { reportReasonLabelKey } from "@/lib/i18n/labels";
 
 type ReportButtonProps = {
   targetType: ReportTargetType;
@@ -115,7 +116,7 @@ export function ReportButton({
         >
           {REPORT_REASONS.map((r) => (
             <option key={r} value={r}>
-              {r}
+              {reportReasonLabelKey(r) ? t(reportReasonLabelKey(r)!) : r}
             </option>
           ))}
         </select>

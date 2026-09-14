@@ -50,6 +50,13 @@ describe("dictionaries", () => {
     }
   });
 
+  it("keeps all seven locale dictionaries structurally complete", () => {
+    const expected = Object.keys(ko).sort();
+    for (const locale of LOCALES) {
+      expect(Object.keys(getDictionary(locale)).sort()).toEqual(expected);
+    }
+  });
+
   it("keeps every {placeholder} a translation uses present in the Korean source", () => {
     // 번역문이 한국어 원문에 없는 자리표시자를 쓰면 화면에 "{foo}"가
     // 그대로 노출된다 -- 호출부는 한국어 기준으로 값을 넘기기 때문이다.

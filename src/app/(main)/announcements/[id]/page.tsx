@@ -2,9 +2,11 @@ import { notFound } from "next/navigation";
 
 import { getAnnouncement } from "@/lib/announcement/service";
 import { BellIcon } from "@/components/icons";
+import { getLocale } from "@/lib/i18n/server";
+import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
+function formatDate(date: Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 // Phase M: the page an announcement's notification links to (see
@@ -19,6 +21,7 @@ export default async function AnnouncementDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const locale = await getLocale();
   const { id: idParam } = await params;
   const id = Number(idParam);
   if (!Number.isInteger(id)) notFound();
@@ -40,8 +43,8 @@ export default async function AnnouncementDetailPage({
       </div>
       <h1 className="text-xl font-semibold text-foreground md:text-2xl">{announcement.title}</h1>
       <p className="text-xs text-muted-foreground">
-        {formatDate(announcement.createdAt)}
-        {wasEdited && ` · 수정됨: ${formatDate(announcement.updatedAt)}`}
+        {formatDate(announcement.createdAt, locale)}
+        {wasEdited && ` · 수정됨: ${formatDate(announcement.updatedAt, locale)}`}
       </p>
       <div className="whitespace-pre-wrap rounded-card border border-border bg-card p-5 text-sm leading-relaxed text-foreground">
         {announcement.content}

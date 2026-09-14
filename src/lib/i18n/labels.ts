@@ -47,6 +47,15 @@ const POST_TYPE_KEYS: Record<PostType, TranslationKey> = {
   found: "post.type.found",
 };
 
+const REPORT_REASON_KEYS: Record<string, TranslationKey> = {
+  "사기/허위 정보": "report.reason.fraud",
+  "부적절한 내용": "report.reason.inappropriate",
+  "욕설/비방": "report.reason.abuse",
+  "개인정보 노출": "report.reason.privacy",
+  "도배/스팸": "report.reason.spam",
+  기타: "report.reason.other",
+};
+
 export function categoryLabelKey(category: string): TranslationKey | null {
   return CATEGORY_KEYS[category] ?? null;
 }
@@ -68,4 +77,8 @@ export function statusLabelKeyOrNull(status: string): TranslationKey | null {
 
 export function postTypeLabelKey(type: PostType): TranslationKey {
   return POST_TYPE_KEYS[type];
+}
+
+export function reportReasonLabelKey(reason: string): TranslationKey | null {
+  return REPORT_REASON_KEYS[reason] ?? null;
 }

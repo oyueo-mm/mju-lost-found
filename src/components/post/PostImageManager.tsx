@@ -5,6 +5,7 @@ import Image from "next/image";
 import { MAX_IMAGES_PER_POST } from "@/lib/images/config";
 import type { GalleryItem } from "@/lib/images/galleryState";
 import { ChevronDownIcon, ChevronUpIcon, ImageOffIcon, XIcon } from "@/components/icons";
+import { useI18n } from "@/lib/i18n/client";
 
 type PostImageManagerProps = {
   items: GalleryItem[];
@@ -35,6 +36,7 @@ export function PostImageManager({
   onDeleteExisting,
   onMove,
 }: PostImageManagerProps) {
+  const { t } = useI18n();
   const atMax = items.length >= MAX_IMAGES_PER_POST;
 
   function handleFileInputChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -48,7 +50,7 @@ export function PostImageManager({
       {items.length === 0 ? (
         <div className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-card border border-dashed border-border text-sm text-muted-foreground">
           <ImageOffIcon className="size-6" />
-          <span>등록된 이미지가 없습니다</span>
+          <span>{t("imageManager.empty")}</span>
         </div>
       ) : (
         // Phase 11-4D section 18: 3 columns even at 375px keeps each thumbnail
@@ -72,18 +74,18 @@ export function PostImageManager({
                       URL, so next/image is used for that one instead. */}
                   {item.kind === "new" ? (
                     // eslint-disable-next-line @next/next/no-img-element -- local blob: object URL preview.
-                    <img src={url} alt="선택한 이미지 미리보기" className="h-full w-full object-cover" />
+                    <img src={url} alt={t("imageManager.selectedPreview")} className="h-full w-full object-cover" />
                   ) : (
-                    <Image src={url} alt="게시글 이미지" fill sizes="200px" className="object-cover" />
+                    <Image src={url} alt={t("imageManager.postImage")} fill sizes="200px" className="object-cover" />
                   )}
                   {isPrimary && (
                     <span className="absolute top-1.5 left-1.5 rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-medium text-foreground shadow-sm backdrop-blur-sm">
-                      대표
+                      {t("imageManager.primary")}
                     </span>
                   )}
                   {itemDisabled && item.kind === "existing" && deletingExistingId === item.id && (
                     <div className="absolute inset-0 flex items-center justify-center bg-card/60 text-xs text-muted-foreground">
-                      삭제 중...
+                      {t("common.deleting")}
                     </div>
                   )}
                 </div>
@@ -97,7 +99,7 @@ export function PostImageManager({
                     type="button"
                     onClick={() => onMove(index, -1)}
                     disabled={itemDisabled || index === 0}
-                    aria-label="위로 이동"
+                    aria-label={t("imageManager.moveUp")}
                     className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
                   >
                     <ChevronUpIcon className="size-4" />
@@ -106,7 +108,7 @@ export function PostImageManager({
                     type="button"
                     onClick={() => onMove(index, 1)}
                     disabled={itemDisabled || index === items.length - 1}
-                    aria-label="아래로 이동"
+                    aria-label={t("imageManager.moveDown")}
                     className="flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
                   >
                     <ChevronDownIcon className="size-4" />
@@ -115,7 +117,7 @@ export function PostImageManager({
                     type="button"
                     onClick={() => (item.kind === "existing" ? onDeleteExisting(item.id) : onRemoveNew(item.localId))}
                     disabled={itemDisabled}
-                    aria-label="이미지 삭제"
+                    aria-label={t("imageManager.delete")}
                     className="flex size-7 items-center justify-center rounded-full text-destructive transition-colors hover:bg-destructive-muted disabled:pointer-events-none disabled:opacity-30"
                   >
                     <XIcon className="size-4" />
@@ -144,7 +146,7 @@ export function PostImageManager({
         <label
           className={`inline-flex w-fit items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50 ${atMax ? "pointer-events-none opacity-50" : "cursor-pointer"}`}
         >
-          사진 촬영
+          {t("imageManager.camera")}
           <input
             type="file"
             accept="image/*"
@@ -158,7 +160,7 @@ export function PostImageManager({
         <label
           className={`inline-flex w-fit items-center gap-1.5 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-foreground/30 has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50 ${atMax ? "pointer-events-none opacity-50" : "cursor-pointer"}`}
         >
-          갤러리에서 선택
+          {t("imageManager.gallery")}
           <input
             type="file"
             accept="image/jpeg,image/png,image/webp"
@@ -171,7 +173,7 @@ export function PostImageManager({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        JPEG, PNG, WebP · 최대 10MB · 최대 {MAX_IMAGES_PER_POST}장 ({items.length}/{MAX_IMAGES_PER_POST})
+        {t("imageManager.limits", { max: MAX_IMAGES_PER_POST, count: items.length })}
       </p>
     </div>
   );

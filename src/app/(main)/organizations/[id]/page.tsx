@@ -8,11 +8,13 @@ import { ShieldIcon, UserIcon } from "@/components/icons";
 import { OrganizationJoinControls } from "@/components/organization/OrganizationJoinControls";
 import { PostCard } from "@/components/post/PostCard";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { getLocale } from "@/lib/i18n/server";
+import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
 
 const ROLE_LABELS = { leader: "대표 관리자", admin: "관리자", member: "구성원" } as const;
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
+function formatDate(date: Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
 }
 
 // Phase 12-4 §5/§24: /lost, /found와 동일하게 비로그인 사용자도 조회 가능
@@ -22,6 +24,7 @@ function formatDate(date: Date): string {
 // 등 인증 정보는 절대 포함하지 않는다(getOrganizationMembers 자체가 이미
 // 그렇게 select한다).
 export default async function OrganizationProfilePage({ params }: { params: Promise<{ id: string }> }) {
+  const locale = await getLocale();
   const { id: idParam } = await params;
   const id = Number(idParam);
   if (!Number.isInteger(id)) notFound();
@@ -108,7 +111,7 @@ export default async function OrganizationProfilePage({ params }: { params: Prom
                     </span>
                     <div className="flex min-w-0 flex-col">
                       <span className="truncate text-sm font-medium text-foreground">{m.user.nickname ?? "닉네임 미설정"}</span>
-                      <span className="text-xs text-muted-foreground">가입일: {formatDate(m.joinedAt)}</span>
+                      <span className="text-xs text-muted-foreground">가입일: {formatDate(m.joinedAt, locale)}</span>
                     </div>
                   </li>
                 ))}

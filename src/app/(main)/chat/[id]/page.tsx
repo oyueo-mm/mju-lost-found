@@ -8,8 +8,10 @@ import { ChatThread } from "@/components/chat/ChatThread";
 import { ReportButton } from "@/components/report/ReportButton";
 import { AuthorLink } from "@/components/user/AuthorLink";
 import { ImageOffIcon, ShieldIcon } from "@/components/icons";
+import { getTranslator } from "@/lib/i18n/server";
 
 export default async function ChatRoomPage({ params }: { params: Promise<{ id: string }> }) {
+  const t = await getTranslator();
   const { id: idParam } = await params;
   const user = await requireReadyUser("chat", `/chat/${idParam}`); // redirects to /login or /onboarding as needed
 
@@ -24,7 +26,7 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
   if (result.kind !== "ok") {
     return (
       <div className="rounded-card border border-destructive/30 bg-destructive-muted p-6 text-sm text-destructive">
-        이 채팅방에 접근할 권한이 없어요.
+        {t("chat.accessDenied")}
       </div>
     );
   }
@@ -77,7 +79,7 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
             </Link>
             {room.inquirer && room.inquirer.id !== user.id && (
               <span className="text-xs text-muted-foreground">
-                문의자: {room.inquirer.nickname ?? "알 수 없음"}
+                {t("chat.inquirer", { name: room.inquirer.nickname ?? t("common.unknown") })}
               </span>
             )}
           </div>
@@ -99,11 +101,11 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
             <ReportButton
               targetType="user"
               targetId={room.counterpart.id}
-              buttonLabel={`${room.counterpart.nickname ?? "상대방"}님 신고하기`}
+              buttonLabel={t("chat.reportUser", { name: room.counterpart.nickname ?? t("chat.counterpart") })}
             />
           )}
           <Link href="/chat" className="text-sm text-muted-foreground underline hover:text-foreground">
-            채팅 목록
+            {t("chat.backToList")}
           </Link>
         </div>
       </div>
@@ -127,7 +129,7 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
               )}
             </span>
             <span className="max-w-32 truncate">{ref.title}</span>
-            <span className="font-medium text-primary">게시글 보기</span>
+            <span className="font-medium text-primary">{t("chat.viewPost")}</span>
           </Link>
         ))}
       </div>

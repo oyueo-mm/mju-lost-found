@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 
 import { ReportButton } from "@/components/report/ReportButton";
 import { ALLOWED_REACTION_EMOJIS } from "@/lib/chat/schema";
+import { useI18n } from "@/lib/i18n/client";
 
 type MessageActionMenuProps = {
   messageId: number;
@@ -93,11 +94,12 @@ export function MessageActionMenu({
   onEdit,
   onDelete,
 }: MessageActionMenuProps) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<MenuStep>("menu");
   const [reacting, setReacting] = useState(false);
   const [reactionError, setReactionError] = useState<string | null>(null);
-  const [copyLabel, setCopyLabel] = useState<"복사" | "복사됨" | "복사 실패">("복사");
+  const [copyLabel, setCopyLabel] = useState<"copy" | "copied" | "failed">("copy");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -117,7 +119,7 @@ export function MessageActionMenu({
     setStep("menu");
     setReactionError(null);
     setDeleteError(null);
-    setCopyLabel("복사");
+    setCopyLabel("copy");
   }
 
   // Outside click/tap and Escape both close the menu. mousedown/
@@ -185,7 +187,7 @@ export function MessageActionMenu({
       await onReact(emoji);
       closeMenu();
     } catch (err) {
-      setReactionError(err instanceof Error ? err.message : "반응을 남기지 못했습니다.");
+      setReactionError(err instanceof Error ? err.message : t("chat.messageAction.reactionFailed"));
     } finally {
       setReacting(false);
     }
@@ -194,27 +196,27 @@ export function MessageActionMenu({
   async function handleCopy() {
     try {
       await navigator.clipboard.writeText(content);
-      setCopyLabel("복사됨");
+      setCopyLabel("copied");
       setTimeout(closeMenu, 700);
     } catch {
       // Most commonly: clipboard permission denied, or a non-secure
       // context without the Clipboard API at all -- either way, this is
       // the only feedback the user needs; nothing else in the app is
       // affected by a failed copy.
-      setCopyLabel("복사 실패");
+      setCopyLabel("failed");
     }
   }
 
   async function handleDelete() {
     if (deleting) return;
-    if (!confirm("메시지를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) return;
+    if (!confirm(t("chat.messageAction.deleteConfirm"))) return;
     setDeleting(true);
     setDeleteError(null);
     try {
       await onDelete();
       closeMenu();
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "메시지를 삭제하지 못했습니다.");
+      setDeleteError(err instanceof Error ? err.message : t("chat.messageAction.deleteFailed"));
     } finally {
       setDeleting(false);
     }
@@ -251,7 +253,7 @@ export function MessageActionMenu({
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        aria-label="메시지 옵션"
+        aria-label={t("chat.messageAction.menu")}
         aria-expanded={open}
         className="mb-1 shrink-0 rounded-full px-1 text-sm text-muted-foreground opacity-0 transition-opacity duration-150 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
       >
@@ -276,7 +278,7 @@ export function MessageActionMenu({
                     type="button"
                     onClick={() => handlePickEmoji(emoji)}
                     disabled={reacting}
-                    aria-label={`${emoji} 반응`}
+                    aria-label={t("chat.messageAction.reaction", { emoji })}
                     className="rounded-full p-1.5 text-lg hover:bg-muted disabled:opacity-60"
                   >
                     {emoji}
@@ -293,12 +295,12 @@ export function MessageActionMenu({
                 }}
                 className="rounded px-2 py-2 text-left text-foreground hover:bg-muted"
               >
-                답장
+                {t("chat.messageAction.reply")}
               </button>
 
               {canCopy && (
                 <button type="button" onClick={handleCopy} className="rounded px-2 py-2 text-left text-foreground hover:bg-muted">
-                  {copyLabel}
+                  {t(copyLabel === "failed" ? "chat.messageAction.copyFailed" : `chat.messageAction.${copyLabel}`)}
                 </button>
               )}
 
@@ -311,7 +313,7 @@ export function MessageActionMenu({
                   }}
                   className="rounded px-2 py-2 text-left text-foreground hover:bg-muted"
                 >
-                  수정
+                  {t("chat.messageAction.edit")}
                 </button>
               )}
 
@@ -322,7 +324,7 @@ export function MessageActionMenu({
                   disabled={deleting}
                   className="rounded px-2 py-2 text-left text-destructive hover:bg-destructive-muted disabled:opacity-60"
                 >
-                  {deleting ? "삭제하는 중..." : "삭제"}
+                  {deleting ? t("chat.messageAction.deleting") : t("chat.messageAction.delete")}
                 </button>
               )}
               {deleteError && <p className="max-w-40 px-2 py-1 text-xs text-destructive">{deleteError}</p>}
@@ -332,7 +334,7 @@ export function MessageActionMenu({
                 onClick={() => setStep("reporting")}
                 className="rounded px-2 py-2 text-left text-destructive hover:bg-destructive-muted"
               >
-                신고
+                {t("chat.messageAction.report")}
               </button>
             </>
           )}

@@ -162,8 +162,15 @@ export type ListQuery = z.infer<typeof listQuerySchema>;
 // location are unbounded TEXT in the DB (see schema.prisma), but a public
 // write API needs its own sane upper bounds regardless of what the column
 // itself allows.
-const title = z.string().trim().min(1, "제목을 입력해주세요.").max(200);
-const description = z.string().trim().min(1, "설명을 입력해주세요.").max(5000);
+export const POST_TITLE_MAX_LENGTH = 200;
+export const POST_DESCRIPTION_MAX_LENGTH = 5000;
+
+const title = z.string().trim().min(1, "제목을 입력해주세요.").max(POST_TITLE_MAX_LENGTH);
+const description = z
+  .string()
+  .trim()
+  .min(1, "설명을 입력해주세요.")
+  .max(POST_DESCRIPTION_MAX_LENGTH);
 const category = z.string().trim().min(1, "카테고리를 입력해주세요.").max(100);
 // Phase P-5: `.nullable()`, not `.optional()` -- the field must still be
 // present on every create (the form always sends either a real value or

@@ -9,9 +9,11 @@ import {
   removeMemberAction,
 } from "@/app/(main)/organizations/[id]/settings/actions";
 import { Button } from "@/components/ui/Button";
+import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
+import { useI18n } from "@/lib/i18n/client";
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
+function formatDate(date: Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
 }
 
 type Member = {
@@ -20,8 +22,6 @@ type Member = {
   joinedAt: Date;
   user: { id: number; nickname: string | null; publicId: string };
 };
-
-const ROLE_LABELS = { leader: "대표 관리자", admin: "관리자", member: "구성원" } as const;
 
 // Phase 12-4 §16-19: 각 행의 버튼은 여기서 "보여줄지 말지"만 결정하고,
 // 실제 허용 여부는 각 Server Action -> service 함수의 canAppointAdmin/
@@ -43,6 +43,7 @@ export function OrganizationMemberManagement({
   myRole: "leader" | "admin";
   myUserId: number;
 }) {
+  const { locale, t } = useI18n();
   const router = useRouter();
   const [pendingUserId, setPendingUserId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +85,7 @@ export function OrganizationMemberManagement({
                   {member.user.nickname ?? "닉네임 미설정"} {isSelf && <span className="text-muted-foreground">(나)</span>}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {ROLE_LABELS[member.role]} · 가입일 {formatDate(member.joinedAt)}
+                  {t(`organization.${member.role}`)} · {t("organization.joinedDate", { date: formatDate(member.joinedAt, locale) })}
                 </span>
               </div>
 
@@ -97,7 +98,7 @@ export function OrganizationMemberManagement({
                       disabled={busy}
                       onClick={() => run(() => appointAdminAction(organizationId, member.user.id), member.user.id)}
                     >
-                      ADMIN 임명
+                      {t("organization.admin")}
                     </Button>
                   )}
                   {canDemote && (
@@ -107,7 +108,7 @@ export function OrganizationMemberManagement({
                       disabled={busy}
                       onClick={() => run(() => removeAdminAction(organizationId, member.user.id), member.user.id)}
                     >
-                      ADMIN 해임
+                      {t("organization.member")}
                     </Button>
                   )}
                   {canRemove && (
@@ -116,11 +117,11 @@ export function OrganizationMemberManagement({
                       size="sm"
                       disabled={busy}
                       onClick={() => {
-                        if (!window.confirm(`${member.user.nickname ?? "이 구성원"}을(를) 단체에서 제거하시겠습니까?`)) return;
+                        if (!window.confirm(`${member.user.nickname ?? t("organization.member")} ${t("chat.messageAction.delete")}`)) return;
                         run(() => removeMemberAction(organizationId, member.user.id), member.user.id);
                       }}
                     >
-                      제거
+                      {t("chat.messageAction.delete")}
                     </Button>
                   )}
                 </div>

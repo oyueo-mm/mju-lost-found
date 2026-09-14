@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
+import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
+import { useI18n } from "@/lib/i18n/client";
 
 type GoogleTestModeToggleProps = {
   initialEnabled: boolean;
@@ -11,8 +13,8 @@ type GoogleTestModeToggleProps = {
   updatedAt: Date | null;
 };
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
+function formatDate(date: Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 // Phase H-3: the button here toggling is UX only -- src/lib/auth/auth.ts's
@@ -23,6 +25,7 @@ function formatDate(date: Date): string {
 // until this component's own PATCH call changes it -- there is no client-
 // only bypass anywhere in this flow.
 export function GoogleTestModeToggle({ initialEnabled, updatedByNickname, updatedAt }: GoogleTestModeToggleProps) {
+  const { locale, t } = useI18n();
   const router = useRouter();
   const [enabled, setEnabled] = useState(initialEnabled);
   const [pending, setPending] = useState(false);
@@ -52,7 +55,7 @@ export function GoogleTestModeToggle({ initialEnabled, updatedByNickname, update
       setEnabled(next);
       router.refresh();
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
     } finally {
       setPending(false);
     }
@@ -92,7 +95,7 @@ export function GoogleTestModeToggle({ initialEnabled, updatedByNickname, update
 
       {updatedByNickname && updatedAt && (
         <p className="text-xs text-muted-foreground">
-          마지막 변경: {updatedByNickname} · {formatDate(updatedAt)}
+          마지막 변경: {updatedByNickname} · {formatDate(updatedAt, locale)}
         </p>
       )}
     </section>

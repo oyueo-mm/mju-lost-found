@@ -6,9 +6,11 @@ import { getLatestSuspensionRecord } from "@/lib/moderation/service";
 import { getLatestAppealForUser } from "@/lib/moderation/appeals";
 import { AppealForm } from "@/components/moderation/AppealForm";
 import { AlertIcon, ClockIcon } from "@/components/icons";
+import { getLocale } from "@/lib/i18n/server";
+import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
 
-function formatDateTime(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(
+function formatDateTime(date: Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(
     date,
   );
 }
@@ -37,6 +39,7 @@ function formatRemaining(until: Date): string {
 // app's real design-system tokens (bg-background/text-foreground/etc)
 // instead of the old hardcoded zinc/black classes this page had before.
 export default async function SuspendedPage() {
+  const locale = await getLocale();
   const user = await requireReadyUser(); // redirects to /login or /onboarding as needed
 
   if (!isCurrentlySuspended(user)) {
@@ -72,7 +75,7 @@ export default async function SuspendedPage() {
             <>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-muted-foreground">해제 예정</span>
-                <span className="font-medium text-foreground">{formatDateTime(user.suspendedUntil)}</span>
+                <span className="font-medium text-foreground">{formatDateTime(user.suspendedUntil, locale)}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-1 text-muted-foreground">
@@ -86,7 +89,7 @@ export default async function SuspendedPage() {
           <div className="flex items-center justify-between gap-3">
             <span className="text-muted-foreground">정지 시작</span>
             <span className="font-medium text-foreground">
-              {record?.startedAt ? formatDateTime(record.startedAt) : "확인 불가"}
+              {record?.startedAt ? formatDateTime(record.startedAt, locale) : "확인 불가"}
             </span>
           </div>
           <div className="flex flex-col gap-1 border-t border-destructive/20 pt-3">
@@ -120,8 +123,8 @@ export default async function SuspendedPage() {
               }`}
             >
               {latestAppeal.reviewedAt
-                ? `이의신청이 검토 완료되었습니다. (제출: ${formatDateTime(latestAppeal.createdAt)})`
-                : `이의신청이 제출되어 검토 대기 중입니다. (제출: ${formatDateTime(latestAppeal.createdAt)})`}
+                ? `이의신청이 검토 완료되었습니다. (제출: ${formatDateTime(latestAppeal.createdAt, locale)})`
+                : `이의신청이 제출되어 검토 대기 중입니다. (제출: ${formatDateTime(latestAppeal.createdAt, locale)})`}
             </p>
           ) : (
             <AppealForm />

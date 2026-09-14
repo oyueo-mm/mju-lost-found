@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import type { PostType } from "@/lib/posts/schema";
+import { useI18n } from "@/lib/i18n/client";
 
 type CommentChatButtonProps = {
   postType: PostType;
@@ -24,6 +25,7 @@ type CommentChatButtonProps = {
 // for the same comment just re-opens the same room.
 export function CommentChatButton({ postType, postId, commentId }: CommentChatButtonProps) {
   const router = useRouter();
+  const { t } = useI18n();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,13 +41,13 @@ export function CommentChatButton({ postType, postId, commentId }: CommentChatBu
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.error ?? "채팅방을 여는 데 실패했습니다.");
+        setError(json.error ?? t("common.networkError"));
         setPending(false);
         return;
       }
       router.push(`/chat/${json.data.id}`);
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
       setPending(false);
     }
   }
@@ -59,7 +61,7 @@ export function CommentChatButton({ postType, postId, commentId }: CommentChatBu
         disabled={pending}
         className="text-muted-foreground underline hover:text-foreground disabled:opacity-60"
       >
-        {pending ? "여는 중..." : "채팅하기"}
+        {pending ? t("common.loading") : t("post.startChat")}
       </button>
     </span>
   );

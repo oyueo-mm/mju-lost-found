@@ -11,9 +11,10 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ReportButton } from "@/components/report/ReportButton";
 import { UserIcon, BoxIcon, ClockIcon } from "@/components/icons";
 import { getTranslator } from "@/lib/i18n/server";
+import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
 
-function formatJoinDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
+function formatJoinDate(date: Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
 }
 
 // Phase H-7: public by design ("다른 사용자의 프로필을 볼 수 있도록 한다") -- no
@@ -101,7 +102,7 @@ export default async function ProfilePage({
         </div>
         <div className="flex flex-col items-center gap-1.5 rounded-card border border-border bg-card p-4 text-center">
           <ClockIcon className="size-5 text-muted-foreground" />
-          <span className="text-sm font-semibold text-foreground">{formatJoinDate(profile.createdAt)}</span>
+          <span className="text-sm font-semibold text-foreground">{formatJoinDate(profile.createdAt, t.locale)}</span>
           <span className="text-xs text-muted-foreground">{t("profile.joinedAt")}</span>
         </div>
       </section>

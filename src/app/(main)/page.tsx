@@ -44,6 +44,8 @@ const RECENT_LIMIT = 6;
 // -- 이번 변경은 홈이 그것들을 *어떻게 불러 쓰는지*만 바꾼다.
 export default async function Home() {
   const [user, t] = await Promise.all([getCurrentUser(), getTranslator()]);
+  const [headingFirstLine, headingSecondLine = ""] = t("home.searchHeading").split("\n", 2);
+  const highlightedAi = headingSecondLine.match(/AI|IA/);
   if (!user) {
     return <LandingHero />;
   }
@@ -64,16 +66,29 @@ export default async function Home() {
       {/* 검색 -- 이 페이지에서 가장 중요한 동작이므로 맨 위에서 가장 큰
           타이포그래피를 가져간다. 예전 히어로와 같은 자리, 같은 여백이고
           그 안에서 토글과 select 두 줄만 사라졌다.
-          거대한 히어로로 키우거나 그라데이션/배지를 새로 넣지 않는다. */}
-      <section className="flex flex-col items-center gap-4 py-2 text-center md:py-4">
-        <h1 className="text-2xl leading-snug font-bold text-balance text-foreground md:text-3xl">
-          {t("home.searchHeading")}
+          거대한 히어로로 키우거나 배지를 새로 넣지 않는다. */}
+      <section className="relative isolate flex flex-col items-center gap-4 py-2 text-center md:py-4">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 -top-8 bottom-0 -z-10 bg-[radial-gradient(ellipse_at_top,var(--primary-muted),transparent_70%)]"
+        />
+        <h1 className="mb-1 text-2xl leading-snug font-bold text-balance text-foreground md:mb-2 md:text-3xl">
+          <span className="block">{headingFirstLine}</span>
+          <span className="block">
+            {highlightedAi ? (
+              <>
+                {headingSecondLine.slice(0, highlightedAi.index)}
+                <span className="text-primary">{highlightedAi[0]}</span>
+                {headingSecondLine.slice((highlightedAi.index ?? 0) + highlightedAi[0].length)}
+              </>
+            ) : headingSecondLine}
+          </span>
         </h1>
         {/* 보조 설명을 따로 두지 않는다 -- AISearchPanel이 입력창 바로
             아래에 이미 "물건의 특징을 설명해주세요. 사진을 더하면 더
             정확하게 찾을 수 있어요."를 렌더링하므로, 여기서 한 줄 더
             얹으면 같은 말이 두 번 나온다. */}
-        <div className="w-full max-w-xl text-left">
+        <div className="w-full text-left">
           <HomeSearchBar />
         </div>
         {/* 가독성 개선 Phase: 두 버튼은 공유 Button의 secondary variant를
@@ -97,13 +112,13 @@ export default async function Home() {
       {/* Phase K: each section below the hero fades up the first time it's
           scrolled to (ScrollReveal -- no-op for content already on screen
           and for prefers-reduced-motion). Contents are unchanged. */}
-      <ScrollReveal className="flex flex-col gap-4">
+      <ScrollReveal className="flex flex-col gap-4 text-center">
         <h2 className="text-lg font-semibold text-foreground">{t("home.categories.title")}</h2>
         <CategoryShortcuts />
       </ScrollReveal>
 
       <ScrollReveal className="flex flex-col gap-4">
-        <SectionHeader title={t("home.recentLost")} href="/lost" />
+        <SectionHeader title={t("home.recentLost")} href="/lost" centered />
         {recentLost === null ? (
           <p className="text-sm text-muted-foreground">{t("home.recentLost.error")}</p>
         ) : recentLost.items.length === 0 ? (
@@ -118,7 +133,7 @@ export default async function Home() {
       </ScrollReveal>
 
       <ScrollReveal className="flex flex-col gap-4">
-        <SectionHeader title={t("home.recentFound")} href="/found" />
+        <SectionHeader title={t("home.recentFound")} href="/found" centered />
         {recentFound === null ? (
           <p className="text-sm text-muted-foreground">{t("home.recentFound.error")}</p>
         ) : recentFound.items.length === 0 ? (

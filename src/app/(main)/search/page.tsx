@@ -9,6 +9,7 @@ import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, listQuerySchema } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
 import { getTranslator } from "@/lib/i18n/server";
+import { SEARCH_RESULTS_GRID_CLASS } from "@/components/search/resultsLayout";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -71,7 +72,7 @@ export default async function SearchPage({
             <Lost112Notice />
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className={SEARCH_RESULTS_GRID_CLASS}>
             {results.items.map((post) => (
               <PostCard key={`${post.type}-${post.id}`} post={post} />
             ))}

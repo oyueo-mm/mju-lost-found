@@ -12,6 +12,7 @@ import {
 import type { ReportTargetType } from "@/lib/report/schema";
 import { Button } from "@/components/ui/Button";
 import { AlertIcon } from "@/components/icons";
+import { useI18n } from "@/lib/i18n/client";
 
 const FIELD_CLASS = "rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-sm text-foreground";
 
@@ -35,6 +36,7 @@ const MAX_CUSTOM_DAYS = 365;
 // vs target_type match) happens server-side in dismissReport()/
 // applyReportAction() -- this is presentation only.
 export function ReportProcessForm({ reportId, targetType, targetDeleted }: ReportProcessFormProps) {
+  const { t } = useI18n();
   const router = useRouter();
   const actionType = TARGET_TYPE_TO_ACTION_TYPE[targetType];
 
@@ -103,7 +105,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
       }
       router.refresh();
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
       setConfirming(false);
     } finally {
       setSubmitting(false);

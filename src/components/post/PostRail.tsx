@@ -29,7 +29,7 @@ export function PostRail({ posts }: { posts: PostDTO[] }) {
   return (
     <div className="scroll-rail -mx-4 flex gap-3 overflow-x-auto px-4 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-4 sm:overflow-visible sm:px-0 lg:grid-cols-3">
       {posts.map((post) => (
-        <div key={`${post.type}-${post.id}`} className="flex w-40 shrink-0 [&>*]:w-full sm:w-auto">
+        <div key={`${post.type}-${post.id}`} className="flex w-40 shrink-0 [&>*]:w-full md:h-full sm:w-auto">
           <PostCard post={post} />
         </div>
       ))}

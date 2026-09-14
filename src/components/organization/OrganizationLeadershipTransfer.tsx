@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { transferLeadershipAction } from "@/app/(main)/organizations/[id]/settings/actions";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 type Member = { user: { id: number; nickname: string | null } };
 
@@ -21,6 +22,7 @@ export function OrganizationLeadershipTransfer({
   members: Member[];
   myUserId: number;
 }) {
+  const { t } = useI18n();
   const router = useRouter();
   const candidates = members.filter((m) => m.user.id !== myUserId);
   const [targetUserId, setTargetUserId] = useState<number | "">(candidates[0]?.user.id ?? "");
@@ -65,7 +67,7 @@ export function OrganizationLeadershipTransfer({
           ))}
         </select>
         <Button variant="destructive" size="sm" disabled={pending} onClick={handleTransfer}>
-          {pending ? "처리 중..." : "대표 관리자 위임"}
+        {pending ? t("organization.processing") : t("organization.transferLeadership")}
         </Button>
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}

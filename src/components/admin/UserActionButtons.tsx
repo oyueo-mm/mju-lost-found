@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { AdminUserDTO } from "@/lib/admin/users";
 import { SUSPEND_DURATION_DAY_OPTIONS, SUSPEND_REASON_CATEGORIES } from "@/lib/moderation/schema";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 type UserActionButtonsProps = {
   user: AdminUserDTO;
@@ -34,6 +35,7 @@ const MAX_CUSTOM_DAYS = 365;
 // admin/users.ts -- not the raw isSuspended flag, so an admin never sees
 // "정지 해제" for a timed suspension that has already expired.
 export function UserActionButtons({ user, isSelf }: UserActionButtonsProps) {
+  const { t } = useI18n();
   const router = useRouter();
   const [pending, setPending] = useState<"role" | "suspend" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +77,7 @@ export function UserActionButtons({ user, isSelf }: UserActionButtonsProps) {
       setSuspendMenuOpen(false);
       router.refresh();
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
     } finally {
       setPending(null);
     }

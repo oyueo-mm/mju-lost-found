@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 // Phase 10: same checkbox-gates-button pattern as
 // privacy-consent/PrivacyConsentButton.tsx -- disabled until the box is
@@ -12,6 +13,7 @@ import { Button } from "@/components/ui/Button";
 // authenticated request (no userId, no confirmation text) -- the server
 // resolves who's withdrawing from the session alone.
 export function WithdrawButton() {
+  const { t } = useI18n();
   const router = useRouter();
   const checkboxId = useId();
   const [checked, setChecked] = useState(false);
@@ -35,7 +37,7 @@ export function WithdrawButton() {
       router.push("/");
       router.refresh();
     } catch {
-      setError("네트워크 오류가 발생했습니다. 다시 시도해주세요.");
+      setError(t("common.networkError"));
     } finally {
       setSubmitting(false);
     }

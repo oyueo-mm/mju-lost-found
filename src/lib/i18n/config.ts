@@ -10,7 +10,7 @@
 // 쓰지 않으며, 필요한 것은 "쿠키로 고른 언어 하나 + 평평한 문자열 사전"
 // 뿐이다. 그 정도는 아래 100줄 남짓으로 충분하고, 새 의존성과 미들웨어
 // 라우팅 규칙을 들여오는 쪽이 오히려 기존 구조를 더 크게 건드린다.
-export const LOCALES = ["ko", "en", "zh", "vi", "mn"] as const;
+export const LOCALES = ["ko", "en", "zh", "vi", "mn", "ja", "fr"] as const;
 export type Locale = (typeof LOCALES)[number];
 
 export const DEFAULT_LOCALE: Locale = "ko";
@@ -32,6 +32,8 @@ export const LOCALE_LABELS: Record<Locale, string> = {
   zh: "中文",
   vi: "Tiếng Việt",
   mn: "Монгол",
+  ja: "日本語",
+  fr: "Français",
 };
 
 // <html lang>과 Intl.DateTimeFormat에 넘길 BCP 47 태그. 중국어는
@@ -42,6 +44,8 @@ export const LOCALE_HTML_LANG: Record<Locale, string> = {
   zh: "zh-Hans",
   vi: "vi",
   mn: "mn",
+  ja: "ja",
+  fr: "fr",
 };
 
 // 날짜/시간 표시에 쓰는 Intl 로케일. 기존 코드가 하드코딩하던 "ko-KR"을
@@ -54,6 +58,8 @@ export const LOCALE_INTL_TAG: Record<Locale, string> = {
   zh: "zh-CN",
   vi: "vi-VN",
   mn: "mn-MN",
+  ja: "ja-JP",
+  fr: "fr-FR",
 };
 
 export function isLocale(value: unknown): value is Locale {

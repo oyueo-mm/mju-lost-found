@@ -3,9 +3,11 @@ import { getMyFeedback } from "@/lib/feedback/service";
 import { FEEDBACK_CATEGORY_LABELS, FEEDBACK_STATUS_LABELS, type FeedbackStatusValue } from "@/lib/feedback/schema";
 import { FeedbackForm } from "@/components/feedback/FeedbackForm";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { getLocale } from "@/lib/i18n/server";
+import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
+function formatDate(date: Date, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
 }
 
 // Phase 11-5: same tone convention as admin/reports/[id]/page.tsx's own
@@ -27,6 +29,7 @@ const STATUS_TONE_CLASSES: Record<FeedbackStatusValue, string> = {
 // getMyFeedback()은 항상 user.id로만 조회하므로 다른 사용자의 의견은 이
 // 페이지의 어떤 경로로도 노출되지 않는다.
 export default async function FeedbackPage() {
+  const locale = await getLocale();
   const user = await requireActiveUser();
   const items = await getMyFeedback(user);
 
@@ -57,7 +60,7 @@ export default async function FeedbackPage() {
                 </div>
                 <p className="font-medium text-foreground">{f.title}</p>
                 <p className="whitespace-pre-wrap text-muted-foreground">{f.content}</p>
-                <p className="text-xs text-muted-foreground/70">{formatDate(f.createdAt)}</p>
+                <p className="text-xs text-muted-foreground/70">{formatDate(f.createdAt, locale)}</p>
               </div>
             ))}
           </div>

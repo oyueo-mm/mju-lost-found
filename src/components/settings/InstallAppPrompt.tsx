@@ -12,6 +12,7 @@ import {
 } from "@/lib/pwa/installPrompt";
 import { Button } from "@/components/ui/Button";
 import { XIcon } from "@/components/icons";
+import { useI18n } from "@/lib/i18n/client";
 
 // Phase 11-5: "앱처럼 설치하기" CTA -- Android/Chrome/Edge get a real
 // install button (the captured `beforeinstallprompt` event, see
@@ -28,6 +29,7 @@ import { XIcon } from "@/components/icons";
 // comment for why this is a useSyncExternalStore store instead of
 // useState+useEffect.
 export function InstallAppPrompt() {
+  const { t } = useI18n();
   const { deferredPrompt, isIos, hidden, mounted } = useSyncExternalStore(
     subscribeInstallPromptState,
     getInstallPromptSnapshot,
@@ -45,17 +47,17 @@ export function InstallAppPrompt() {
     <div className="flex flex-col gap-2 rounded-card border border-border bg-card p-4 text-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-1">
-          <span className="font-medium text-foreground">앱처럼 설치하기</span>
+          <span className="font-medium text-foreground">{t("install.title")}</span>
           <span className="text-xs text-muted-foreground">
             {deferredPrompt
-              ? "홈 화면에 추가하면 더 빠르게 접속할 수 있어요."
-              : "Safari 하단 공유 버튼을 누른 뒤 \"홈 화면에 추가\"를 선택하면 설치할 수 있어요."}
+              ? t("install.description")
+              : t("install.iosDescription")}
           </span>
         </div>
         <button
           type="button"
           onClick={dismissInstallPrompt}
-          aria-label="앱 설치 안내 닫기"
+          aria-label={t("install.close")}
           className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <XIcon className="size-4" />
@@ -65,10 +67,10 @@ export function InstallAppPrompt() {
       {deferredPrompt && (
         <div className="flex gap-2">
           <Button type="button" size="sm" onClick={() => void triggerInstallPrompt()}>
-            앱 추가하기
+            {t("install.add")}
           </Button>
           <Button type="button" size="sm" variant="secondary" onClick={dismissInstallPrompt}>
-            나중에
+            {t("install.later")}
           </Button>
         </div>
       )}
