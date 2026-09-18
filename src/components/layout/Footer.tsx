@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { LogoMark } from "@/components/layout/Logo";
 import { LocaleSwitcher } from "@/components/layout/LocaleSwitcher";
+import { FooterSections } from "@/components/layout/FooterSections";
 import { getTranslator } from "@/lib/i18n/server";
 import type { TranslationKey } from "@/lib/i18n/translate";
 
@@ -76,6 +77,13 @@ const FOOTER_SECTIONS: { titleKey: TranslationKey; links: { href: string; labelK
 
 export async function Footer() {
   const t = await getTranslator();
+  const localizedSections = FOOTER_SECTIONS.map((section) => ({
+    title: t(section.titleKey),
+    links: section.links.map((link) => ({ href: link.href, label: t(link.labelKey) })),
+  }));
+  const legalLinks = localizedSections[2].links.filter((link) =>
+    ["/policy/terms", "/policy/privacy", "/policy/community"].includes(link.href),
+  );
 
   return (
     <footer className="border-t border-border bg-background">
@@ -94,14 +102,15 @@ export async function Footer() {
             {/* Deliberately never claims official university operation
                 (this phase's own explicit rule) -- describes only what the
                 service actually does. */}
-            <p className="text-xs text-muted-foreground">{t("footer.tagline")}</p>
+            <p className="hidden text-xs text-muted-foreground md:block">{t("footer.tagline")}</p>
+            <p className="text-xs text-muted-foreground md:hidden">{t("brand.name")}</p>
             {/* Phase 12-9 §5: explicit "이 학교 공식 서비스가 아니다" +
                 "학생이 자발적으로 만들었다" 고지 -- 학교 로고/브랜드는 이
                 텍스트 한 줄 외에 새로 추가하지 않는다. 실제로 확인된 팀원
                 이름/연락처가 없으므로(현재 프로젝트에 공개하기로 정해진
                 정보 없음) 구체적인 개인정보는 넣지 않고, "학생이 만들었다"는
                 사실만 표시한다. */}
-            <p className="text-xs text-muted-foreground">{t("footer.disclaimer")}</p>
+            <p className="hidden text-xs text-muted-foreground md:block">{t("footer.disclaimer")}</p>
             <p className="text-[11px] text-muted-foreground/80">{t("footer.createdBy")}</p>
           </div>
 
@@ -113,7 +122,7 @@ export async function Footer() {
               배치되므로, 섹션 "안" 링크까지 가로로 흐르면 어느 링크가 어느
               섹션 소속인지 다시 헷갈리게 된다. */}
           {FOOTER_SECTIONS.map((section) => (
-            <div key={section.titleKey} className="flex flex-col gap-2.5">
+            <div key={section.titleKey} className="hidden flex-col gap-2.5 md:flex">
               <h3 className="text-xs font-semibold text-foreground">{t(section.titleKey)}</h3>
               <nav aria-label={t(section.titleKey)} className="flex flex-col gap-1.5 text-xs">
                 {section.links.map((link) => (
@@ -125,6 +134,8 @@ export async function Footer() {
             </div>
           ))}
         </div>
+
+        <FooterSections sections={localizedSections} legalLinks={legalLinks} />
 
         {/* 다국어(i18n) Phase §8: 언어 선택 UI는 Footer에 둔다 -- 이 앱의
             Header는 이미 로고/5탭 내비/알림/내 정보로 가로 폭이 꽉 차 있고,

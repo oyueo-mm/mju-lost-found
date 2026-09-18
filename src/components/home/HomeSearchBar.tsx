@@ -36,7 +36,7 @@ export const HOME_POPULAR_SEARCHES = ["카드", "지갑", "무선 이어폰", "�
 // 버튼을 그대로 쓴다. 인기 검색어도 선택적 prop으로만 전달하므로 이
 // 화면에서만 보이고 /search, /lost, /found의 패널은 바뀌지 않는다.
 export function HomeSearchBar() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const quickSearchItems = [
     { query: HOME_POPULAR_SEARCHES[0], label: t("home.popular.card") },
     { query: HOME_POPULAR_SEARCHES[1], label: t("home.popular.wallet") },
@@ -54,6 +54,17 @@ export function HomeSearchBar() {
     ].flatMap((phraseGroup) => phraseGroup.split("\n").filter(Boolean)),
     [t],
   );
+  const mobileAnimatedPlaceholders = useMemo(
+    () => [
+      t("home.aiPlaceholderMobile.1"),
+      t("home.aiPlaceholderMobile.2"),
+      t("home.aiPlaceholderMobile.3"),
+      t("home.aiPlaceholderMobile.4"),
+      t("home.aiPlaceholderMobile.5"),
+      t("home.aiPlaceholderMobile.6"),
+    ],
+    [t],
+  );
 
   return (
     <AISearchPanel
@@ -61,8 +72,11 @@ export function HomeSearchBar() {
       placeholder={animatedPlaceholders[0] ?? t("home.aiPlaceholder")}
       quickSearchLabel={t("home.popularSearches")}
       quickSearchItems={quickSearchItems}
-      controlsClassName="mx-auto w-full max-w-xl text-center [&>div]:justify-center [&>p]:text-center"
+      controlsClassName={`mx-auto w-full max-w-xl text-center [&>div]:justify-center [&>p]:text-center ${
+        locale === "fr" ? "!gap-2 sm:!gap-3 [&>div]:gap-1.5 sm:[&>div]:gap-2" : ""
+      }`}
       animatedPlaceholders={animatedPlaceholders}
+      mobileAnimatedPlaceholders={mobileAnimatedPlaceholders}
     />
   );
 }

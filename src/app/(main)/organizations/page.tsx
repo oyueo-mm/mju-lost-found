@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { getCurrentUser, requireActiveUser } from "@/lib/auth/session";
+import { requireActiveUser } from "@/lib/auth/session";
 import {
   getMyOrganizationJoinRequests,
   getMyOrganizationMemberships,
@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { LinkButton } from "@/components/ui/Button";
 import { ShieldIcon, PlusIcon } from "@/components/icons";
 import { OrganizationHelpTooltip } from "@/components/organization/OrganizationHelpTooltip";
+import { getTranslator } from "@/lib/i18n/server";
 
 const ROLE_LABELS = { leader: "대표 관리자", admin: "관리자", member: "구성원" } as const;
 
@@ -46,7 +47,10 @@ export default async function OrganizationsHubPage({
   // Phase 12-10 §3/§5: "내 단체"/"신청 내역" 탭은 본인 데이터를 보여주므로
   // 로그인이 필요하다 -- "단체 찾기"는 /lost, /found와 동일하게 비로그인도
   // 볼 수 있는 기존 동작을 그대로 유지한다.
-  const currentUser = tab === "find" ? await getCurrentUser() : await requireActiveUser();
+  const [currentUser, t] = await Promise.all([
+    tab === "find" ? Promise.resolve(null) : requireActiveUser(),
+    getTranslator(),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -84,19 +88,25 @@ export default async function OrganizationsHubPage({
         ))}
       </nav>
 
-      {tab === "find" && <FindTab />}
-      {tab === "my" && currentUser && <MyTab userId={currentUser.id} statusFilter={memberStatusFilter} />}
-      {tab === "requests" && currentUser && <RequestsTab userId={currentUser.id} />}
+      {tab === "find" && <FindTab loadErrorTitle={t("common.networkError")} />}
+      {tab === "my" && currentUser && <MyTab userId={currentUser.id} statusFilter={memberStatusFilter} loadErrorTitle={t("common.networkError")} />}
+      {tab === "requests" && currentUser && <RequestsTab userId={currentUser.id} loadErrorTitle={t("common.networkError")} />}
     </div>
   );
 }
 
 // Phase 12-4 §4/§24 그대로 -- ACTIVE 단체만, 이름순. 이번 phase에서 조회/
 // 표시 로직은 바꾸지 않고 허브의 한 탭으로 옮기기만 했다.
-async function FindTab() {
-  const organizations = await listActiveOrganizations();
+async function FindTab({ loadErrorTitle }: { loadErrorTitle: string }) {
+  let organizations: Awaited<ReturnType<typeof listActiveOrganizations>>;
+  try {
+    organizations = await listActiveOrganizations();
+  } catch (error) {
+    console.error("Failed to load active organizations", error);
+    return <EmptyState title={loadErrorTitle} description="단체 목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요." />;
+  }
 
-  if (organizations.length === 0) {
+  if (!organizations?.length) {
     return <EmptyState title="등록된 단체가 없습니다" description="아직 승인된 단체가 없습니다." />;
   }
 
@@ -130,9 +140,23 @@ async function FindTab() {
 // 때만 INACTIVE를 보여준다. getMyOrganizationMemberships 자체는 상태 필터
 // 없이 전부 반환하므로(Phase 12-4), 여기서 클라이언트 쪽 필터링 없이
 // 서버에서 한 번에 걸러낸다.
-async function MyTab({ userId, statusFilter }: { userId: number; statusFilter: "active" | "inactive" }) {
-  const memberships = await getMyOrganizationMemberships(userId);
-  const filtered = memberships.filter((m) => m.organizationStatus === statusFilter);
+async function MyTab({
+  userId,
+  statusFilter,
+  loadErrorTitle,
+}: {
+  userId: number;
+  statusFilter: "active" | "inactive";
+  loadErrorTitle: string;
+}) {
+  let memberships: Awaited<ReturnType<typeof getMyOrganizationMemberships>>;
+  try {
+    memberships = await getMyOrganizationMemberships(userId);
+  } catch (error) {
+    console.error("Failed to load organization memberships", error);
+    return <EmptyState title={loadErrorTitle} description="내 단체를 불러오지 못했습니다. 잠시 후 다시 시도해주세요." />;
+  }
+  const filtered = (memberships ?? []).filter((m) => m.organizationStatus === statusFilter);
 
   return (
     <div className="flex flex-col gap-4">
@@ -196,17 +220,24 @@ async function MyTab({ userId, statusFilter }: { userId: number; statusFilter: "
 // 여기서는 새 승인/거절 로직을 추가하지 않는다 -- 가입 신청 취소는 기존
 // 단체 프로필 페이지(OrganizationJoinControls)에서, 생성 신청 취소는 기존
 // /organizations/create(PendingOrganizationRequestCard)에서 그대로 처리한다.
-async function RequestsTab({ userId }: { userId: number }) {
-  const [joinRequests, creationRequest] = await Promise.all([
-    getMyOrganizationJoinRequests(userId),
-    getMyPendingOrganizationCreationRequest(userId),
-  ]);
+async function RequestsTab({ userId, loadErrorTitle }: { userId: number; loadErrorTitle: string }) {
+  let joinRequests: Awaited<ReturnType<typeof getMyOrganizationJoinRequests>>;
+  let creationRequest: Awaited<ReturnType<typeof getMyPendingOrganizationCreationRequest>>;
+  try {
+    [joinRequests, creationRequest] = await Promise.all([
+      getMyOrganizationJoinRequests(userId),
+      getMyPendingOrganizationCreationRequest(userId),
+    ]);
+  } catch (error) {
+    console.error("Failed to load organization requests", error);
+    return <EmptyState title={loadErrorTitle} description="단체 신청 내역을 불러오지 못했습니다. 잠시 후 다시 시도해주세요." />;
+  }
 
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-semibold text-foreground">가입 신청</h2>
-        {joinRequests.length === 0 ? (
+        {!joinRequests?.length ? (
           <p className="text-sm text-muted-foreground">가입 신청 내역이 없습니다.</p>
         ) : (
           <ul className="flex flex-col gap-2">

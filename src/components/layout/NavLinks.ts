@@ -59,6 +59,15 @@ export const ADMIN_NAV_ITEM: NavItem<NavKey> = {
   labelKey: "nav.admin",
 };
 
+export const MOBILE_NAV_LABEL_KEYS = {
+  home: "nav.mobile.home",
+  lost: "nav.mobile.lost",
+  found: "nav.mobile.found",
+  chat: "nav.mobile.chat",
+  me: "nav.mobile.me",
+  admin: "nav.mobile.admin",
+} as const satisfies Record<NavKey, TranslationKey>;
+
 // Desktop navigation groups the two existing boards and search modes without
 // changing BottomNav's established five-tab layout.
 export const DESKTOP_NAV_ITEMS: NavItem[] = [

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { ADMIN_NAV_ITEM, NAV_ITEMS, isNavActive } from "./NavLinks";
+import { ADMIN_NAV_ITEM, MOBILE_NAV_LABEL_KEYS, NAV_ITEMS, isNavActive } from "./NavLinks";
 import { useI18n } from "@/lib/i18n/client";
 import { onChatUnreadCount } from "./chatUnreadEvent";
 import { HomeIcon, BoxIcon, HandboxIcon, ChatIcon, UserIcon, ShieldIcon } from "@/components/icons";
@@ -64,8 +64,9 @@ export function BottomNav({ unreadChatCount, isAdmin = false }: { unreadChatCoun
             <li key={item.key} className="flex-1">
               <Link
                 href={item.href}
+                aria-label={t(item.labelKey)}
                 aria-current={active ? "page" : undefined}
-                className={`relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors ${
+                className={`relative flex min-w-0 flex-col items-center gap-0.5 py-2.5 text-[10px] leading-tight font-medium transition-colors ${
                   active ? "text-primary" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -80,7 +81,7 @@ export function BottomNav({ unreadChatCount, isAdmin = false }: { unreadChatCoun
                     </span>
                   )}
                 </span>
-                {t(item.labelKey)}
+                <span className="w-full whitespace-nowrap px-0.5 text-center">{t(MOBILE_NAV_LABEL_KEYS[item.key])}</span>
               </Link>
             </li>
           );

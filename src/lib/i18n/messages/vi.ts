@@ -41,15 +41,16 @@ export const vi: Dictionary = {
   "nav.notifications": "Thông báo",
   "nav.unreadNotifications": "{count} thông báo chưa đọc",
 
-  "brand.name": "Trung tâm đồ thất lạc Myongji",
-  "brand.shortName": "Đồ thất lạc MJU",
+  "brand.name": "MYONGJI L&F",
+  "brand.shortName": "MYONGJI L&F",
+  "brand.description": "Trung tâm đồ thất lạc thông minh dành cho người MJU",
 
   "footer.tagline": "Dịch vụ đăng tin, tìm kiếm và liên hệ về đồ thất lạc dành cho sinh viên Đại học Myongji.",
   "footer.disclaimer":
     "Đây là dự án do sinh viên Đại học Myongji tự nguyện thực hiện, không phải dịch vụ chính thức của nhà trường.",
   "footer.createdBy": "Created by MJU students",
   "footer.copyright":
-    "© {year} Trung tâm đồ thất lạc Myongji. Nếu cần phản ánh về một bài đăng, tin nhắn hay người dùng cụ thể, vui lòng dùng chức năng báo cáo trên màn hình đó.",
+    "© {year} MYONGJI L&F. Nếu cần phản ánh về một bài đăng, tin nhắn hay người dùng cụ thể, vui lòng dùng chức năng báo cáo trên màn hình đó.",
   "footer.section.service": "Dịch vụ",
   "footer.section.community": "Cộng đồng",
   "footer.section.guide": "Thông tin",
@@ -107,6 +108,12 @@ export const vi: Dictionary = {
   "home.aiPlaceholder.4": "Tôi nhặt được một chiếc ví đựng thẻ gần hội trường sinh viên",
   "home.aiPlaceholder.5": "Hôm qua tôi để quên chiếc ô màu đen ở tòa nhà Kỹ thuật",
   "home.aiPlaceholder.6": "Hãy giúp tôi tìm tai nghe không dây có hộp màu xanh",
+  "home.aiPlaceholderMobile.1": "Tôi làm mất AirPods màu đen",
+  "home.aiPlaceholderMobile.2": "Tôi đang tìm thẻ sinh viên",
+  "home.aiPlaceholderMobile.3": "Tôi nhặt được ví đựng thẻ",
+  "home.aiPlaceholderMobile.4": "Tôi để quên ô màu đen",
+  "home.aiPlaceholderMobile.5": "Tôi đang tìm tai nghe không dây",
+  "home.aiPlaceholderMobile.6": "Tôi làm mất bình nước màu xanh",
   "home.searchTargetLabel": "Phạm vi tìm",
   "home.searchIn": "Tìm trong {board}",
 
@@ -185,6 +192,8 @@ export const vi: Dictionary = {
   "post.createdAt": "Đăng {created} · Sửa {updated}",
   "post.foundContactNotice":
     "💡 Hãy mô tả thêm đặc điểm của món đồ — cho biết một đặc điểm chưa nêu trong bài, hoặc nơi và thời điểm bị mất, sẽ giúp xác nhận chủ nhân và trả lại an toàn.",
+  "post.lostPropertyNotice":
+    "💡 Việc mang đi, cất giữ hoặc xử lý đồ thất lạc mà không trả lại có thể bị xem là chiếm giữ tài sản do người khác đánh rơi. Hãy liên hệ người đăng qua chat hoặc báo với cơ quan cảnh sát hay trung tâm đồ thất lạc gần nhất.",
   "post.closedOrganization": "Tổ chức đã đóng",
   "post.contactOrganization": "Liên hệ tổ chức",
   "post.startChat": "Bắt đầu trò chuyện",
@@ -269,7 +278,7 @@ export const vi: Dictionary = {
   "report.submit": "Gửi báo cáo",
   "report.submitting": "Đang gửi...",
 
-  "auth.login.title": "Trung tâm đồ thất lạc Myongji",
+  "auth.login.title": "MYONGJI L&F",
   "auth.login.subtitle": "Tìm nhanh món đồ bạn đánh rơi trong khuôn viên trường",
   "auth.login.google": "Đăng nhập bằng Google",
   "auth.login.domainNotice": "Tài khoản không thuộc trường (@mju.ac.kr) không thể đăng nhập.",
@@ -336,6 +345,8 @@ export const vi: Dictionary = {
     "Ghi rõ màu sắc, thương hiệu, đặc điểm... sẽ giúp tìm ra chủ nhân dễ hơn.",
   "form.foundNotice":
     "💡 Trước khi trả lại — tốt nhất không nên công khai hết những thông tin mấu chốt như đặc điểm riêng hay thứ bên trong món đồ. Khi có người liên hệ, bạn có thể hỏi về đặc điểm chưa công khai để xác nhận họ có đúng là chủ nhân hay không.",
+  "form.lostRewardNotice": "Việc đưa ra tiền cảm ơn là tùy chọn. Điều này có thể khuyến khích việc trả lại, nhưng không bảo đảm việc trả lại hoặc thanh toán.",
+  "form.lostRewardPrivacyNotice": "Không công khai thông tin cá nhân như số tài khoản hoặc số điện thoại trong bài đăng. Hãy dùng chat trong dịch vụ để liên hệ và trao đổi về tiền cảm ơn; dịch vụ không trung gian, giữ hộ hoặc chuyển tiền cảm ơn.",
   "form.unknownOrganization": "Tổ chức không xác định",
   "form.imageLimit": "Bạn chỉ có thể đăng tối đa {max} ảnh. {rejected} ảnh đã không được thêm.",
   "form.imageDeleteFailed": "Không xoá được ảnh.",
@@ -413,8 +424,11 @@ export const vi: Dictionary = {
   "theme.title": "Cài đặt hiển thị", "theme.mode": "Chế độ giao diện", "theme.modeAria": "Chọn chế độ giao diện",
   "theme.mode.system": "Hệ thống", "theme.mode.light": "Sáng", "theme.mode.dark": "Tối",
   "theme.accent": "Màu nhấn", "theme.accentAria": "Chọn màu nhấn",
-  "theme.accent.blue": "Xanh lam", "theme.accent.green": "Xanh lá", "theme.accent.purple": "Tím",
-  "theme.accent.rose": "Hồng", "theme.accent.amber": "Hổ phách",
+  "theme.accent.mjuBlue": "Xanh Myongji", "theme.accent.mjuDarkBlue": "Xanh đậm Myongji", "theme.accent.pink": "Hồng tươi",
+  "theme.accent.rose": "Hồng", "theme.accent.lavender": "Tím nhạt", "theme.accent.green": "Xanh lá",
+  "theme.accent.custom": "Tự chọn",
+  "theme.accent.customInput": "Màu tùy chỉnh",
+  "theme.accent.customHint": "Nhập HEX hoặc RGB, chẳng hạn #2f6fed hoặc rgb(47, 111, 237). Màu chữ sẽ tự điều chỉnh để dễ đọc.",
   "theme.highContrast": "Độ tương phản cao",
   "theme.highContrastDescription": "Tăng độ tương phản của chữ, nền và nút để hiển thị rõ hơn.",
   "chat.accessDenied": "Bạn không có quyền truy cập cuộc trò chuyện này.", "chat.inquirer": "Người hỏi: {name}",
@@ -443,4 +457,10 @@ export const vi: Dictionary = {
   "nav.adminOrganizations": "Quản lý tổ chức",
   "nav.adminOrganizationRequests": "Yêu cầu tổ chức",
   "nav.adminSanctions": "Quản lý xử phạt",
+  "nav.mobile.home": "Trang chủ",
+  "nav.mobile.lost": "Đồ mất",
+  "nav.mobile.found": "Đồ nhặt",
+  "nav.mobile.chat": "Chat",
+  "nav.mobile.me": "Hồ sơ",
+  "nav.mobile.admin": "Quản trị",
 };

@@ -44,6 +44,7 @@ const RECENT_LIMIT = 6;
 // -- 이번 변경은 홈이 그것들을 *어떻게 불러 쓰는지*만 바꾼다.
 export default async function Home() {
   const [user, t] = await Promise.all([getCurrentUser(), getTranslator()]);
+  const compactFrenchHome = t.locale === "fr";
   const [headingFirstLine, headingSecondLine = ""] = t("home.searchHeading").split("\n", 2);
   const highlightedAi = headingSecondLine.match(/AI|IA/);
   if (!user) {
@@ -67,12 +68,22 @@ export default async function Home() {
           타이포그래피를 가져간다. 예전 히어로와 같은 자리, 같은 여백이고
           그 안에서 토글과 select 두 줄만 사라졌다.
           거대한 히어로로 키우거나 배지를 새로 넣지 않는다. */}
-      <section className="relative isolate flex flex-col items-center gap-4 py-2 text-center md:py-4">
+      <section
+        className={`relative isolate flex flex-col items-center text-center ${
+          compactFrenchHome ? "gap-3 py-1 md:gap-4 md:py-4" : "gap-4 py-2 md:py-4"
+        }`}
+      >
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 -top-8 bottom-0 -z-10 bg-[radial-gradient(ellipse_at_top,var(--primary-muted),transparent_70%)]"
         />
-        <h1 className="mb-1 text-2xl leading-snug font-bold text-balance text-foreground md:mb-2 md:text-3xl">
+        <h1
+          className={`max-w-full font-bold text-balance text-foreground ${
+            compactFrenchHome
+              ? "mb-0 text-2xl leading-tight md:mb-2 md:text-4xl md:leading-snug"
+              : "mb-1 text-3xl leading-snug md:mb-2 md:text-4xl"
+          }`}
+        >
           <span className="block">{headingFirstLine}</span>
           <span className="block">
             {highlightedAi ? (
@@ -99,7 +110,7 @@ export default async function Home() {
             준다. secondary variant 자체는 건드리지 않는다: 앱 전체 19개
             파일 25곳이 쓰고 있어서, 여기 한 화면 때문에 관리자/단체/폼
             화면 버튼까지 같이 바뀌면 이번 작업 범위를 벗어난다. */}
-        <div className="flex flex-wrap items-center justify-center gap-2">
+        <div className={`flex flex-wrap items-center justify-center ${compactFrenchHome ? "gap-1.5 sm:gap-2" : "gap-2"}`}>
           <LinkButton href="/lost" variant="secondary" size="sm" className="gap-1.5 bg-muted/60 hover:bg-muted">
             <BoxIcon className="size-4" /> {t("home.viewLost")}
           </LinkButton>
@@ -118,7 +129,7 @@ export default async function Home() {
       </ScrollReveal>
 
       <ScrollReveal className="flex flex-col gap-4">
-        <SectionHeader title={t("home.recentLost")} href="/lost" centered />
+        <SectionHeader title={t("home.recentLost")} href="/lost" centered titleClassName="text-xl md:text-2xl" />
         {recentLost === null ? (
           <p className="text-sm text-muted-foreground">{t("home.recentLost.error")}</p>
         ) : recentLost.items.length === 0 ? (
@@ -133,7 +144,7 @@ export default async function Home() {
       </ScrollReveal>
 
       <ScrollReveal className="flex flex-col gap-4">
-        <SectionHeader title={t("home.recentFound")} href="/found" centered />
+        <SectionHeader title={t("home.recentFound")} href="/found" centered titleClassName="text-xl md:text-2xl" />
         {recentFound === null ? (
           <p className="text-sm text-muted-foreground">{t("home.recentFound.error")}</p>
         ) : recentFound.items.length === 0 ? (

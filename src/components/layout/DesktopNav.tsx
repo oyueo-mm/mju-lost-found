@@ -30,7 +30,7 @@ export function DesktopNav({
   onSignOut: ServerAction;
 }) {
   const pathname = usePathname();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [prevUnreadChatCount, setPrevUnreadChatCount] = useState(unreadChatCount);
   const [liveUnreadChatCount, setLiveUnreadChatCount] = useState(unreadChatCount);
   const [openDropdown, setOpenDropdown] = useState<DesktopNavKey | null>(null);
@@ -45,9 +45,10 @@ export function DesktopNav({
   // Phase 31: appended, never a permanent member of NAV_ITEMS -- see
   // ADMIN_NAV_ITEM's own comment in NavLinks.ts for why.
   const items = isAdmin ? [...DESKTOP_NAV_ITEMS, DESKTOP_ADMIN_NAV_ITEM] : DESKTOP_NAV_ITEMS;
+  const compactLocale = locale === "fr" || locale === "vi" || locale === "mn";
 
   return (
-    <nav aria-label={t("nav.primary")} className="hidden items-center gap-1 md:flex">
+    <nav aria-label={t("nav.primary")} className={`hidden min-w-0 w-full items-center justify-center md:flex ${compactLocale ? "gap-0" : "gap-1"}`}>
       {items.map((item) => {
         const active = isNavActive(item.key, item.href, pathname);
         const badge = item.key === "chat" && liveUnreadChatCount > 0 ? liveUnreadChatCount : null;
@@ -61,6 +62,7 @@ export function DesktopNav({
               onOpen={() => setOpenDropdown(item.key)}
               onClose={() => setOpenDropdown((current) => (current === item.key ? null : current))}
               onSignOut={onSignOut}
+              compact={compactLocale}
             />
           );
         }
@@ -69,7 +71,13 @@ export function DesktopNav({
             key={item.key}
             href={item.href}
             aria-current={active ? "page" : undefined}
-              className={`relative flex h-10 items-center rounded-full px-4 text-sm font-medium whitespace-nowrap transition-colors ${
+              // Header 정렬 Phase: Header의 콘텐츠 폭이 이제 viewport와 무관하게
+              // Footer와 같은 max-w-4xl로 고정되므로, "넓은 화면일수록 더
+              // 크게"(xl/2xl에서 padding/font를 키우던 이전 로직)는 더 이상
+              // 맞지 않는다 -- 고정된 예산 안에서 화면만 넓어지면 오히려
+              // nav가 로고/우측 영역을 침범해 겹친다(2xl+ 데스크톱에서 실제
+              // 확인된 증상). compact locale은 항상 가장 작은 크기로 고정한다.
+              className={`relative flex h-10 shrink-0 items-center rounded-full font-medium whitespace-nowrap transition-colors ${compactLocale ? "px-2 text-xs" : "px-4 text-sm"} ${
               active ? "bg-primary-muted text-primary" : "text-muted-foreground hover:text-foreground"
             }`}
           >

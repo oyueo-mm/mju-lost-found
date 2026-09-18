@@ -28,12 +28,12 @@
   --muted: #f4f5f7;
   --muted-foreground: #6b7280;
   --border: #e4e4e7;
-  --ring: #2f6fed;
+  --ring: #006ec7;
 
   /* Primary: a confident blue -- trustworthy/"campus official" without
      reading as a government-site navy. Used for the brand mark, primary
      CTAs, active nav state, and links. */
-  --primary: #2f6fed;
+  --primary: #006ec7;
   --primary-foreground: #ffffff;
   --primary-muted: #eaf1ff;
 

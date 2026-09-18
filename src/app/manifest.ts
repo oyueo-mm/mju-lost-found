@@ -17,8 +17,8 @@ import type { MetadataRoute } from "next";
 // values (globals.css), never invented colors.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "명지 스마트 분실물 센터",
-    short_name: "명지 분실물",
+    name: "명지인을 위한 스마트 분실물 센터 — MYONGJI L&F",
+    short_name: "MYONGJI L&F",
     description: "명지대학교 학생을 위한 분실물 등록·검색·연락 서비스",
     start_url: "/",
     display: "standalone",

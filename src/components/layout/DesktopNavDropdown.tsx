@@ -30,6 +30,7 @@ type DesktopNavDropdownProps = {
   onClose: () => void;
   onSignOut?: ServerAction;
   triggerContent?: ReactNode;
+  compact?: boolean;
 };
 
 const ICONS: Record<NavIconName, typeof BoxIcon> = {
@@ -48,7 +49,7 @@ const ICONS: Record<NavIconName, typeof BoxIcon> = {
 
 const DROPDOWN_OPEN_EVENT = "mju-desktop-nav-dropdown-open";
 
-export function DesktopNavDropdown({ item, active, open, onOpen, onClose, onSignOut, triggerContent }: DesktopNavDropdownProps) {
+export function DesktopNavDropdown({ item, active, open, onOpen, onClose, onSignOut, triggerContent, compact = false }: DesktopNavDropdownProps) {
   const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLAnchorElement>(null);
@@ -112,7 +113,7 @@ export function DesktopNavDropdown({ item, active, open, onOpen, onClose, onSign
   return (
     <div
       ref={rootRef}
-      className="relative"
+      className="relative shrink-0"
       onMouseEnter={openMenu}
       onMouseLeave={scheduleClose}
       onFocusCapture={openMenu}
@@ -128,7 +129,11 @@ export function DesktopNavDropdown({ item, active, open, onOpen, onClose, onSign
         aria-expanded={open}
         aria-controls={menuId}
         aria-current={active ? "page" : undefined}
-        className={`inline-flex h-10 items-center gap-1 rounded-full px-4 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+        // Header 정렬 Phase: DesktopNav.tsx의 동일한 항목 className과 같은
+        // 이유로 xl/2xl 확대를 제거했다 -- Header 콘텐츠 폭이 Footer와 같은
+        // 고정 max-w-4xl이 된 이상, 화면이 넓어져도 쓸 수 있는 예산은 늘지
+        // 않는다.
+        className={`inline-flex h-10 items-center gap-1 rounded-full font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${compact ? "px-2 text-xs" : "px-4 text-sm"} ${
           active ? "bg-primary-muted text-primary" : "text-muted-foreground hover:text-foreground"
         }`}
       >
@@ -173,10 +178,12 @@ export function DesktopProfileDropdown({
   nickname,
   active,
   onSignOut,
+  compact = false,
 }: {
   nickname: string;
   active: boolean;
   onSignOut: ServerAction;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -190,12 +197,17 @@ export function DesktopProfileDropdown({
       onOpen={() => setOpen(true)}
       onClose={() => setOpen(false)}
       onSignOut={onSignOut}
+      compact={compact}
       triggerContent={
         <span className="flex min-w-0 items-center gap-2">
           <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <UserIcon className="size-4" />
           </span>
-          <span className="hidden max-w-24 truncate sm:inline">{nickname}</span>
+          {/* Header 정렬 Phase: 모바일(640px 미만)에서는 어떤 locale이든
+              사용자 이름을 표시하지 않는다 -- 이전에는 sm:inline 때문에
+              640~768px 구간(아직 그리드로 전환되지 않은 모바일 레이아웃)
+              에서 잠깐 이름이 보였다. */}
+          <span className={`hidden truncate ${compact ? "max-w-20" : "max-w-24"} 2xl:inline`}>{nickname}</span>
         </span>
       }
     />

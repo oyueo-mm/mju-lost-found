@@ -56,7 +56,7 @@ export default async function PrivacyConsentPage({
       <div data-fade-in className="flex w-full max-w-md flex-col items-center gap-6">
         <div className="flex flex-col items-center gap-2 text-center">
           <LogoMark size={44} />
-          <p className="text-xs font-medium tracking-wide text-muted-foreground">명지 스마트 분실물 센터</p>
+          <p className="text-xs font-medium tracking-wide text-muted-foreground">MYONGJI L&amp;F</p>
           <h1 className="mt-1 text-xl font-semibold text-foreground">👋 시작하기 전에 잠깐 확인해주세요</h1>
           <p className="text-sm text-muted-foreground">
             서비스를 이용하기 위해 필요한

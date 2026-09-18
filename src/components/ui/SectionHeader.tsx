@@ -17,18 +17,20 @@ export async function SectionHeader({
   hrefLabel,
   action,
   centered = false,
+  titleClassName,
 }: {
   title: string;
   href?: string;
   hrefLabel?: string;
   action?: ReactNode;
   centered?: boolean;
+  titleClassName?: string;
 }) {
   const t = await getTranslator();
 
   return (
     <div className={centered ? "grid grid-cols-[1fr_auto_1fr] items-center gap-2" : "flex items-center justify-between gap-2"}>
-      <h2 className={`text-lg font-semibold text-foreground${centered ? " col-start-2" : ""}`}>{title}</h2>
+      <h2 className={`${titleClassName ?? "text-lg"} font-semibold text-foreground${centered ? " col-start-2" : ""}`}>{title}</h2>
       {href ? (
         <Link
           href={href}

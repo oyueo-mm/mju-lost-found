@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import {
   ACCENT_COLORS,
@@ -10,6 +10,7 @@ import {
   setThemeState,
   subscribeThemeState,
   syncThemeStateFromStorage,
+  normalizeCustomAccent,
   type AccentColor,
   type ThemeMode,
 } from "@/lib/theme/constants";
@@ -22,12 +23,13 @@ const THEME_MODE_KEYS: Record<ThemeMode, TranslationKey> = {
   dark: "theme.mode.dark",
 };
 
-const ACCENT_COLOR_KEYS: Record<AccentColor, TranslationKey> = {
-  blue: "theme.accent.blue",
-  green: "theme.accent.green",
-  purple: "theme.accent.purple",
+const ACCENT_COLOR_KEYS: Record<Exclude<AccentColor, "custom">, TranslationKey> = {
+  mjuBlue: "theme.accent.mjuBlue",
+  mjuDarkBlue: "theme.accent.mjuDarkBlue",
+  pink: "theme.accent.pink",
   rose: "theme.accent.rose",
-  amber: "theme.accent.amber",
+  lavender: "theme.accent.lavender",
+  green: "theme.accent.green",
 };
 
 // Phase H-3: purely client-side preference (localStorage), same as this
@@ -51,18 +53,55 @@ const ACCENT_COLOR_KEYS: Record<AccentColor, TranslationKey> = {
 // into this component's re-render.
 export function ThemeSettings() {
   const { t } = useI18n();
+  const customPanelRef = useRef<HTMLDivElement>(null);
+  const customTriggerRef = useRef<HTMLButtonElement>(null);
+  const [customPanelOpen, setCustomPanelOpen] = useState(false);
+  const [customInput, setCustomInput] = useState("#006ec7");
   const { mode, accent, highContrast, mounted } = useSyncExternalStore(
     subscribeThemeState,
     getThemeSnapshot,
     getThemeServerSnapshot,
+  );
+  const customAccent = useSyncExternalStore(
+    subscribeThemeState,
+    () => getThemeSnapshot().customAccent,
+    () => null,
   );
 
   useEffect(() => {
     syncThemeStateFromStorage();
   }, []);
 
+  useEffect(() => {
+    if (!customPanelOpen) return;
+
+    function closeOnOutsideClick(event: PointerEvent) {
+      if (!customPanelRef.current?.contains(event.target as Node)) setCustomPanelOpen(false);
+    }
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setCustomPanelOpen(false);
+      customTriggerRef.current?.focus();
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [customPanelOpen]);
+
   function update(nextMode: ThemeMode, nextAccent: AccentColor, nextHighContrast: boolean) {
-    setThemeState(nextMode, nextAccent, nextHighContrast);
+    setThemeState(nextMode, nextAccent, nextHighContrast, customAccent);
+  }
+
+  function applyCustomAccent(value: string) {
+    const normalized = normalizeCustomAccent(value);
+    if (!normalized) return;
+    setCustomInput(normalized);
+    setThemeState(mode, "custom", highContrast, normalized);
   }
 
   return (
@@ -93,22 +132,74 @@ export function ThemeSettings() {
 
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium text-foreground">{t("theme.accent")}</span>
-        <div className="flex flex-wrap gap-2" role="group" aria-label={t("theme.accentAria")}>
-          {ACCENT_COLORS.map((a) => (
+        <div ref={customPanelRef} className="relative">
+          <div className="flex flex-wrap gap-2" role="group" aria-label={t("theme.accentAria")}>
+            {ACCENT_COLORS.map((a) => (
+              <button
+                key={a.value}
+                type="button"
+                aria-pressed={accent === a.value}
+                aria-label={t(ACCENT_COLOR_KEYS[a.value])}
+                disabled={!mounted}
+                onClick={() => update(mode, a.value, highContrast)}
+                className={`flex size-9 items-center justify-center rounded-full border-2 transition-colors disabled:opacity-60 ${
+                  accent === a.value ? "border-foreground" : "border-transparent"
+                }`}
+              >
+                <span className="size-6 rounded-full" style={{ backgroundColor: a.swatch }} />
+              </button>
+            ))}
             <button
-              key={a.value}
+              ref={customTriggerRef}
               type="button"
-              aria-pressed={accent === a.value}
-              aria-label={t(ACCENT_COLOR_KEYS[a.value])}
+              aria-pressed={accent === "custom"}
+              aria-expanded={customPanelOpen}
+              aria-controls="custom-accent-panel"
+              aria-label={t("theme.accent.custom")}
               disabled={!mounted}
-              onClick={() => update(mode, a.value, highContrast)}
+              onClick={() => {
+                const initialColor = customAccent ?? "#006ec7";
+                setCustomInput(initialColor);
+                applyCustomAccent(initialColor);
+                setCustomPanelOpen(true);
+              }}
               className={`flex size-9 items-center justify-center rounded-full border-2 transition-colors disabled:opacity-60 ${
-                accent === a.value ? "border-foreground" : "border-transparent"
+                accent === "custom" ? "border-foreground" : "border-transparent"
               }`}
             >
-              <span className="size-6 rounded-full" style={{ backgroundColor: a.swatch }} />
+              <span className="flex size-6 items-center justify-center rounded-full border border-border bg-card text-sm text-muted-foreground">+</span>
             </button>
-          ))}
+          </div>
+          {customPanelOpen && (
+            <div id="custom-accent-panel" role="dialog" aria-label={t("theme.accent.custom")} className="mt-3 flex flex-col gap-2 rounded-lg border border-border bg-card p-3 shadow-sm">
+            <label className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+              <span className="font-medium">{t("theme.accent.customInput")}</span>
+              <input
+                type="text"
+                value={customInput}
+                placeholder="#006ec7 or rgb(0, 110, 199)"
+                aria-label={t("theme.accent.customInput")}
+                onChange={(event) => setCustomInput(event.currentTarget.value)}
+                onBlur={(event) => applyCustomAccent(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    applyCustomAccent(event.currentTarget.value);
+                  }
+                }}
+                className="min-w-0 flex-1 rounded-md border border-border bg-transparent px-2.5 py-1.5 font-mono text-xs text-foreground outline-none focus:ring-2 focus:ring-ring"
+              />
+              <input
+                type="color"
+                value={normalizeCustomAccent(customInput) ?? customAccent ?? "#006ec7"}
+                aria-label={t("theme.accent.customInput")}
+                onChange={(event) => applyCustomAccent(event.target.value)}
+                className="size-9 rounded-md border-0 bg-transparent p-0"
+              />
+            </label>
+            <p className="text-xs text-muted-foreground">{t("theme.accent.customHint")}</p>
+            </div>
+          )}
         </div>
       </div>
 

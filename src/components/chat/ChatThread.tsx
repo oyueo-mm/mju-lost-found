@@ -9,7 +9,9 @@ import { useI18n } from "@/lib/i18n/client";
 import { MessageActionMenu } from "@/components/chat/MessageActionMenu";
 import { useChatRoomRealtime } from "@/components/chat/useChatRoomRealtime";
 import { dispatchChatUnreadCount } from "@/components/layout/chatUnreadEvent";
-import { CameraIcon } from "@/components/icons";
+import { CameraIcon, UserIcon } from "@/components/icons";
+import { LOCALE_INTL_TAG } from "@/lib/i18n/config";
+import { isSameCalendarDay, isSameMessageGroup } from "./messageGrouping";
 
 // Phase D-3: mirrors chat/service.ts's MessageReplyPreview -- no
 // createdAt/etc, just enough to render an inline quote (sender + a short
@@ -51,6 +53,13 @@ type MessageItem = {
   replyTo: ReplyPreview | null;
   reactions: ReactionSummary[];
 };
+
+function formatChatDay(date: Date, locale: keyof typeof LOCALE_INTL_TAG): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], {
+    dateStyle: "medium",
+    timeZone: "Asia/Seoul",
+  }).format(date);
+}
 
 // All message fetching/sending happens via our own server API (never a
 // direct DB/AI call from this Client Component) -- see Phase 10 spec
@@ -498,10 +507,30 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
             {t("chatThread.empty")}
           </p>
         ) : (
-          messages.map((m, index) => (
-            <div key={m.id} className={`flex flex-col ${m.isMine ? "items-end" : "items-start"}`}>
-              {!m.isMine && (
-                <span className="mb-0.5 text-xs text-muted-foreground">{m.senderNickname ?? t("common.unknown")}</span>
+          messages.map((m, index) => {
+            const previousMessage = messages[index - 1];
+            const nextMessage = messages[index + 1];
+            const groupStart = !isSameMessageGroup(previousMessage, m);
+            const groupEnd = !isSameMessageGroup(m, nextMessage);
+            const dateChanged = !isSameCalendarDay(previousMessage, m);
+
+            return (
+            <div key={m.id} className="flex flex-col">
+              {dateChanged && (
+                <div className="my-2 flex items-center gap-3 text-xs text-muted-foreground" role="separator">
+                  <span className="h-px flex-1 bg-border" />
+                  <span>{formatChatDay(new Date(m.createdAt), locale)}</span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              )}
+              <div className={`flex flex-col ${m.isMine ? "items-end" : "items-start"} ${groupStart ? "mt-1" : "mt-0.5"}`}>
+              {groupStart && !m.isMine && (
+                <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className="flex size-5 items-center justify-center rounded-full bg-muted" aria-hidden="true">
+                    <UserIcon className="size-3" />
+                  </span>
+                  <span>{m.senderNickname ?? t("common.unknown")}</span>
+                </div>
               )}
               {editingMessageId === m.id ? (
                 // Phase P-6: inline editing replaces the normal bubble in
@@ -626,7 +655,7 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
               {/* title: the exact date/time on hover/long-press -- this
                   phase's own "필요한 경우 오래된 메시지는 정확한 날짜/시간을
                   확인할 수 있게 한다". */}
-              <span className="mt-0.5 text-xs text-muted-foreground" title={formatAbsoluteTime(new Date(m.createdAt), locale)}>
+              {groupEnd && <span className="mt-0.5 text-xs text-muted-foreground" title={formatAbsoluteTime(new Date(m.createdAt), locale)}>
                 {index === messages.length - 1
                   ? formatRelativeTime(new Date(m.createdAt), t)
                   : formatAbsoluteTime(new Date(m.createdAt), locale)}
@@ -635,9 +664,10 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
                     side (see chat/service.ts's listMessages own comment). */}
                 {m.editedAt ? t("comment.edited") : ""}
                 {m.isMine ? ` · ${isReadByCounterpart(m) ? t("chatThread.read") : t("chatThread.unread")}` : ""}
-              </span>
+              </span>}
+              </div>
             </div>
-          ))
+          )})
         )}
         {/* Bottom sentinel -- scrollIntoView({ block: "end" }) targets this
             empty marker rather than the list container itself, so the

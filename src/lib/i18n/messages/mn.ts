@@ -41,8 +41,9 @@ export const mn: Dictionary = {
   "nav.notifications": "Мэдэгдэл",
   "nav.unreadNotifications": "Уншаагүй {count} мэдэгдэл",
 
-  "brand.name": "Мёнжи ухаалаг гээгдсэн эд зүйлийн төв",
-  "brand.shortName": "Мёнжи гээгдсэн эд",
+  "brand.name": "MYONGJI L&F",
+  "brand.shortName": "MYONGJI L&F",
+  "brand.description": "Мёнжийнхэнд зориулсан ухаалаг гээгдсэн эд зүйлийн төв",
 
   "footer.tagline":
     "Мёнжи их сургуулийн оюутнуудад зориулсан гээгдсэн эд зүйл бүртгэх, хайх, холбоо барих үйлчилгээ.",
@@ -50,7 +51,7 @@ export const mn: Dictionary = {
     "Энэ бол Мёнжи их сургуулийн оюутнууд сайн дураараа хийсэн төсөл бөгөөд сургуулийн албан ёсны үйлчилгээ биш юм.",
   "footer.createdBy": "Created by MJU students",
   "footer.copyright":
-    "© {year} Мёнжи ухаалаг гээгдсэн эд зүйлийн төв. Тодорхой нийтлэл, мессеж, хэрэглэгчийн талаар санал гомдол байвал тухайн дэлгэц дэх мэдээлэх товчийг ашиглана уу.",
+    "© {year} MYONGJI L&F. Тодорхой нийтлэл, мессеж, хэрэглэгчийн талаар санал гомдол байвал тухайн дэлгэц дэх мэдээлэх товчийг ашиглана уу.",
   "footer.section.service": "Үйлчилгээ",
   "footer.section.community": "Нийгэмлэг",
   "footer.section.guide": "Мэдээлэл",
@@ -108,6 +109,12 @@ export const mn: Dictionary = {
   "home.aiPlaceholder.4": "Оюутны төвийн ойролцоо картны түрийвч оллоо",
   "home.aiPlaceholder.5": "Өчигдөр хар шүхрээ Инженерийн байранд орхисон",
   "home.aiPlaceholder.6": "Цэнхэр гэртэй утасгүй чихэвчээ олоход туслаарай",
+  "home.aiPlaceholderMobile.1": "Хар AirPods-оо гээсэн",
+  "home.aiPlaceholderMobile.2": "Оюутны үнэмлэхээ хайж байна",
+  "home.aiPlaceholderMobile.3": "Картны түрийвч олсон",
+  "home.aiPlaceholderMobile.4": "Хар шүхрээ мартсан",
+  "home.aiPlaceholderMobile.5": "Утасгүй чихэвч хайж байна",
+  "home.aiPlaceholderMobile.6": "Цэнхэр усны сав гээсэн",
   "home.searchTargetLabel": "Хайх хүрээ",
   "home.searchIn": "{board} дотроос хайх",
 
@@ -187,6 +194,8 @@ export const mn: Dictionary = {
   "post.createdAt": "Нийтэлсэн {created} · Зассан {updated}",
   "post.foundContactNotice":
     "💡 Эд зүйлийн онцлогийг хамт хэлээрэй — нийтлэлд ороогүй онцлог, эсвэл хаана хэзээ гээснээ дуулгавал эзнийг нь баталгаажуулж, аюулгүй буцаахад тусална.",
+  "post.lostPropertyNotice":
+    "💡 Гээсэн эд зүйлийг авч яваад буцаахгүйгээр хадгалах, захиран зарцуулах нь гээсэн эд хөрөнгө завших гэмт хэрэгт тооцогдож болзошгүй. Нийтлэл оруулагчтай чатаар холбогдох эсвэл ойрын цагдаагийн байгууллага, олдворын төвд мэдэгдээрэй.",
   "post.closedOrganization": "Хаагдсан байгууллага",
   "post.contactOrganization": "Байгууллагад хандах",
   "post.startChat": "Чат эхлүүлэх",
@@ -271,7 +280,7 @@ export const mn: Dictionary = {
   "report.submit": "Мэдээлэл илгээх",
   "report.submitting": "Илгээж байна...",
 
-  "auth.login.title": "Мёнжи ухаалаг гээгдсэн эд зүйлийн төв",
+  "auth.login.title": "MYONGJI L&F",
   "auth.login.subtitle": "Кампуст гээсэн эд зүйлээ хурдан олоход тусална",
   "auth.login.google": "Google-ээр нэвтрэх",
   "auth.login.domainNotice": "Сургуулийн бүртгэл (@mju.ac.kr) биш бол нэвтрэх боломжгүй.",
@@ -337,6 +346,8 @@ export const mn: Dictionary = {
   "form.found.descriptionPlaceholder": "Өнгө, брэнд, онцлог зэргийг дэлгэрэнгүй бичвэл эзнийг нь олоход тустай.",
   "form.foundNotice":
     "💡 Буцааж өгөхөөс өмнө — эд зүйлийн өвөрмөц онцлог, дотор нь юу байгаа зэрэг шийдвэрлэх мэдээллийг тайлбарт бүрэн бичихгүй байвал зохино. Дараа нь хэн нэгэн хандахад нийтлээгүй онцлогийг асууж, жинхэнэ эзэн мөн эсэхийг шалгаж болно.",
+  "form.lostRewardNotice": "Шагнал санал болгох нь сонголттой. Энэ нь буцаан өгөхийг дэмжиж болох ч буцаалт эсвэл төлбөрийг баталгаажуулахгүй.",
+  "form.lostRewardPrivacyNotice": "Дансны дугаар, утасны дугаар зэрэг хувийн мэдээллийг нийтлэлд бүү нийтлээрэй. Холбогдох болон шагналын талаар тохиролцохдоо үйлчилгээний чатыг ашиглаарай; үйлчилгээ шагналыг зуучлах, хадгалах, шилжүүлэхгүй.",
   "form.unknownOrganization": "Тодорхойгүй байгууллага",
   "form.imageLimit": "Хамгийн ихдээ {max} зураг оруулах боломжтой. {rejected} зураг нэмэгдсэнгүй.",
   "form.imageDeleteFailed": "Зургийг устгаж чадсангүй.",
@@ -414,8 +425,11 @@ export const mn: Dictionary = {
   "theme.title": "Дэлгэцийн тохиргоо", "theme.mode": "Загварын горим", "theme.modeAria": "Загварын горим сонгох",
   "theme.mode.system": "Систем", "theme.mode.light": "Цайвар", "theme.mode.dark": "Бараан",
   "theme.accent": "Онцлох өнгө", "theme.accentAria": "Онцлох өнгө сонгох",
-  "theme.accent.blue": "Цэнхэр", "theme.accent.green": "Ногоон", "theme.accent.purple": "Нил ягаан",
-  "theme.accent.rose": "Ягаан", "theme.accent.amber": "Хув",
+  "theme.accent.mjuBlue": "Мёнжигийн цэнхэр", "theme.accent.mjuDarkBlue": "Мёнжигийн гүн цэнхэр", "theme.accent.pink": "Ягаан",
+  "theme.accent.rose": "Сарнайн ягаан", "theme.accent.lavender": "Цайвар нил ягаан", "theme.accent.green": "Ногоон",
+  "theme.accent.custom": "Өөрөө сонгох",
+  "theme.accent.customInput": "Өөрийн өнгө",
+  "theme.accent.customHint": "#2f6fed эсвэл rgb(47, 111, 237) хэлбэрээр оруулна уу. Уншихад хялбар байлгахын тулд текстийн өнгө автоматаар тохирно.",
   "theme.highContrast": "Өндөр ялгарал",
   "theme.highContrastDescription": "Текст, дэвсгэр, товчны ялгарлыг нэмэгдүүлж илүү тод харуулна.",
   "chat.accessDenied": "Та энэ чатад нэвтрэх эрхгүй байна.", "chat.inquirer": "Лавлагч: {name}",
@@ -444,4 +458,10 @@ export const mn: Dictionary = {
   "nav.adminOrganizations": "Байгууллагын удирдлага",
   "nav.adminOrganizationRequests": "Байгууллагын хүсэлт",
   "nav.adminSanctions": "Хариуцлагын удирдлага",
+  "nav.mobile.home": "Нүүр",
+  "nav.mobile.lost": "Гээсэн",
+  "nav.mobile.found": "Олдсон",
+  "nav.mobile.chat": "Чат",
+  "nav.mobile.me": "Профайл",
+  "nav.mobile.admin": "Админ",
 };

@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { themeInitScript } from "@/lib/theme/constants";
 import { LOCALE_HTML_LANG } from "@/lib/i18n/config";
-import { getLocale } from "@/lib/i18n/server";
+import { getLocale, getTranslator } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/messages";
 import { I18nProvider } from "@/lib/i18n/client";
 
@@ -17,29 +17,45 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  // Phase 31: resolves opengraph-image.png's relative path to an absolute
-  // URL for link previews -- VERCEL_PROJECT_PRODUCTION_URL is a Vercel-
-  // provided system env var (no manual configuration needed), falling
-  // back to localhost for local dev.
-  metadataBase: new URL(
-    process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000",
-  ),
-  title: "명지 스마트 분실물 센터",
-  description: "MJU Lost & Found",
-  // Phase 11-5: app/manifest.ts is what actually makes /manifest.webmanifest
-  // exist and auto-links it -- appleWebApp here only fills in the two
-  // iOS-specific bits that manifest.json/PWA spec doesn't cover (iOS
-  // Safari has never read the Web App Manifest's `display`/`name` for its
-  // own "홈 화면에 추가" flow, only these Apple-specific meta tags).
-  // apple-touch-icon itself is unaffected (src/app/apple-icon.png already
-  // covers that via Next's own metadata-file convention).
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "명지 분실물",
-  },
-};
+// 브랜드명 통일 Phase: 브라우저 제목/설명이 "MYONGJI L&F | [현재 locale의
+// 서비스 설명]" 형식이 되어야 하므로, 정적 `metadata` 객체 대신 요청마다
+// locale을 읽어 조립하는 generateMetadata()로 바꿨다 -- 이 레이아웃이
+// 이미 getLocale()로 동적 렌더링임을 감수하고 있으므로 새로 정적 렌더링을
+// 포기하는 페이지는 없다(RootLayout 자체 주석 참고).
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslator();
+  const brandName = t("brand.name");
+  const description = t("brand.description");
+  const title = `${brandName} | ${description}`;
+
+  return {
+    // Phase 31: resolves opengraph-image.png's relative path to an absolute
+    // URL for link previews -- VERCEL_PROJECT_PRODUCTION_URL is a Vercel-
+    // provided system env var (no manual configuration needed), falling
+    // back to localhost for local dev.
+    metadataBase: new URL(
+      process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000",
+    ),
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+    },
+    // Phase 11-5: app/manifest.ts is what actually makes /manifest.webmanifest
+    // exist and auto-links it -- appleWebApp here only fills in the two
+    // iOS-specific bits that manifest.json/PWA spec doesn't cover (iOS
+    // Safari has never read the Web App Manifest's `display`/`name` for its
+    // own "홈 화면에 추가" flow, only these Apple-specific meta tags).
+    // apple-touch-icon itself is unaffected (src/app/apple-icon.png already
+    // covers that via Next's own metadata-file convention).
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "default",
+      title: brandName,
+    },
+  };
+}
 
 // Phase 11-5: themeColor moved out of `metadata` into its own export --
 // Next.js deprecated (and, since a recent version, silently drops)

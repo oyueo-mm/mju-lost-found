@@ -562,6 +562,16 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             {t("form.foundNotice")}
           </p>
         )}
+        {type === "lost" && (
+          <div className="flex flex-col gap-2">
+            <p className="rounded-lg bg-primary-muted px-3.5 py-3 text-xs text-primary">
+              {t("form.lostRewardNotice")}
+            </p>
+            <p className="rounded-lg border border-border px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
+              {t("form.lostRewardPrivacyNotice")}
+            </p>
+          </div>
+        )}
       </section>
 
       {/* Phase 12-8 §1: 개인/단체 토글 + (단체 선택 시) 대표 단체 드롭다운 --

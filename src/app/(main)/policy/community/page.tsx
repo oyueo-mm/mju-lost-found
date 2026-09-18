@@ -8,7 +8,7 @@ type Section = { title: string; body: React.ReactNode };
 const SECTIONS: Section[] = [
   {
     title: "1. 목적",
-    body: "이 운영정책은 명지 스마트 분실물 센터를 모든 이용자가 안전하게 이용할 수 있도록, 금지행위와 신고·조치 절차를 안내합니다.",
+    body: "이 운영정책은 MYONGJI L&F를 모든 이용자가 안전하게 이용할 수 있도록, 금지행위와 신고·조치 절차를 안내합니다.",
   },
   {
     title: "2. 금지행위",

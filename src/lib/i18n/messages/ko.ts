@@ -50,8 +50,9 @@ export const ko = {
   "nav.unreadNotifications": "읽지 않은 알림 {count}개",
 
   // ---------- 브랜드 ----------
-  "brand.name": "명지 스마트 분실물 센터",
-  "brand.shortName": "명지 분실물",
+  "brand.name": "MYONGJI L&F",
+  "brand.shortName": "MYONGJI L&F",
+  "brand.description": "명지인을 위한 스마트 분실물 센터",
 
   // ---------- Footer ----------
   "footer.tagline": "명지대학교 학생을 위한 분실물 등록·검색·연락 서비스입니다.",
@@ -59,7 +60,7 @@ export const ko = {
     "명지대학교 학생들이 자발적으로 제작한 프로젝트이며, 명지대학교가 공식적으로 운영하는 서비스가 아닙니다.",
   "footer.createdBy": "Created by MJU students",
   "footer.copyright":
-    "© {year} 명지 스마트 분실물 센터. 특정 게시물·메시지·사용자에 대한 문의는 해당 화면의 신고 기능을 이용해주세요.",
+    "© {year} MYONGJI L&F. 특정 게시물·메시지·사용자에 대한 문의는 해당 화면의 신고 기능을 이용해주세요.",
   "footer.section.service": "서비스",
   "footer.section.community": "커뮤니티",
   "footer.section.guide": "안내",
@@ -121,6 +122,12 @@ export const ko = {
   "home.aiPlaceholder.4": "빨간색 케이스가 씌워진 아이폰을 잃어버렸어요\n종합관 앞에서 파란색 우산을 잃어버렸어요",
   "home.aiPlaceholder.5": "작은 스티커가 붙은 흰색 아이패드를 찾고 있어요\n자연캠 도서관 열람실에서 흰색 무선 이어폰을 잃어버렸어요",
   "home.aiPlaceholder.6": "자연캠 생활관 주변에서 오래된 빨간색 카드지갑을 잃어버렸어요\n인문캠퍼스 어딘가에서 검은색 무선 이어폰을 잃어버렸어요\n제1공학관에서 살짝 깨진 갤럭시 스마트폰을 잃어버렸어요",
+  "home.aiPlaceholderMobile.1": "검은색 에어팟을 잃어버렸어요",
+  "home.aiPlaceholderMobile.2": "학생증을 찾고 있어요",
+  "home.aiPlaceholderMobile.3": "카드지갑을 주웠어요",
+  "home.aiPlaceholderMobile.4": "검은색 우산을 두고 왔어요",
+  "home.aiPlaceholderMobile.5": "무선 이어폰을 찾고 있어요",
+  "home.aiPlaceholderMobile.6": "파란색 텀블러를 잃어버렸어요",
   "home.searchTargetLabel": "검색 대상",
   "home.searchIn": "{board}에서 찾기",
 
@@ -204,6 +211,8 @@ export const ko = {
   "post.createdAt": "작성일 {created} · 수정일 {updated}",
   "post.foundContactNotice":
     "💡 물건의 특징을 함께 알려주세요 -- 게시글에 공개되지 않은 특징이나 분실 장소·시기 등을 전달하면 소유자 확인과 안전한 반환에 도움이 돼요.",
+  "post.lostPropertyNotice":
+    "💡 분실물을 가져가거나 돌려주지 않고 보관·처분하면 점유이탈물횡령죄가 될 수 있어요. 주운 물건은 게시자에게 채팅으로 연락하거나 가까운 경찰관서·유실물센터에 신고해주세요.",
   "post.closedOrganization": "폐쇄된 단체입니다",
   "post.contactOrganization": "단체에 문의하기",
   "post.startChat": "채팅하기",
@@ -295,7 +304,7 @@ export const ko = {
   "report.submitting": "제출 중...",
 
   // ---------- 로그인 / 온보딩 ----------
-  "auth.login.title": "명지 스마트 분실물 센터",
+  "auth.login.title": "MYONGJI L&F",
   "auth.login.subtitle": "캠퍼스에서 잃어버린 물건을 빠르게 찾아드려요",
   "auth.login.google": "Google로 로그인",
   "auth.login.domainNotice": "학교 계정(@mju.ac.kr)이 아닌 계정은 로그인할 수 없습니다.",
@@ -363,6 +372,8 @@ export const ko = {
   "form.found.descriptionPlaceholder": "색상, 브랜드, 특징 등을 자세히 적어주시면 주인을 찾는 데 도움이 돼요.",
   "form.foundNotice":
     "💡 반환 전 확인 -- 물건의 고유한 특징이나 내부 내용 등 결정적인 정보는 설명에 모두 공개하지 않는 것이 좋아요. 나중에 문의가 오면 공개하지 않은 특징을 물어보고 실제 소유자인지 확인할 수 있어요.",
+  "form.lostRewardNotice": "사례를 제시하는 것은 선택사항이에요. 사례를 제시하면 반환을 유도하는 데 도움이 될 수 있지만, 반환이나 지급을 보장하지는 않아요.",
+  "form.lostRewardPrivacyNotice": "계좌번호·전화번호 등 개인정보를 게시글에 공개하지 말고, 연락과 사례 관련 협의는 서비스 내 채팅을 이용해주세요. 서비스는 사례금을 중개·보관·송금하지 않아요.",
   "form.unknownOrganization": "알 수 없는 단체",
   "form.imageLimit": "최대 {max}장까지 등록할 수 있어요. {rejected}장은 추가되지 않았습니다.",
   "form.imageDeleteFailed": "이미지를 삭제하지 못했습니다.",
@@ -458,11 +469,15 @@ export const ko = {
   "theme.mode.dark": "다크",
   "theme.accent": "강조 색상",
   "theme.accentAria": "강조 색상 선택",
-  "theme.accent.blue": "블루",
+  "theme.accent.mjuBlue": "명지 블루",
+  "theme.accent.mjuDarkBlue": "명지 다크 블루",
+  "theme.accent.pink": "핑크색",
+  "theme.accent.lavender": "연보라",
   "theme.accent.green": "그린",
-  "theme.accent.purple": "퍼플",
   "theme.accent.rose": "로즈",
-  "theme.accent.amber": "앰버",
+  "theme.accent.custom": "직접 선택",
+  "theme.accent.customInput": "색상 값",
+  "theme.accent.customHint": "#2f6fed 또는 rgb(47, 111, 237) 형식으로 입력하세요. 가독성을 위해 글자 색상은 자동으로 조정됩니다.",
   "theme.highContrast": "고대비 모드",
   "theme.highContrastDescription": "텍스트·배경·버튼의 대비를 높여 더 뚜렷하게 표시합니다.",
   "chat.accessDenied": "이 채팅방에 접근할 권한이 없어요.",
@@ -497,4 +512,10 @@ export const ko = {
   "nav.adminOrganizations": "단체 관리",
   "nav.adminOrganizationRequests": "단체 가입 요청",
   "nav.adminSanctions": "제재 관리",
+  "nav.mobile.home": "홈",
+  "nav.mobile.lost": "분실물",
+  "nav.mobile.found": "습득물",
+  "nav.mobile.chat": "채팅",
+  "nav.mobile.me": "내 정보",
+  "nav.mobile.admin": "관리자",
 } as const;

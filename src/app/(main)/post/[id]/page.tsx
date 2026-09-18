@@ -322,6 +322,12 @@ export default async function PostDetailPage({
         </p>
       </div>
 
+      {post.type === "lost" && (
+        <p className="rounded-lg bg-primary-muted px-3.5 py-3 text-xs leading-relaxed text-primary">
+          {t("post.lostPropertyNotice")}
+        </p>
+      )}
+
       {/* Phase 10: direct-chat entry point -- only a non-owner can message
           the author this way (no Match required); the owner never sees
           this (mirrors legacy pages/1,2, which only render the button on

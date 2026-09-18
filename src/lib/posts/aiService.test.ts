@@ -1399,18 +1399,18 @@ describe("AI search similarity threshold", () => {
   });
 
   it("keeps the inclusive boundary and removes weaker candidates", () => {
-    expect(AI_SEARCH_MIN_SIMILARITY).toBe(0.7);
-    expect(filterAiSearchResults([{ id: 1, score: 0.7 }, { id: 2, score: 0.69 }])).toEqual([{ id: 1, score: 0.7 }]);
+    expect(AI_SEARCH_MIN_SIMILARITY).toBe(0.65);
+    expect(filterAiSearchResults([{ id: 1, score: 0.65 }, { id: 2, score: 0.64 }])).toEqual([{ id: 1, score: 0.65 }]);
   });
 
   it("returns no candidates when every similarity is below the threshold", () => {
-    expect(filterAiSearchResults([{ id: 1, score: 0.2 }, { id: 2, score: 0.69 }])).toEqual([]);
+    expect(filterAiSearchResults([{ id: 1, score: 0.2 }, { id: 2, score: 0.64 }])).toEqual([]);
   });
 
   it("keeps only candidates that meet the threshold", () => {
-    expect(filterAiSearchResults([{ id: 1, score: 0.82 }, { id: 2, score: 0.31 }, { id: 3, score: 0.7 }])).toEqual([
+    expect(filterAiSearchResults([{ id: 1, score: 0.82 }, { id: 2, score: 0.31 }, { id: 3, score: 0.65 }])).toEqual([
       { id: 1, score: 0.82 },
-      { id: 3, score: 0.7 },
+      { id: 3, score: 0.65 },
     ]);
   });
 });

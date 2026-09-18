@@ -231,10 +231,11 @@ const SEMANTIC_SEARCH_TOP_K = 10;
 // Vector search returns normalized cosine similarity, not pgvector distance:
 // vectorSearch.ts converts `1 - (embedding <=> query)` through normalizeScore
 // into the shared [0, 1] scale. The measured semantic pairs in the project
-// were about 0.63 cosine for a relevant pair and 0.28 for an unrelated pair;
-// 0.70 on the normalized scale (cosine about 0.40) keeps relevant candidates
-// while suppressing weak recommendations. Keyword search never uses this.
-export const AI_SEARCH_MIN_SIMILARITY = 0.7;
+// were about 0.63 cosine for a relevant pair and 0.28 for an unrelated pair.
+// 0.65 on the normalized scale (cosine about 0.30) keeps the relevant pair
+// while still excluding the measured unrelated pair. Keyword search never
+// uses this threshold.
+export const AI_SEARCH_MIN_SIMILARITY = 0.65;
 
 export function filterAiSearchResults<T extends { score: number }>(results: T[]): T[] {
   return results.filter((result) => result.score >= AI_SEARCH_MIN_SIMILARITY);

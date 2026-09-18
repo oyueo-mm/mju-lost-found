@@ -11,7 +11,7 @@ type Section = { title: string; body: React.ReactNode };
 const SECTIONS: Section[] = [
   {
     title: "1. 목적",
-    body: "이 약관은 명지 스마트 분실물 센터(이하 '서비스')를 이용하는 데 필요한 기본적인 사항을 안내합니다.",
+    body: "이 약관은 MYONGJI L&F(이하 '서비스')를 이용하는 데 필요한 기본적인 사항을 안내합니다.",
   },
   {
     title: "2. 이용 대상",

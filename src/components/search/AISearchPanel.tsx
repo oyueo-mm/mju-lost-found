@@ -38,6 +38,7 @@ type AISearchPanelProps = {
   quickSearchItems?: readonly { label: string; query: string }[];
   controlsClassName?: string;
   animatedPlaceholders?: readonly string[];
+  mobileAnimatedPlaceholders?: readonly string[];
 };
 
 export function resolveAiSearchQuery(currentQuery: string, quickSearchQuery?: string): string {
@@ -60,6 +61,7 @@ export function AISearchPanel({
   quickSearchItems,
   controlsClassName,
   animatedPlaceholders,
+  mobileAnimatedPlaceholders,
 }: AISearchPanelProps) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
@@ -73,6 +75,7 @@ export function AISearchPanel({
   const inputRef = useRef<HTMLInputElement>(null);
   const requestInFlightRef = useRef(false);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [animatedPlaceholderText, setAnimatedPlaceholderText] = useState("");
 
   useEffect(() => {
@@ -84,7 +87,18 @@ export function AISearchPanel({
   }, []);
 
   useEffect(() => {
-    const phrases = animatedPlaceholders?.filter(Boolean) ?? [];
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+    const updateViewport = () => setIsMobileViewport(mediaQuery.matches);
+    updateViewport();
+    mediaQuery.addEventListener("change", updateViewport);
+    return () => mediaQuery.removeEventListener("change", updateViewport);
+  }, []);
+
+  useEffect(() => {
+    const phrases = (isMobileViewport && mobileAnimatedPlaceholders?.length
+      ? mobileAnimatedPlaceholders
+      : animatedPlaceholders
+    )?.filter(Boolean) ?? [];
     if (phrases.length === 0 || reducedMotion || query) {
       return;
     }
@@ -115,7 +129,7 @@ export function AISearchPanel({
     };
     timer = window.setTimeout(tick, 75);
     return () => window.clearTimeout(timer);
-  }, [animatedPlaceholders, query, reducedMotion]);
+  }, [animatedPlaceholders, isMobileViewport, mobileAnimatedPlaceholders, query, reducedMotion]);
 
   useEffect(() => {
     return () => {
