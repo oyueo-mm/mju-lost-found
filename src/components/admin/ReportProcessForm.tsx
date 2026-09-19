@@ -49,6 +49,13 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
   const [confirming, setConfirming] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Phase 관리자 승인제: set when the server responded 202 instead of 201 --
+  // the reported user is an admin, so applyReportAction() created an
+  // AdminActionProposal instead of applying the sanction (see that
+  // function's own comment); the report itself stays PENDING. Mirrors
+  // UserActionButtons.tsx's own identical notice for the direct-action
+  // entry point.
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Client-side range check only, same as UserActionButtons' own custom-days
   // input -- the server's own suspendDurationDays schema (positive, int,
@@ -71,6 +78,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
   async function handleConfirm() {
     setSubmitting(true);
     setError(null);
+    setNotice(null);
     try {
       const suspendDurationDays =
         actionType === "suspend_user"
@@ -103,6 +111,12 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
         setConfirming(false);
         return;
       }
+      if (res.status === 202) {
+        setNotice(
+          "신고 대상이 관리자입니다. 즉시 적용되지 않고 관리자 조치 제안으로 등록되었습니다 (/admin/proposals에서 승인 대기). 이 신고는 계속 대기 상태로 남습니다.",
+        );
+      }
+      setConfirming(false);
       router.refresh();
     } catch {
       setError(t("common.networkError"));
@@ -150,6 +164,10 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
         <AlertIcon className="size-3.5" />
         관리자 조치 — 이 처리는 되돌릴 수 없습니다
       </p>
+
+      {notice && (
+        <p className="rounded-card border border-primary/30 bg-primary-muted px-3 py-2 text-primary">{notice}</p>
+      )}
 
       {error && (
         <p className="rounded-card border border-destructive/30 bg-destructive-muted px-3 py-2 text-destructive">

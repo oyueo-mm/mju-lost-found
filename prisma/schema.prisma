@@ -128,6 +128,48 @@ enum NotificationType {
   SUSPENSION_APPEAL_RECEIVED     @map("suspension_appeal_received")
 }
 
+// Phase 관리자 승인제: the four direct User-row mutations that become a
+// two-admin-approval AdminActionProposal instead of an immediate write
+// whenever they'd affect another admin -- see admin/proposals.ts's own
+// module comment for the full policy. Named for the *effect* on the
+// target row (not the UI verb), matching User.isAdmin/isSuspended's own
+// field names: GRANT_ADMIN/REVOKE_ADMIN toggle isAdmin, SUSPEND_USER/
+// UNSUSPEND_USER toggle isSuspended -- the exact same four toggles
+// admin/schema.ts's AdminUserAction already exposes, never a fifth kind
+// of action.
+enum AdminActionProposalType {
+  SUSPEND_USER   @map("suspend_user")
+  UNSUSPEND_USER @map("unsuspend_user")
+  GRANT_ADMIN    @map("grant_admin")
+  REVOKE_ADMIN   @map("revoke_admin")
+}
+
+// PENDING is the only state new approvals/execution can act on -- EXECUTED/
+// CANCELLED/EXPIRED are all terminal, mirroring Report/OrganizationRequest's
+// own "pending -> exactly one terminal state" shape in this schema.
+enum AdminActionProposalStatus {
+  PENDING   @map("pending")
+  EXECUTED  @map("executed")
+  CANCELLED @map("cancelled")
+  EXPIRED   @map("expired")
+}
+
+// One row per lifecycle event on a proposal -- append-only, never updated
+// or deleted, the actual "감사 로그" the admin UI reads back. Kept as its
+// own table (not reconstructed from AdminActionProposal's own timestamp
+// columns) so an APPROVED event survives even though an approval's own
+// AdminActionApproval row would otherwise be the only record of it, and so
+// every event (including a lazily-detected EXPIRED transition) has one
+// uniform, ordered trail regardless of which column on the proposal itself
+// changed.
+enum AdminActionAuditEvent {
+  CREATED   @map("created")
+  APPROVED  @map("approved")
+  EXECUTED  @map("executed")
+  CANCELLED @map("cancelled")
+  EXPIRED   @map("expired")
+}
+
 // Phase 11-5: the four categories this app's own Feedback form (not
 // Report -- see that model's own comment) offers. Kept small/fixed
 // (matching every other enum in this file) rather than free-text, so the
@@ -347,6 +389,20 @@ model User {
   // own LEADER/ADMIN, never a Platform Admin concern).
   organizationJoinRequests     OrganizationJoinRequest[]     @relation("OrgJoinRequester")
   organizationJoinReviews      OrganizationJoinRequest[]     @relation("OrgJoinReviewer")
+  // Phase 관리자 승인제: four distinct actor roles this User can hold across
+  // the AdminActionProposal lifecycle -- same "one relation name per FK
+  // path off the same pair of models" mechanic Report.reporterUserId/
+  // processedByUserId and OrganizationCreationRequest's requester/reviewer
+  // pair already establish elsewhere in this file. adminActionApprovals is
+  // this user's own approvals cast (as the approving admin, not the
+  // proposer/target/canceller), and adminActionAuditLogs is every audit
+  // entry where this user was the acting party (never populated for a
+  // system-detected EXPIRED event, see that model's own comment).
+  adminActionProposalsAsTarget AdminActionProposal[]         @relation("AdminActionProposalTarget")
+  adminActionProposalsProposed AdminActionProposal[]         @relation("AdminActionProposalProposer")
+  adminActionProposalsCancelled AdminActionProposal[]        @relation("AdminActionProposalCanceller")
+  adminActionApprovals         AdminActionApproval[]
+  adminActionAuditLogs         AdminActionAuditLog[]         @relation("AdminActionAuditLogActor")
 
   @@map("User")
 }
@@ -886,6 +942,102 @@ model ModerationAction {
   // included as a third column.
   @@index([targetType, targetId], map: "idx_moderation_action_target")
   @@map("ModerationAction")
+}
+
+// ---------- AdminActionProposal (Phase 관리자 승인제) ----------
+
+// A direct admin/users.ts::updateUserByAdmin() mutation against a User who
+// is *currently* an admin (suspend/unsuspend/revoke) or a mutation that
+// would *make* someone an admin (grant) is never applied straight to the
+// User row -- it's recorded here instead, and only actually applied once
+// admin/proposals.ts::approveAdminActionProposal() sees two valid,
+// independent approvals (see that function's own long comment for the
+// full concurrency-safety argument: a `SELECT ... FOR UPDATE` row lock on
+// this exact row is what makes "the second valid approval executes the
+// action exactly once" hold under concurrent requests, not just the
+// AdminActionApproval unique constraint below). A regular (non-admin)
+// target is completely unaffected by this table -- updateUserByAdmin()
+// still writes straight to User for that case, unchanged.
+//
+// suspendDurationDays/reasonCategory/reason mirror updateUserByAdmin()'s
+// own parameters exactly (same optional-ness, same "required only for
+// suspend" rule, re-checked in createAdminActionProposal()) -- this row is
+// what carries them from proposal time to execution time, since execution
+// can happen an admin-approval-cycle later than creation.
+model AdminActionProposal {
+  id                  Int                        @id @default(autoincrement())
+  targetUserId        Int                        @map("target_user_id")
+  targetUser          User                       @relation("AdminActionProposalTarget", fields: [targetUserId], references: [id], onDelete: Restrict)
+  actionType          AdminActionProposalType    @map("action_type")
+  reasonCategory      String?                    @map("reason_category") @db.Text
+  reason              String?                    @db.Text
+  suspendDurationDays Int?                       @map("suspend_duration_days")
+  status              AdminActionProposalStatus  @default(PENDING)
+  proposedByUserId    Int                        @map("proposed_by_user_id")
+  proposedBy          User                       @relation("AdminActionProposalProposer", fields: [proposedByUserId], references: [id], onDelete: Restrict)
+  createdAt           DateTime                   @default(now()) @map("created_at")
+  // Always createdAt + 7 days, set once at creation (admin/proposals.ts's
+  // own PROPOSAL_EXPIRY_DAYS constant) -- never extended/renewed.
+  expiresAt           DateTime                   @map("expires_at")
+  executedAt          DateTime?                  @map("executed_at")
+  cancelledAt         DateTime?                  @map("cancelled_at")
+  cancelledByUserId   Int?                       @map("cancelled_by_user_id")
+  cancelledBy         User?                      @relation("AdminActionProposalCanceller", fields: [cancelledByUserId], references: [id], onDelete: Restrict)
+
+  approvals AdminActionApproval[]
+  auditLogs AdminActionAuditLog[]
+
+  @@index([status], map: "idx_admin_action_proposal_status")
+  @@index([targetUserId], map: "idx_admin_action_proposal_target")
+  @@map("AdminActionProposal")
+}
+
+// One row per (proposal, approving admin) -- the actual backstop against a
+// double approval, not just an application-side check: the composite
+// unique index below rejects a second INSERT for the same admin outright
+// (surfaces as Prisma error P2002, caught in approveAdminActionProposal()
+// and converted to a typed "already_approved" result), so a double-click
+// or two concurrent identical requests from the same admin can produce at
+// most one row, ever. approvedByUserId has no "must currently be an admin"
+// CHECK constraint -- that's enforced at INSERT time in application code
+// (the caller only reaches this INSERT after re-verifying isAdmin() on a
+// fresh session read), matching this schema's usual "DB constraint for
+// structural invariants, application code for a value derived from
+// request-time authorization" split.
+model AdminActionApproval {
+  id               Int                  @id @default(autoincrement())
+  proposalId       Int                  @map("proposal_id")
+  proposal         AdminActionProposal  @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  approvedByUserId Int                  @map("approved_by_user_id")
+  approvedBy       User                 @relation(fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  createdAt        DateTime             @default(now()) @map("created_at")
+
+  @@unique([proposalId, approvedByUserId], map: "idx_admin_action_approval_unique")
+  @@index([proposalId], map: "idx_admin_action_approval_proposal")
+  @@map("AdminActionApproval")
+}
+
+// Append-only audit trail -- see AdminActionAuditEvent's own comment for
+// why this exists as a separate table rather than being reconstructed from
+// AdminActionProposal's own timestamp columns. actorUserId is null only
+// for a system-detected EXPIRED event (nobody clicked anything) --
+// SetNull, not Restrict, since an audit log entry documenting "admin X
+// approved this" should survive even if User X's row were ever removed
+// (never happens today, User has no delete path, but this table's whole
+// purpose is being a permanent record, so it shouldn't be the one place in
+// this schema that could silently disappear a name from history).
+model AdminActionAuditLog {
+  id          Int                    @id @default(autoincrement())
+  proposalId  Int                    @map("proposal_id")
+  proposal    AdminActionProposal    @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  event       AdminActionAuditEvent
+  actorUserId Int?                   @map("actor_user_id")
+  actor       User?                  @relation("AdminActionAuditLogActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  detail      String?                @db.Text
+  createdAt   DateTime               @default(now()) @map("created_at")
+
+  @@index([proposalId], map: "idx_admin_action_audit_proposal")
+  @@map("AdminActionAuditLog")
 }
 
 // ---------- SuspensionAppeal (Phase I) ----------

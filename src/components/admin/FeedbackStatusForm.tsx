@@ -15,8 +15,14 @@ type FeedbackStatusFormProps = {
 
 // Same "direct Server Action call inside a plain async handler" convention
 // as CreateAnnouncementForm.tsx/FeedbackForm.tsx.
+// Phase 반영 완료 잠금: once currentStatus is "completed", the status
+// picker is locked -- the server (updateFeedbackStatus) rejects any other
+// status regardless, but disabling the buttons here keeps an admin from
+// getting a confusing "저장했지만 아무것도 안 바뀜" moment for something
+// that can never actually apply.
 export function FeedbackStatusForm({ feedbackId, currentStatus, currentAdminNote }: FeedbackStatusFormProps) {
   const router = useRouter();
+  const locked = currentStatus === "completed";
   const [status, setStatus] = useState<FeedbackStatusValue>(currentStatus);
   const [adminNote, setAdminNote] = useState(currentAdminNote ?? "");
   const [pending, setPending] = useState(false);
@@ -51,7 +57,7 @@ export function FeedbackStatusForm({ feedbackId, currentStatus, currentAdminNote
               variant={status === s ? "primary" : "secondary"}
               size="sm"
               aria-pressed={status === s}
-              disabled={pending}
+              disabled={pending || locked}
               onClick={() => setStatus(s)}
               className="h-8 px-3 text-xs"
             >
@@ -59,6 +65,11 @@ export function FeedbackStatusForm({ feedbackId, currentStatus, currentAdminNote
             </Button>
           ))}
         </div>
+        {locked && (
+          <p className="text-xs text-muted-foreground">
+            반영 완료로 처리된 문의는 다른 상태로 변경할 수 없습니다.
+          </p>
+        )}
       </label>
 
       <label className="flex flex-col gap-1.5 text-sm">

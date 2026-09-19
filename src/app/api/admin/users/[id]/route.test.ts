@@ -167,4 +167,33 @@ describe("PATCH /api/admin/users/[id]", () => {
     expect(updateUserByAdmin).toHaveBeenCalledWith(admin, 5, "suspend", 7, undefined, undefined);
     expect(json.data.id).toBe(5);
   });
+
+  // Phase 관리자 승인제: this is the actual "우회 차단" contract at the HTTP
+  // layer -- whatever updateUserByAdmin() itself decided (target is an
+  // admin, so it created an AdminActionProposal instead of writing
+  // isAdmin/isSuspended directly), the route must surface it as 202, never
+  // a plain 200, so a caller (UI or a direct API client) can never mistake
+  // "a proposal now exists" for "the sanction is already applied". This
+  // same PATCH endpoint is the only entry point -- there is no separate,
+  // unguarded route a client could call instead to force an immediate
+  // write against an admin target.
+  it("returns 202 with the proposal (never 200) when the service reports proposal_created", async () => {
+    requireAdminForApi.mockResolvedValueOnce({ user: admin });
+    updateUserByAdmin.mockResolvedValueOnce({
+      kind: "proposal_created",
+      data: { id: 42, actionType: "suspend_user", status: "pending" },
+    });
+
+    const res = await PATCH(
+      new NextRequest("http://localhost/api/admin/users/5", {
+        method: "PATCH",
+        body: JSON.stringify({ action: "suspend", suspendDurationDays: 7, reasonCategory: "욕설/비방", reason: "반복" }),
+      }),
+      params("5"),
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(202);
+    expect(json.data).toEqual({ id: 42, actionType: "suspend_user", status: "pending" });
+  });
 });

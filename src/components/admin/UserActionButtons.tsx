@@ -39,6 +39,11 @@ export function UserActionButtons({ user, isSelf }: UserActionButtonsProps) {
   const router = useRouter();
   const [pending, setPending] = useState<"role" | "suspend" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Phase 관리자 승인제: set when the server responded 202 instead of 200 --
+  // the target required two-admin approval, so nothing was applied yet;
+  // this is what tells the admin "제안이 생성되었습니다" instead of letting
+  // them assume the action already happened.
+  const [notice, setNotice] = useState<string | null>(null);
   const [suspendMenuOpen, setSuspendMenuOpen] = useState(false);
   const [suspendChoice, setSuspendChoice] = useState<SuspendChoice>(`${SUSPEND_DURATION_DAY_OPTIONS[0]}`);
   const [customDays, setCustomDays] = useState("");
@@ -58,6 +63,7 @@ export function UserActionButtons({ user, isSelf }: UserActionButtonsProps) {
   ) {
     setPending(kind);
     setError(null);
+    setNotice(null);
     try {
       const body: Record<string, unknown> = { action };
       if (suspendDurationDays !== undefined) body.suspendDurationDays = suspendDurationDays;
@@ -73,6 +79,14 @@ export function UserActionButtons({ user, isSelf }: UserActionButtonsProps) {
       if (!res.ok) {
         setError(json.error ?? "처리하지 못했습니다.");
         return;
+      }
+      // Phase 관리자 승인제: 202 means a proposal was created instead of the
+      // action being applied -- see admin/response.ts's own comment on why
+      // this is never 200. Nothing on this row actually changed yet, so
+      // router.refresh() would show no visible difference; the notice is
+      // what tells the admin what really happened.
+      if (res.status === 202) {
+        setNotice("이 사용자는 관리자입니다. 즉시 적용되지 않고 관리자 조치 제안으로 등록되었습니다 (/admin/proposals에서 승인 대기).");
       }
       setSuspendMenuOpen(false);
       router.refresh();
@@ -264,6 +278,7 @@ export function UserActionButtons({ user, isSelf }: UserActionButtonsProps) {
         </div>
       )}
 
+      {notice && <p className="max-w-xs text-xs text-primary">{notice}</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );

@@ -94,7 +94,13 @@ function toFeedbackAdminDTO(
 export type FeedbackMutationResult<T> =
   | { kind: "ok"; data: T }
   | { kind: "forbidden" }
-  | { kind: "not_found" };
+  | { kind: "not_found" }
+  // Phase 반영 완료 잠금: this Feedback's status is already `completed` and
+  // the caller asked to change it to something else -- terminal, rejected
+  // regardless of who's asking or how (see updateFeedbackStatus()'s own
+  // comment). Requesting `completed` again on an already-completed row is
+  // NOT this -- that's the allowed idempotent no-op branch, "ok".
+  | { kind: "locked" };
 
 // Login required -- enforced by the caller (requireUser(), see
 // feedback/actions.ts), not here; this function itself has no anonymous
@@ -200,6 +206,25 @@ export async function getFeedbackForAdmin(admin: User, id: number): Promise<Feed
 // change; category/title/content (the submitter's own words) are never
 // editable by anyone, mirroring how a Report's reason/detail also stay
 // fixed once filed.
+//
+// Phase 반영 완료 잠금: `completed` is terminal -- once a Feedback reaches
+// it, no other status can ever be written back, from any path (this
+// function is the only place feedback.status is ever updated, called by
+// both the Server Action and, indirectly, anything else that might be
+// added later). The re-request-same-status case (completed -> completed)
+// is explicitly allowed as a no-op (still updates adminNote if given) --
+// this is what makes a page refresh or a duplicate submit of the same form
+// idempotent instead of erroring.
+//
+// Concurrency: the actual status-changing UPDATE below is conditioned on
+// `status: { not: COMPLETED }` in its own WHERE clause, not just the
+// `existing.status` read above -- so two concurrent requests (or a request
+// racing a moment after another admin's already completed this feedback)
+// can't both succeed: whichever commits first wins, and the loser's
+// `updateMany` simply matches zero rows, detected via `result.count === 0`
+// below and reported as `locked` -- there is no window between reading
+// and writing where a second admin could sneak a non-`completed` status
+// through.
 export async function updateFeedbackStatus(
   admin: User,
   id: number,
@@ -210,17 +235,34 @@ export async function updateFeedbackStatus(
   const existing = await prisma.feedback.findUnique({ where: { id } });
   if (!existing) return { kind: "not_found" };
 
-  const updated = await prisma.feedback.update({
+  const noteData = input.adminNote !== undefined ? { adminNote: input.adminNote || null } : {};
+
+  if (existing.status === PrismaFeedbackStatus.COMPLETED) {
+    if (input.status !== "completed") return { kind: "locked" };
+    // Idempotent no-op on the status itself -- only adminNote can still
+    // change on an already-completed feedback.
+    const updated = await prisma.feedback.update({
+      where: { id },
+      data: noteData,
+      include: { user: { select: AUTHOR_SELECT } },
+    });
+    return { kind: "ok", data: toFeedbackAdminDTO(updated) };
+  }
+
+  const result = await prisma.feedback.updateMany({
+    where: { id, status: { not: PrismaFeedbackStatus.COMPLETED } },
+    data: { status: STATUS_TO_DB[input.status], ...noteData },
+  });
+  if (result.count === 0) {
+    // Someone else completed this feedback in the instant between our own
+    // read above and this write -- never a "not_found" (the row is still
+    // there), always the same lock outcome a same-request retry would see.
+    return { kind: "locked" };
+  }
+
+  const updated = await prisma.feedback.findUniqueOrThrow({
     where: { id },
-    data: {
-      status: STATUS_TO_DB[input.status],
-      // `adminNote` omitted entirely (not just an empty string) keeps
-      // whatever note is already there -- an admin changing only the
-      // status dropdown shouldn't silently wipe a previous note.
-      ...(input.adminNote !== undefined ? { adminNote: input.adminNote || null } : {}),
-    },
     include: { user: { select: AUTHOR_SELECT } },
   });
-
   return { kind: "ok", data: toFeedbackAdminDTO(updated) };
 }

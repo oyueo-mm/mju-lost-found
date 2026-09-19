@@ -9,7 +9,21 @@ import { isAdmin } from "@/lib/moderation/service";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { UUID_PATTERN } from "@/lib/user/service";
 import { listCommentsByUser, type MyCommentDTO } from "@/lib/comment/service";
-import type { AdminUserAction } from "./schema";
+import { createAdminActionProposal, type AdminActionProposalDTO } from "./proposals";
+import type { AdminUserAction, AdminActionProposalTypeValue } from "./schema";
+
+// Phase 관리자 승인제: the one place an AdminUserAction (this ordinary
+// user-management screen's own verb set) maps onto an
+// AdminActionProposalTypeValue (admin/proposals.ts's verb set, named for
+// the *effect* rather than the UI action) -- "promote"/"demote" toggle
+// isAdmin, "suspend"/"unsuspend" toggle isSuspended, in the same order
+// both enums list them.
+const ACTION_TO_PROPOSAL_TYPE: Record<AdminUserAction, AdminActionProposalTypeValue> = {
+  promote: "grant_admin",
+  demote: "revoke_admin",
+  suspend: "suspend_user",
+  unsuspend: "unsuspend_user",
+};
 
 // Phase 28-1: reuses the exact same User.isAdmin/isSuspended columns and
 // isAdmin()/requireAdmin()/requireAdminForApi() gates every other
@@ -165,7 +179,13 @@ export type AdminUserMutationResult<T> =
   // Phase I: action is "suspend" but reasonCategory and/or reason came in
   // blank -- mirrors moderation/service.ts's applyReportAction's own
   // "reason_required" kind for the report-flow suspend path.
-  | { kind: "reason_required" };
+  | { kind: "reason_required" }
+  // Phase 관리자 승인제: the target requires two-admin approval (see
+  // updateUserByAdmin()'s own comment on exactly which action/target
+  // combinations trigger this) -- nothing was written to the target's
+  // User row; an AdminActionProposal was created instead, returned here so
+  // the caller can show "제안이 생성되었습니다" instead of a plain success.
+  | { kind: "proposal_created"; data: AdminActionProposalDTO };
 
 export type PagedAdminUsers = {
   items: AdminUserDTO[];
@@ -258,15 +278,43 @@ export async function updateUserByAdmin(
   const existing = await prisma.user.findUnique({ where: { id: targetUserId } });
   if (!existing) return { kind: "not_found" };
 
+  // Phase 관리자 승인제: a *currently admin* target's suspend/unsuspend/
+  // demote, or granting admin to *anyone*, is never written to User
+  // directly from this function -- it becomes a two-admin-approval
+  // AdminActionProposal instead (see admin/proposals.ts's own module
+  // comment for the full policy and concurrency argument). This is a
+  // server-side branch, not a client-hidden button: the exact same PATCH
+  // /api/admin/users/[id] request a regular-user toggle already uses hits
+  // this same check, so there is no second, unguarded path to bypass by
+  // calling the API directly. "promote" is gated unconditionally (its
+  // target is, by construction, not yet an admin -- the risk here is
+  // *creating* a new admin, not acting against an existing one); the other
+  // three are gated only when `existing.isAdmin` is already true.
+  const requiresApproval = action === "promote" || existing.isAdmin;
+  if (requiresApproval) {
+    const proposal = await createAdminActionProposal(admin, targetUserId, ACTION_TO_PROPOSAL_TYPE[action], {
+      reasonCategory: trimmedReasonCategory ?? undefined,
+      reason: trimmedReason ?? undefined,
+      suspendDurationDays,
+    });
+    if (proposal.kind === "reason_required") return { kind: "reason_required" };
+    if (proposal.kind === "not_found") return { kind: "not_found" };
+    if (proposal.kind === "forbidden") return { kind: "forbidden" };
+    if (proposal.kind !== "ok") return { kind: "not_found" };
+    return { kind: "proposal_created", data: proposal.data };
+  }
+
   const data: {
     isAdmin?: boolean;
     isSuspended?: boolean;
     suspendedUntil?: Date | null;
     suspendedByUserId?: number | null;
   } = (() => {
+    // "promote" never reaches here -- it's unconditionally gated into
+    // createAdminActionProposal() above (granting admin is always a
+    // two-admin-approval action), so this switch only ever handles the
+    // three toggles that can still apply directly to a non-admin target.
     switch (action) {
-      case "promote":
-        return { isAdmin: true };
       case "demote":
         return { isAdmin: false };
       case "suspend":

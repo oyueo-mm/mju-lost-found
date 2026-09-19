@@ -69,3 +69,32 @@ export const listPostsForAdminQuerySchema = z.object({
     .catch(DEFAULT_ADMIN_POST_LIMIT)
     .transform((n) => Math.min(n, MAX_ADMIN_POST_LIMIT)),
 });
+
+// Phase 관리자 승인제: the same four toggles ADMIN_USER_ACTIONS above
+// exposes, renamed to the *effect* on the target row (see
+// AdminActionProposalType's own schema.prisma comment) -- this is the
+// input shape for creating a proposal directly (the standalone /admin
+// proposal-creation UI), separate from updateUserByAdminSchema above,
+// which an admin still submits through the ordinary user-management
+// screen and which admin/users.ts::updateUserByAdmin() itself converts
+// into a proposal server-side when the target requires one.
+export const ADMIN_ACTION_PROPOSAL_TYPES = ["suspend_user", "unsuspend_user", "grant_admin", "revoke_admin"] as const;
+export type AdminActionProposalTypeValue = (typeof ADMIN_ACTION_PROPOSAL_TYPES)[number];
+
+export const ADMIN_ACTION_PROPOSAL_TYPE_LABELS: Record<AdminActionProposalTypeValue, string> = {
+  suspend_user: "정지·제재 부과",
+  unsuspend_user: "정지·제재 해제",
+  grant_admin: "관리자 권한 부여",
+  revoke_admin: "관리자 권한 해제",
+};
+
+export const createAdminActionProposalSchema = z.object({
+  targetUserId: z.coerce.number().int().positive(),
+  actionType: z.enum(ADMIN_ACTION_PROPOSAL_TYPES),
+  // Same "1~365, omit for permanent" contract as updateUserByAdminSchema's
+  // own suspendDurationDays -- only meaningful for actionType=suspend_user.
+  suspendDurationDays: z.coerce.number().int().positive().max(365).optional(),
+  reasonCategory: z.string().trim().max(100).optional(),
+  reason: z.string().trim().max(500).optional(),
+});
+export type CreateAdminActionProposalInput = z.infer<typeof createAdminActionProposalSchema>;

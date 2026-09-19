@@ -157,4 +157,27 @@ describe("POST /api/admin/reports/[id]/process", () => {
 
     expect(res.status).toBe(409);
   });
+
+  // Phase 관리자 승인제: same "우회 차단" HTTP contract as
+  // admin/users/[id]/route's own identical test -- when the reported user
+  // is an admin, applyReportAction() creates an AdminActionProposal
+  // instead of suspending directly, and this route must surface that as
+  // 202 (never 201/200), regardless of how the request was made.
+  it("returns 202 with the proposal (never 201) when the reported user is an admin", async () => {
+    requireAdminForApi.mockResolvedValueOnce({ user: admin });
+    getReportTargetType.mockResolvedValueOnce("user");
+    applyReportAction.mockResolvedValueOnce({
+      kind: "proposal_created",
+      data: { id: 42, actionType: "suspend_user", status: "pending" },
+    });
+
+    const res = await POST(
+      req({ decision: "action", actionReasonCategory: "욕설/비방", actionReason: "반복적인 욕설" }),
+      params("1"),
+    );
+    const json = await res.json();
+
+    expect(res.status).toBe(202);
+    expect(json.data).toEqual({ id: 42, actionType: "suspend_user", status: "pending" });
+  });
 });

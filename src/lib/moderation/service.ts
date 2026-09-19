@@ -13,6 +13,7 @@ import { TARGET_TYPE_FROM_DB, TARGET_TYPE_TO_DB, toReportDTO, type ReportDTO } f
 import type { ReportStatusValue, ReportTargetType } from "@/lib/report/schema";
 import { resolveCommentTarget, resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "@/lib/report/targets";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
+import { createAdminActionProposal, type AdminActionProposalDTO } from "@/lib/admin/proposals";
 import { TARGET_TYPE_TO_ACTION_TYPE, type ModerationActionTypeValue } from "./schema";
 
 // Same duplication tradeoff as notification/service.ts's
@@ -223,7 +224,14 @@ export type AdminMutationResult<T> =
   | { kind: "target_gone" }
   // Phase I: actionType is suspend_user but reasonCategory and/or the
   // detail reason came in blank -- see applyReportAction()'s own comment.
-  | { kind: "reason_required" };
+  | { kind: "reason_required" }
+  // Phase 관리자 승인제: the reported user is currently an admin --
+  // applyReportAction() never suspends an admin directly (see its own
+  // comment). Nothing was written to the target's User row or to this
+  // report; an AdminActionProposal was created instead, returned here so
+  // the caller can respond 202 with the proposal id instead of a plain
+  // success. The report itself stays PENDING.
+  | { kind: "proposal_created"; data: AdminActionProposalDTO };
 
 export type PagedReportsForAdmin = {
   items: ReportAdminDTO[];
@@ -407,6 +415,34 @@ export async function applyReportAction(
   // behavior, unchanged.
   if (actionType === "suspend_user" && (!trimmedReasonCategory || !trimmedReason)) {
     return { kind: "reason_required" };
+  }
+
+  // Phase 관리자 승인제: this is the report-flow's own suspend path -- a
+  // reported user can be anyone, including another admin, so this needs
+  // the exact same "never suspend an admin without two-admin approval"
+  // gate admin/users.ts::updateUserByAdmin() enforces for a direct
+  // suspend, and the same entry point: createAdminActionProposal(), not a
+  // second, independent write path. Checked before the transaction even
+  // opens -- nothing here writes to the User row or the ModerationAction
+  // table; only a PENDING AdminActionProposal is created. The report
+  // itself is deliberately left PENDING (never marked ACTIONED) -- this
+  // call only ever produces the proposal id, and resolving the report
+  // itself (dismiss it, or reprocess once the proposal has executed) is a
+  // separate admin decision, same as before this phase.
+  if (targetType === "user") {
+    const targetUser = await prisma.user.findUnique({ where: { id: report.targetId }, select: { isAdmin: true } });
+    if (targetUser?.isAdmin) {
+      const proposal = await createAdminActionProposal(admin, report.targetId, "suspend_user", {
+        reasonCategory: trimmedReasonCategory ?? undefined,
+        reason: trimmedReason ?? undefined,
+        suspendDurationDays,
+      });
+      if (proposal.kind === "reason_required") return { kind: "reason_required" };
+      if (proposal.kind === "not_found") return { kind: "target_gone" };
+      if (proposal.kind === "forbidden") return { kind: "forbidden" };
+      if (proposal.kind !== "ok") return { kind: "target_gone" };
+      return { kind: "proposal_created", data: proposal.data };
+    }
   }
 
   try {

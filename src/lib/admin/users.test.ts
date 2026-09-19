@@ -12,7 +12,16 @@ const notification = { create: vi.fn() };
 // the same transaction (see admin/users.ts's own comment on why) -- added
 // to the tx object alongside user/notification, same shape.
 const moderationAction = { create: vi.fn() };
-const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn({ user, notification, moderationAction }));
+// Phase 관리자 승인제: createAdminActionProposal() (called by
+// updateUserByAdmin() itself whenever the target requires approval) opens
+// its own $transaction writing adminActionProposal + adminActionAuditLog --
+// added to the same tx object alongside user/notification/moderationAction
+// so both code paths share one mock shape.
+const adminActionProposal = { create: vi.fn(), findUnique: vi.fn() };
+const adminActionAuditLog = { create: vi.fn() };
+const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
+  fn({ user, notification, moderationAction, adminActionProposal, adminActionAuditLog }),
+);
 // Phase P-1: getUserDetailForAdmin's own count queries -- separate spies
 // per table, same convention as the rest of this mock.
 const lostPost = { count: vi.fn() };
@@ -21,7 +30,7 @@ const comment = { count: vi.fn(), findMany: vi.fn() };
 const report = { count: vi.fn() };
 
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { user, notification, moderationAction, lostPost, foundPost, comment, report, $transaction },
+  prisma: { user, notification, moderationAction, adminActionProposal, adminActionAuditLog, lostPost, foundPost, comment, report, $transaction },
 }));
 // isAdmin() is a one-line `return user.isAdmin` in moderation/service.ts,
 // but that module also pulls in report/service.ts and report/targets.ts --
@@ -35,11 +44,20 @@ vi.mock("@/lib/moderation/service", () => ({ isAdmin: (u: { isAdmin: boolean }) 
 // never exercises anything organization-related.
 vi.mock("@/lib/organization/service", () => ({ validateOrganizationPosting: vi.fn() }));
 // Same convention as comment/service.test.ts's own mock of this module --
-// only the members this file actually exercises are stubbed.
+// only the members this file actually exercises are stubbed. AdminAction*
+// enums (Phase 관리자 승인제) are added for admin/proposals.ts, pulled in
+// transitively via updateUserByAdmin()'s own new proposal-routing branch.
 vi.mock("@/generated/prisma/client", () => ({
   NotificationType: { USER_SUSPENDED: "USER_SUSPENDED" },
   ModerationActionType: { SUSPEND_USER: "SUSPEND_USER" },
   ReportTargetType: { USER: "USER" },
+  AdminActionProposalType: {
+    SUSPEND_USER: "SUSPEND_USER",
+    UNSUSPEND_USER: "UNSUSPEND_USER",
+    GRANT_ADMIN: "GRANT_ADMIN",
+    REVOKE_ADMIN: "REVOKE_ADMIN",
+  },
+  AdminActionAuditEvent: { CREATED: "CREATED" },
 }));
 
 const { listUsersForAdmin, updateUserByAdmin, getUserDetailForAdmin } = await import("./users");
@@ -189,53 +207,96 @@ describe("updateUserByAdmin", () => {
     expect(user.update).not.toHaveBeenCalled();
   });
 
-  it("allows an admin to promote themselves (harmless, stays allowed)", async () => {
-    user.findUnique.mockResolvedValueOnce({ ...baseRow, id: admin.id });
-    user.update.mockResolvedValueOnce({ ...baseRow, id: admin.id, isAdmin: true });
-
-    const result = await updateUserByAdmin(admin as never, admin.id, "promote");
-
-    expect(result.kind).toBe("ok");
-    expect(user.update).toHaveBeenCalledWith({
-      where: { id: admin.id },
-      data: { isAdmin: true },
-      include: { suspendedBy: { select: { nickname: true } } },
-    });
-  });
-
   it("returns not_found for a nonexistent target user", async () => {
     user.findUnique.mockResolvedValueOnce(null);
     const result = await updateUserByAdmin(admin as never, 999, "promote");
     expect(result).toEqual({ kind: "not_found" });
   });
 
-  it("promotes a user to admin", async () => {
-    user.findUnique.mockResolvedValueOnce(baseRow);
-    user.update.mockResolvedValueOnce({ ...baseRow, isAdmin: true });
+  // Phase 관리자 승인제: "promote" is gated unconditionally -- granting
+  // admin is always a two-admin-approval action, even against a target
+  // that isn't (yet) an admin, and even when the caller targets
+  // themselves (harmless in effect, but the code path doesn't special-case
+  // it -- see admin/users.ts's own comment). Nothing is written to the
+  // target's User row; an AdminActionProposal is created instead.
+  it("never promotes directly -- always creates an AdminActionProposal instead", async () => {
+    user.findUnique.mockResolvedValueOnce(baseRow); // updateUserByAdmin's own `existing` lookup
+    user.findUnique.mockResolvedValueOnce(baseRow); // createAdminActionProposal's own target lookup
+    adminActionProposal.create.mockResolvedValueOnce({
+      id: 1,
+      targetUserId: 5,
+      actionType: "GRANT_ADMIN",
+      reasonCategory: null,
+      reason: null,
+      suspendDurationDays: null,
+      status: "PENDING",
+      proposedByUserId: admin.id,
+      createdAt: new Date("2026-01-01"),
+      expiresAt: new Date("2026-01-08"),
+      executedAt: null,
+      cancelledAt: null,
+      cancelledByUserId: null,
+      targetUser: { id: 5, nickname: baseRow.nickname, publicId: baseRow.publicId, isAdmin: false },
+      proposedBy: { id: admin.id, nickname: null },
+      cancelledBy: null,
+      approvals: [],
+    });
 
     const result = await updateUserByAdmin(admin as never, 5, "promote");
 
-    expect(user.update).toHaveBeenCalledWith({
-      where: { id: 5 },
-      data: { isAdmin: true },
-      include: { suspendedBy: { select: { nickname: true } } },
-    });
-    expect(result.kind).toBe("ok");
-    if (result.kind === "ok") expect(result.data.isAdmin).toBe(true);
+    expect(user.update).not.toHaveBeenCalled();
+    expect(result.kind).toBe("proposal_created");
+    if (result.kind === "proposal_created") {
+      expect(result.data.actionType).toBe("grant_admin");
+      expect(result.data.status).toBe("pending");
+    }
   });
 
-  it("demotes another admin", async () => {
-    user.findUnique.mockResolvedValueOnce({ ...baseRow, isAdmin: true });
+  // Phase 관리자 승인제: "demote" only reaches the direct-write branch when
+  // the target is NOT currently an admin (a practical no-op, but exercises
+  // the same code path "unsuspend" does) -- a target that *is* an admin is
+  // covered by the proposal-routing test below instead.
+  it("does not create a notification (or use $transaction) for demote/unsuspend on a non-admin target", async () => {
+    user.findUnique.mockResolvedValueOnce(baseRow);
     user.update.mockResolvedValueOnce({ ...baseRow, isAdmin: false });
+
+    await updateUserByAdmin(admin as never, 5, "demote");
+
+    expect($transaction).not.toHaveBeenCalled();
+    expect(notification.create).not.toHaveBeenCalled();
+  });
+
+  // Phase 관리자 승인제: demoting a target who currently *is* an admin is
+  // exactly the case this policy exists for -- routed to
+  // createAdminActionProposal() instead of writing User.isAdmin directly.
+  it("routes a demote against a currently-admin target to a proposal instead of writing isAdmin directly", async () => {
+    user.findUnique.mockResolvedValueOnce({ ...baseRow, isAdmin: true }); // existing
+    user.findUnique.mockResolvedValueOnce({ ...baseRow, isAdmin: true }); // createAdminActionProposal's own lookup
+    adminActionProposal.create.mockResolvedValueOnce({
+      id: 2,
+      targetUserId: 5,
+      actionType: "REVOKE_ADMIN",
+      reasonCategory: null,
+      reason: null,
+      suspendDurationDays: null,
+      status: "PENDING",
+      proposedByUserId: admin.id,
+      createdAt: new Date("2026-01-01"),
+      expiresAt: new Date("2026-01-08"),
+      executedAt: null,
+      cancelledAt: null,
+      cancelledByUserId: null,
+      targetUser: { id: 5, nickname: baseRow.nickname, publicId: baseRow.publicId, isAdmin: true },
+      proposedBy: { id: admin.id, nickname: null },
+      cancelledBy: null,
+      approvals: [],
+    });
 
     const result = await updateUserByAdmin(admin as never, 5, "demote");
 
-    expect(user.update).toHaveBeenCalledWith({
-      where: { id: 5 },
-      data: { isAdmin: false },
-      include: { suspendedBy: { select: { nickname: true } } },
-    });
-    expect(result.kind).toBe("ok");
+    expect(user.update).not.toHaveBeenCalled();
+    expect(result.kind).toBe("proposal_created");
+    if (result.kind === "proposal_created") expect(result.data.actionType).toBe("revoke_admin");
   });
 
   it("suspends permanently when no duration is given", async () => {
@@ -333,16 +394,6 @@ describe("updateUserByAdmin", () => {
 
     expect(result.kind).toBe("ok");
     if (result.kind === "ok") expect(result.data.suspendedByNickname).toBe("관리자닉네임");
-  });
-
-  it("does not create a notification (or use $transaction) for promote/demote/unsuspend", async () => {
-    user.findUnique.mockResolvedValueOnce(baseRow);
-    user.update.mockResolvedValueOnce({ ...baseRow, isAdmin: true });
-
-    await updateUserByAdmin(admin as never, 5, "promote");
-
-    expect($transaction).not.toHaveBeenCalled();
-    expect(notification.create).not.toHaveBeenCalled();
   });
 
   it("unsuspends a user, clearing suspendedUntil", async () => {

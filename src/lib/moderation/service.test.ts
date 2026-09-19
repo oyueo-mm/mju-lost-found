@@ -27,6 +27,13 @@ const txUser = { update: vi.fn() };
 const txComment = { delete: vi.fn() };
 const txModerationAction = { create: vi.fn() };
 const txNotification = { create: vi.fn() };
+// Phase 관리자 승인제: applyReportAction() now calls
+// admin/proposals.ts::createAdminActionProposal() when the reported user
+// is an admin -- that function opens its own $transaction (the same
+// mocked prisma.$transaction this file already provides), writing these
+// two additional tables.
+const txAdminActionProposal = { create: vi.fn() };
+const txAdminActionAuditLog = { create: vi.fn() };
 
 const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
   fn({
@@ -38,6 +45,8 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
     comment: txComment,
     moderationAction: txModerationAction,
     notification: txNotification,
+    adminActionProposal: txAdminActionProposal,
+    adminActionAuditLog: txAdminActionAuditLog,
   }),
 );
 
@@ -63,6 +72,13 @@ vi.mock("@/generated/prisma/client", () => ({
     MESSAGE_HIDDEN: "MESSAGE_HIDDEN",
     USER_SUSPENDED: "USER_SUSPENDED",
   },
+  AdminActionProposalType: {
+    SUSPEND_USER: "SUSPEND_USER",
+    UNSUSPEND_USER: "UNSUSPEND_USER",
+    GRANT_ADMIN: "GRANT_ADMIN",
+    REVOKE_ADMIN: "REVOKE_ADMIN",
+  },
+  AdminActionAuditEvent: { CREATED: "CREATED" },
   Prisma: { PrismaClientKnownRequestError: FakePrismaClientKnownRequestError },
 }));
 
@@ -390,6 +406,11 @@ describe("applyReportAction", () => {
 
   it("suspends the target user with a timed expiry when suspendDurationDays is given", async () => {
     report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "USER", targetId: 88 }));
+    // Phase 관리자 승인제: applyReportAction() now checks the target's own
+    // isAdmin (a separate prisma.user.findUnique call, before the
+    // transaction opens) before resolveUserTarget's own call inside it --
+    // both share this same mock, so both calls need a queued value now.
+    userTable.findUnique.mockResolvedValueOnce({ isAdmin: false });
     userTable.findUnique.mockResolvedValueOnce({ id: 88 });
     txReport.updateMany.mockResolvedValueOnce({ count: 1 });
 
@@ -412,6 +433,7 @@ describe("applyReportAction", () => {
   // added short preset (1일) still reaches that same code path correctly.
   it("suspends the target user for a 1-day duration (new F-2 preset)", async () => {
     report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "USER", targetId: 88 }));
+    userTable.findUnique.mockResolvedValueOnce({ isAdmin: false });
     userTable.findUnique.mockResolvedValueOnce({ id: 88 });
     txReport.updateMany.mockResolvedValueOnce({ count: 1 });
 
@@ -430,6 +452,7 @@ describe("applyReportAction", () => {
 
   it("suspends permanently (suspendedUntil null) when no duration is given", async () => {
     report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "USER", targetId: 88 }));
+    userTable.findUnique.mockResolvedValueOnce({ isAdmin: false });
     userTable.findUnique.mockResolvedValueOnce({ id: 88 });
     txReport.updateMany.mockResolvedValueOnce({ count: 1 });
 
@@ -441,6 +464,89 @@ describe("applyReportAction", () => {
     expect(txUser.update).toHaveBeenCalledWith({
       where: { id: 88 },
       data: { isSuspended: true, suspendedUntil: null, suspendedByUserId: admin.id },
+    });
+  });
+
+  // Phase 관리자 승인제.
+  describe("admin-target suspend routes through AdminActionProposal", () => {
+    it("suspends a regular (non-admin) reported user immediately, exactly as before", async () => {
+      report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "USER", targetId: 88 }));
+      userTable.findUnique.mockResolvedValueOnce({ isAdmin: false });
+      userTable.findUnique.mockResolvedValueOnce({ id: 88 });
+      txReport.updateMany.mockResolvedValueOnce({ count: 1 });
+
+      const result = await applyReportAction(admin, 10, "suspend_user", {
+        actionReasonCategory: "욕설/비방",
+        actionReason: "반복적인 욕설",
+      });
+
+      expect(result.kind).toBe("ok");
+      expect(txUser.update).toHaveBeenCalledWith({
+        where: { id: 88 },
+        data: { isSuspended: true, suspendedUntil: null, suspendedByUserId: admin.id },
+      });
+      expect(txAdminActionProposal.create).not.toHaveBeenCalled();
+      // The report itself is actually resolved (ACTIONED) for a regular
+      // target -- distinct from the admin-target case below, which leaves
+      // it PENDING.
+      expect(txReport.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 10, status: "PENDING" } }),
+      );
+    });
+
+    it("never suspends an admin-reported user directly -- creates an AdminActionProposal instead, and leaves the report PENDING", async () => {
+      report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "USER", targetId: 88 }));
+      // The admin-target check (a separate prisma.user.findUnique, before
+      // the transaction) and createAdminActionProposal's own target
+      // lookup (a second, independent call) both share this mock.
+      userTable.findUnique.mockResolvedValueOnce({ isAdmin: true });
+      userTable.findUnique.mockResolvedValueOnce({ id: 88, isAdmin: true });
+      txAdminActionProposal.create.mockResolvedValueOnce({
+        id: 42,
+        targetUserId: 88,
+        actionType: "SUSPEND_USER",
+        reasonCategory: "욕설/비방",
+        reason: "반복적인 욕설",
+        suspendDurationDays: null,
+        status: "PENDING",
+        proposedByUserId: admin.id,
+        createdAt: new Date("2026-01-01"),
+        expiresAt: new Date("2026-01-08"),
+        executedAt: null,
+        cancelledAt: null,
+        cancelledByUserId: null,
+        targetUser: { id: 88, nickname: "대상관리자", publicId: "target-uuid", isAdmin: true },
+        proposedBy: { id: admin.id, nickname: "제안자" },
+        cancelledBy: null,
+        approvals: [],
+      });
+
+      const result = await applyReportAction(admin, 10, "suspend_user", {
+        actionReasonCategory: "욕설/비방",
+        actionReason: "반복적인 욕설",
+      });
+
+      expect(result.kind).toBe("proposal_created");
+      if (result.kind === "proposal_created") {
+        expect(result.data.actionType).toBe("suspend_user");
+        expect(result.data.status).toBe("pending");
+      }
+      // Nothing about the User row, ModerationAction, or the report's own
+      // status was ever touched by this call -- only the proposal exists.
+      expect(txUser.update).not.toHaveBeenCalled();
+      expect(txModerationAction.create).not.toHaveBeenCalled();
+      expect(txReport.updateMany).not.toHaveBeenCalled();
+      expect(txAdminActionProposal.create).toHaveBeenCalledTimes(1);
+    });
+
+    it("still requires a reason category and detail for an admin-target suspend, same as a direct one", async () => {
+      report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "USER", targetId: 88 }));
+
+      const result = await applyReportAction(admin, 10, "suspend_user", {});
+
+      expect(result).toEqual({ kind: "reason_required" });
+      expect(userTable.findUnique).not.toHaveBeenCalled();
+      expect(txAdminActionProposal.create).not.toHaveBeenCalled();
     });
   });
 

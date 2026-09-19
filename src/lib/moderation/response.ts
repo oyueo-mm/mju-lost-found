@@ -20,5 +20,11 @@ export function adminMutationResultToResponse<T>(result: AdminMutationResult<T>,
       return jsonError(409, "대상이 이미 삭제되어 조치를 적용할 수 없습니다.");
     case "reason_required":
       return jsonError(400, "사용자 정지에는 사유 카테고리와 상세 사유가 모두 필요합니다.");
+    // Phase 관리자 승인제: this report's target is an admin -- nothing was
+    // applied yet, an AdminActionProposal was created instead (see
+    // applyReportAction()'s own comment). 202 (Accepted), never 200, same
+    // convention as admin/response.ts's own "proposal_created" case.
+    case "proposal_created":
+      return jsonOk(result.data, { status: 202 });
   }
 }

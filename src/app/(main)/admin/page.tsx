@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { listReportsForAdmin } from "@/lib/moderation/service";
 import { getAppSettings } from "@/lib/settings/service";
+import { listAdminActionProposalsForAdmin } from "@/lib/admin/proposals";
 import { REPORT_STATUS_LABELS, REPORT_TARGET_TYPE_LABELS } from "@/lib/report/schema";
 import { ShieldIcon } from "@/components/icons";
 import { GoogleTestModeToggle } from "@/components/admin/GoogleTestModeToggle";
@@ -33,6 +34,7 @@ export default async function AdminDashboardPage() {
     pendingOrganizationRequestCount,
     organizationCount,
     appSettings,
+    proposalsResult,
   ] = await Promise.all([
     listReportsForAdmin(admin, { status: "pending", page: 1, limit: 5 }),
     prisma.user.count({ where: { isSuspended: true } }),
@@ -60,9 +62,15 @@ export default async function AdminDashboardPage() {
     // below -- server-rendered so the admin always sees the real DB state
     // on load, never a stale/optimistic default.
     getAppSettings(),
+    // Phase 관리자 승인제: same rule, for the new "관리자 조치 제안" tile
+    // below -- counts only PENDING proposals, matching "신고 대기"/"서비스
+    // 의견 (접수)" tiles' own "지금 봐야 할 것" framing.
+    listAdminActionProposalsForAdmin(admin),
   ]);
 
   const pending = pendingResult.kind === "ok" ? pendingResult.data : { items: [], total: 0 };
+  const pendingProposalCount =
+    proposalsResult.kind === "ok" ? proposalsResult.data.filter((p) => p.status === "pending").length : 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -154,6 +162,17 @@ export default async function AdminDashboardPage() {
         >
           <span className="text-xs text-muted-foreground">단체 관리</span>
           <span className="text-2xl font-bold text-foreground">{organizationCount}</span>
+        </Link>
+        {/* Phase 관리자 승인제: new tile -- /admin/proposals. 동일한 "새로운
+            탭을 추가하지 않는다" 원칙, 대시보드 타일로만 추가. */}
+        <Link
+          href="/admin/proposals"
+          className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"
+        >
+          <span className="text-xs text-muted-foreground">관리자 조치 제안 (대기)</span>
+          <span className={`text-2xl font-bold ${pendingProposalCount > 0 ? "text-warning" : "text-foreground"}`}>
+            {pendingProposalCount}
+          </span>
         </Link>
       </div>
 

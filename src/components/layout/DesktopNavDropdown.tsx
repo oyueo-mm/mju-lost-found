@@ -129,6 +129,25 @@ export function DesktopNavDropdown({ item, active, open, onOpen, onClose, onSign
         aria-expanded={open}
         aria-controls={menuId}
         aria-current={active ? "page" : undefined}
+        // 모바일 프로필 UX Phase: this component only ever opens on
+        // onMouseEnter/onFocusCapture -- neither fires from a tap on a
+        // touchscreen, so before this handler a mobile visitor tapping the
+        // (only, on mobile) instance of this trigger -- Header's profile
+        // icon -- would just navigate straight to item.href, with no way
+        // to ever reach the dropdown's other five items. A first tap
+        // (menu not yet open) now opens the menu instead of navigating; a
+        // second tap on the trigger, or any tap on a menu item, navigates
+        // normally. Desktop mouse users see no change at all: hovering
+        // already opens the menu (onMouseEnter) before a click ever
+        // reaches this handler, so `open` is already true and the click
+        // falls through to the Link's normal navigation, exactly as
+        // before.
+        onClick={(event) => {
+          if (!open) {
+            event.preventDefault();
+            openMenu();
+          }
+        }}
         // Header 정렬 Phase: DesktopNav.tsx의 동일한 항목 className과 같은
         // 이유로 xl/2xl 확대를 제거했다 -- Header 콘텐츠 폭이 Footer와 같은
         // 고정 max-w-4xl이 된 이상, 화면이 넓어져도 쓸 수 있는 예산은 늘지
