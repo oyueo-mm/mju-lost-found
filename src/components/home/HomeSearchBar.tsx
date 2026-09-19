@@ -62,6 +62,9 @@ export function HomeSearchBar() {
       t("home.aiPlaceholderMobile.4"),
       t("home.aiPlaceholderMobile.5"),
       t("home.aiPlaceholderMobile.6"),
+      t("home.aiPlaceholderMobile.7"),
+      t("home.aiPlaceholderMobile.8"),
+      t("home.aiPlaceholderMobile.9"),
     ],
     [t],
   );
