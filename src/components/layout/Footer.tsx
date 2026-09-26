@@ -44,6 +44,15 @@ const FOOTER_LINK_CLASS = "text-muted-foreground transition-colors hover:text-fo
 // 않았다(이번 작업의 "Footer의 기존 링크와 안내 문구는 임의로 삭제하거나
 // 변경하지 않는다" 제약 그대로). 한국어로 볼 때 나오는 문구도 예전과
 // 글자 하나까지 동일하다(messages/ko.ts).
+//
+// Footer 안내 섹션 정리 Phase: "안내"에는 이용약관/개인정보처리방침/
+// 운영정책(정책 문서)과 계정 안내/단체 이용 안내/서비스 개선 제안(사용자
+// 도움말)이 성격이 다른데도 함께 있었다 -- 정책 문서 3개는 legalLinks로
+// 따로 빼서 아래 FooterSections의 기존 정책 링크 영역(이전에는 모바일
+// 전용, 이번에 데스크톱까지 재사용)에만 두고, 이 섹션에는 도움말 성격의
+// 3개만 남긴다. href/라벨 텍스트는 하나도 바꾸지 않았다 -- 정책 링크
+// 3개가 안내 섹션과 legalLinks 양쪽에 동시에 나타나던 모바일 아코디언의
+// 중복도 이 분리로 함께 없어진다.
 const FOOTER_SECTIONS: { titleKey: TranslationKey; links: { href: string; labelKey: TranslationKey }[] }[] = [
   {
     titleKey: "footer.section.service",
@@ -65,14 +74,19 @@ const FOOTER_SECTIONS: { titleKey: TranslationKey; links: { href: string; labelK
   {
     titleKey: "footer.section.guide",
     links: [
-      { href: "/policy/terms", labelKey: "footer.link.terms" },
-      { href: "/policy/privacy", labelKey: "footer.link.privacy" },
-      { href: "/policy/community", labelKey: "footer.link.community" },
       { href: "/account-guide", labelKey: "footer.link.accountGuide" },
-      { href: "/feedback", labelKey: "footer.link.feedback" },
       { href: "/organizations/guide", labelKey: "footer.link.organizationGuide" },
+      { href: "/feedback", labelKey: "footer.link.feedback" },
     ],
   },
+];
+
+// 안내 섹션에서 분리된 정책 문서 3개 -- href/라벨/순서 모두 예전 안내
+// 섹션 안에 있던 그대로다.
+const LEGAL_LINKS: { href: string; labelKey: TranslationKey }[] = [
+  { href: "/policy/terms", labelKey: "footer.link.terms" },
+  { href: "/policy/privacy", labelKey: "footer.link.privacy" },
+  { href: "/policy/community", labelKey: "footer.link.community" },
 ];
 
 export async function Footer() {
@@ -81,9 +95,7 @@ export async function Footer() {
     title: t(section.titleKey),
     links: section.links.map((link) => ({ href: link.href, label: t(link.labelKey) })),
   }));
-  const legalLinks = localizedSections[2].links.filter((link) =>
-    ["/policy/terms", "/policy/privacy", "/policy/community"].includes(link.href),
-  );
+  const legalLinks = LEGAL_LINKS.map((link) => ({ href: link.href, label: t(link.labelKey) }));
 
   return (
     <footer className="border-t border-border bg-background">

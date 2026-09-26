@@ -41,7 +41,14 @@ export function FooterSections({ sections, legalLinks }: { sections: FooterSecti
         })}
       </div>
 
-      <nav className="flex flex-wrap gap-x-4 gap-y-2 text-xs md:hidden">
+      {/* Footer 안내 섹션 정리 Phase: 정책 링크(이용약관/개인정보처리방침/
+          운영정책) 전용 영역 -- 예전에는 모바일에만 있었고(md:hidden),
+          안내 아코디언 안에도 같은 3개 링크가 또 있어 모바일에서 중복
+          노출됐다. 안내 아코디언에서 그 3개를 뺐으니(위 Footer.tsx), 이제
+          이 영역 하나가 데스크톱/모바일 공통 "정책 링크 영역"이 되도록
+          md:hidden을 없앴다 -- 새 영역을 만들지 않고 기존 구조를
+          재사용한다는 요구에 따른 것. */}
+      <nav className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
         {legalLinks.map((link) => <Link key={link.href} href={link.href} className={LINK_CLASS}>{link.label}</Link>)}
       </nav>
     </>
