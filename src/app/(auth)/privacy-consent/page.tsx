@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
-import { requireUser, sanitizeCallbackUrl } from "@/lib/auth/session";
+import { hasRequiredConsents, requireUser, sanitizeCallbackUrl } from "@/lib/auth/session";
+import { CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 import { signOut } from "@/lib/auth/auth";
 import { LogoMark } from "@/components/layout/Logo";
-import { ShieldIcon, ChevronRightIcon } from "@/components/icons";
+import { ShieldIcon, ChevronRightIcon, BookIcon } from "@/components/icons";
 import { PrivacyConsentButton } from "./PrivacyConsentButton";
 
 // Phase 8: the actual items/purposes below are drawn directly from this
@@ -13,12 +15,21 @@ import { PrivacyConsentButton } from "./PrivacyConsentButton";
 // period more specific than what the code itself guarantees (rows are
 // kept for as long as the account/content exists; there is no separate
 // data-retention job in this codebase). This is a service-level notice,
-// not legal advice -- it doesn't cite statutes or claim legal review, and
-// it deliberately never calls this "약관 동의" (see this phase's own
-// section 4) -- there is no separate terms-of-service in this app today,
-// only this one privacy notice. Never lists gender/locale/other Google
-// public-profile fields -- the app never reads them (see auth.ts's own
-// comment on why the OAuth scope was narrowed to "openid email").
+// not legal advice -- it doesn't cite statutes or claim legal review.
+// Never lists gender/locale/other Google public-profile fields -- the
+// app never reads them (see auth.ts's own comment on why the OAuth scope
+// was narrowed to "openid email").
+//
+// 이용약관 동의 Phase: this screen now also gates on the separate terms
+// consent (see hasRequiredConsents()) -- this page's own top comment
+// above used to say "there is no separate terms-of-service in this app
+// today", which is no longer true (/policy/terms exists), so this screen
+// now asks for that consent too, as its own independent checkbox/DB field
+// (User.termsAcceptedAt/termsVersion), never merged into the privacy
+// checkbox above it. The two documents/consents stay wherever this
+// phase's own design put them: /policy/terms and /policy/community are
+// only linked from here, never reproduced inline (that content lives in
+// its own pages, same as this one never repeats a URL's real content).
 const COLLECTED_ITEMS: { label: string; detail: string }[] = [
   { label: "Google 계정 식별 정보", detail: "Google 계정의 고유 식별자(구글 로그인 시 발급)" },
   { label: "이메일 주소", detail: "Google 계정의 이메일 주소" },
@@ -38,11 +49,23 @@ export default async function PrivacyConsentPage({
   const { callbackUrl: rawCallbackUrl } = await searchParams;
   const callbackUrl = sanitizeCallbackUrl(rawCallbackUrl) ?? null;
 
-  // Already consented (e.g. re-visiting this URL directly, or a race with
-  // a second tab) -- send them straight on instead of showing the notice
-  // again. Prevents any redirect loop with requireReadyUser/onboarding/
-  // login, all of which only ever send a user *here* when this is false.
-  if (user.privacyConsentAt !== null) {
+  // 이용약관 동의 Phase: each consent's "still needed" flag is computed
+  // independently -- an existing user who already agreed to the privacy
+  // notice long ago but has never agreed to the terms (every pre-this-
+  // phase account) only needs `needsTerms`; a first-time visitor needs
+  // both. Passed down to PrivacyConsentButton so it can render each
+  // checkbox as either interactive (still needed) or an already-done
+  // state (see that component's own comment) -- never re-demanding a
+  // consent this user already gave.
+  const needsPrivacy = user.privacyConsentAt === null;
+  const needsTerms = user.termsAcceptedAt === null || user.termsVersion !== CURRENT_TERMS_VERSION;
+
+  // Already consented to everything currently required (e.g. re-visiting
+  // this URL directly, or a race with a second tab) -- send them straight
+  // on instead of showing the notice again. Prevents any redirect loop
+  // with requireReadyUser/onboarding/login, all of which only ever send a
+  // user *here* when hasRequiredConsents() is false.
+  if (hasRequiredConsents(user)) {
     redirect(callbackUrl ?? "/");
   }
 
@@ -121,7 +144,34 @@ export default async function PrivacyConsentPage({
           </details>
         </div>
 
-        <PrivacyConsentButton callbackUrl={callbackUrl} />
+        {/* 이용약관 동의 Phase: same card language as the privacy card
+            directly above -- this screen's own established "in-app
+            content card, not a legal-document surface" rule. Deliberately
+            no inline reproduction of either document's actual text (this
+            phase's own instruction never to duplicate /policy/community's
+            10-item 금지행위 list, or /policy/terms's own sections, here) --
+            just enough context to know what's being agreed to, plus links
+            to the real documents. */}
+        <div className="flex w-full flex-col gap-3 rounded-card border border-border bg-card p-5 text-sm text-foreground">
+          <div className="flex items-center gap-1.5 font-semibold">
+            <BookIcon className="size-4.5 text-primary" />
+            이용약관
+          </div>
+          <p className="text-muted-foreground">
+            서비스 이용을 위한 기본 조건과 이용자의 의무, 계정 이용 제한 및 이의신청 절차 등을
+            안내합니다. 구체적인 금지행위와 신고·조치 기준은 운영정책에서 확인할 수 있습니다.
+          </p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-3 text-primary">
+            <Link href="/policy/terms" target="_blank" className="font-medium hover:opacity-80">
+              이용약관 보기
+            </Link>
+            <Link href="/policy/community" target="_blank" className="font-medium hover:opacity-80">
+              운영정책 보기
+            </Link>
+          </div>
+        </div>
+
+        <PrivacyConsentButton callbackUrl={callbackUrl} needsPrivacy={needsPrivacy} needsTerms={needsTerms} />
 
         {/* Calm, single line -- states the fact (consent is required to
             continue) and the way out, without a separate warning block or

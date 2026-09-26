@@ -450,7 +450,7 @@ export async function cancelOrganizationCreationRequest(
 
 // Platform Admin 전용. `updateMany({where:{...,status:PENDING}})`로 승인을
 // "선점"하는 것 자체가 동시 이중 승인을 막는 원자적 체크다 -- withdrawUser()/
-// recordPrivacyConsent()가 이미 쓰는 "only if still in the expected state"
+// recordRequiredConsents()가 이미 쓰는 "only if still in the expected state"
 // 패턴과 동일.
 export async function approveOrganizationCreationRequest(
   admin: User,

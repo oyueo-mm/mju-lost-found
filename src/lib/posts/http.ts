@@ -1,6 +1,6 @@
 import type { NextResponse } from "next/server";
 
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser, hasRequiredConsents } from "@/lib/auth/session";
 import type { User } from "@/generated/prisma/client";
 import { jsonError } from "./response";
 
@@ -20,11 +20,17 @@ export async function requireUserForApi(): Promise<
   // before nickname) -- every route this gates (posts/comments/chat/
   // chat-upload/reports/notifications) is exactly the "개인정보를 생성/
   // 처리하는" boundary this phase's spec asks to enforce server-side, not
-  // just in the UI. POST /api/me/privacy-consent itself deliberately does
-  // NOT go through this function (see that route) -- it can't require
-  // consent to already exist in order to grant it.
-  if (user.privacyConsentAt === null) {
-    return { response: jsonError(403, "개인정보 수집·이용 동의가 필요합니다.") };
+  // just in the UI. POST /api/me/consent itself deliberately does NOT go
+  // through this function (see that route) -- it can't require consent
+  // to already exist in order to grant it.
+  //
+  // 이용약관 동의 Phase: hasRequiredConsents() also covers the terms
+  // consent (missing, or on file for a superseded termsVersion) -- same
+  // 403 boundary, same session.ts helper requireReadyUser()/onboarding
+  // now share, so this route-level gate can never fall out of sync with
+  // the page-level one.
+  if (!hasRequiredConsents(user)) {
+    return { response: jsonError(403, "개인정보 수집·이용 동의 및 이용약관 동의가 필요합니다.") };
   }
   if (user.nickname === null) {
     return { response: jsonError(403, "닉네임을 먼저 설정해주세요.") };

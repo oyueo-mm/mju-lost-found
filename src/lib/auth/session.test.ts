@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 
 const auth = vi.fn();
 const findUnique = vi.fn();
@@ -10,8 +11,22 @@ vi.mock("@/lib/auth/auth", () => ({ auth }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: { user: { findUnique } } }));
 vi.mock("next/navigation", () => ({ redirect }));
 
-const { getCurrentUser, requireUser, requireReadyUser, requireActiveUser, requireAdmin, sanitizeCallbackUrl } =
-  await import("./session");
+const {
+  getCurrentUser,
+  requireUser,
+  requireReadyUser,
+  requireActiveUser,
+  requireAdmin,
+  sanitizeCallbackUrl,
+  hasRequiredConsents,
+} = await import("./session");
+
+// 이용약관 동의 Phase: every "ready to use the service" mocked row from
+// here on also carries both consent fields at the current terms version
+// -- these tests are about nickname/suspension/admin routing, not
+// consent itself (that's hasRequiredConsents's own describe block below),
+// so this is just what "already cleared the consent gate" looks like now.
+const readyConsent = { privacyConsentAt: new Date(), termsAcceptedAt: new Date(), termsVersion: CURRENT_TERMS_VERSION };
 
 beforeEach(() => {
   auth.mockReset();
@@ -88,17 +103,39 @@ describe("requireUser", () => {
   });
 });
 
+// 이용약관 동의 Phase: hasRequiredConsents() is the single predicate every
+// gate below (requireReadyUser, requireUserForApi, onboarding's own
+// page/action) shares -- tested directly here so each of those call
+// sites' own tests don't have to re-cover every field combination.
+describe("hasRequiredConsents", () => {
+  it("is true only when privacy consent, terms consent, and the current terms version are all present", () => {
+    expect(hasRequiredConsents({ privacyConsentAt: new Date(), termsAcceptedAt: new Date(), termsVersion: CURRENT_TERMS_VERSION })).toBe(true);
+  });
+
+  it("is false when privacy consent is missing", () => {
+    expect(hasRequiredConsents({ privacyConsentAt: null, termsAcceptedAt: new Date(), termsVersion: CURRENT_TERMS_VERSION })).toBe(false);
+  });
+
+  it("is false when terms consent was never given", () => {
+    expect(hasRequiredConsents({ privacyConsentAt: new Date(), termsAcceptedAt: null, termsVersion: null })).toBe(false);
+  });
+
+  it("is false when the stored terms version no longer matches the current one", () => {
+    expect(hasRequiredConsents({ privacyConsentAt: new Date(), termsAcceptedAt: new Date(), termsVersion: "2025-01-01" })).toBe(false);
+  });
+});
+
 describe("requireReadyUser", () => {
-  it("returns the user when consented and nickname is already set", async () => {
+  it("returns the user when consented (privacy + current terms) and nickname is already set", async () => {
     auth.mockResolvedValueOnce({ user: { id: "1" } });
-    findUnique.mockResolvedValueOnce({ id: 1, nickname: "닉네임", privacyConsentAt: new Date() });
+    findUnique.mockResolvedValueOnce({ id: 1, nickname: "닉네임", ...readyConsent });
 
     await expect(requireReadyUser()).resolves.toMatchObject({ id: 1, nickname: "닉네임" });
   });
 
   it("redirects to /onboarding when signed in but nickname is not set yet", async () => {
     auth.mockResolvedValueOnce({ user: { id: "1" } });
-    findUnique.mockResolvedValueOnce({ id: 1, nickname: null, privacyConsentAt: new Date() });
+    findUnique.mockResolvedValueOnce({ id: 1, nickname: null, ...readyConsent });
 
     await expect(requireReadyUser()).rejects.toThrow("REDIRECT:/onboarding");
   });
@@ -109,7 +146,47 @@ describe("requireReadyUser", () => {
   // this phase's own "기존 사용자 처리" section).
   it("redirects to /privacy-consent when signed in but not yet consented, even with a nickname already set", async () => {
     auth.mockResolvedValueOnce({ user: { id: "1" } });
-    findUnique.mockResolvedValueOnce({ id: 1, nickname: "닉네임", privacyConsentAt: null });
+    findUnique.mockResolvedValueOnce({
+      id: 1,
+      nickname: "닉네임",
+      privacyConsentAt: null,
+      termsAcceptedAt: new Date(),
+      termsVersion: CURRENT_TERMS_VERSION,
+    });
+
+    await expect(requireReadyUser()).rejects.toThrow("REDIRECT:/privacy-consent");
+  });
+
+  // 이용약관 동의 Phase: an existing user who already agreed to the
+  // privacy notice long ago, but has never agreed to the terms at all
+  // (every pre-this-phase account) -- exactly the "기존 사용자" scenario
+  // this phase's own design calls for, and it must be redirected the
+  // same way a first-time visitor is, not silently let through on
+  // account of their already-set privacyConsentAt/nickname.
+  it("redirects to /privacy-consent when privacy was consented but terms never agreed to (existing pre-phase user)", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({
+      id: 1,
+      nickname: "닉네임",
+      privacyConsentAt: new Date("2025-01-01T00:00:00Z"),
+      termsAcceptedAt: null,
+      termsVersion: null,
+    });
+
+    await expect(requireReadyUser()).rejects.toThrow("REDIRECT:/privacy-consent");
+  });
+
+  // 이용약관 동의 Phase: a user who agreed to an older terms version --
+  // must re-agree, same redirect target as never having agreed at all.
+  it("redirects to /privacy-consent when the stored terms version is stale", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({
+      id: 1,
+      nickname: "닉네임",
+      privacyConsentAt: new Date(),
+      termsAcceptedAt: new Date("2025-01-01T00:00:00Z"),
+      termsVersion: "2025-01-01",
+    });
 
     await expect(requireReadyUser()).rejects.toThrow("REDIRECT:/privacy-consent");
   });
@@ -179,6 +256,7 @@ describe("requireActiveUser", () => {
     findUnique.mockResolvedValueOnce({
       id: 1,
       nickname: "닉네임",
+      ...readyConsent,
       isSuspended: false,
       suspendedUntil: null,
     });
@@ -191,6 +269,7 @@ describe("requireActiveUser", () => {
     findUnique.mockResolvedValueOnce({
       id: 1,
       nickname: "닉네임",
+      ...readyConsent,
       isSuspended: true,
       suspendedUntil: null,
     });
@@ -203,6 +282,7 @@ describe("requireActiveUser", () => {
     findUnique.mockResolvedValueOnce({
       id: 1,
       nickname: "닉네임",
+      ...readyConsent,
       isSuspended: true,
       suspendedUntil: new Date(Date.now() + 60_000),
     });
@@ -215,6 +295,7 @@ describe("requireActiveUser", () => {
     findUnique.mockResolvedValueOnce({
       id: 1,
       nickname: "닉네임",
+      ...readyConsent,
       isSuspended: true,
       suspendedUntil: new Date(Date.now() - 60_000),
     });
@@ -227,6 +308,7 @@ describe("requireActiveUser", () => {
     findUnique.mockResolvedValueOnce({
       id: 1,
       nickname: null,
+      ...readyConsent,
       isSuspended: true,
       suspendedUntil: null,
     });
@@ -254,21 +336,21 @@ describe("requireActiveUser", () => {
 describe("requireAdmin", () => {
   it("returns the user when ready and an admin", async () => {
     auth.mockResolvedValueOnce({ user: { id: "1" } });
-    findUnique.mockResolvedValueOnce({ id: 1, nickname: "닉네임", isAdmin: true });
+    findUnique.mockResolvedValueOnce({ id: 1, nickname: "닉네임", ...readyConsent, isAdmin: true });
 
     await expect(requireAdmin()).resolves.toMatchObject({ id: 1, isAdmin: true });
   });
 
   it("redirects to / when ready but not an admin -- never trusts a client claim", async () => {
     auth.mockResolvedValueOnce({ user: { id: "1" } });
-    findUnique.mockResolvedValueOnce({ id: 1, nickname: "닉네임", isAdmin: false });
+    findUnique.mockResolvedValueOnce({ id: 1, nickname: "닉네임", ...readyConsent, isAdmin: false });
 
     await expect(requireAdmin()).rejects.toThrow("REDIRECT:/");
   });
 
   it("redirects to /onboarding before checking admin status when nickname isn't set", async () => {
     auth.mockResolvedValueOnce({ user: { id: "1" } });
-    findUnique.mockResolvedValueOnce({ id: 1, nickname: null, isAdmin: true });
+    findUnique.mockResolvedValueOnce({ id: 1, nickname: null, ...readyConsent, isAdmin: true });
 
     await expect(requireAdmin()).rejects.toThrow("REDIRECT:/onboarding");
   });

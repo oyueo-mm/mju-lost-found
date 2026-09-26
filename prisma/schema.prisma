@@ -320,6 +320,30 @@ model User {
   // who signed up before this phase starts out requiring consent exactly
   // like a brand-new user does.
   privacyConsentAt          DateTime? @map("privacy_consent_at")
+  // 이용약관 동의 Phase: same shape/rules as privacyConsentAt directly
+  // above -- NULL means never agreed to the current terms version, a
+  // timestamp means they agreed at that exact instant. Deliberately a
+  // *separate* column from privacyConsentAt (never one combined
+  // "consentedAt"): the two are legally and logically distinct documents
+  // (auth/user.ts::recordRequiredConsents() writes them independently,
+  // never overwriting an already-set privacyConsentAt), and this app's
+  // own /policy/terms already treats them that way. Set only by the
+  // user's own explicit action (POST /api/me/consent), never inferred
+  // from Google OAuth succeeding, and never backfilled for existing rows
+  // by this migration -- every user who signed up before this phase
+  // starts out requiring terms consent exactly like a brand-new user
+  // does, same convention as privacyConsentAt's own migration.
+  termsAcceptedAt           DateTime? @map("terms_accepted_at")
+  // Which version of /policy/terms this user last agreed to (see
+  // auth/terms.ts's CURRENT_TERMS_VERSION) -- a plain string, not a
+  // dedicated version table: this app has exactly one terms document and
+  // no other "versioned document" concept anywhere else in this schema,
+  // so a bare string column is the whole mechanism needed. A future
+  // terms revision only requires bumping that one constant; a user whose
+  // stored value no longer matches it is treated as needing to re-agree,
+  // the same way termsAcceptedAt alone is treated for a first-time
+  // agreement.
+  termsVersion              String?   @map("terms_version")
   // Phase 10: NULL means this account is active; a timestamp means the
   // user deactivated it at that instant (auth/user.ts's withdrawUser --
   // the only place this is ever set, always by the account's own owner,

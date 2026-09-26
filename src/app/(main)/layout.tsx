@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { BottomNav } from "@/components/layout/BottomNav";
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser, hasRequiredConsents } from "@/lib/auth/session";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { countUnreadMessagesForUser } from "@/lib/chat/service";
 import { isAdmin } from "@/lib/moderation/service";
@@ -11,20 +11,30 @@ import { isAdmin } from "@/lib/moderation/service";
 export default async function MainLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
 
-  // Phase I section 1: "정지 사용자가 서비스의 일반 기능을 사용할 수 없도록
-  // 한다" -- every page under this layout (home, /lost, /found, /post/[id],
-  // /chat, /me, /admin, ...) now redirects a currently-suspended, logged-in
-  // user to /suspended before rendering anything. /suspended itself lives
+  // 필수 동의 게이트 우회 점검 Phase: this blanket check was missing here
+  // entirely -- every *write* path already enforced it via
+  // requireReadyUser()/requireUserForApi() (hasRequiredConsents()), but a
+  // logged-in user who already has a nickname (any existing pre-이용약관
+  // account, or one whose termsVersion is now stale) could freely browse
+  // every public read page under this layout (home, /lost, /found,
+  // /search, /post/[id], ...) without ever being routed to
+  // /privacy-consent -- the nickname check just below never catches this,
+  // since their nickname is already set. Same "blanket redirect for every
+  // page this layout wraps" shape the nickname/suspension checks below
+  // already use, and the same reordering requireActiveUser() (session.ts)
+  // already established for the non-layout gate: consent -> nickname ->
+  // suspension, never the other order. /privacy-consent itself lives
   // under the sibling (auth) route group (outside this layout), so this
-  // can never loop. A logged-out visitor (user === null) is completely
-  // unaffected -- this only ever fires for a real, currently-suspended
-  // session, never gates the public browsing this app has always allowed.
-  // The server-side blocks this phase's spec also asks to keep (post/
-  // comment/chat/upload/report mutations already calling
-  // isCurrentlySuspended() themselves) are untouched by this -- this is an
-  // *additional*, UI-level wall, not a replacement for those checks.
-  if (user && isCurrentlySuspended(user)) {
-    redirect("/suspended");
+  // can never loop.
+  //
+  // /policy/terms, /policy/community, /policy/privacy are deliberately
+  // NOT under this layout (moved to their own route group, see
+  // (policy)/layout.tsx) specifically so they stay readable regardless of
+  // consent/nickname/suspension state -- this check has no pathname
+  // exception to carve out for them because they simply aren't reachable
+  // through this component at all.
+  if (user && !hasRequiredConsents(user)) {
+    redirect("/privacy-consent");
   }
 
   // Phase 닉네임 필수: "닉네임 설정을 완료하기 전에는 서비스 이용 불가" --
@@ -34,18 +44,39 @@ export default async function MainLayout({ children }: { children: React.ReactNo
   // every public read page under this layout (home, /lost, /found,
   // /search, /post/[id], ...) without ever being routed through
   // onboarding. This closes that gap the same way the suspension check
-  // above already does: one blanket redirect for every page this layout
+  // below already does: one blanket redirect for every page this layout
   // wraps, server-side, so it can't be bypassed by only visiting pages
   // that don't call requireReadyUser themselves. /onboarding and
   // /privacy-consent both live under the sibling (auth) route group
   // (outside this layout), so this can never loop -- and onboarding's own
   // page redirects on to /privacy-consent first if consent isn't recorded
-  // yet, exactly mirroring requireReadyUser's own check order. A
-  // reactivated (previously deactivated) user is never affected here:
-  // resolveOrCreateUser() never clears their nickname, so this only ever
-  // fires for a genuinely brand-new account.
+  // yet, exactly mirroring requireReadyUser's own check order (now also
+  // covering terms consent, via the check just above). A reactivated
+  // (previously deactivated) user is never affected here: resolveOrCreateUser()
+  // never clears their nickname, so this only ever fires for a genuinely
+  // brand-new account.
   if (user && user.nickname === null) {
     redirect("/onboarding");
+  }
+
+  // Phase I section 1: "정지 사용자가 서비스의 일반 기능을 사용할 수 없도록
+  // 한다" -- every page under this layout now redirects a currently-
+  // suspended, logged-in user to /suspended before rendering anything.
+  // /suspended itself lives under the sibling (auth) route group (outside
+  // this layout), so this can never loop. A logged-out visitor (user ===
+  // null) is completely unaffected -- this only ever fires for a real,
+  // currently-suspended session, never gates the public browsing this app
+  // has always allowed. Checked *after* consent/nickname above (moved
+  // below them in the 필수 동의 게이트 phase, matching requireActiveUser's
+  // own consent -> nickname -> suspension order) -- a suspended user who
+  // also hasn't consented/onboarded yet sees the consent/onboarding
+  // screen first, not a suspension notice before they've even agreed to
+  // use the service. The server-side blocks this phase's spec also asks
+  // to keep (post/comment/chat/upload/report mutations already calling
+  // isCurrentlySuspended() themselves) are untouched by this -- this is
+  // an *additional*, UI-level wall, not a replacement for those checks.
+  if (user && isCurrentlySuspended(user)) {
+    redirect("/suspended");
   }
 
   let unreadChat = 0;

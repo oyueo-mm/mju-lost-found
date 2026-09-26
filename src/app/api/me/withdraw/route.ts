@@ -4,7 +4,7 @@ import { withdrawUser } from "@/lib/auth/user";
 import { jsonError, jsonOk, withErrorHandling } from "@/lib/posts/http";
 
 // Phase 10: deliberately does NOT go through requireUserForApi() (same
-// reasoning as POST /api/me/privacy-consent) -- withdrawal only needs an
+// reasoning as POST /api/me/consent) -- withdrawal only needs an
 // authenticated session, not a "ready" (consented + nicknamed) one, and
 // getCurrentUser() itself is the real authorization here: the id it
 // resolves comes from the server-verified session, never from any

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { signIn } from "@/lib/auth/auth";
-import { getCurrentUser, sanitizeCallbackUrl, type LoginReason } from "@/lib/auth/session";
+import { getCurrentUser, hasRequiredConsents, sanitizeCallbackUrl, type LoginReason } from "@/lib/auth/session";
 import { isGoogleTestModeEnabled } from "@/lib/settings/service";
 import { LogoMark } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/Button";
@@ -53,7 +53,11 @@ export default async function LoginPage({
     // (consent -> nickname -> ready) -- an already-signed-in visitor who
     // lands back on /login (e.g. clicking the Google button again) gets
     // routed exactly where a fresh sign-in would send them.
-    if (user.privacyConsentAt === null) {
+    //
+    // 이용약관 동의 Phase: hasRequiredConsents() also covers the terms
+    // consent -- same redirect target, kept in sync with
+    // requireReadyUser()'s own identical check.
+    if (!hasRequiredConsents(user)) {
       const params = callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : "";
       redirect(`/privacy-consent${params}`);
     }

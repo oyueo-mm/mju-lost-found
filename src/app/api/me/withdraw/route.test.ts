@@ -7,7 +7,7 @@ const signOut = vi.fn();
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser }));
 vi.mock("@/lib/auth/user", () => ({ withdrawUser }));
 vi.mock("@/lib/auth/auth", () => ({ signOut }));
-// Same reason as src/app/api/me/privacy-consent/route.test.ts: avoid
+// Same reason as src/app/api/me/consent/route.test.ts: avoid
 // pulling in the real @/lib/posts/http.ts's next-auth import chain.
 vi.mock("@/lib/posts/http", async () => {
   const response = await import("@/lib/posts/response");

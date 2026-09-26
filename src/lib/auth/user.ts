@@ -52,26 +52,50 @@ export async function resolveOrCreateUser(params: {
   });
 }
 
-// Phase 8: the only place privacyConsentAt is ever written -- called
-// solely from POST /api/me/privacy-consent, i.e. only when the user
-// themselves clicked the consent button (never from the OAuth/login flow
-// above, see that column's own schema.prisma comment). `new Date()` is
-// this server's own clock, never a client-supplied value, matching this
-// phase's own "클라이언트가 전달한 timestamp를 신뢰하지 않는다" requirement.
+// 이용약관 동의 Phase: replaces the old standalone recordPrivacyConsent()
+// -- the two consents are legally/logically separate (see schema.prisma's
+// own comments on privacyConsentAt/termsAcceptedAt), but the UI now asks
+// for both from *one* screen with *one* "동의하고 계속하기" button (see
+// (auth)/privacy-consent), and that button must never leave the account
+// in a state where one consent recorded and the other didn't because two
+// separate requests raced or the second one failed after the first
+// succeeded. Both writes happen inside a single $transaction: if anything
+// after the first updateMany throws, Postgres rolls the whole thing back,
+// so a caller only ever gets a row committed with both writes applied, or
+// neither. Called solely from POST /api/me/consent, i.e. only when the
+// user themselves clicked the button -- never from the OAuth/login flow
+// (resolveOrCreateUser above never touches either column). `new Date()`
+// is this server's own clock, never a client-supplied value, matching
+// this phase's own "클라이언트가 전달한 timestamp를 신뢰하지 않는다"
+// requirement (same rule the original recordPrivacyConsent already
+// followed).
 //
-// The `privacyConsentAt: null` guard in the where-clause makes this
-// idempotent without clobbering an already-recorded consent instant: a
-// second call (double-submit, or hitting the API directly after already
-// consenting) matches zero rows and changes nothing, so the *original*
-// consent timestamp is what's preserved -- mirrors
-// onboarding/actions.ts's identical "only if still unset" pattern for
-// nickname.
-export async function recordPrivacyConsent(userId: number) {
-  await prisma.user.updateMany({
-    where: { id: userId, privacyConsentAt: null },
-    data: { privacyConsentAt: new Date() },
+// Each write keeps recordPrivacyConsent's own idempotent "only if not
+// already satisfied" guard:
+// - privacyConsentAt: only set while still NULL -- a user who already
+//   consented never has this instant overwritten, matching this phase's
+//   own "이미 privacyConsentAt이 존재하면 그것을 덮어쓰지 말 것"
+//   requirement.
+// - termsAcceptedAt/termsVersion: only set while termsAcceptedAt is NULL
+//   *or* the stored termsVersion differs from the version being agreed to
+//   now -- a user who already agreed to the exact current version has
+//   this left completely untouched (no wasted write, no timestamp churn),
+//   while a user on an older version (or never-agreed) gets both fields
+//   stamped together.
+export type RequiredConsentUser = Awaited<ReturnType<typeof prisma.user.findUniqueOrThrow>>;
+
+export async function recordRequiredConsents(userId: number, termsVersion: string): Promise<RequiredConsentUser> {
+  return prisma.$transaction(async (tx) => {
+    await tx.user.updateMany({
+      where: { id: userId, privacyConsentAt: null },
+      data: { privacyConsentAt: new Date() },
+    });
+    await tx.user.updateMany({
+      where: { id: userId, OR: [{ termsAcceptedAt: null }, { termsVersion: { not: termsVersion } }] },
+      data: { termsAcceptedAt: new Date(), termsVersion },
+    });
+    return tx.user.findUniqueOrThrow({ where: { id: userId } });
   });
-  return prisma.user.findUniqueOrThrow({ where: { id: userId } });
 }
 
 // Phase 비활성화: "회원 탈퇴" -> "회원 비활성화" -- deliberately NOT

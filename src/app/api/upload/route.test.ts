@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 
 const getCurrentUser = vi.fn();
 const isCurrentlySuspended = vi.fn();
@@ -7,7 +8,23 @@ const getLostPost = vi.fn();
 const getFoundPost = vi.fn();
 const createSignedUploadUrl = vi.fn();
 
-vi.mock("@/lib/auth/session", () => ({ getCurrentUser }));
+// hasRequiredConsents() is pure logic (see session.ts's own comment) --
+// reimplemented here rather than mocked as a vi.fn(), same as
+// http.test.ts's identical setup for the requireUserForApi() this route
+// deliberately doesn't go through.
+function hasRequiredConsents(user: {
+  privacyConsentAt?: Date | null;
+  termsAcceptedAt?: Date | null;
+  termsVersion?: string | null;
+}): boolean {
+  return (
+    (user.privacyConsentAt ?? null) !== null &&
+    (user.termsAcceptedAt ?? null) !== null &&
+    user.termsVersion === CURRENT_TERMS_VERSION
+  );
+}
+
+vi.mock("@/lib/auth/session", () => ({ getCurrentUser, hasRequiredConsents }));
 vi.mock("@/lib/auth/suspension", () => ({ isCurrentlySuspended }));
 vi.mock("@/lib/posts/service", () => ({ getLostPost, getFoundPost }));
 // Mocked wholesale (see route.test.ts elsewhere) so this never loads the
@@ -28,6 +45,8 @@ const readyUser = {
   isSuspended: false,
   suspendedUntil: null,
   privacyConsentAt: new Date("2026-01-01T00:00:00Z"),
+  termsAcceptedAt: new Date("2026-01-01T00:00:00Z"),
+  termsVersion: CURRENT_TERMS_VERSION,
 };
 
 function requestWith(body: unknown) {
@@ -77,6 +96,18 @@ describe("POST /api/upload", () => {
   // route's own top comment on why).
   it("rejects a user who hasn't agreed to the privacy notice yet", async () => {
     getCurrentUser.mockResolvedValueOnce({ ...readyUser, privacyConsentAt: null });
+
+    const { status, json } = await callAndGetJson({ postType: "lost", postId: 1, contentType: "image/jpeg" });
+
+    expect(status).toBe(403);
+    expect(json.error).toMatch(/동의/);
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
+  // 이용약관 동의 Phase: same 403 boundary, now also covering the terms
+  // consent this route checks inline alongside privacy consent.
+  it("rejects a user who hasn't agreed to the current terms yet", async () => {
+    getCurrentUser.mockResolvedValueOnce({ ...readyUser, termsAcceptedAt: null, termsVersion: null });
 
     const { status, json } = await callAndGetJson({ postType: "lost", postId: 1, contentType: "image/jpeg" });
 

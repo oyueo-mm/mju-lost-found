@@ -33,7 +33,8 @@ vi.mock("@/lib/db/prisma", () => ({
   prisma: { user: { findUnique, update, create, updateMany, findUniqueOrThrow }, $transaction },
 }));
 
-const { resolveOrCreateUser, recordPrivacyConsent, withdrawUser } = await import("./user");
+const { resolveOrCreateUser, recordRequiredConsents, withdrawUser } = await import("./user");
+const CURRENT_VERSION = "2026-09-27";
 
 queryRaw.mockResolvedValue([]);
 
@@ -160,42 +161,110 @@ describe("resolveOrCreateUser", () => {
   });
 });
 
-describe("recordPrivacyConsent", () => {
-  it("stamps privacyConsentAt with the server's own clock, only while it's still unset", async () => {
-    updateMany.mockResolvedValueOnce({ count: 1 });
-    findUniqueOrThrow.mockResolvedValueOnce({ id: 5, privacyConsentAt: new Date() });
+describe("recordRequiredConsents", () => {
+  it("stamps both privacyConsentAt and termsAcceptedAt/termsVersion with the server's own clock inside one transaction", async () => {
+    updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 1 });
+    findUniqueOrThrow.mockResolvedValueOnce({
+      id: 5,
+      privacyConsentAt: new Date(),
+      termsAcceptedAt: new Date(),
+      termsVersion: CURRENT_VERSION,
+    });
 
-    await recordPrivacyConsent(5);
+    await recordRequiredConsents(5, CURRENT_VERSION);
 
-    expect(updateMany).toHaveBeenCalledWith({
+    expect($transaction).toHaveBeenCalledTimes(1);
+    expect(updateMany).toHaveBeenNthCalledWith(1, {
       where: { id: 5, privacyConsentAt: null },
       data: { privacyConsentAt: expect.any(Date) },
     });
+    expect(updateMany).toHaveBeenNthCalledWith(2, {
+      where: { id: 5, OR: [{ termsAcceptedAt: null }, { termsVersion: { not: CURRENT_VERSION } }] },
+      data: { termsAcceptedAt: expect.any(Date), termsVersion: CURRENT_VERSION },
+    });
   });
 
-  it("returns the fresh user row after recording consent", async () => {
-    updateMany.mockResolvedValueOnce({ count: 1 });
-    findUniqueOrThrow.mockResolvedValueOnce({ id: 5, privacyConsentAt: new Date("2026-01-01T00:00:00Z") });
+  it("returns the fresh user row after recording both consents", async () => {
+    updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 1 });
+    const consentedAt = new Date("2026-01-01T00:00:00Z");
+    findUniqueOrThrow.mockResolvedValueOnce({
+      id: 5,
+      privacyConsentAt: consentedAt,
+      termsAcceptedAt: consentedAt,
+      termsVersion: CURRENT_VERSION,
+    });
 
-    const user = await recordPrivacyConsent(5);
+    const user = await recordRequiredConsents(5, CURRENT_VERSION);
 
     expect(findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 5 } });
-    expect(user).toEqual({ id: 5, privacyConsentAt: new Date("2026-01-01T00:00:00Z") });
+    expect(user).toEqual({
+      id: 5,
+      privacyConsentAt: consentedAt,
+      termsAcceptedAt: consentedAt,
+      termsVersion: CURRENT_VERSION,
+    });
   });
 
-  // Idempotent: a second call (double-submit, or hitting the API directly
-  // after already consenting) must not overwrite the original consent
-  // instant -- the where-clause's `privacyConsentAt: null` guard makes
-  // updateMany match zero rows in that case, same "only if still unset"
-  // pattern as onboarding/actions.ts's nickname write.
-  it("does not overwrite an already-recorded consent timestamp", async () => {
-    updateMany.mockResolvedValueOnce({ count: 0 });
+  // Idempotent: a second call (double-submit, or a user who already
+  // consented calling this again) must not overwrite the original
+  // privacy consent instant -- the where-clause's `privacyConsentAt:
+  // null` guard makes that updateMany match zero rows in that case, same
+  // "only if still unset" pattern as onboarding/actions.ts's nickname
+  // write and the original recordPrivacyConsent this replaces.
+  it("does not overwrite an already-recorded privacy consent timestamp", async () => {
+    updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
     const original = new Date("2025-06-01T00:00:00Z");
-    findUniqueOrThrow.mockResolvedValueOnce({ id: 5, privacyConsentAt: original });
+    findUniqueOrThrow.mockResolvedValueOnce({
+      id: 5,
+      privacyConsentAt: original,
+      termsAcceptedAt: new Date(),
+      termsVersion: CURRENT_VERSION,
+    });
 
-    const user = await recordPrivacyConsent(5);
+    const user = await recordRequiredConsents(5, CURRENT_VERSION);
 
     expect(user.privacyConsentAt).toEqual(original);
+  });
+
+  // 이용약관 동의 Phase's own "이미 현재 버전의 약관에 동의한 경우
+  // termsAcceptedAt을 불필요하게 변경하지 말 것" requirement -- a user
+  // already on the exact current version has their termsAcceptedAt/
+  // termsVersion untouched (the where-clause's OR guard matches zero
+  // rows), no wasted write, no timestamp churn.
+  it("does not overwrite an already-recorded terms consent for the same version", async () => {
+    updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+    const original = new Date("2025-06-01T00:00:00Z");
+    findUniqueOrThrow.mockResolvedValueOnce({
+      id: 5,
+      privacyConsentAt: new Date(),
+      termsAcceptedAt: original,
+      termsVersion: CURRENT_VERSION,
+    });
+
+    const user = await recordRequiredConsents(5, CURRENT_VERSION);
+
+    expect(user.termsAcceptedAt).toEqual(original);
+    expect(user.termsVersion).toBe(CURRENT_VERSION);
+  });
+
+  // A user re-agreeing after a terms version bump: the OR guard's second
+  // branch (`termsVersion: { not: termsVersion } }`) is what makes this
+  // updateMany match even though termsAcceptedAt is already set.
+  it("re-stamps termsAcceptedAt/termsVersion when the stored version differs from the one being agreed to now", async () => {
+    updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
+    findUniqueOrThrow.mockResolvedValueOnce({
+      id: 5,
+      privacyConsentAt: new Date("2024-01-01T00:00:00Z"),
+      termsAcceptedAt: new Date(),
+      termsVersion: CURRENT_VERSION,
+    });
+
+    await recordRequiredConsents(5, CURRENT_VERSION);
+
+    expect(updateMany).toHaveBeenNthCalledWith(2, {
+      where: { id: 5, OR: [{ termsAcceptedAt: null }, { termsVersion: { not: CURRENT_VERSION } }] },
+      data: { termsAcceptedAt: expect.any(Date), termsVersion: CURRENT_VERSION },
+    });
   });
 });
 

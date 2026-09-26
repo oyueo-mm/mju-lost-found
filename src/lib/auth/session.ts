@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth/auth";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
+import { CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 import { prisma } from "@/lib/db/prisma";
 import type { User } from "@/generated/prisma/client";
 
@@ -116,9 +117,9 @@ export async function requireUser(reason?: LoginReason, callbackUrl?: string): P
 
 // The full page-level gate used before a write action, matching the
 // legacy ui/auth.py::require_ready_user(): not logged in -> /login;
-// logged in but hasn't agreed to the privacy notice yet -> /privacy-
-// consent; logged in and consented but nickname not set yet ->
-// /onboarding; all three satisfied -> the User row. Used by /lost/new,
+// logged in but hasn't agreed to the privacy notice and/or the current
+// terms yet -> /privacy-consent; both agreed but nickname not set yet ->
+// /onboarding; all satisfied -> the User row. Used by /lost/new,
 // /found/new, and the edit page.
 //
 // Phase 8: privacyConsentAt is checked *before* nickname, matching this
@@ -129,9 +130,31 @@ export async function requireUser(reason?: LoginReason, callbackUrl?: string): P
 // notice either. callbackUrl is forwarded to /privacy-consent so
 // consenting lands the user back on the page they were trying to reach,
 // not just "/".
+//
+// 이용약관 동의 Phase: hasRequiredConsents() below folds the terms check
+// into the exact same gate/redirect this function already had for
+// privacy consent -- required consent (both documents) -> nickname,
+// never the other order, and no new redirect target: a user missing
+// either consent (or on file for a stale termsVersion) is sent to the
+// same /privacy-consent screen, which now asks for whichever of the two
+// is still outstanding (see that page's own comment). A reactivated user
+// keeps whatever they'd already agreed to (withdrawUser/
+// resolveOrCreateUser never touch either column -- see schema.prisma's
+// own comments), so this same check is *also* what makes a reactivated
+// account on a now-superseded terms version get re-routed here exactly
+// like any other outstanding-consent case, with no separate
+// reactivation-specific branch needed anywhere.
+export function hasRequiredConsents(user: Pick<User, "privacyConsentAt" | "termsAcceptedAt" | "termsVersion">): boolean {
+  return (
+    user.privacyConsentAt !== null &&
+    user.termsAcceptedAt !== null &&
+    user.termsVersion === CURRENT_TERMS_VERSION
+  );
+}
+
 export async function requireReadyUser(reason?: LoginReason, callbackUrl?: string): Promise<User> {
   const user = await requireUser(reason, callbackUrl);
-  if (user.privacyConsentAt === null) redirect(privacyConsentRedirectUrl(callbackUrl));
+  if (!hasRequiredConsents(user)) redirect(privacyConsentRedirectUrl(callbackUrl));
   if (user.nickname === null) redirect("/onboarding");
   return user;
 }

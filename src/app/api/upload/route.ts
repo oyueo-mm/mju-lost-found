@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser, hasRequiredConsents } from "@/lib/auth/session";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { jsonError, jsonOk, withErrorHandling } from "@/lib/posts/http";
 import { getFoundPost, getLostPost } from "@/lib/posts/service";
@@ -32,8 +32,12 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   // checks inline), so the same consent check requireUserForApi() gained
   // is added here directly too. Image upload is part of "게시글 작성/수정",
   // exactly the boundary this phase's spec calls out.
-  if (user.privacyConsentAt === null) {
-    return jsonError(403, "개인정보 수집·이용 동의가 필요합니다.");
+  //
+  // 이용약관 동의 Phase: hasRequiredConsents() also covers the terms
+  // consent -- same duplicated-inline-check reasoning as above, kept in
+  // sync with requireUserForApi()'s own identical check.
+  if (!hasRequiredConsents(user)) {
+    return jsonError(403, "개인정보 수집·이용 동의 및 이용약관 동의가 필요합니다.");
   }
   if (user.nickname === null) return jsonError(403, "닉네임을 먼저 설정해주세요.");
   if (isCurrentlySuspended(user)) {

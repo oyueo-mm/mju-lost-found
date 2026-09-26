@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { requireUser } from "@/lib/auth/session";
+import { hasRequiredConsents, requireUser } from "@/lib/auth/session";
 import { LogoMark } from "@/components/layout/Logo";
 import { NicknameForm } from "./NicknameForm";
 import { getTranslator } from "@/lib/i18n/server";
@@ -14,7 +14,11 @@ export default async function OnboardingPage() {
   // requireUser() directly, not requireReadyUser(), specifically so it
   // can redirect a not-yet-consented visitor to /privacy-consent instead
   // of looping back to itself.
-  if (user.privacyConsentAt === null) {
+  //
+  // 이용약관 동의 Phase: hasRequiredConsents() also covers a user missing
+  // (or on a stale version of) the terms consent -- same redirect target,
+  // no separate branch, matching requireReadyUser()'s own single check.
+  if (!hasRequiredConsents(user)) {
     redirect("/privacy-consent?callbackUrl=%2Fonboarding");
   }
 
