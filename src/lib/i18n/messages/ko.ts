@@ -296,6 +296,22 @@ export const ko = {
   "notification.delete": "알림 삭제",
   "notification.deleteFailed": "삭제하지 못했습니다.",
 
+  // ---------- 키워드 알림 ----------
+  "keywordAlert.title": "키워드 알림",
+  "keywordAlert.description": "관심 있는 키워드를 등록하면, 조건에 맞는 새 글이 올라올 때 알려드려요.",
+  "keywordAlert.notifications.settingsLink": "키워드 알림 설정",
+  "keywordAlert.form.keyword": "대표 키워드",
+  "keywordAlert.form.keywordPlaceholder": "예: 에어팟",
+  "keywordAlert.form.postType": "글 종류",
+  "keywordAlert.form.excludeKeywords": "제외 키워드",
+  "keywordAlert.form.excludeKeywordsPlaceholder": "쉼표(,)로 구분해 입력 (선택)",
+  "keywordAlert.form.excludeKeywordsHint": "이 단어가 포함된 글은 알리지 않아요.",
+  "keywordAlert.form.submit": "추가하기",
+  "keywordAlert.list.title": "내 키워드 알림",
+  "keywordAlert.empty": "아직 등록한 키워드 알림이 없어요.",
+  "keywordAlert.empty.description": "위에서 첫 키워드 알림을 만들어보세요.",
+  "keywordAlert.deleteConfirm": "이 키워드 알림을 삭제하시겠어요?",
+
   // ---------- 신고 ----------
   "report.button": "신고하기",
   "report.short": "신고",
@@ -337,6 +353,7 @@ export const ko = {
   "me.feedback": "서비스 개선 제안",
   "me.organizations": "단체",
   "me.notifications": "알림",
+  "me.keywordAlerts": "키워드 알림",
   "me.adminCenter": "관리자 센터",
   "me.logout": "로그아웃",
   "me.deactivate": "회원 비활성화",

@@ -8,13 +8,24 @@ const resolveMessageTarget = vi.fn();
 const resolvePostTarget = vi.fn();
 const getAnnouncement = vi.fn();
 const getOrganizationById = vi.fn();
+const getKeywordAlertMatchForUser = vi.fn();
 
 vi.mock("@/lib/chat/service", () => ({ getMessage, getChatRoomForUser }));
 vi.mock("@/lib/comment/service", () => ({ getCommentPostRef }));
 vi.mock("@/lib/report/service", () => ({ getReportTargetRef }));
-vi.mock("@/lib/report/targets", () => ({ resolveMessageTarget, resolvePostTarget }));
+// encodePostTargetId is real (not a spy) -- it's a one-line pure function
+// (report/targets.ts's own comment: sign encodes lost/found), and
+// resolveHref's own keyword_alert_match branch calls it before
+// resolvePostTarget, so a stub here has to behave like the real thing for
+// those tests' resolvePostTarget mock args to make sense.
+vi.mock("@/lib/report/targets", () => ({
+  resolveMessageTarget,
+  resolvePostTarget,
+  encodePostTargetId: (kind: "lost" | "found", id: number) => (kind === "lost" ? id : -id),
+}));
 vi.mock("@/lib/announcement/service", () => ({ getAnnouncement }));
 vi.mock("@/lib/organization/service", () => ({ getOrganizationById }));
+vi.mock("@/lib/keywordAlert/service", () => ({ getKeywordAlertMatchForUser }));
 
 const { resolveHref } = await import("./resolveHref");
 
@@ -292,6 +303,48 @@ describe("resolveHref -- admin submission notifications (Phase 12-9 §2)", () =>
 
   it("an unrecognized type for relatedType=feedback falls through to null", async () => {
     expect(await resolveHref(9, "something_else", "feedback", 55)).toBeNull();
+  });
+});
+
+// 키워드 알림 Phase: relatedId is the KeywordAlertMatch's own id (never the
+// post id directly), and getKeywordAlertMatchForUser() is what re-derives
+// that this match's KeywordAlert actually belongs to the current user --
+// same "never trust the notification row alone" posture as the
+// message/report branches above.
+describe("resolveHref -- keyword_alert_match notifications", () => {
+  it("links to the matched lost post", async () => {
+    getKeywordAlertMatchForUser.mockResolvedValueOnce({ id: 1, postType: "lost", postId: 7 });
+    resolvePostTarget.mockResolvedValueOnce({ postKind: "lost", id: 7, userId: 99 });
+
+    const href = await resolveHref(1, "keyword_alert_match", "keyword_alert_match", 1);
+
+    expect(href).toBe("/post/7?type=lost");
+    expect(getKeywordAlertMatchForUser).toHaveBeenCalledWith(1, 1);
+    expect(resolvePostTarget).toHaveBeenCalledWith(7);
+  });
+
+  it("links to the matched found post", async () => {
+    getKeywordAlertMatchForUser.mockResolvedValueOnce({ id: 2, postType: "found", postId: 9 });
+    resolvePostTarget.mockResolvedValueOnce({ postKind: "found", id: 9, userId: 99 });
+
+    const href = await resolveHref(1, "keyword_alert_match", "keyword_alert_match", 2);
+
+    expect(href).toBe("/post/9?type=found");
+    expect(resolvePostTarget).toHaveBeenCalledWith(-9);
+  });
+
+  it("returns null when the match no longer belongs to this user (or was deleted)", async () => {
+    getKeywordAlertMatchForUser.mockResolvedValueOnce(null);
+
+    expect(await resolveHref(1, "keyword_alert_match", "keyword_alert_match", 1)).toBeNull();
+    expect(resolvePostTarget).not.toHaveBeenCalled();
+  });
+
+  it("returns null when the matched post was since deleted", async () => {
+    getKeywordAlertMatchForUser.mockResolvedValueOnce({ id: 1, postType: "lost", postId: 7 });
+    resolvePostTarget.mockResolvedValueOnce(null);
+
+    expect(await resolveHref(1, "keyword_alert_match", "keyword_alert_match", 1)).toBeNull();
   });
 });
 

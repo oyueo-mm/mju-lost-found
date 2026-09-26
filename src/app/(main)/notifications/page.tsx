@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { requireReadyUser } from "@/lib/auth/session";
 import {
   getUnreadNotificationCount,
@@ -74,11 +76,19 @@ export default async function NotificationsPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-semibold text-foreground">
           {t("notification.unreadHeading", { count: unreadCount })}
         </h1>
-        <MarkAllReadButton disabled={unreadCount === 0} />
+        <div className="flex shrink-0 items-center gap-2">
+          {/* 키워드 알림 Phase: "어떤 조건으로 알림을 받을지"는 별도
+              설정 화면(/me/keyword-alerts)이라, 여기 도착한 알림 목록
+              헤더에 조용한 텍스트 링크 하나만 둔다. */}
+          <Link href="/me/keyword-alerts" className="text-sm font-medium text-muted-foreground hover:text-foreground">
+            {t("keywordAlert.notifications.settingsLink")}
+          </Link>
+          <MarkAllReadButton disabled={unreadCount === 0} />
+        </div>
       </div>
 
       {items.length === 0 ? (

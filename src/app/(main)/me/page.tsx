@@ -4,7 +4,7 @@ import { requireReadyUser } from "@/lib/auth/session";
 import { signOut } from "@/lib/auth/auth";
 import { getUnreadNotificationCount } from "@/lib/notification/service";
 import { isAdmin } from "@/lib/moderation/service";
-import { UserIcon, ChevronRightIcon, BellIcon, ShieldIcon, LogoutIcon, ChatBubbleIcon } from "@/components/icons";
+import { UserIcon, ChevronRightIcon, BellIcon, ShieldIcon, LogoutIcon, ChatBubbleIcon, SearchIcon } from "@/components/icons";
 import { ThemeSettings } from "@/components/settings/ThemeSettings";
 import { InstallAppPrompt } from "@/components/settings/InstallAppPrompt";
 import { NicknameSettings } from "@/components/settings/NicknameSettings";
@@ -115,6 +115,10 @@ export default async function MePage() {
             )
           }
         />
+        {/* 키워드 알림 Phase: "알림"(도착한 알림 목록) 바로 아래 -- 이
+            메뉴는 알림을 "받는 조건"을 설정하는 화면이라, 알림 그 자체와
+            같은 섹션에 두는 게 가장 자연스럽다. */}
+        <MenuRow href="/me/keyword-alerts" icon={<SearchIcon className="size-4.5" />} label={t("me.keywordAlerts")} />
       </section>
 
       {admin && (

@@ -1,9 +1,10 @@
 import { getChatRoomForUser, getMessage } from "@/lib/chat/service";
 import { getCommentPostRef } from "@/lib/comment/service";
 import { getReportTargetRef } from "@/lib/report/service";
-import { resolveMessageTarget, resolvePostTarget } from "@/lib/report/targets";
+import { encodePostTargetId, resolveMessageTarget, resolvePostTarget } from "@/lib/report/targets";
 import { getAnnouncement } from "@/lib/announcement/service";
 import { getOrganizationById } from "@/lib/organization/service";
+import { getKeywordAlertMatchForUser } from "@/lib/keywordAlert/service";
 
 // Resolves a notification's relatedType/relatedId into a link to navigate
 // to, when there's something to link to. Kept out of
@@ -187,6 +188,21 @@ export async function resolveHref(
   // inventing a new route just for this link target.
   if (relatedType === "suspension_appeal" && type === "suspension_appeal_received") {
     return "/admin/sanctions";
+  }
+
+  // 키워드 알림 Phase: relatedId is the KeywordAlertMatch's own id (never
+  // the post's id directly -- see that model's own schema.prisma comment
+  // on why). getKeywordAlertMatchForUser() re-derives ownership (this
+  // match's own KeywordAlert must belong to `userId`) rather than trusting
+  // the notification row alone, same posture as every other branch above.
+  // resolvePostTarget() re-confirms the post itself still exists -- a post
+  // deleted after the match was recorded still degrades to "no link",
+  // never a broken one, same as every other post-linking branch here.
+  if (relatedType === "keyword_alert_match" && type === "keyword_alert_match") {
+    const match = await getKeywordAlertMatchForUser(relatedId, userId);
+    if (!match) return null;
+    const post = await resolvePostTarget(encodePostTargetId(match.postType as "lost" | "found", match.postId));
+    return post ? `/post/${post.id}?type=${post.postKind}` : null;
   }
 
   return null;

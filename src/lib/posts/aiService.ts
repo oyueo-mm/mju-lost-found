@@ -9,6 +9,7 @@ import { findPostsByImageQuery, findPostsBySemanticQuery } from "@/lib/ai/vector
 import { combineRankings } from "@/lib/ai/rankFusion";
 import { invalidateRecommendationCache } from "@/lib/recommendation/service";
 import { validateOrganizationPosting } from "@/lib/organization/service";
+import { notifyKeywordAlertSubscribers } from "@/lib/keywordAlert/matcher";
 import type { User } from "@/generated/prisma/client";
 import type {
   CreateFoundPostInput,
@@ -93,6 +94,19 @@ export async function createLostPost(
   // silently logged and swallowed -- identical failure behavior, just no
   // longer awaited before the client gets its response.
   after(() => embedPostBestEffort("lost", row.id, row));
+  // 키워드 알림 Phase: 같은 post-commit/best-effort/after() 원칙 -- 이
+  // 매칭이 실패해도(matcher.ts 자체가 절대 throw하지 않지만, 방어적으로
+  // 여기서도 이 응답을 막지 않는다) 게시글 작성 자체는 이미 끝난 뒤다.
+  after(() =>
+    notifyKeywordAlertSubscribers("lost", {
+      id: row.id,
+      userId: row.userId,
+      title: row.title,
+      description: row.description,
+      campus: row.campus,
+      category: row.category,
+    }),
+  );
   return { kind: "ok", data: toLostPostDTO(row) };
 }
 
@@ -178,6 +192,17 @@ export async function createFoundPost(
   // Phase H-5-1: see createLostPost's own comment -- same after()
   // deferral, same unchanged failure behavior.
   after(() => embedPostBestEffort("found", row.id, row));
+  // 키워드 알림 Phase: see createLostPost's own comment.
+  after(() =>
+    notifyKeywordAlertSubscribers("found", {
+      id: row.id,
+      userId: row.userId,
+      title: row.title,
+      description: row.description,
+      campus: row.campus,
+      category: row.category,
+    }),
+  );
   return { kind: "ok", data: toFoundPostDTO(row) };
 }
 

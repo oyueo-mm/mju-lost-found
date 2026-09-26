@@ -126,6 +126,15 @@ enum NotificationType {
   REPORT_RECEIVED                @map("report_received")
   FEEDBACK_RECEIVED              @map("feedback_received")
   SUSPENSION_APPEAL_RECEIVED     @map("suspension_appeal_received")
+  // 키워드 알림 Phase: sent to exactly one recipient (the KeywordAlert's own
+  // owner) the moment a newly-created LostPost/FoundPost matches their
+  // alert -- never fanned out. relatedType is "keyword_alert_match",
+  // relatedId is the new KeywordAlertMatch row's own id (not the post's id
+  // directly) -- see that model's own comment for why: it's what actually
+  // carries the (keywordAlertId, postType, postId) triple resolveHref.ts
+  // needs, and its own unique constraint is what guarantees this type is
+  // never created twice for the same (user, alert, post).
+  KEYWORD_ALERT_MATCH            @map("keyword_alert_match")
 }
 
 // Phase 관리자 승인제: the four direct User-row mutations that become a
@@ -403,6 +412,9 @@ model User {
   adminActionProposalsCancelled AdminActionProposal[]        @relation("AdminActionProposalCanceller")
   adminActionApprovals         AdminActionApproval[]
   adminActionAuditLogs         AdminActionAuditLog[]         @relation("AdminActionAuditLogActor")
+  // 키워드 알림 Phase: 이 User가 만든 키워드 알림 규칙 전체 -- FK 경로가
+  // 하나뿐이라(userId) 다른 관계들처럼 별도 관계명이 필요 없다.
+  keywordAlerts                KeywordAlert[]
 
   @@map("User")
 }
@@ -1091,6 +1103,72 @@ model Notification {
   @@unique([userId, type, relatedType, relatedId])
   @@index([userId, isRead, createdAt(sort: Desc)], map: "idx_notification_user_read_created")
   @@map("Notification")
+}
+
+// ---------- KeywordAlert (키워드 알림 Phase) ----------
+
+// "전체/전부"인 조건은 빈 배열로 표현한다(campuses/categories 모두) -- 값이
+// 하나라도 들어있으면 그 목록에 속한 것만, 비어 있으면 필터 없음(전체 통과).
+// campuses/categories 각각의 실제 값은 언제나 posts/schema.ts의 CAMPUSES/
+// CATEGORIES와 정확히 같은 canonical 문자열이어야 한다(예: "인문캠퍼스",
+// "전자기기") -- 이 스키마 파일 자체는 그 목록을 강제하지 않는다(Postgres
+// text[] 컬럼일 뿐이라 CHECK로 표현하기 번거롭고, CATEGORIES는 LostPost.
+// category와 마찬가지로 UI 레벨 canonical 목록이라는 이 스키마 기존 관례를
+// 따른다) -- 실제 검증은 keywordAlert/schema.ts의 zod enum이 담당한다.
+enum KeywordAlertPostType {
+  ALL   @map("all")
+  LOST  @map("lost")
+  FOUND @map("found")
+}
+
+// 사용자가 만드는 "이 키워드가 새 글 제목/본문에 있으면 알려줘" 규칙 하나.
+// 활성/비활성 토글은 두지 않는다(이번 phase 스펙) -- 규칙이 더 이상 필요
+// 없으면 삭제하는 것이 유일한 경로다. campuses/categories/excludeKeywords는
+// Postgres native text[] -- 이 스키마에서 스칼라 리스트 컬럼의 첫 사례지만,
+// Prisma의 postgresql connector가 기본으로 지원하는 타입이라 별도 직렬화
+// (JSON 컬럼 등)가 필요 없다.
+model KeywordAlert {
+  id              Int                  @id @default(autoincrement())
+  userId          Int                  @map("user_id")
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  keyword         String               @db.Text
+  postType        KeywordAlertPostType @default(ALL) @map("post_type")
+  campuses        String[]             @default([])
+  categories      String[]             @default([])
+  // 제외 키워드 -- 제목/본문에 이 중 하나라도 있으면 대표 키워드가
+  // 일치하더라도 알리지 않는다(keywordAlert/matcher.ts 참고).
+  excludeKeywords String[]             @default([]) @map("exclude_keywords")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  matches KeywordAlertMatch[]
+
+  @@index([userId], map: "idx_keyword_alert_user_id")
+  @@map("KeywordAlert")
+}
+
+// 하나의 (keywordAlert, 게시글) 조합이 실제로 일치해 알림을 만든 기록 --
+// "같은 사용자·키워드 알림·게시글 조합에는 중복 알림을 만들지 않는다"는
+// 요구사항의 실제 DB 레벨 보증은 바로 아래 @@unique다(keywordAlertId가
+// 이미 정확히 한 User에 속하므로, 이 세 컬럼의 조합이 곧 "같은 사용자·같은
+// 알림·같은 게시글"과 동치). Notification 자신의 (userId, type,
+// relatedType, relatedId) unique 제약은 이 목적에는 세분도가 맞지 않는다
+// (같은 사용자의 서로 다른 두 알림이 같은 글에 각각 매치되는 경우를
+// 구분하지 못한다) -- 그래서 Notification.relatedId는 이 행 자신의 id를
+// 가리키고, 실제 "중복 매치 방지"는 이 테이블의 unique 인덱스가 담당한다.
+// postType은 다른 폴리모픽 postType 컬럼들(PostView.postType, Match
+// CandidateCache.sourceType)과 동일하게 실제 FK 없는 plain string이다 --
+// LostPost/FoundPost가 독립된 id 시퀀스를 쓰는 이 스키마의 기존 관례.
+model KeywordAlertMatch {
+  id             Int          @id @default(autoincrement())
+  keywordAlertId Int          @map("keyword_alert_id")
+  keywordAlert   KeywordAlert @relation(fields: [keywordAlertId], references: [id], onDelete: Cascade)
+  postType       String       @map("post_type")
+  postId         Int          @map("post_id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@unique([keywordAlertId, postType, postId], map: "idx_keyword_alert_match_unique")
+  @@map("KeywordAlertMatch")
 }
 
 // ---------- Comment (Phase 23) ----------

@@ -36,6 +36,8 @@ const NOTIFICATION_TYPE_FROM_DB: Record<PrismaNotificationType, string> = {
   // sent to every current LEADER/ADMIN of an organization when a new
   // inquiry ChatRoom is created.
   ORGANIZATION_CHAT_RECEIVED: "organization_chat_received",
+  // 키워드 알림 Phase: see schema.prisma's own comment on this enum value.
+  KEYWORD_ALERT_MATCH: "keyword_alert_match",
 };
 
 // Same Korean labels as the legacy pages/8_알림.py's TYPE_LABELS.
@@ -53,6 +55,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   feedback_received: "새 문의 접수",
   suspension_appeal_received: "새 이의제기 접수",
   organization_chat_received: "새 단체 문의",
+  keyword_alert_match: "키워드 알림",
 };
 
 export type NotificationDTO = {

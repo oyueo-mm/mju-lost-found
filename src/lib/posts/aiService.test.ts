@@ -67,6 +67,12 @@ vi.mock("@/lib/ai/postEmbedding", () => ({
   EMBEDDING_INPUT_FIELDS: ["title", "description", "category", "location"],
   embedPostBestEffort,
 }));
+// 키워드 알림 Phase: createLostPost/createFoundPost defer this alongside
+// embedPostBestEffort() via the same after() -- mocked wholesale here for
+// the same reason (this suite only cares whether/when aiService.ts calls
+// it, never the real matching logic, which has its own tests).
+const notifyKeywordAlertSubscribers = vi.fn();
+vi.mock("@/lib/keywordAlert/matcher", () => ({ notifyKeywordAlertSubscribers }));
 vi.mock("@/lib/ai/embedding", () => ({ getEmbeddingProvider: () => ({ embed }) }));
 vi.mock("@/lib/ai/imageEmbedding", () => ({ getImageEmbeddingProvider: () => ({ embed: imageEmbed }) }));
 vi.mock("@/lib/ai/vectorSearch", () => ({ findPostsBySemanticQuery, findPostsByImageQuery }));
@@ -221,7 +227,7 @@ describe("createLostPost / createFoundPost", () => {
     });
 
     expect(result.kind).toBe("ok"); // the response is ready immediately...
-    expect(after).toHaveBeenCalledTimes(1); // ...with the embedding only *registered*...
+    expect(after).toHaveBeenCalledTimes(2); // ...with the embedding and the keyword-alert check only *registered*...
     expect(embedPostBestEffort).not.toHaveBeenCalled(); // ...not yet run.
 
     await flushAfterCallbacks();
