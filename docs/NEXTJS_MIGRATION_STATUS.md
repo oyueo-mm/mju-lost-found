@@ -2,6 +2,8 @@
 
 > Phase 8 산출물. 작성 기준: `main` 브랜치(레거시 Streamlit, 커밋은 `git log main`으로 확인), `vercel` 브랜치(Next.js, 이 문서 작성 시점 최신 커밋 `de834db`), 2026-09-05.
 > 이 문서는 기능 구현을 하지 않는다 — 실제 코드(`main:app.py`, `main:pages/*.py`, `main:db/database.py`, `main:ai/*.py`, `main:ui/*.py`, `vercel` 브랜치의 `src/app/**`, `src/lib/**`, `src/components/**`)를 직접 읽고 확인한 결과만 기록한다. 추측이 필요한 부분은 명시적으로 "미확인"으로 표기한다.
+>
+> **문서 최신화 Phase 안내(2026-09-28 기준)**: 이 문서는 Phase 8 시점(커밋 `de834db`)의 스냅샷이며, 이후 내용이 갱신되지 않았다. §6의 미구현(C) 항목 중 AI 자연어 의미 검색·게시글 상태 변경 UI·"내 게시물" 페이지·direct 채팅은 이후 모두 구현되었고(README 참고), §4~8이 전제로 삼는 `Match`/`MatchPanel`/"내 매칭" 도메인 자체가 이후 완전히 제거되고 `src/lib/recommendation/*`의 게시글 추천 기능으로 대체되었다(자세한 배경은 `AI_MATCHING_ARCHITECTURE.md` 상단의 동일 안내 참고). §2/§3/§9~10의 상세 비교와 일부 근거 코드 경로(`src/lib/match/*` 등)는 더 이상 유효하지 않다. 이 문서는 마이그레이션 초기 의사결정 기록으로만 참고하고, 현재 기능 현황은 README와 실제 코드를 기준으로 확인할 것.
 
 ---
 

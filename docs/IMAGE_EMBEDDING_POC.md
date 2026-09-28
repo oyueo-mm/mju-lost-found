@@ -2,6 +2,8 @@
 
 이 문서는 Phase 15-1의 실제 PoC 실행 결과를 기록한다. **프로덕션 코드는 변경되지 않았다** — 이 문서는 참고용 기록이며, 이 phase에서 커밋되지 않는다.
 
+> **문서 최신화 Phase 안내(2026-09-28 기준)**: §3의 추천(SigLIP)과 §10의 제안이 이후 실제로 채택·구현되었다 — `Xenova/siglip-base-patch16-224`가 현재도 이미지 검색에 쓰이고 있고(README 참고), 이미지 유사도를 "동일 물건 판정"으로 표현하지 말라는 §9의 원칙도 현재 UI 문구에 유지되고 있다. §10에서 제안한 "게시글 상세의 이 사진과 비슷한 게시물"(방법 A)은 이후 `src/lib/recommendation/*` 기반의 관련 게시글 추천 기능으로 흡수되었다(`AI_MATCHING_ARCHITECTURE.md` 상단 안내 참고).
+
 ## 1. 재사용 가능한 기존 인프라
 
 - `@huggingface/transformers` (이미 `package.json`에 `^4.2.0`으로 설치됨) — **새 의존성 추가 없이** `SiglipVisionModel`/`CLIPVisionModelWithProjection`/`AutoProcessor`/`RawImage`를 즉시 사용 가능함을 실제로 확인(`node -e "require('@huggingface/transformers')"`로 export 목록 확인).

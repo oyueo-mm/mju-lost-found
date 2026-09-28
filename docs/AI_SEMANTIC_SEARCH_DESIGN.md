@@ -2,6 +2,8 @@
 
 > Phase 12-1 산출물. 작성 기준: `vercel` 브랜치, 커밋 `2048464`(Phase 10) 위에 Phase 11 변경사항이 아직 커밋되지 않은 작업 트리 상태, 2026-09-05.
 > **이 문서는 설계 전용이다 — 이번 Phase에서 코드/스키마/의존성 변경은 전혀 없다.** 실제 코드(`src/lib/posts/*`, `src/lib/ai/*`, `src/app/api/posts/route.ts`, `src/components/search/*`, `main:ai/search.py` 등)를 직접 읽고 확인한 내용만 근거로 작성했다.
+>
+> **문서 최신화 Phase 안내(2026-09-28 기준)**: 이후 Phase에서 이 설계가 실제로 구현되었다 — `listQuerySchema`의 `mode: "keyword" | "semantic"`(`src/lib/posts/schema.ts`)과 `GET /api/posts`의 확장(`src/app/api/posts/route.ts`)이 §4.2의 제안과 거의 동일한 형태로 존재한다. 다만 §4.2가 제안한 "`mode=semantic`은 `type=all`과 함께 거부" 규칙은 이후 Phase 11-2에서 뒤집혀, 현재는 `type=all` + `mode=semantic` 조합이 허용된다 — 이 부분만 실제 코드와 다르다. §8(예상 변경 파일)·§9(테스트 전략)는 실제 구현과 대체로 일치한다.
 
 ---
 
