@@ -31,25 +31,27 @@ export async function Pagination({ basePath, currentSearchParams, page, totalPag
   // and "…" for the gaps (see getPaginationItems). Two variants of the same
   // list: ±2 neighbors from `sm` up, ±1 on narrow screens -- only one is
   // ever displayed (the other is display:none, so screen readers skip it
-  // too).
-  function pageList(siblings: number, className: string) {
+  // too). `itemPx`/`ellipsisPx` let the narrow-screen list use tighter
+  // padding so the whole row (prev, numbers, next) fits a ~320px screen;
+  // the desktop list keeps its original spacing.
+  function pageList(siblings: number, className: string, itemPx: string, ellipsisPx: string) {
     return (
       <div className={className}>
         {getPaginationItems(page, totalPages, siblings).map((item) =>
           typeof item !== "number" ? (
-            <span key={item} aria-hidden="true" className="px-1.5 py-1.5 text-muted-foreground">
+            <span key={item} aria-hidden="true" className={`${ellipsisPx} py-1.5 text-muted-foreground`}>
               …
             </span>
           ) : item === page ? (
             <span
               key={item}
               aria-current="page"
-              className="rounded-lg bg-primary px-3 py-1.5 font-medium text-primary-foreground"
+              className={`rounded-lg bg-primary ${itemPx} py-1.5 font-medium text-primary-foreground`}
             >
               {item}
             </span>
           ) : (
-            <Link key={item} href={hrefFor(item)} className="rounded-lg px-3 py-1.5 text-foreground hover:bg-muted">
+            <Link key={item} href={hrefFor(item)} className={`rounded-lg ${itemPx} py-1.5 text-foreground hover:bg-muted`}>
               {item}
             </Link>
           ),
@@ -59,24 +61,24 @@ export async function Pagination({ basePath, currentSearchParams, page, totalPag
   }
 
   return (
-    <nav className="flex items-center justify-center gap-2 text-sm">
+    <nav className="flex items-center justify-center gap-1 text-sm sm:gap-2">
       {page > 1 ? (
-        <Link href={hrefFor(page - 1)} className="rounded-lg px-3 py-1.5 text-foreground hover:bg-muted">
+        <Link href={hrefFor(page - 1)} className="whitespace-nowrap rounded-lg px-2 py-1.5 text-foreground hover:bg-muted sm:px-3">
           {t("search.pagination.prev")}
         </Link>
       ) : (
-        <span className="px-3 py-1.5 text-muted-foreground/50">{t("search.pagination.prev")}</span>
+        <span className="whitespace-nowrap px-2 py-1.5 text-muted-foreground/50 sm:px-3">{t("search.pagination.prev")}</span>
       )}
 
-      {pageList(2, "hidden items-center gap-1 sm:flex")}
-      {pageList(1, "flex items-center gap-1 sm:hidden")}
+      {pageList(2, "hidden items-center gap-1 sm:flex", "px-3", "px-1.5")}
+      {pageList(1, "flex items-center gap-0.5 sm:hidden", "px-2", "px-0.5")}
 
       {page < totalPages ? (
-        <Link href={hrefFor(page + 1)} className="rounded-lg px-3 py-1.5 text-foreground hover:bg-muted">
+        <Link href={hrefFor(page + 1)} className="whitespace-nowrap rounded-lg px-2 py-1.5 text-foreground hover:bg-muted sm:px-3">
           {t("search.pagination.next")}
         </Link>
       ) : (
-        <span className="px-3 py-1.5 text-muted-foreground/50">{t("search.pagination.next")}</span>
+        <span className="whitespace-nowrap px-2 py-1.5 text-muted-foreground/50 sm:px-3">{t("search.pagination.next")}</span>
       )}
     </nav>
   );
