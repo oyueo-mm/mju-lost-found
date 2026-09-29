@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { DATE_ONLY, EVENT_PERIODS, kstStartOfDay, resolveEventRange } from "./eventPeriod";
 import { interpretDateTimeLocalAsKst } from "./kstDateTime";
 
 // Same two enums as prisma/schema.prisma's LostPostStatus/FoundPostStatus
@@ -80,6 +81,47 @@ export const DEFAULT_LIMIT = 20;
 export const MAX_LIMIT = 50;
 export const DEFAULT_SORT: SortOption = "latest";
 
+// 기간 검색 필터 (분실/습득 시점 기준 -- lostAt / foundAt, never createdAt).
+// URL shape: period=today|3d|1w|1m|custom, from/to=YYYY-MM-DD (KST dates,
+// custom only), unknownTime=include (also include posts whose time is
+// 시간 모름/null). Resolved into eventFrom/eventTo instants by
+// withEventRange() below; shared by listQuerySchema and the AI search route.
+const dateOnlyParam = (label: string) =>
+  z
+    .string()
+    .regex(DATE_ONLY, `${label}은(는) YYYY-MM-DD 형식이어야 합니다.`)
+    .refine((value) => kstStartOfDay(value) !== null, `${label}이(가) 올바른 날짜가 아닙니다.`);
+
+const eventPeriodFields = {
+  period: z.enum(EVENT_PERIODS).optional(),
+  from: dateOnlyParam("시작일").optional(),
+  to: dateOnlyParam("종료일").optional(),
+  unknownTime: z.enum(["include"]).optional(),
+};
+
+type EventPeriodInput = { period?: (typeof EVENT_PERIODS)[number]; from?: string; to?: string; unknownTime?: "include" };
+
+function refineEventPeriod(data: EventPeriodInput, ctx: z.RefinementCtx) {
+  if (data.period === "custom" && data.from && data.to && data.from > data.to) {
+    ctx.addIssue({ code: "custom", path: ["to"], message: "종료일은 시작일보다 빠를 수 없습니다." });
+  }
+}
+
+// Adds the resolved filter fields the services read. eventFrom/eventTo are
+// undefined when no period applies (전체), in which case unknownTime has no
+// effect either -- nothing is filtered by time at all.
+function withEventRange<T extends EventPeriodInput>(data: T) {
+  const range = resolveEventRange(data);
+  return {
+    ...data,
+    eventFrom: range?.from,
+    eventTo: range?.to,
+    includeUnknownEventTime: range ? data.unknownTime === "include" : undefined,
+  };
+}
+
+export const eventPeriodQuerySchema = z.object(eventPeriodFields).superRefine(refineEventPeriod).transform(withEventRange);
+
 export const listQuerySchema = z
   .object({
     type: postListTypeSchema,
@@ -94,8 +136,7 @@ export const listQuerySchema = z
     // rejected rather than silently kept, since there's no legacy data to
     // stay compatible with).
     campus: z.enum(CAMPUSES).optional(),
-    dateFrom: z.coerce.date("dateFrom이 올바르지 않습니다.").optional(),
-    dateTo: z.coerce.date("dateTo가 올바르지 않습니다.").optional(),
+    ...eventPeriodFields,
     // Board-specific (Phase 9): LostPost's two statuses differ from
     // FoundPost's, so which values are valid depends on `type` -- checked
     // below in .superRefine(), not with a flat z.enum() here. Kept as a
@@ -118,6 +159,7 @@ export const listQuerySchema = z
       .transform((n) => Math.min(n, MAX_LIMIT)),
   })
   .superRefine((data, ctx) => {
+    refineEventPeriod(data, ctx);
     if (data.status !== undefined) {
       // type=all merges LostPost and FoundPost, which don't share a status
       // vocabulary -- rather than guess which board a bare status string was
@@ -157,7 +199,8 @@ export const listQuerySchema = z
         ctx.addIssue({ code: "custom", path: ["q"], message: "AI 의미 검색은 검색어가 필요합니다." });
       }
     }
-  });
+  })
+  .transform(withEventRange);
 export type ListQuery = z.infer<typeof listQuerySchema>;
 
 // Shared fields between LostPost/FoundPost -- title/description/category/

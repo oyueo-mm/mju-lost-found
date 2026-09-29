@@ -101,9 +101,38 @@ export type SemanticSearchFilters = {
   // reaches here (see posts/schema.ts), same contract as
   // posts/service.ts's buildSearchWhere() uses for the keyword-search path.
   status?: string;
-  dateFrom?: Date;
-  dateTo?: Date;
+  // 기간 검색 필터 -- same meaning as posts/service.ts's PostFilters: a range
+  // on the board's own 분실/습득 시점 column (lost_at / found_at, never
+  // created_at); null times only match when includeUnknownEventTime is on.
+  eventFrom?: Date;
+  eventTo?: Date;
+  includeUnknownEventTime?: boolean;
 };
+
+// The 기간 검색 필터 condition for one board's table, or null when no range
+// applies. Column names are literal (chosen by targetType, never input);
+// the bounds are bound parameters.
+//
+// Note: like every other filter here it is a WHERE clause on a query
+// ordered by the HNSW-indexed distance with a LIMIT, so when the index is
+// used Postgres filters the index scan's candidates rather than searching
+// only within the period -- a narrow period can return fewer than topK
+// rows even though more matching posts exist (see this module's tests and
+// scripts/ai-eval-seed/check-period-vector-search.ts).
+export function eventTimeCondition(
+  targetType: PostType,
+  filters: Pick<SemanticSearchFilters, "eventFrom" | "eventTo" | "includeUnknownEventTime">,
+): InstanceType<typeof Prisma.Sql> | null {
+  if (!filters.eventFrom && !filters.eventTo) return null;
+  const column = targetType === "lost" ? Prisma.raw(`lost_at`) : Prisma.raw(`found_at`);
+  const bounds: InstanceType<typeof Prisma.Sql>[] = [];
+  if (filters.eventFrom) bounds.push(Prisma.sql`${column} >= ${filters.eventFrom}`);
+  if (filters.eventTo) bounds.push(Prisma.sql`${column} <= ${filters.eventTo}`);
+  const inRange = Prisma.join(bounds, " AND ");
+  return filters.includeUnknownEventTime
+    ? Prisma.sql`((${inRange}) OR ${column} IS NULL)`
+    : Prisma.sql`(${inRange})`;
+}
 
 // Phase 12: free-text semantic search. Unlike findSimilarPosts() above,
 // there is no source *post* here -- a search query is never saved to the
@@ -146,8 +175,8 @@ export async function findPostsBySemanticQuery(
   if (filters.category) conditions.push(Prisma.sql`category = ${filters.category}`);
   if (filters.campus) conditions.push(Prisma.sql`campus = ${filters.campus}`);
   if (filters.status) conditions.push(Prisma.sql`status = ${filters.status}::${statusType}`);
-  if (filters.dateFrom) conditions.push(Prisma.sql`created_at >= ${filters.dateFrom}`);
-  if (filters.dateTo) conditions.push(Prisma.sql`created_at <= ${filters.dateTo}`);
+  const eventTime = eventTimeCondition(targetType, filters);
+  if (eventTime) conditions.push(eventTime);
 
   const rows = await prisma.$queryRaw<{ id: number; similarity: number }[]>(Prisma.sql`
     SELECT id, 1 - (embedding <=> ${vectorLiteral}::vector) AS similarity
@@ -250,7 +279,7 @@ export async function findSimilarPostsByImage(
 // search (targetType), the same "user picks lost or found" contract
 // findPostsBySemanticQuery already uses for text search. Mirrors that
 // function's shape exactly, `imageEmbedding` in place of `embedding` --
-// same reused filter set (category/campus/status/dateFrom/dateTo), same
+// same reused filter set (category/campus/status/분실·습득 시점 기간), same
 // parameterized Prisma.sql conditions, never string-concatenated.
 export async function findPostsByImageQuery(
   targetType: PostType,
@@ -266,8 +295,8 @@ export async function findPostsByImageQuery(
   if (filters.category) conditions.push(Prisma.sql`category = ${filters.category}`);
   if (filters.campus) conditions.push(Prisma.sql`campus = ${filters.campus}`);
   if (filters.status) conditions.push(Prisma.sql`status = ${filters.status}::${statusType}`);
-  if (filters.dateFrom) conditions.push(Prisma.sql`created_at >= ${filters.dateFrom}`);
-  if (filters.dateTo) conditions.push(Prisma.sql`created_at <= ${filters.dateTo}`);
+  const eventTime = eventTimeCondition(targetType, filters);
+  if (eventTime) conditions.push(eventTime);
 
   const rows = await prisma.$queryRaw<{ id: number; similarity: number }[]>(Prisma.sql`
     SELECT id, 1 - ("imageEmbedding" <=> ${vectorLiteral}::vector) AS similarity

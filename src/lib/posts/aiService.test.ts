@@ -956,11 +956,11 @@ describe("searchPosts -- mode=semantic (Phase 12)", () => {
     expect(result.total).toBe(2);
   });
 
-  it("passes category/campus/status/dateFrom/dateTo through to findPostsBySemanticQuery", async () => {
+  it("passes category/campus/status and the 분실/습득 시점 period through to findPostsBySemanticQuery", async () => {
     embed.mockResolvedValueOnce([0.1]);
     findPostsBySemanticQuery.mockResolvedValueOnce([]);
-    const dateFrom = new Date("2026-01-01");
-    const dateTo = new Date("2026-01-31");
+    const eventFrom = new Date("2026-08-31T15:00:00.000Z");
+    const eventTo = new Date("2026-09-15T14:59:59.999Z");
 
     await searchPosts({
       type: "found",
@@ -971,16 +971,42 @@ describe("searchPosts -- mode=semantic (Phase 12)", () => {
       category: "지갑",
       campus: "인문캠퍼스",
       status: "보관 중",
-      dateFrom,
-      dateTo,
+      eventFrom,
+      eventTo,
+      includeUnknownEventTime: true,
     });
 
     expect(findPostsBySemanticQuery).toHaveBeenCalledWith(
       "found",
       [0.1],
       10,
-      expect.objectContaining({ category: "지갑", campus: "인문캠퍼스", status: "보관 중", dateFrom, dateTo }),
+      expect.objectContaining({
+        category: "지갑",
+        campus: "인문캠퍼스",
+        status: "보관 중",
+        eventFrom,
+        eventTo,
+        includeUnknownEventTime: true,
+      }),
     );
+  });
+
+  it("applies the period to AI 검색 image-only and text+image searches too", async () => {
+    const eventFrom = new Date("2026-08-31T15:00:00.000Z");
+    const period = { eventFrom, includeUnknownEventTime: false };
+
+    imageEmbed.mockResolvedValueOnce([0.3]);
+    findPostsByImageQuery.mockResolvedValueOnce([]);
+    await searchPostsAI("found", undefined, new Blob([new Uint8Array([1])], { type: "image/jpeg" }), { page: 1, limit: 20, ...period });
+    expect(findPostsByImageQuery).toHaveBeenLastCalledWith("found", [0.3], 10, expect.objectContaining(period));
+
+    embed.mockResolvedValueOnce([0.1]);
+    imageEmbed.mockResolvedValueOnce([0.2]);
+    findPostsBySemanticQuery.mockResolvedValueOnce([]);
+    findPostsByImageQuery.mockResolvedValueOnce([]);
+    await searchPostsAI("found", "지갑", new Blob([new Uint8Array([1])], { type: "image/jpeg" }), { page: 1, limit: 20, ...period });
+    expect(findPostsBySemanticQuery).toHaveBeenLastCalledWith("found", [0.1], 10, expect.objectContaining(period));
+    expect(findPostsByImageQuery).toHaveBeenLastCalledWith("found", [0.2], 10, expect.objectContaining(period));
   });
 
   it("returns an empty page (not an error) when nothing matches", async () => {

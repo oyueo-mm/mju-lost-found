@@ -5,6 +5,7 @@ import { jsonError } from "@/lib/posts/response";
 
 const requireUserForApi = vi.fn();
 const searchPosts = vi.fn();
+const searchPostsAI = vi.fn();
 const createLostPost = vi.fn();
 const createFoundPost = vi.fn();
 
@@ -20,6 +21,7 @@ vi.mock("@/lib/posts/http", async () => {
 });
 vi.mock("@/lib/posts/aiService", () => ({
   searchPosts,
+  searchPostsAI,
   createLostPost,
   createFoundPost,
 }));
@@ -65,11 +67,76 @@ describe("GET /api/posts", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects an invalid date", async () => {
-    const res = await GET(
-      new NextRequest("http://localhost/api/posts?type=lost&dateFrom=not-a-date"),
+  it("rejects an invalid period date and an inverted range", async () => {
+    const bad = await GET(new NextRequest("http://localhost/api/posts?type=lost&period=custom&from=not-a-date"));
+    expect(bad.status).toBe(400);
+    const inverted = await GET(
+      new NextRequest("http://localhost/api/posts?type=lost&period=custom&from=2026-09-15&to=2026-09-01"),
     );
-    expect(res.status).toBe(400);
+    expect(inverted.status).toBe(400);
+  });
+
+  it("passes the resolved 분실/습득 시점 period to the service layer", async () => {
+    searchPosts.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 0, totalPages: 1 });
+
+    await GET(
+      new NextRequest("http://localhost/api/posts?type=found&period=custom&from=2026-09-01&to=2026-09-15&unknownTime=include"),
+    );
+
+    expect(searchPosts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "found",
+        eventFrom: new Date("2026-08-31T15:00:00.000Z"),
+        eventTo: new Date("2026-09-15T14:59:59.999Z"),
+        includeUnknownEventTime: true,
+      }),
+    );
+  });
+
+  describe("POST ?mode=ai -- period filter", () => {
+    const aiRequest = (query: string) => {
+      const form = new FormData();
+      form.append("q", "지갑");
+      return new NextRequest(`http://localhost/api/posts?mode=ai&${query}`, { method: "POST", body: form });
+    };
+
+    it("forwards the same period parameters to AI 검색", async () => {
+      searchPostsAI.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 0, totalPages: 1 });
+
+      const res = await POST(aiRequest("type=lost&period=custom&from=2026-09-01&to=2026-09-15"));
+
+      expect(res.status).toBe(200);
+      expect(searchPostsAI).toHaveBeenCalledWith(
+        "lost",
+        "지갑",
+        undefined,
+        expect.objectContaining({
+          eventFrom: new Date("2026-08-31T15:00:00.000Z"),
+          eventTo: new Date("2026-09-15T14:59:59.999Z"),
+          includeUnknownEventTime: false,
+        }),
+      );
+    });
+
+    it("rejects an inverted range with 400 before searching", async () => {
+      const res = await POST(aiRequest("type=lost&period=custom&from=2026-09-15&to=2026-09-01"));
+
+      expect(res.status).toBe(400);
+      expect(searchPostsAI).not.toHaveBeenCalled();
+    });
+
+    it("searches without a time filter when no period is given", async () => {
+      searchPostsAI.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 0, totalPages: 1 });
+
+      await POST(aiRequest("type=found"));
+
+      expect(searchPostsAI).toHaveBeenCalledWith(
+        "found",
+        "지갑",
+        undefined,
+        expect.objectContaining({ eventFrom: undefined, eventTo: undefined }),
+      );
+    });
   });
 
   it("passes q/category/campus/sort through to the service layer", async () => {

@@ -39,6 +39,10 @@ type AISearchPanelProps = {
   controlsClassName?: string;
   animatedPlaceholders?: readonly string[];
   mobileAnimatedPlaceholders?: readonly string[];
+  // 기간 검색 필터: extra query-string parameters (period / from / to /
+  // unknownTime, see periodParams.ts) appended to the search request.
+  // Omitted by callers without a period control (e.g. Home).
+  extraQuery?: string;
 };
 
 export function resolveAiSearchQuery(currentQuery: string, quickSearchQuery?: string): string {
@@ -62,6 +66,7 @@ export function AISearchPanel({
   controlsClassName,
   animatedPlaceholders,
   mobileAnimatedPlaceholders,
+  extraQuery,
 }: AISearchPanelProps) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
@@ -137,6 +142,16 @@ export function AISearchPanel({
     };
   }, [previewUrl]);
 
+  // Results on screen were fetched for the previous period -- clear them
+  // rather than show them under a filter they don't match (React's "adjust
+  // state when a prop changes" pattern: compared during render, no effect).
+  const [resultsExtraQuery, setResultsExtraQuery] = useState(extraQuery);
+  if (resultsExtraQuery !== extraQuery) {
+    setResultsExtraQuery(extraQuery);
+    setResults(null);
+    setError(null);
+  }
+
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0] ?? null;
     setError(null);
@@ -197,7 +212,7 @@ export function AISearchPanel({
       if (submittedQuery !== "") formData.append("q", submittedQuery);
       if (file) formData.append("image", file);
 
-      const res = await fetch(`/api/posts?mode=ai&type=${type}`, {
+      const res = await fetch(`/api/posts?mode=ai&type=${type}${extraQuery ? `&${extraQuery}` : ""}`, {
         method: "POST",
         body: formData,
       });

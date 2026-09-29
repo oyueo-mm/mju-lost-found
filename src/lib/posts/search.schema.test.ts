@@ -53,18 +53,50 @@ describe("listQuerySchema -- search/filter fields", () => {
     expect(result.success).toBe(false);
   });
 
-  it("accepts valid dateFrom/dateTo", () => {
-    const result = listQuerySchema.safeParse({
-      type: "lost",
-      dateFrom: "2026-01-01",
-      dateTo: "2026-01-31",
-    });
+  // 기간 검색 필터 (분실/습득 시점 기준).
+  it("resolves a custom period into KST eventFrom/eventTo instants", () => {
+    const result = listQuerySchema.safeParse({ type: "lost", period: "custom", from: "2026-09-01", to: "2026-09-15" });
     expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.eventFrom?.toISOString()).toBe("2026-08-31T15:00:00.000Z");
+    expect(result.data.eventTo?.toISOString()).toBe("2026-09-15T14:59:59.999Z");
+    expect(result.data.includeUnknownEventTime).toBe(false);
   });
 
-  it("rejects an invalid date", () => {
-    const result = listQuerySchema.safeParse({ type: "lost", dateFrom: "not-a-date" });
-    expect(result.success).toBe(false);
+  it("resolves a preset relative to now and honors unknownTime=include", () => {
+    const result = listQuerySchema.safeParse({ type: "found", period: "1w", unknownTime: "include" });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.eventFrom).toBeInstanceOf(Date);
+    expect(result.data.eventTo).toBeInstanceOf(Date);
+    expect(result.data.eventTo!.getTime() - result.data.eventFrom!.getTime()).toBe(7 * 24 * 60 * 60 * 1000 - 1);
+    expect(result.data.includeUnknownEventTime).toBe(true);
+  });
+
+  it("applies no time filter without a period (unknownTime alone does nothing)", () => {
+    const result = listQuerySchema.safeParse({ type: "lost", unknownTime: "include" });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.eventFrom).toBeUndefined();
+    expect(result.data.eventTo).toBeUndefined();
+    expect(result.data.includeUnknownEventTime).toBeUndefined();
+  });
+
+  it("rejects an unknown period, a malformed or impossible date, and an inverted range", () => {
+    expect(listQuerySchema.safeParse({ type: "lost", period: "forever" }).success).toBe(false);
+    expect(listQuerySchema.safeParse({ type: "lost", period: "custom", from: "not-a-date" }).success).toBe(false);
+    expect(listQuerySchema.safeParse({ type: "lost", period: "custom", from: "2026-02-30" }).success).toBe(false);
+    const inverted = listQuerySchema.safeParse({ type: "lost", period: "custom", from: "2026-09-15", to: "2026-09-01" });
+    expect(inverted.success).toBe(false);
+    if (!inverted.success) expect(inverted.error.issues[0].path).toEqual(["to"]);
+  });
+
+  it("no longer filters by createdAt: the old dateFrom/dateTo parameters are ignored", () => {
+    const result = listQuerySchema.safeParse({ type: "lost", dateFrom: "2026-01-01", dateTo: "2026-01-31" });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data).not.toHaveProperty("dateFrom");
+    expect(result.data.eventFrom).toBeUndefined();
   });
 
   it("defaults sort to undefined (service applies the 'latest' default) when omitted", () => {

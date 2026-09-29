@@ -13,6 +13,7 @@ import {
   DEFAULT_PAGE,
   MAX_LIMIT,
   MAX_SEARCH_QUERY_LENGTH,
+  eventPeriodQuerySchema,
   listQuerySchema,
   postListTypeSchema,
   postTypeSchema,
@@ -164,9 +165,24 @@ async function handleAiSearch(request: NextRequest) {
   const page = parsePageParam(searchParams.get("page"));
   const limit = parseLimitParam(searchParams.get("limit"));
 
+  // 기간 검색 필터 (분실/습득 시점 기준): the same period/from/to/unknownTime
+  // URL parameters and validation as the GET search (posts/schema.ts), so a
+  // shared URL behaves the same in either search mode.
+  const period = eventPeriodQuerySchema.safeParse(Object.fromEntries(searchParams));
+  if (!period.success) {
+    return jsonError(400, period.error.issues[0]?.message ?? "기간 필터가 올바르지 않습니다.");
+  }
+  const { eventFrom, eventTo, includeUnknownEventTime } = period.data;
+
   let result;
   try {
-    result = await searchPostsAI(typeResult.data, query, image, { page, limit });
+    result = await searchPostsAI(typeResult.data, query, image, {
+      page,
+      limit,
+      eventFrom,
+      eventTo,
+      includeUnknownEventTime,
+    });
   } catch (error) {
     console.error("AI search failed:", error);
     return jsonError(502, "AI 검색에 실패했습니다. 다시 시도해주세요.");

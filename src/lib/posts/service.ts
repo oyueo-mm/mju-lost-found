@@ -180,8 +180,14 @@ export type PostFilters = {
   // -- no public search UI exposes this. Optional/undefined for every
   // other existing caller, so this is purely additive to buildSearchWhere.
   authorQuery?: string;
-  dateFrom?: Date;
-  dateTo?: Date;
+  // 기간 검색 필터: an instant range on the post's actual 분실/습득 시점 --
+  // LostPost.lostAt / FoundPost.foundAt, never createdAt (resolved from the
+  // URL's period/from/to in KST by posts/schema.ts). Posts whose time is
+  // unknown (null) are excluded while a range applies, unless
+  // includeUnknownEventTime is set -- createdAt is never used as a stand-in.
+  eventFrom?: Date;
+  eventTo?: Date;
+  includeUnknownEventTime?: boolean;
   // Korean status string (e.g. "찾는 중"), already validated against the
   // right board's enum by listQuerySchema's superRefine before it ever
   // reaches here -- see buildSearchWhere()'s statusMap param for how it's
@@ -212,10 +218,8 @@ const MY_POSTS_CAP = 200;
 // `category` is an exact match (matches the legacy search_lost_posts()/
 // search_found_posts()'s `category = ?`); `location` is a partial match,
 // since it's free text with no legacy precedent to match against.
-// `dateFrom`/`dateTo` filter on `createdAt` (post registration date) rather
-// than lostAt/foundAt -- those differ in meaning between the two boards and
-// don't unify for `type=all`, while createdAt is the one date field with
-// identical, unambiguous meaning on both, and is already what `sort` orders by.
+// The 분실/습득 시점 period filter is not built here -- it targets a
+// different column per board (lostAt / foundAt), see eventTimeWhere().
 // statusMap converts filters.status (a Korean string) to the board-specific
 // Prisma enum value -- LOST_STATUS_TO_DB for LostPost queries,
 // FOUND_STATUS_TO_DB for FoundPost queries. Omitted entirely by
@@ -242,7 +246,6 @@ function buildSearchWhere<S extends PrismaLostPostStatus | PrismaFoundPostStatus
   // needed.
   campus?: string;
   user?: { nickname: { contains: string; mode: "insensitive" } };
-  createdAt?: { gte?: Date; lte?: Date };
   status?: S;
 } {
   const where: ReturnType<typeof buildSearchWhere<S>> = {};
@@ -257,16 +260,33 @@ function buildSearchWhere<S extends PrismaLostPostStatus | PrismaFoundPostStatus
   if (filters.authorQuery) {
     where.user = { nickname: { contains: filters.authorQuery, mode: "insensitive" } };
   }
-  if (filters.dateFrom || filters.dateTo) {
-    where.createdAt = {
-      ...(filters.dateFrom && { gte: filters.dateFrom }),
-      ...(filters.dateTo && { lte: filters.dateTo }),
-    };
-  }
   if (filters.status && statusMap && filters.status in statusMap) {
     where.status = statusMap[filters.status];
   }
   return where;
+}
+
+type EventField = "lostAt" | "foundAt";
+type EventTimeRange = { gte?: Date; lte?: Date };
+type EventTimeCondition<K extends EventField> =
+  | { [P in K]: EventTimeRange }
+  | { OR: ({ [P in K]: EventTimeRange } | { [P in K]: null })[] };
+
+// 기간 검색 필터 for one board: `field` is that board's own 분실/습득 시점
+// column. Returned as an AND entry so it composes with buildSearchWhere()'s
+// own OR (the title/description text match) instead of overwriting it.
+// Unknown times (null) only match when includeUnknownEventTime is on --
+// never via createdAt.
+export function eventTimeWhere<K extends EventField>(field: K, filters: PostFilters): { AND?: EventTimeCondition<K>[] } {
+  if (!filters.eventFrom && !filters.eventTo) return {};
+  const range: EventTimeRange = {
+    ...(filters.eventFrom && { gte: filters.eventFrom }),
+    ...(filters.eventTo && { lte: filters.eventTo }),
+  };
+  const inRange = { [field]: range } as { [P in K]: EventTimeRange };
+  if (!filters.includeUnknownEventTime) return { AND: [inRange] };
+  const unknown = { [field]: null } as { [P in K]: null };
+  return { AND: [{ OR: [inRange, unknown] }] };
 }
 
 function buildOrderBy(sort: SortOption = DEFAULT_SORT) {
@@ -349,7 +369,7 @@ export async function listLostPosts({
   ...filters
 }: ListParams): Promise<PagedResult<LostPostDTO>> {
   const skip = (page - 1) * limit;
-  const where = buildSearchWhere(filters, LOST_STATUS_TO_DB);
+  const where = { ...buildSearchWhere(filters, LOST_STATUS_TO_DB), ...eventTimeWhere("lostAt", filters) };
   const [rows, total] = await Promise.all([
     prisma.lostPost.findMany({
       where,
@@ -447,7 +467,7 @@ export async function listFoundPosts({
   ...filters
 }: ListParams): Promise<PagedResult<FoundPostDTO>> {
   const skip = (page - 1) * limit;
-  const where = buildSearchWhere(filters, FOUND_STATUS_TO_DB);
+  const where = { ...buildSearchWhere(filters, FOUND_STATUS_TO_DB), ...eventTimeWhere("foundAt", filters) };
   const [rows, total] = await Promise.all([
     prisma.foundPost.findMany({
       where,
@@ -567,14 +587,17 @@ async function searchAllPosts({
   // assignable to both LostPost's and FoundPost's WhereInput regardless of
   // their (different) status enum types.
   const where = buildSearchWhere<never>(filters);
+  // 기간 검색 필터: each board filters by its own 분실/습득 시점 column.
+  const lostWhere = { ...where, ...eventTimeWhere("lostAt", filters) };
+  const foundWhere = { ...where, ...eventTimeWhere("foundAt", filters) };
   const orderBy = buildOrderBy(filters.sort);
   const depth = Math.min(page * limit, 1000);
 
   const [lostRows, foundRows, lostTotal, foundTotal] = await Promise.all([
-    prisma.lostPost.findMany({ where, orderBy, take: depth, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } }),
-    prisma.foundPost.findMany({ where, orderBy, take: depth, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } }),
-    prisma.lostPost.count({ where }),
-    prisma.foundPost.count({ where }),
+    prisma.lostPost.findMany({ where: lostWhere, orderBy, take: depth, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } }),
+    prisma.foundPost.findMany({ where: foundWhere, orderBy, take: depth, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } }),
+    prisma.lostPost.count({ where: lostWhere }),
+    prisma.foundPost.count({ where: foundWhere }),
   ]);
 
   const sortSign = filters.sort === "oldest" ? 1 : -1;

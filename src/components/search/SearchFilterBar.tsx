@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { CAMPUSES, CATEGORIES } from "@/lib/posts/schema";
 import type { PostListType, PostType, SortOption } from "@/lib/posts/schema";
 import { AISearchPanel } from "./AISearchPanel";
+import { EventPeriodFilter } from "./EventPeriodFilter";
+import { isPeriodRangeInvalid, periodStateToEntries, readPeriodState, withPeriodParams, type PeriodState } from "./periodParams";
 import { SearchModeToggle, type SearchUiMode } from "./SearchModeToggle";
 import { SearchIcon } from "@/components/icons";
 import { useI18n } from "@/lib/i18n/client";
@@ -106,7 +108,7 @@ export function SearchFilterBar({
   const searchParams = useSearchParams();
   const { t } = useI18n();
 
-  const hasActiveFilters = ["q", "category", "campus", "status", "sort", "mode"].some((key) =>
+  const hasActiveFilters = ["q", "category", "campus", "status", "sort", "mode", "period"].some((key) =>
     searchParams.get(key),
   );
 
@@ -141,6 +143,23 @@ export function SearchFilterBar({
   // <select> when present, otherwise the page's fixed board (/lost ->
   // "lost", /found -> "found"). Never "all" once fixedType is given.
   const aiSearchType: PostListType = showTypeFilter ? type : (fixedType ?? "all");
+  // The board the keyword filters apply to (the period label names its
+  // time field): /search's type select, otherwise the page's fixed board.
+  const keywordBoardType: PostListType = showTypeFilter ? type : (fixedType ?? "all");
+
+  // 기간 검색 필터 (분실/습득 시점 기준): seeded from the URL (the source of
+  // truth, so shared links keep the filter) and shared by both modes.
+  // Keyword mode applies it on submit like every other filter here; AI
+  // mode (which never navigates) sends it with each search and mirrors it
+  // into the current URL right away so the address bar stays shareable.
+  const [periodState, setPeriodState] = useState<PeriodState>(() => readPeriodState(searchParams));
+  const aiPeriodQuery = new URLSearchParams(periodStateToEntries(periodState)).toString();
+
+  function handleAiPeriodChange(next: PeriodState) {
+    setPeriodState(next);
+    const query = withPeriodParams(window.location.search, next);
+    window.history.replaceState(null, "", query ? `${window.location.pathname}?${query}` : window.location.pathname);
+  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -158,6 +177,10 @@ export function SearchFilterBar({
         params.set(key, value.trim());
       }
     }
+    // An inverted custom range is shown inline by EventPeriodFilter; don't
+    // navigate to a URL the server would reject.
+    if (isPeriodRangeInvalid(periodState)) return;
+    for (const [key, value] of periodStateToEntries(periodState)) params.set(key, value);
     // A new search always starts from page 1 -- keeping the old page
     // number here could point past the end of the new result set.
 
@@ -215,7 +238,10 @@ export function SearchFilterBar({
       )}
 
       {mode === "ai" && imageSearchEnabled ? (
-        <AISearchPanel type={aiSearchType} />
+        <>
+          <EventPeriodFilter value={periodState} onChange={handleAiPeriodChange} boardType={aiSearchType} size="sm" />
+          <AISearchPanel type={aiSearchType} extraQuery={aiPeriodQuery} />
+        </>
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           {/* AI 검색 입력창(AISearchPanel)과 같은 pill 모양 -- 모드를
@@ -325,6 +351,8 @@ export function SearchFilterBar({
                 </option>
               ))}
             </select>
+
+            <EventPeriodFilter value={periodState} onChange={setPeriodState} boardType={keywordBoardType} />
 
             {hasActiveFilters && (
               <button
