@@ -41,19 +41,18 @@ type PostCardProps = {
   //   using the old default is unaffected).
   // - "decimal": AI 검색 고도화 Phase's own requirement -- AI 검색 결과와
   //   게시글 상세 AI 추천은 이제 "AI 유사도 0.87"처럼 소수 두 자리로
-  //   표시한다("87%"/"87점"/확률 표현 금지, see this phase's spec). Used
-  //   by both AI 검색(AISearchPanel) and the post-detail AI recommendation
-  //   (SimilarPostsSection) -- the latter's score, once combined with an
-  //   image signal, is recommendation/service.ts's (now shared via
-  //   rankFusion.ts) min-max-normalized-and-averaged value, not raw
-  //   cosine -- but that's the exact same shape searchPostsAI's combined
-  //   path produces (rankFusion.combineRankings), so "AI 유사도" reads
-  //   consistently in both places.
+  //   표시한다("87%"/"87점"/확률 표현 금지, see this phase's spec). Now
+  //   used only by the post-detail AI recommendation (SimilarPostsSection),
+  //   whose score is rankFusion.ts's absolute D3 "AI 유사도" (a calibrated
+  //   similarity, not a probability). AI 검색(AISearchPanel) used this too
+  //   until the AI 검색 점수 숨김 Phase, which switched it to "hidden" --
+  //   see that component's own comment.
   // - "hidden": no badge at all, even though `post.score` is present --
-  //   only the "분실물 작성 직후" auto-recommendation view uses this (see
+  //   the "분실물 작성 직후" auto-recommendation view (see
   //   PendingRecommendations/SimilarPostsSection's own `showScore`), so a
   //   just-created post's recommendations read as pure suggestions
-  //   ("AI가 찾아본 비슷한 습득물"), never a numeric claim.
+  //   ("AI가 찾아본 비슷한 습득물"), never a numeric claim; and every AI
+  //   검색 result (AISearchPanel).
   scoreDisplay?: "percentage" | "decimal" | "hidden";
 };
 

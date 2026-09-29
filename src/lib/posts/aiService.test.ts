@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { User } from "@/generated/prisma/client";
 import { normalizeScore } from "@/lib/ai/matching";
+import { aiSimilarity } from "@/lib/ai/rankFusion";
 
 const lostPost = {
   findMany: vi.fn(),
@@ -51,6 +52,9 @@ const findPostsBySemanticQuery = vi.fn();
 // Phase 32: image search's own collaborators, mocked the same way.
 const imageEmbed = vi.fn();
 const findPostsByImageQuery = vi.fn();
+// AI 유사도 척도 통일 Phase: the text + image AI 검색 path's per-candidate
+// cosine lookup, mocked the same way.
+const findCandidateCosinesForQuery = vi.fn();
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost, matchCandidateCache } }));
 vi.mock("@/generated/prisma/client", () => ({
@@ -75,7 +79,7 @@ const notifyKeywordAlertSubscribers = vi.fn();
 vi.mock("@/lib/keywordAlert/matcher", () => ({ notifyKeywordAlertSubscribers }));
 vi.mock("@/lib/ai/embedding", () => ({ getEmbeddingProvider: () => ({ embed }) }));
 vi.mock("@/lib/ai/imageEmbedding", () => ({ getImageEmbeddingProvider: () => ({ embed: imageEmbed }) }));
-vi.mock("@/lib/ai/vectorSearch", () => ({ findPostsBySemanticQuery, findPostsByImageQuery }));
+vi.mock("@/lib/ai/vectorSearch", () => ({ findPostsBySemanticQuery, findPostsByImageQuery, findCandidateCosinesForQuery }));
 // Phase 12-5: organization/service.ts's own import chain (authz.ts,
 // generated Prisma enums for OrganizationRole/Status/RequestStatus) has
 // nothing to do with what this file tests -- only validateOrganizationPosting()
@@ -1342,22 +1346,22 @@ describe("searchPostsAI", () => {
     expect(result.items.map((p) => p.id)).toEqual([9]);
   });
 
-  it("text + image: runs both vector searches and combines them via the shared rankFusion logic", async () => {
+  it("text + image: scores the thresholded text ∪ image pool with both signals and sorts by AI 유사도 (D3-pool)", async () => {
     embed.mockResolvedValueOnce([0.1]);
     imageEmbed.mockResolvedValueOnce([0.2]);
-    // Candidate 3 is present in both the text and image ranking (and is
-    // the best raw score in each), while 1 only has a text score and 2
-    // only has an image score -- min-max normalizing each signal over its
-    // own {low, high} pair maps 3 to 1 on both signals (averaging to 1),
-    // while 1 and 2 each normalize to 0 with no second signal to average
-    // against -- so 3 should rank first, 1 and 2 tied behind it.
     findPostsBySemanticQuery.mockResolvedValueOnce([
       { id: 1, score: 0.75 },
       { id: 3, score: 0.9 },
+      { id: 4, score: 0.6 }, // below AI_SEARCH_MIN_SIMILARITY -- never enters the pool
     ]);
     findPostsByImageQuery.mockResolvedValueOnce([
       { id: 2, score: 0.75 },
       { id: 3, score: 0.9 },
+    ]);
+    findCandidateCosinesForQuery.mockResolvedValueOnce([
+      { id: 1, text: 0.5, image: null },
+      { id: 2, text: 0.2, image: 0.8 },
+      { id: 3, text: 0.8, image: 0.8 },
     ]);
     lostPost.findMany.mockResolvedValueOnce([row({ id: 1 }), row({ id: 2 }), row({ id: 3 })]);
 
@@ -1368,8 +1372,36 @@ describe("searchPostsAI", () => {
 
     expect(embed).toHaveBeenCalledWith("검은색 에어팟");
     expect(imageEmbed).toHaveBeenCalled();
+    expect(findCandidateCosinesForQuery).toHaveBeenCalledWith("lost", [0.1], [0.2], [1, 3, 2]);
     expect(result.items.map((p) => p.id)).toEqual([3, 1, 2]);
-    expect(result.items[0].score).toBeCloseTo(1);
+    expect(result.items.map((p) => p.score)).toEqual([
+      aiSimilarity(0.8, 0.8)!.score,
+      aiSimilarity(0.5, null)!.score,
+      aiSimilarity(0.2, 0.8)!.score,
+    ]);
+    expect(result.items[0].score).toBeLessThan(1);
+  });
+
+  it("text only: shows the D3 AI 유사도 of the raw cosine, without the title bonus", async () => {
+    embed.mockResolvedValueOnce([0.1]);
+    findPostsBySemanticQuery.mockResolvedValueOnce([{ id: 1, score: 0.84 }]);
+    lostPost.findMany.mockResolvedValueOnce([row({ id: 1, title: "검은색 에어팟 분실" })]);
+
+    const result = await searchPostsAI("lost", "검은색 에어팟", undefined, { page: 1, limit: 20 });
+
+    // normalized 0.84 -> cosine 0.68; the title matches, but the bonus only reorders.
+    expect(result.items[0].score).toBeCloseTo(aiSimilarity(0.68, null)!.score, 6);
+  });
+
+  it("image only: shows the D3 AI 유사도 of the raw image cosine", async () => {
+    const fakeImage = new Blob([new Uint8Array([1])], { type: "image/jpeg" });
+    imageEmbed.mockResolvedValueOnce([0.3]);
+    findPostsByImageQuery.mockResolvedValueOnce([{ id: 9, score: 0.95 }]);
+    lostPost.findMany.mockResolvedValueOnce([row({ id: 9 })]);
+
+    const result = await searchPostsAI("lost", undefined, fakeImage, { page: 1, limit: 20 });
+
+    expect(result.items[0].score).toBeCloseTo(aiSimilarity(null, 0.9)!.score, 6);
   });
 
   it("rejects when neither text nor image is given", async () => {

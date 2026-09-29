@@ -1,0 +1,1875 @@
+{
+  "environment": "Preview (swqvlihgupranzfzjevb)",
+  "evaluatedAt": "2026-09-29T06:35:30.593Z",
+  "minimum": 0.35,
+  "metrics": {
+    "L→F": {
+      "before": {
+        "n": 56,
+        "top1": 0.714,
+        "recall3": 0.929,
+        "recall5": 0.946,
+        "mrr": 0.822
+      },
+      "after": {
+        "n": 56,
+        "top1": 0.714,
+        "recall3": 0.929,
+        "recall5": 0.929,
+        "mrr": 0.818
+      }
+    },
+    "F→L": {
+      "before": {
+        "n": 56,
+        "top1": 0.857,
+        "recall3": 0.946,
+        "recall5": 0.964,
+        "mrr": 0.905
+      },
+      "after": {
+        "n": 56,
+        "top1": 0.857,
+        "recall3": 0.929,
+        "recall5": 0.929,
+        "mrr": 0.893
+      }
+    },
+    "easy": {
+      "before": {
+        "n": 26,
+        "top1": 0.962,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 0.981
+      },
+      "after": {
+        "n": 26,
+        "top1": 0.962,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 0.981
+      }
+    },
+    "medium": {
+      "before": {
+        "n": 48,
+        "top1": 0.75,
+        "recall3": 0.938,
+        "recall5": 0.958,
+        "mrr": 0.844
+      },
+      "after": {
+        "n": 48,
+        "top1": 0.75,
+        "recall3": 0.917,
+        "recall5": 0.917,
+        "mrr": 0.83
+      }
+    },
+    "hard": {
+      "before": {
+        "n": 38,
+        "top1": 0.711,
+        "recall3": 0.895,
+        "recall5": 0.921,
+        "mrr": 0.808
+      },
+      "after": {
+        "n": 38,
+        "top1": 0.711,
+        "recall3": 0.895,
+        "recall5": 0.895,
+        "mrr": 0.803
+      }
+    }
+  },
+  "noMatchExposure": {
+    "before": 1,
+    "after": 0.48,
+    "avgShownBefore": 5,
+    "avgShownAfter": 0.96,
+    "stillShown": [
+      "M01 손목시계 잃어버렸어요 (0.509, 3개)",
+      "M04 은반지 분실 (0.438, 3개)",
+      "M06 노트북 거치대 두고 왔어요 (0.572, 5개)",
+      "M08 베이지 양산 잃어버렸어요 (0.440, 1개)",
+      "M10 서류 든 L자 파일 분실 (0.354, 1개)",
+      "M11 보라색 텀블러 잃어버렸어요 (0.519, 2개)",
+      "M12 분홍 노트북 잃어버렸어요 (0.525, 4개)",
+      "M13 빨간 볼캡 습득 (0.508, 1개)",
+      "M14 연두색 무선 마우스 주웠어요 (0.399, 1개)",
+      "M15 빨간 뿔테 안경 분실 (0.474, 2개)",
+      "M21 투명 학생증 케이스 분실 (0.476, 2개)",
+      "M22 교직원증 주웠어요 (0.352, 1개)",
+      "M24 은색 명함지갑 분실 (0.396, 3개)",
+      "M25 라이트닝 케이블 잃어버렸어요 (0.435, 5개)",
+      "M26 실리콘 이어팁 한 쌍 주웠어요 (0.352, 1개)",
+      "M28 USB 허브 잃어버렸어요 (0.473, 2개)",
+      "M29 검은색 외장하드 주웠어요 (0.360, 1개)",
+      "M31 날진 물병 분실 (0.389, 1개)",
+      "M32 안경닦이 천 주웠어요 (0.509, 3개)",
+      "M33 우노 카드 잃어버렸어요 (0.437, 2개)",
+      "M37 빨간 목걸이 줄만 잃어버렸어요 (0.370, 1개)",
+      "M38 초록 스프링 노트 분실 (0.403, 1개)",
+      "M40 만년필 잃어버렸어요 (0.371, 1개)",
+      "M44 고데기 주웠어요 (0.400, 1개)"
+    ]
+  },
+  "pairListsEmptiedAfter": "3/112",
+  "answersLost": [
+    "P06 L→F (hard) was #5, AI 유사도 0.300",
+    "R14 F→L (medium) was #5, AI 유사도 0.160",
+    "R17 F→L (medium) was #2, AI 유사도 0.277"
+  ],
+  "demoScenarios": [
+    {
+      "pairId": "P08",
+      "direction": "L→F",
+      "before": 3,
+      "after": 3,
+      "answerScore": 0.622,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "P08",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.622,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "P01",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.785,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "P01",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.785,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "P17",
+      "direction": "L→F",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.611,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "P17",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.611,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "P11",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.61,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "P11",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.61,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "P05",
+      "direction": "L→F",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.617,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "P05",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.617,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "P14",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.585,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "P14",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.585,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "P20",
+      "direction": "L→F",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.643,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "P20",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.643,
+      "shownAfter": 3
+    }
+  ],
+  "rows": [
+    {
+      "pairId": "P08",
+      "batch": "batch0-demo",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 3,
+      "after": 3,
+      "answerScore": 0.6221983095910508,
+      "top1": 0.6799898280660053,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "P08",
+      "batch": "batch0-demo",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6221983095910508,
+      "top1": 0.6221983095910508,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "P01",
+      "batch": "batch0-demo",
+      "difficulty": "easy",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.7847703784318596,
+      "top1": 0.7847703784318596,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "P01",
+      "batch": "batch0-demo",
+      "difficulty": "easy",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.7847703784318596,
+      "top1": 0.7847703784318596,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "P17",
+      "batch": "batch0-demo",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.610508387108077,
+      "top1": 0.6166570017309658,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "P17",
+      "batch": "batch0-demo",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.610508387108077,
+      "top1": 0.610508387108077,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "P11",
+      "batch": "batch0-demo",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6103031625546688,
+      "top1": 0.6103031625546688,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "P11",
+      "batch": "batch0-demo",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6103031625546688,
+      "top1": 0.6103031625546688,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "P05",
+      "batch": "batch1-extra",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.61681758457796,
+      "top1": 0.665223041200955,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "P05",
+      "batch": "batch1-extra",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.61681758457796,
+      "top1": 0.61681758457796,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "P09",
+      "batch": "batch1-extra",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.4173257003927731,
+      "top1": 0.42463554917033963,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "P09",
+      "batch": "batch1-extra",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.4173257003927731,
+      "top1": 0.5253940715376338,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "P14",
+      "batch": "batch1-extra",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.585342937218016,
+      "top1": 0.585342937218016,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "P14",
+      "batch": "batch1-extra",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.585342937218016,
+      "top1": 0.585342937218016,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "P15",
+      "batch": "batch1-extra",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.45870488495430356,
+      "top1": 0.45870488495430356,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "P15",
+      "batch": "batch1-extra",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.45870488495430356,
+      "top1": 0.47344833915912526,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "P20",
+      "batch": "batch1-extra",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.6429711302945821,
+      "top1": 0.6814154037247916,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "P20",
+      "batch": "batch1-extra",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6429711302945821,
+      "top1": 0.6429711302945821,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "P28",
+      "batch": "batch1-extra",
+      "difficulty": "easy",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6938957284690564,
+      "top1": 0.6938957284690564,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "P28",
+      "batch": "batch1-extra",
+      "difficulty": "easy",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6938957284690564,
+      "top1": 0.6938957284690564,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "P06",
+      "batch": "batch2",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 5,
+      "after": null,
+      "answerScore": 0.299764571834568,
+      "top1": 0.4096108218736871,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "P06",
+      "batch": "batch2",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": null,
+      "after": null,
+      "answerScore": null,
+      "top1": 0.39275037664625667,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "P13",
+      "batch": "batch2",
+      "difficulty": "easy",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.8057387971482269,
+      "top1": 0.8057387971482269,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "P13",
+      "batch": "batch2",
+      "difficulty": "easy",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.8057387971482269,
+      "top1": 0.8057387971482269,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "P22",
+      "batch": "batch2",
+      "difficulty": "easy",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.8102169935052784,
+      "top1": 0.8102169935052784,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "P22",
+      "batch": "batch2",
+      "difficulty": "easy",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.8102169935052784,
+      "top1": 0.8102169935052784,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "P25",
+      "batch": "batch2",
+      "difficulty": "easy",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6358072177722567,
+      "top1": 0.6358072177722567,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "P25",
+      "batch": "batch2",
+      "difficulty": "easy",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6358072177722567,
+      "top1": 0.6358072177722567,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "P26",
+      "batch": "batch2",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.47859814642819554,
+      "top1": 0.47859814642819554,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "P26",
+      "batch": "batch2",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.47859814642819554,
+      "top1": 0.47859814642819554,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "P27",
+      "batch": "batch2",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": null,
+      "after": null,
+      "answerScore": null,
+      "top1": 0.3388694008431597,
+      "shownAfter": 0
+    },
+    {
+      "pairId": "P27",
+      "batch": "batch2",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": null,
+      "after": null,
+      "answerScore": null,
+      "top1": 0.12281843047558999,
+      "shownAfter": 0
+    },
+    {
+      "pairId": "P29",
+      "batch": "batch2",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.44167331164256646,
+      "top1": 0.4633978454471737,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "P29",
+      "batch": "batch2",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.44167331164256646,
+      "top1": 0.44167331164256646,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "P30",
+      "batch": "batch2",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.49476003687279024,
+      "top1": 0.49476003687279024,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "P30",
+      "batch": "batch2",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.49476003687279024,
+      "top1": 0.49476003687279024,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "Q01",
+      "batch": "batch2",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.7755778541820963,
+      "top1": 0.7755778541820963,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "Q01",
+      "batch": "batch2",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.7755778541820963,
+      "top1": 0.7755778541820963,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "Q02",
+      "batch": "batch2",
+      "difficulty": "easy",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6970048827282797,
+      "top1": 0.6970048827282797,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "Q02",
+      "batch": "batch2",
+      "difficulty": "easy",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6970048827282797,
+      "top1": 0.6970048827282797,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "Q03",
+      "batch": "batch2",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.7046524077602583,
+      "top1": 0.7046524077602583,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "Q03",
+      "batch": "batch2",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.7046524077602583,
+      "top1": 0.7046524077602583,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "Q04",
+      "batch": "batch2",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.5806632481712896,
+      "top1": 0.6176661417602786,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "Q04",
+      "batch": "batch2",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5806632481712896,
+      "top1": 0.5806632481712896,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "Q05",
+      "batch": "batch2",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.4862620938998185,
+      "top1": 0.4862620938998185,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "Q05",
+      "batch": "batch2",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.4862620938998185,
+      "top1": 0.4862620938998185,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "Q06",
+      "batch": "batch2",
+      "difficulty": "easy",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6714358524244868,
+      "top1": 0.6714358524244868,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "Q06",
+      "batch": "batch2",
+      "difficulty": "easy",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6714358524244868,
+      "top1": 0.6714358524244868,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "Q07",
+      "batch": "batch2",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6549264055020892,
+      "top1": 0.6549264055020892,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "Q07",
+      "batch": "batch2",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6549264055020892,
+      "top1": 0.6549264055020892,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "Q08",
+      "batch": "batch2",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.3928989532093161,
+      "top1": 0.4037246058104805,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "Q08",
+      "batch": "batch2",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.3928989532093161,
+      "top1": 0.39857325537322696,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "R01",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5708313049614555,
+      "top1": 0.5708313049614555,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R01",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5708313049614555,
+      "top1": 0.5708313049614555,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R02",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.5169567647207862,
+      "top1": 0.6485108085291091,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R02",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5169567647207862,
+      "top1": 0.5169567647207862,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "R03",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5909029653915892,
+      "top1": 0.5909029653915892,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "R03",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5909029653915892,
+      "top1": 0.5909029653915892,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "R04",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5337259049523552,
+      "top1": 0.5337259049523552,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "R04",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5337259049523552,
+      "top1": 0.5337259049523552,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R05",
+      "batch": "batch3",
+      "difficulty": "easy",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6941899971920632,
+      "top1": 0.6941899971920632,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R05",
+      "batch": "batch3",
+      "difficulty": "easy",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6941899971920632,
+      "top1": 0.6941899971920632,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R06",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.7845217225591834,
+      "top1": 0.7845217225591834,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R06",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.7845217225591834,
+      "top1": 0.7845217225591834,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "R07",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.5717165021608936,
+      "top1": 0.5966987161618076,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "R07",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5717165021608936,
+      "top1": 0.5717165021608936,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "R08",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6613167717358044,
+      "top1": 0.6613167717358044,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R08",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6613167717358044,
+      "top1": 0.6613167717358044,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "R09",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.7132068926429851,
+      "top1": 0.7132068926429851,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "R09",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.7132068926429851,
+      "top1": 0.7132068926429851,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "R10",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.7496172831431474,
+      "top1": 0.7496172831431474,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "R10",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.7496172831431474,
+      "top1": 0.7496172831431474,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "R11",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5773790709051956,
+      "top1": 0.5773790709051956,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "R11",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5773790709051956,
+      "top1": 0.5773790709051956,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "R12",
+      "batch": "batch3",
+      "difficulty": "easy",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6809174652122029,
+      "top1": 0.6809174652122029,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R12",
+      "batch": "batch3",
+      "difficulty": "easy",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6809174652122029,
+      "top1": 0.6809174652122029,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "R13",
+      "batch": "batch3",
+      "difficulty": "easy",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6627517968004131,
+      "top1": 0.6627517968004131,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "R13",
+      "batch": "batch3",
+      "difficulty": "easy",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6627517968004131,
+      "top1": 0.6627517968004131,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "R14",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": null,
+      "after": null,
+      "answerScore": null,
+      "top1": 0.5094458685473804,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "R14",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 5,
+      "after": null,
+      "answerScore": 0.16026794417714246,
+      "top1": 0.2561953214615619,
+      "shownAfter": 0
+    },
+    {
+      "pairId": "R15",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.42467741590275754,
+      "top1": 0.42467741590275754,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "R15",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.42467741590275754,
+      "top1": 0.42467741590275754,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "R16",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.5720347918489688,
+      "top1": 0.5948208773824633,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "R16",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5720347918489688,
+      "top1": 0.5720347918489688,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "R17",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": null,
+      "after": null,
+      "answerScore": null,
+      "top1": 0.5205967202147872,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R17",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 2,
+      "after": null,
+      "answerScore": 0.2773297698423208,
+      "top1": 0.4003688654746213,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "R18",
+      "batch": "batch3",
+      "difficulty": "easy",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.4761985480030798,
+      "top1": 0.4761985480030798,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "R18",
+      "batch": "batch3",
+      "difficulty": "easy",
+      "direction": "F→L",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.4761985480030798,
+      "top1": 0.5237664721487135,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "R19",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.7848938328559405,
+      "top1": 0.7848938328559405,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R19",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.7848938328559405,
+      "top1": 0.7848938328559405,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "R20",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6856439291295086,
+      "top1": 0.6856439291295086,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R20",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6856439291295086,
+      "top1": 0.6856439291295086,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "R21",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.38945291885473554,
+      "top1": 0.38945291885473554,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "R21",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.38945291885473554,
+      "top1": 0.38945291885473554,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "R22",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5453384205155697,
+      "top1": 0.5453384205155697,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "R22",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5453384205155697,
+      "top1": 0.5453384205155697,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "R23",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.4875275040517057,
+      "top1": 0.4875275040517057,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "R23",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.4875275040517057,
+      "top1": 0.4875275040517057,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "R24",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6285187592163977,
+      "top1": 0.6285187592163977,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R24",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6285187592163977,
+      "top1": 0.6285187592163977,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R25",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5759667207269673,
+      "top1": 0.5759667207269673,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "R25",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.5759667207269673,
+      "top1": 0.5759667207269673,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "R26",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.4714189802963474,
+      "top1": 0.4714189802963474,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "R26",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.4714189802963474,
+      "top1": 0.4714189802963474,
+      "shownAfter": 3
+    },
+    {
+      "pairId": "R27",
+      "batch": "batch3",
+      "difficulty": "easy",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6668970502235821,
+      "top1": 0.6668970502235821,
+      "shownAfter": 1
+    },
+    {
+      "pairId": "R27",
+      "batch": "batch3",
+      "difficulty": "easy",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6668970502235821,
+      "top1": 0.6668970502235821,
+      "shownAfter": 4
+    },
+    {
+      "pairId": "R28",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "L→F",
+      "before": 2,
+      "after": 2,
+      "answerScore": 0.42872780821425815,
+      "top1": 0.542845087629997,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "R28",
+      "batch": "batch3",
+      "difficulty": "medium",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.42872780821425815,
+      "top1": 0.42872780821425815,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "R29",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6956477440472504,
+      "top1": 0.6956477440472504,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R29",
+      "batch": "batch3",
+      "difficulty": "hard",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6956477440472504,
+      "top1": 0.6956477440472504,
+      "shownAfter": 5
+    },
+    {
+      "pairId": "R30",
+      "batch": "batch3",
+      "difficulty": "easy",
+      "direction": "L→F",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6384517644171862,
+      "top1": 0.6384517644171862,
+      "shownAfter": 2
+    },
+    {
+      "pairId": "R30",
+      "batch": "batch3",
+      "difficulty": "easy",
+      "direction": "F→L",
+      "before": 1,
+      "after": 1,
+      "answerScore": 0.6384517644171862,
+      "top1": 0.6384517644171862,
+      "shownAfter": 2
+    }
+  ],
+  "noMatch": [
+    {
+      "noMatchId": "M01",
+      "title": "손목시계 잃어버렸어요",
+      "proximity": "(batch2)",
+      "top1": 0.509456273889917,
+      "shownBefore": 5,
+      "shownAfter": 3
+    },
+    {
+      "noMatchId": "M02",
+      "title": "카메라 렌즈캡 주웠어요",
+      "proximity": "(batch2)",
+      "top1": 0.17351991719784818,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M03",
+      "title": "집게핀 주웠어요",
+      "proximity": "(batch2)",
+      "top1": 0.25796171277993435,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M04",
+      "title": "은반지 분실",
+      "proximity": "(batch2)",
+      "top1": 0.4383358880249656,
+      "shownBefore": 5,
+      "shownAfter": 3
+    },
+    {
+      "noMatchId": "M05",
+      "title": "목베개 습득",
+      "proximity": "(batch2)",
+      "top1": 0.33077361333060096,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M06",
+      "title": "노트북 거치대 두고 왔어요",
+      "proximity": "(batch2)",
+      "top1": 0.5716955396460673,
+      "shownBefore": 5,
+      "shownAfter": 5
+    },
+    {
+      "noMatchId": "M07",
+      "title": "줄넘기 주웠어요",
+      "proximity": "(batch2)",
+      "top1": 0.13434096276524254,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M08",
+      "title": "베이지 양산 잃어버렸어요",
+      "proximity": "(batch2)",
+      "top1": 0.43962271447082163,
+      "shownBefore": 5,
+      "shownAfter": 1
+    },
+    {
+      "noMatchId": "M09",
+      "title": "손선풍기 주웠어요",
+      "proximity": "(batch2)",
+      "top1": 0.21994193475466045,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M10",
+      "title": "서류 든 L자 파일 분실",
+      "proximity": "(batch2)",
+      "top1": 0.35411664471417836,
+      "shownBefore": 5,
+      "shownAfter": 1
+    },
+    {
+      "noMatchId": "M11",
+      "title": "보라색 텀블러 잃어버렸어요",
+      "proximity": "near",
+      "top1": 0.5185751984552738,
+      "shownBefore": 5,
+      "shownAfter": 2
+    },
+    {
+      "noMatchId": "M12",
+      "title": "분홍 노트북 잃어버렸어요",
+      "proximity": "near",
+      "top1": 0.5253130062837652,
+      "shownBefore": 5,
+      "shownAfter": 4
+    },
+    {
+      "noMatchId": "M13",
+      "title": "빨간 볼캡 습득",
+      "proximity": "near",
+      "top1": 0.5083144369069957,
+      "shownBefore": 5,
+      "shownAfter": 1
+    },
+    {
+      "noMatchId": "M14",
+      "title": "연두색 무선 마우스 주웠어요",
+      "proximity": "near",
+      "top1": 0.3991130905519879,
+      "shownBefore": 5,
+      "shownAfter": 1
+    },
+    {
+      "noMatchId": "M15",
+      "title": "빨간 뿔테 안경 분실",
+      "proximity": "near",
+      "top1": 0.47414868447855313,
+      "shownBefore": 5,
+      "shownAfter": 2
+    },
+    {
+      "noMatchId": "M16",
+      "title": "갤럭시 워치 분실",
+      "proximity": "near",
+      "top1": 0.27556435107760563,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M17",
+      "title": "소니 헤드폰 잃어버렸어요",
+      "proximity": "near",
+      "top1": 0.26235516039187173,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M18",
+      "title": "게이밍 헤드셋 주웠어요",
+      "proximity": "near",
+      "top1": 0.3120314446352378,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M19",
+      "title": "C타입 HDMI 젠더 분실",
+      "proximity": "near",
+      "top1": 0.31478036294880907,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M20",
+      "title": "랜선 주웠어요",
+      "proximity": "near",
+      "top1": 0.24212550027039598,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M21",
+      "title": "투명 학생증 케이스 분실",
+      "proximity": "near",
+      "top1": 0.47591171746820815,
+      "shownBefore": 5,
+      "shownAfter": 2
+    },
+    {
+      "noMatchId": "M22",
+      "title": "교직원증 주웠어요",
+      "proximity": "near",
+      "top1": 0.35165453404890296,
+      "shownBefore": 5,
+      "shownAfter": 1
+    },
+    {
+      "noMatchId": "M23",
+      "title": "아이돌 포토카드 주웠어요",
+      "proximity": "near",
+      "top1": 0.2858814492626072,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M24",
+      "title": "은색 명함지갑 분실",
+      "proximity": "near",
+      "top1": 0.39640708853205164,
+      "shownBefore": 5,
+      "shownAfter": 3
+    },
+    {
+      "noMatchId": "M25",
+      "title": "라이트닝 케이블 잃어버렸어요",
+      "proximity": "near",
+      "top1": 0.43450386076620506,
+      "shownBefore": 5,
+      "shownAfter": 5
+    },
+    {
+      "noMatchId": "M26",
+      "title": "실리콘 이어팁 한 쌍 주웠어요",
+      "proximity": "near",
+      "top1": 0.35232137850195466,
+      "shownBefore": 5,
+      "shownAfter": 1
+    },
+    {
+      "noMatchId": "M27",
+      "title": "JBL 블루투스 스피커 분실",
+      "proximity": "near",
+      "top1": 0.14142060808101406,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M28",
+      "title": "USB 허브 잃어버렸어요",
+      "proximity": "near",
+      "top1": 0.47344833915912526,
+      "shownBefore": 5,
+      "shownAfter": 2
+    },
+    {
+      "noMatchId": "M29",
+      "title": "검은색 외장하드 주웠어요",
+      "proximity": "near",
+      "top1": 0.360467329581626,
+      "shownBefore": 5,
+      "shownAfter": 1
+    },
+    {
+      "noMatchId": "M30",
+      "title": "텀블러 뚜껑만 주웠어요",
+      "proximity": "near",
+      "top1": 0.328377967274108,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M31",
+      "title": "날진 물병 분실",
+      "proximity": "near",
+      "top1": 0.38897063510900787,
+      "shownBefore": 5,
+      "shownAfter": 1
+    },
+    {
+      "noMatchId": "M32",
+      "title": "안경닦이 천 주웠어요",
+      "proximity": "near",
+      "top1": 0.5089562286233991,
+      "shownBefore": 5,
+      "shownAfter": 3
+    },
+    {
+      "noMatchId": "M33",
+      "title": "우노 카드 잃어버렸어요",
+      "proximity": "near",
+      "top1": 0.43733694036888104,
+      "shownBefore": 5,
+      "shownAfter": 2
+    },
+    {
+      "noMatchId": "M34",
+      "title": "악보 파일 습득",
+      "proximity": "near",
+      "top1": 0.28143568426284515,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M35",
+      "title": "강아지 인형 키링 분실",
+      "proximity": "near",
+      "top1": 0.21566341218070115,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M36",
+      "title": "자전거 자물쇠 주웠어요",
+      "proximity": "near",
+      "top1": 0.3379595758332818,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M37",
+      "title": "빨간 목걸이 줄만 잃어버렸어요",
+      "proximity": "near",
+      "top1": 0.3698226349571456,
+      "shownBefore": 5,
+      "shownAfter": 1
+    },
+    {
+      "noMatchId": "M38",
+      "title": "초록 스프링 노트 분실",
+      "proximity": "near",
+      "top1": 0.4031716651958764,
+      "shownBefore": 5,
+      "shownAfter": 1
+    },
+    {
+      "noMatchId": "M39",
+      "title": "형광펜 세트 주웠어요",
+      "proximity": "near",
+      "top1": 0.2614247862372253,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M40",
+      "title": "만년필 잃어버렸어요",
+      "proximity": "near",
+      "top1": 0.37066783580935986,
+      "shownBefore": 5,
+      "shownAfter": 1
+    },
+    {
+      "noMatchId": "M41",
+      "title": "카메라 스트랩 습득",
+      "proximity": "near",
+      "top1": 0.1769307642052926,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M42",
+      "title": "인감도장 분실",
+      "proximity": "far",
+      "top1": 0.2830330855145274,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M43",
+      "title": "립밤 주웠어요",
+      "proximity": "far",
+      "top1": 0.3017716328482583,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M44",
+      "title": "고데기 주웠어요",
+      "proximity": "far",
+      "top1": 0.39994908402691237,
+      "shownBefore": 5,
+      "shownAfter": 1
+    },
+    {
+      "noMatchId": "M45",
+      "title": "야구 글러브 잃어버렸어요",
+      "proximity": "far",
+      "top1": 0.2675115870152206,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M46",
+      "title": "배드민턴 라켓 습득",
+      "proximity": "far",
+      "top1": 0.22286335414384043,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M47",
+      "title": "콘택트렌즈 케이스 분실",
+      "proximity": "far",
+      "top1": 0.32074885432944755,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M48",
+      "title": "무릎담요 주웠어요",
+      "proximity": "far",
+      "top1": 0.2823986898920469,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M49",
+      "title": "손목 보호대 습득",
+      "proximity": "far",
+      "top1": 0.30265230221970424,
+      "shownBefore": 5,
+      "shownAfter": 0
+    },
+    {
+      "noMatchId": "M50",
+      "title": "휴대용 가습기 잃어버렸어요",
+      "proximity": "far",
+      "top1": 0.24083359134424728,
+      "shownBefore": 5,
+      "shownAfter": 0
+    }
+  ]
+}

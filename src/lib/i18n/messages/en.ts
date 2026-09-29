@@ -155,7 +155,7 @@ export const en: Dictionary = {
   "aiSearch.typeConflict": "AI search with a photo is only available once you pick the lost or found board.",
   "aiSearch.failed": "AI search failed. Please try again.",
   "aiSearch.resultNotice":
-    "These are similar found items identified by AI. A higher similarity score means a closer match to the item you are looking for.",
+    "These are similar found items identified by AI. Items nearer the top are closer matches to the item you are looking for.",
   "aiSearch.empty.title": "No similar posts found.",
   "aiSearch.empty.description": "Try a different search term or photo.",
 

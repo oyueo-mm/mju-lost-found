@@ -25,6 +25,14 @@ export function normalizeScore(cosine: number): number {
   return Math.min(1, Math.max(0, (cosine + 1) / 2));
 }
 
+// Inverse of normalizeScore() -- recovers the raw cosine from a
+// VectorSearchResult's score (exact, since cosine is always within [-1, 1]
+// and never actually hits the clamp). Used where a single-signal search
+// result needs its "AI 유사도" (rankFusion.ts's D3 scale) for display.
+export function cosineFromNormalizedScore(score: number): number {
+  return score * 2 - 1;
+}
+
 // Phase 6 note: this file used to also export rankCandidates() -- a
 // brute-force ranker that re-embedded every candidate in Node on every
 // request (bounded back then by a hardcoded 50-candidate pool). It's

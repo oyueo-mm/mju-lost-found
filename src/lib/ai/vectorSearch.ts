@@ -279,3 +279,61 @@ export async function findPostsByImageQuery(
 
   return rows.map((row) => ({ id: row.id, score: normalizeScore(row.similarity) }));
 }
+
+// ---------- Per-candidate raw cosines (AI 유사도 척도 통일 Phase) ----------
+
+// Raw cosine similarity (not normalizeScore'd) of each signal for one
+// already-chosen candidate, or null when that signal can't be compared
+// because either side has no embedding for it. rankFusion.ts turns these
+// into the shared "AI 유사도" (D3) score.
+export type CandidateCosines = { id: number; text: number | null; image: number | null };
+
+// Recommendation side: source post vs. a candidate pool on the opposite
+// board. The pool already came out of findSimilarPosts()/
+// findSimilarPostsByImage() (so eligibility filters were applied there);
+// this only fills in *both* signals for every pooled candidate, including
+// the one a candidate didn't make the other signal's top-K for.
+export async function findCandidateCosines(
+  sourceType: PostType,
+  sourcePostId: number,
+  candidateIds: number[],
+): Promise<CandidateCosines[]> {
+  if (candidateIds.length === 0) return [];
+  const sourceTable = sourceType === "lost" ? Prisma.raw(`"LostPost"`) : Prisma.raw(`"FoundPost"`);
+  const candidateTable = sourceType === "lost" ? Prisma.raw(`"FoundPost"`) : Prisma.raw(`"LostPost"`);
+
+  return prisma.$queryRaw<CandidateCosines[]>(Prisma.sql`
+    SELECT c.id AS id,
+           CASE WHEN c.embedding IS NOT NULL AND s.embedding IS NOT NULL
+                THEN 1 - (c.embedding <=> s.embedding) END AS text,
+           CASE WHEN c."imageEmbedding" IS NOT NULL AND s."imageEmbedding" IS NOT NULL
+                THEN 1 - (c."imageEmbedding" <=> s."imageEmbedding") END AS image
+    FROM ${candidateTable} c,
+         (SELECT embedding, "imageEmbedding" FROM ${sourceTable} WHERE id = ${sourcePostId}) s
+    WHERE c.id IN (${Prisma.join(candidateIds)})
+  `);
+}
+
+// AI 검색 (text + image) side: the same, against an on-the-fly text query
+// vector and image query vector instead of a stored source post.
+export async function findCandidateCosinesForQuery(
+  targetType: PostType,
+  textVector: number[],
+  imageVector: number[],
+  candidateIds: number[],
+): Promise<CandidateCosines[]> {
+  if (candidateIds.length === 0) return [];
+  const table = targetType === "lost" ? Prisma.raw(`"LostPost"`) : Prisma.raw(`"FoundPost"`);
+  const textLiteral = `[${textVector.join(",")}]`;
+  const imageLiteral = `[${imageVector.join(",")}]`;
+
+  return prisma.$queryRaw<CandidateCosines[]>(Prisma.sql`
+    SELECT id,
+           CASE WHEN embedding IS NOT NULL
+                THEN 1 - (embedding <=> ${textLiteral}::vector) END AS text,
+           CASE WHEN "imageEmbedding" IS NOT NULL
+                THEN 1 - ("imageEmbedding" <=> ${imageLiteral}::vector) END AS image
+    FROM ${table}
+    WHERE id IN (${Prisma.join(candidateIds)})
+  `);
+}

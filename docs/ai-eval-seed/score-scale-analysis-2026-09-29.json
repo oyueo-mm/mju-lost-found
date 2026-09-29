@@ -1,0 +1,4299 @@
+{
+  "environment": "Preview (swqvlihgupranzfzjevb)",
+  "evaluatedAt": "2026-09-29T05:52:05.229Z",
+  "rawCosine": {
+    "textBackground": {
+      "n": 2292,
+      "min": 0.044,
+      "p10": 0.229,
+      "p50": 0.361,
+      "p90": 0.502,
+      "p99": 0.66,
+      "max": 0.788
+    },
+    "textAnswer": {
+      "n": 26,
+      "min": 0.337,
+      "p10": 0.625,
+      "p50": 0.716,
+      "p90": 0.832,
+      "p99": 0.879,
+      "max": 0.879
+    },
+    "imageBackground": {
+      "n": 288,
+      "min": 0.481,
+      "p10": 0.578,
+      "p50": 0.657,
+      "p90": 0.741,
+      "p99": 0.889,
+      "max": 0.958
+    },
+    "imageAnswer": {
+      "n": 12,
+      "min": 0.827,
+      "p10": 0.86,
+      "p50": 0.925,
+      "p90": 0.942,
+      "p99": 0.948,
+      "max": 0.948
+    }
+  },
+  "calibrationBaselines": {
+    "textP50": 0.361,
+    "imageP50": 0.657
+  },
+  "shownCandidates": {
+    "total": 310,
+    "withBothImages": 86
+  },
+  "definitions": {
+    "D0_current": {
+      "answer": {
+        "n": 51,
+        "min": 0,
+        "p10": 0.777,
+        "p50": 1,
+        "p90": 1,
+        "p99": 1,
+        "max": 1
+      },
+      "noMatchTop1": {
+        "n": 10,
+        "min": 1,
+        "p10": 1,
+        "p50": 1,
+        "p90": 1,
+        "p99": 1,
+        "max": 1
+      },
+      "wrongTop1InPairs": {
+        "n": 11,
+        "min": 0.945,
+        "p10": 0.959,
+        "p50": 1,
+        "p90": 1,
+        "p99": 1,
+        "max": 1
+      },
+      "allNonAnswerShown": {
+        "n": 259,
+        "min": 0,
+        "p10": 0,
+        "p50": 0.189,
+        "p90": 0.837,
+        "p99": 1,
+        "max": 1
+      },
+      "aucAnswerVsNoMatchTop1": 0.382,
+      "aucAnswerVsAllNonAnswer": 0.932,
+      "top1Displayed1000": 57,
+      "adjacentInversions": 0,
+      "listsWithInversion": "0/62"
+    },
+    "D1_meanNormalized": {
+      "answer": {
+        "n": 51,
+        "min": 0.669,
+        "p10": 0.814,
+        "p50": 0.894,
+        "p90": 0.939,
+        "p99": 0.942,
+        "max": 0.942
+      },
+      "noMatchTop1": {
+        "n": 10,
+        "min": 0.715,
+        "p10": 0.736,
+        "p50": 0.785,
+        "p90": 0.821,
+        "p99": 0.863,
+        "max": 0.863
+      },
+      "wrongTop1InPairs": {
+        "n": 11,
+        "min": 0.72,
+        "p10": 0.789,
+        "p50": 0.829,
+        "p90": 0.914,
+        "p99": 0.918,
+        "max": 0.918
+      },
+      "allNonAnswerShown": {
+        "n": 259,
+        "min": 0.671,
+        "p10": 0.725,
+        "p50": 0.776,
+        "p90": 0.85,
+        "p99": 0.902,
+        "max": 0.918
+      },
+      "aucAnswerVsNoMatchTop1": 0.929,
+      "aucAnswerVsAllNonAnswer": 0.913,
+      "top1Displayed1000": 0,
+      "adjacentInversions": 20,
+      "listsWithInversion": "16/62"
+    },
+    "D2_meanCosine": {
+      "answer": {
+        "n": 51,
+        "min": 0.337,
+        "p10": 0.628,
+        "p50": 0.787,
+        "p90": 0.879,
+        "p99": 0.885,
+        "max": 0.885
+      },
+      "noMatchTop1": {
+        "n": 10,
+        "min": 0.431,
+        "p10": 0.472,
+        "p50": 0.571,
+        "p90": 0.642,
+        "p99": 0.726,
+        "max": 0.726
+      },
+      "wrongTop1InPairs": {
+        "n": 11,
+        "min": 0.439,
+        "p10": 0.578,
+        "p50": 0.657,
+        "p90": 0.827,
+        "p99": 0.835,
+        "max": 0.835
+      },
+      "allNonAnswerShown": {
+        "n": 259,
+        "min": 0.343,
+        "p10": 0.451,
+        "p50": 0.553,
+        "p90": 0.7,
+        "p99": 0.804,
+        "max": 0.835
+      },
+      "aucAnswerVsNoMatchTop1": 0.929,
+      "aucAnswerVsAllNonAnswer": 0.913,
+      "top1Displayed1000": 0,
+      "adjacentInversions": 20,
+      "listsWithInversion": "16/62"
+    },
+    "D3_calibratedMean": {
+      "answer": {
+        "n": 51,
+        "min": 0,
+        "p10": 0.417,
+        "p50": 0.617,
+        "p90": 0.785,
+        "p99": 0.81,
+        "max": 0.81
+      },
+      "noMatchTop1": {
+        "n": 10,
+        "min": 0.108,
+        "p10": 0.173,
+        "p50": 0.327,
+        "p90": 0.439,
+        "p99": 0.571,
+        "max": 0.571
+      },
+      "wrongTop1InPairs": {
+        "n": 11,
+        "min": 0.122,
+        "p10": 0.338,
+        "p50": 0.463,
+        "p90": 0.68,
+        "p99": 0.681,
+        "max": 0.681
+      },
+      "allNonAnswerShown": {
+        "n": 259,
+        "min": 0,
+        "p10": 0.109,
+        "p50": 0.245,
+        "p90": 0.463,
+        "p99": 0.665,
+        "max": 0.681
+      },
+      "aucAnswerVsNoMatchTop1": 0.925,
+      "aucAnswerVsAllNonAnswer": 0.925,
+      "top1Displayed1000": 0,
+      "adjacentInversions": 23,
+      "listsWithInversion": "17/62"
+    },
+    "D4_textOnlyCosine": {
+      "answer": {
+        "n": 51,
+        "min": 0.337,
+        "p10": 0.625,
+        "p50": 0.716,
+        "p90": 0.832,
+        "p99": 0.879,
+        "max": 0.879
+      },
+      "noMatchTop1": {
+        "n": 10,
+        "min": 0.431,
+        "p10": 0.472,
+        "p50": 0.571,
+        "p90": 0.642,
+        "p99": 0.726,
+        "max": 0.726
+      },
+      "wrongTop1InPairs": {
+        "n": 11,
+        "min": 0.439,
+        "p10": 0.578,
+        "p50": 0.657,
+        "p90": 0.756,
+        "p99": 0.761,
+        "max": 0.761
+      },
+      "allNonAnswerShown": {
+        "n": 259,
+        "min": 0.186,
+        "p10": 0.4,
+        "p50": 0.523,
+        "p90": 0.66,
+        "p99": 0.756,
+        "max": 0.788
+      },
+      "aucAnswerVsNoMatchTop1": 0.898,
+      "aucAnswerVsAllNonAnswer": 0.911,
+      "top1Displayed1000": 0,
+      "adjacentInversions": 27,
+      "listsWithInversion": "20/62"
+    }
+  },
+  "lists": [
+    {
+      "label": "P08 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 6,
+          "answer": false,
+          "current": 0.964,
+          "textCos": 0.727,
+          "imageCos": 0.927,
+          "D1_meanNormalized": 0.914,
+          "D2_meanCosine": 0.827,
+          "D3_calibratedMean": 0.68,
+          "D4_textOnlyCosine": 0.727
+        },
+        {
+          "rank": 2,
+          "id": 12,
+          "answer": true,
+          "current": 0.697,
+          "textCos": 0.625,
+          "imageCos": 0.942,
+          "D1_meanNormalized": 0.892,
+          "D2_meanCosine": 0.784,
+          "D3_calibratedMean": 0.622,
+          "D4_textOnlyCosine": 0.625
+        },
+        {
+          "rank": 3,
+          "id": 9,
+          "answer": false,
+          "current": 0.633,
+          "textCos": 0.664,
+          "imageCos": 0.866,
+          "D1_meanNormalized": 0.882,
+          "D2_meanCosine": 0.765,
+          "D3_calibratedMean": 0.542,
+          "D4_textOnlyCosine": 0.664
+        },
+        {
+          "rank": 4,
+          "id": 36,
+          "answer": false,
+          "current": 0.111,
+          "textCos": 0.4,
+          "imageCos": 0.753,
+          "D1_meanNormalized": 0.788,
+          "D2_meanCosine": 0.577,
+          "D3_calibratedMean": 0.171,
+          "D4_textOnlyCosine": 0.4
+        },
+        {
+          "rank": 5,
+          "id": 4,
+          "answer": false,
+          "current": 0.006,
+          "textCos": 0.559,
+          "imageCos": 0.677,
+          "D1_meanNormalized": 0.809,
+          "D2_meanCosine": 0.618,
+          "D3_calibratedMean": 0.184,
+          "D4_textOnlyCosine": 0.559
+        }
+      ]
+    },
+    {
+      "label": "P08 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 4,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.625,
+          "imageCos": 0.942,
+          "D1_meanNormalized": 0.892,
+          "D2_meanCosine": 0.784,
+          "D3_calibratedMean": 0.622,
+          "D4_textOnlyCosine": 0.625
+        },
+        {
+          "rank": 2,
+          "id": 10,
+          "answer": false,
+          "current": 0.338,
+          "textCos": 0.557,
+          "imageCos": 0.652,
+          "D1_meanNormalized": 0.802,
+          "D2_meanCosine": 0.605,
+          "D3_calibratedMean": 0.153,
+          "D4_textOnlyCosine": 0.557
+        },
+        {
+          "rank": 3,
+          "id": 11,
+          "answer": false,
+          "current": 0.208,
+          "textCos": 0.4,
+          "imageCos": 0.743,
+          "D1_meanNormalized": 0.786,
+          "D2_meanCosine": 0.571,
+          "D3_calibratedMean": 0.156,
+          "D4_textOnlyCosine": 0.4
+        },
+        {
+          "rank": 4,
+          "id": 23,
+          "answer": false,
+          "current": 0.19,
+          "textCos": 0.385,
+          "imageCos": 0.739,
+          "D1_meanNormalized": 0.781,
+          "D2_meanCosine": 0.562,
+          "D3_calibratedMean": 0.138,
+          "D4_textOnlyCosine": 0.385
+        },
+        {
+          "rank": 5,
+          "id": 7,
+          "answer": false,
+          "current": 0.038,
+          "textCos": 0.526,
+          "imageCos": null,
+          "D1_meanNormalized": 0.763,
+          "D2_meanCosine": 0.526,
+          "D3_calibratedMean": 0.258,
+          "D4_textOnlyCosine": 0.526
+        }
+      ]
+    },
+    {
+      "label": "P01 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 5,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.821,
+          "imageCos": 0.948,
+          "D1_meanNormalized": 0.942,
+          "D2_meanCosine": 0.885,
+          "D3_calibratedMean": 0.785,
+          "D4_textOnlyCosine": 0.821
+        },
+        {
+          "rank": 2,
+          "id": 1,
+          "answer": false,
+          "current": 0.693,
+          "textCos": 0.753,
+          "imageCos": null,
+          "D1_meanNormalized": 0.877,
+          "D2_meanCosine": 0.753,
+          "D3_calibratedMean": 0.613,
+          "D4_textOnlyCosine": 0.753
+        },
+        {
+          "rank": 3,
+          "id": 2,
+          "answer": false,
+          "current": 0.384,
+          "textCos": 0.71,
+          "imageCos": 0.81,
+          "D1_meanNormalized": 0.88,
+          "D2_meanCosine": 0.76,
+          "D3_calibratedMean": 0.497,
+          "D4_textOnlyCosine": 0.71
+        },
+        {
+          "rank": 4,
+          "id": 23,
+          "answer": false,
+          "current": 0.047,
+          "textCos": 0.451,
+          "imageCos": 0.769,
+          "D1_meanNormalized": 0.805,
+          "D2_meanCosine": 0.61,
+          "D3_calibratedMean": 0.234,
+          "D4_textOnlyCosine": 0.451
+        },
+        {
+          "rank": 5,
+          "id": 22,
+          "answer": false,
+          "current": 0.035,
+          "textCos": 0.599,
+          "imageCos": 0.773,
+          "D1_meanNormalized": 0.843,
+          "D2_meanCosine": 0.686,
+          "D3_calibratedMean": 0.356,
+          "D4_textOnlyCosine": 0.599
+        }
+      ]
+    },
+    {
+      "label": "P01 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 1,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.821,
+          "imageCos": 0.948,
+          "D1_meanNormalized": 0.942,
+          "D2_meanCosine": 0.885,
+          "D3_calibratedMean": 0.785,
+          "D4_textOnlyCosine": 0.821
+        },
+        {
+          "rank": 2,
+          "id": 11,
+          "answer": false,
+          "current": 0.304,
+          "textCos": 0.475,
+          "imageCos": 0.791,
+          "D1_meanNormalized": 0.817,
+          "D2_meanCosine": 0.633,
+          "D3_calibratedMean": 0.285,
+          "D4_textOnlyCosine": 0.475
+        },
+        {
+          "rank": 3,
+          "id": 10,
+          "answer": false,
+          "current": 0.252,
+          "textCos": 0.67,
+          "imageCos": 0.746,
+          "D1_meanNormalized": 0.854,
+          "D2_meanCosine": 0.708,
+          "D3_calibratedMean": 0.372,
+          "D4_textOnlyCosine": 0.67
+        },
+        {
+          "rank": 4,
+          "id": 12,
+          "answer": false,
+          "current": 0.22,
+          "textCos": 0.502,
+          "imageCos": 0.772,
+          "D1_meanNormalized": 0.818,
+          "D2_meanCosine": 0.637,
+          "D3_calibratedMean": 0.278,
+          "D4_textOnlyCosine": 0.502
+        },
+        {
+          "rank": 5,
+          "id": 26,
+          "answer": false,
+          "current": 0.093,
+          "textCos": 0.594,
+          "imageCos": null,
+          "D1_meanNormalized": 0.797,
+          "D2_meanCosine": 0.594,
+          "D3_calibratedMean": 0.364,
+          "D4_textOnlyCosine": 0.594
+        }
+      ]
+    },
+    {
+      "label": "P17 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 11,
+          "answer": false,
+          "current": 0.945,
+          "textCos": 0.751,
+          "imageCos": 0.87,
+          "D1_meanNormalized": 0.905,
+          "D2_meanCosine": 0.811,
+          "D3_calibratedMean": 0.616,
+          "D4_textOnlyCosine": 0.751
+        },
+        {
+          "rank": 2,
+          "id": 10,
+          "answer": true,
+          "current": 0.924,
+          "textCos": 0.711,
+          "imageCos": 0.888,
+          "D1_meanNormalized": 0.9,
+          "D2_meanCosine": 0.8,
+          "D3_calibratedMean": 0.61,
+          "D4_textOnlyCosine": 0.711
+        },
+        {
+          "rank": 3,
+          "id": 3,
+          "answer": false,
+          "current": 0.395,
+          "textCos": 0.592,
+          "imageCos": null,
+          "D1_meanNormalized": 0.796,
+          "D2_meanCosine": 0.592,
+          "D3_calibratedMean": 0.36,
+          "D4_textOnlyCosine": 0.592
+        },
+        {
+          "rank": 4,
+          "id": 45,
+          "answer": false,
+          "current": 0.189,
+          "textCos": 0.28,
+          "imageCos": 0.76,
+          "D1_meanNormalized": 0.76,
+          "D2_meanCosine": 0.52,
+          "D3_calibratedMean": 0.149,
+          "D4_textOnlyCosine": 0.28
+        },
+        {
+          "rank": 5,
+          "id": 19,
+          "answer": false,
+          "current": 0.083,
+          "textCos": 0.531,
+          "imageCos": 0.73,
+          "D1_meanNormalized": 0.815,
+          "D2_meanCosine": 0.63,
+          "D3_calibratedMean": 0.239,
+          "D4_textOnlyCosine": 0.531
+        }
+      ]
+    },
+    {
+      "label": "P17 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 3,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.711,
+          "imageCos": 0.888,
+          "D1_meanNormalized": 0.9,
+          "D2_meanCosine": 0.8,
+          "D3_calibratedMean": 0.61,
+          "D4_textOnlyCosine": 0.711
+        },
+        {
+          "rank": 2,
+          "id": 13,
+          "answer": false,
+          "current": 0.735,
+          "textCos": 0.642,
+          "imageCos": null,
+          "D1_meanNormalized": 0.821,
+          "D2_meanCosine": 0.642,
+          "D3_calibratedMean": 0.439,
+          "D4_textOnlyCosine": 0.642
+        },
+        {
+          "rank": 3,
+          "id": 29,
+          "answer": false,
+          "current": 0.212,
+          "textCos": 0.351,
+          "imageCos": 0.697,
+          "D1_meanNormalized": 0.762,
+          "D2_meanCosine": 0.524,
+          "D3_calibratedMean": 0.059,
+          "D4_textOnlyCosine": 0.351
+        },
+        {
+          "rank": 4,
+          "id": 23,
+          "answer": false,
+          "current": 0.116,
+          "textCos": 0.186,
+          "imageCos": 0.674,
+          "D1_meanNormalized": 0.715,
+          "D2_meanCosine": 0.43,
+          "D3_calibratedMean": 0.025,
+          "D4_textOnlyCosine": 0.186
+        },
+        {
+          "rank": 5,
+          "id": 16,
+          "answer": false,
+          "current": 0.083,
+          "textCos": 0.472,
+          "imageCos": null,
+          "D1_meanNormalized": 0.736,
+          "D2_meanCosine": 0.472,
+          "D3_calibratedMean": 0.173,
+          "D4_textOnlyCosine": 0.472
+        }
+      ]
+    },
+    {
+      "label": "P11 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 8,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.658,
+          "imageCos": 0.916,
+          "D1_meanNormalized": 0.894,
+          "D2_meanCosine": 0.787,
+          "D3_calibratedMean": 0.61,
+          "D4_textOnlyCosine": 0.658
+        },
+        {
+          "rank": 2,
+          "id": 7,
+          "answer": false,
+          "current": 0.6,
+          "textCos": 0.623,
+          "imageCos": 0.798,
+          "D1_meanNormalized": 0.855,
+          "D2_meanCosine": 0.71,
+          "D3_calibratedMean": 0.409,
+          "D4_textOnlyCosine": 0.623
+        },
+        {
+          "rank": 3,
+          "id": 4,
+          "answer": false,
+          "current": 0.599,
+          "textCos": 0.632,
+          "imageCos": 0.776,
+          "D1_meanNormalized": 0.852,
+          "D2_meanCosine": 0.704,
+          "D3_calibratedMean": 0.385,
+          "D4_textOnlyCosine": 0.632
+        },
+        {
+          "rank": 4,
+          "id": 6,
+          "answer": false,
+          "current": 0.113,
+          "textCos": 0.559,
+          "imageCos": 0.626,
+          "D1_meanNormalized": 0.796,
+          "D2_meanCosine": 0.593,
+          "D3_calibratedMean": 0.155,
+          "D4_textOnlyCosine": 0.559
+        },
+        {
+          "rank": 5,
+          "id": 5,
+          "answer": false,
+          "current": 0.002,
+          "textCos": 0.482,
+          "imageCos": 0.671,
+          "D1_meanNormalized": 0.788,
+          "D2_meanCosine": 0.576,
+          "D3_calibratedMean": 0.114,
+          "D4_textOnlyCosine": 0.482
+        }
+      ]
+    },
+    {
+      "label": "P11 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 2,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.658,
+          "imageCos": 0.916,
+          "D1_meanNormalized": 0.894,
+          "D2_meanCosine": 0.787,
+          "D3_calibratedMean": 0.61,
+          "D4_textOnlyCosine": 0.658
+        },
+        {
+          "rank": 2,
+          "id": 36,
+          "answer": false,
+          "current": 0.408,
+          "textCos": 0.548,
+          "imageCos": null,
+          "D1_meanNormalized": 0.774,
+          "D2_meanCosine": 0.548,
+          "D3_calibratedMean": 0.292,
+          "D4_textOnlyCosine": 0.548
+        },
+        {
+          "rank": 3,
+          "id": 11,
+          "answer": false,
+          "current": 0.243,
+          "textCos": 0.556,
+          "imageCos": 0.613,
+          "D1_meanNormalized": 0.792,
+          "D2_meanCosine": 0.585,
+          "D3_calibratedMean": 0.153,
+          "D4_textOnlyCosine": 0.556
+        },
+        {
+          "rank": 4,
+          "id": 30,
+          "answer": false,
+          "current": 0.218,
+          "textCos": 0.513,
+          "imageCos": null,
+          "D1_meanNormalized": 0.756,
+          "D2_meanCosine": 0.513,
+          "D3_calibratedMean": 0.237,
+          "D4_textOnlyCosine": 0.513
+        },
+        {
+          "rank": 5,
+          "id": 1,
+          "answer": false,
+          "current": 0.049,
+          "textCos": 0.415,
+          "imageCos": 0.618,
+          "D1_meanNormalized": 0.758,
+          "D2_meanCosine": 0.517,
+          "D3_calibratedMean": 0.042,
+          "D4_textOnlyCosine": 0.415
+        }
+      ]
+    },
+    {
+      "label": "P05 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 25,
+          "answer": true,
+          "current": 0.777,
+          "textCos": 0.772,
+          "imageCos": 0.86,
+          "D1_meanNormalized": 0.908,
+          "D2_meanCosine": 0.816,
+          "D3_calibratedMean": 0.617,
+          "D4_textOnlyCosine": 0.772
+        },
+        {
+          "rank": 2,
+          "id": 22,
+          "answer": false,
+          "current": 0.761,
+          "textCos": 0.65,
+          "imageCos": 0.958,
+          "D1_meanNormalized": 0.902,
+          "D2_meanCosine": 0.804,
+          "D3_calibratedMean": 0.665,
+          "D4_textOnlyCosine": 0.65
+        },
+        {
+          "rank": 3,
+          "id": 5,
+          "answer": false,
+          "current": 0.159,
+          "textCos": 0.502,
+          "imageCos": 0.772,
+          "D1_meanNormalized": 0.818,
+          "D2_meanCosine": 0.637,
+          "D3_calibratedMean": 0.278,
+          "D4_textOnlyCosine": 0.502
+        },
+        {
+          "rank": 4,
+          "id": 1,
+          "answer": false,
+          "current": 0.055,
+          "textCos": 0.531,
+          "imageCos": null,
+          "D1_meanNormalized": 0.765,
+          "D2_meanCosine": 0.531,
+          "D3_calibratedMean": 0.265,
+          "D4_textOnlyCosine": 0.531
+        },
+        {
+          "rank": 5,
+          "id": 18,
+          "answer": false,
+          "current": 0.018,
+          "textCos": 0.521,
+          "imageCos": null,
+          "D1_meanNormalized": 0.761,
+          "D2_meanCosine": 0.521,
+          "D3_calibratedMean": 0.25,
+          "D4_textOnlyCosine": 0.521
+        }
+      ]
+    },
+    {
+      "label": "P05 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 12,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.772,
+          "imageCos": 0.86,
+          "D1_meanNormalized": 0.908,
+          "D2_meanCosine": 0.816,
+          "D3_calibratedMean": 0.617,
+          "D4_textOnlyCosine": 0.772
+        },
+        {
+          "rank": 2,
+          "id": 1,
+          "answer": false,
+          "current": 0.269,
+          "textCos": 0.592,
+          "imageCos": 0.696,
+          "D1_meanNormalized": 0.822,
+          "D2_meanCosine": 0.644,
+          "D3_calibratedMean": 0.236,
+          "D4_textOnlyCosine": 0.592
+        },
+        {
+          "rank": 3,
+          "id": 10,
+          "answer": false,
+          "current": 0.153,
+          "textCos": 0.518,
+          "imageCos": 0.663,
+          "D1_meanNormalized": 0.795,
+          "D2_meanCosine": 0.591,
+          "D3_calibratedMean": 0.132,
+          "D4_textOnlyCosine": 0.518
+        },
+        {
+          "rank": 4,
+          "id": 29,
+          "answer": false,
+          "current": 0.147,
+          "textCos": 0.568,
+          "imageCos": 0.611,
+          "D1_meanNormalized": 0.795,
+          "D2_meanCosine": 0.589,
+          "D3_calibratedMean": 0.162,
+          "D4_textOnlyCosine": 0.568
+        },
+        {
+          "rank": 5,
+          "id": 15,
+          "answer": false,
+          "current": 0.081,
+          "textCos": 0.553,
+          "imageCos": null,
+          "D1_meanNormalized": 0.776,
+          "D2_meanCosine": 0.553,
+          "D3_calibratedMean": 0.3,
+          "D4_textOnlyCosine": 0.553
+        }
+      ]
+    },
+    {
+      "label": "P09 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 14,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.628,
+          "imageCos": null,
+          "D1_meanNormalized": 0.814,
+          "D2_meanCosine": 0.628,
+          "D3_calibratedMean": 0.417,
+          "D4_textOnlyCosine": 0.628
+        },
+        {
+          "rank": 2,
+          "id": 4,
+          "answer": false,
+          "current": 0.294,
+          "textCos": 0.556,
+          "imageCos": null,
+          "D1_meanNormalized": 0.778,
+          "D2_meanCosine": 0.556,
+          "D3_calibratedMean": 0.305,
+          "D4_textOnlyCosine": 0.556
+        },
+        {
+          "rank": 3,
+          "id": 41,
+          "answer": false,
+          "current": 0.17,
+          "textCos": 0.544,
+          "imageCos": null,
+          "D1_meanNormalized": 0.772,
+          "D2_meanCosine": 0.544,
+          "D3_calibratedMean": 0.285,
+          "D4_textOnlyCosine": 0.544
+        },
+        {
+          "rank": 4,
+          "id": 7,
+          "answer": false,
+          "current": 0.071,
+          "textCos": 0.534,
+          "imageCos": null,
+          "D1_meanNormalized": 0.767,
+          "D2_meanCosine": 0.534,
+          "D3_calibratedMean": 0.27,
+          "D4_textOnlyCosine": 0.534
+        },
+        {
+          "rank": 5,
+          "id": 12,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.526,
+          "imageCos": null,
+          "D1_meanNormalized": 0.763,
+          "D2_meanCosine": 0.526,
+          "D3_calibratedMean": 0.258,
+          "D4_textOnlyCosine": 0.526
+        }
+      ]
+    },
+    {
+      "label": "P09 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 8,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.628,
+          "imageCos": null,
+          "D1_meanNormalized": 0.814,
+          "D2_meanCosine": 0.628,
+          "D3_calibratedMean": 0.417,
+          "D4_textOnlyCosine": 0.628
+        },
+        {
+          "rank": 2,
+          "id": 30,
+          "answer": false,
+          "current": 0.794,
+          "textCos": 0.613,
+          "imageCos": null,
+          "D1_meanNormalized": 0.807,
+          "D2_meanCosine": 0.613,
+          "D3_calibratedMean": 0.394,
+          "D4_textOnlyCosine": 0.613
+        },
+        {
+          "rank": 3,
+          "id": 7,
+          "answer": false,
+          "current": 0.538,
+          "textCos": 0.596,
+          "imageCos": null,
+          "D1_meanNormalized": 0.798,
+          "D2_meanCosine": 0.596,
+          "D3_calibratedMean": 0.367,
+          "D4_textOnlyCosine": 0.596
+        },
+        {
+          "rank": 4,
+          "id": 37,
+          "answer": false,
+          "current": 0.266,
+          "textCos": 0.577,
+          "imageCos": null,
+          "D1_meanNormalized": 0.788,
+          "D2_meanCosine": 0.577,
+          "D3_calibratedMean": 0.337,
+          "D4_textOnlyCosine": 0.577
+        },
+        {
+          "rank": 5,
+          "id": 4,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.558,
+          "imageCos": null,
+          "D1_meanNormalized": 0.779,
+          "D2_meanCosine": 0.558,
+          "D3_calibratedMean": 0.308,
+          "D4_textOnlyCosine": 0.558
+        }
+      ]
+    },
+    {
+      "label": "P14 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 23,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.716,
+          "imageCos": 0.868,
+          "D1_meanNormalized": 0.896,
+          "D2_meanCosine": 0.792,
+          "D3_calibratedMean": 0.585,
+          "D4_textOnlyCosine": 0.716
+        },
+        {
+          "rank": 2,
+          "id": 20,
+          "answer": false,
+          "current": 0.837,
+          "textCos": 0.553,
+          "imageCos": 0.852,
+          "D1_meanNormalized": 0.851,
+          "D2_meanCosine": 0.703,
+          "D3_calibratedMean": 0.435,
+          "D4_textOnlyCosine": 0.553
+        },
+        {
+          "rank": 3,
+          "id": 24,
+          "answer": false,
+          "current": 0.321,
+          "textCos": 0.613,
+          "imageCos": null,
+          "D1_meanNormalized": 0.807,
+          "D2_meanCosine": 0.613,
+          "D3_calibratedMean": 0.394,
+          "D4_textOnlyCosine": 0.613
+        },
+        {
+          "rank": 4,
+          "id": 2,
+          "answer": false,
+          "current": 0.304,
+          "textCos": 0.343,
+          "imageCos": 0.801,
+          "D1_meanNormalized": 0.786,
+          "D2_meanCosine": 0.572,
+          "D3_calibratedMean": 0.209,
+          "D4_textOnlyCosine": 0.343
+        },
+        {
+          "rank": 5,
+          "id": 6,
+          "answer": false,
+          "current": 0.258,
+          "textCos": 0.604,
+          "imageCos": 0.692,
+          "D1_meanNormalized": 0.824,
+          "D2_meanCosine": 0.648,
+          "D3_calibratedMean": 0.24,
+          "D4_textOnlyCosine": 0.604
+        }
+      ]
+    },
+    {
+      "label": "P14 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 11,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.716,
+          "imageCos": 0.868,
+          "D1_meanNormalized": 0.896,
+          "D2_meanCosine": 0.792,
+          "D3_calibratedMean": 0.585,
+          "D4_textOnlyCosine": 0.716
+        },
+        {
+          "rank": 2,
+          "id": 30,
+          "answer": false,
+          "current": 0.546,
+          "textCos": 0.616,
+          "imageCos": null,
+          "D1_meanNormalized": 0.808,
+          "D2_meanCosine": 0.616,
+          "D3_calibratedMean": 0.398,
+          "D4_textOnlyCosine": 0.616
+        },
+        {
+          "rank": 3,
+          "id": 1,
+          "answer": false,
+          "current": 0.421,
+          "textCos": 0.451,
+          "imageCos": 0.769,
+          "D1_meanNormalized": 0.805,
+          "D2_meanCosine": 0.61,
+          "D3_calibratedMean": 0.234,
+          "D4_textOnlyCosine": 0.451
+        },
+        {
+          "rank": 4,
+          "id": 36,
+          "answer": false,
+          "current": 0.258,
+          "textCos": 0.553,
+          "imageCos": null,
+          "D1_meanNormalized": 0.776,
+          "D2_meanCosine": 0.553,
+          "D3_calibratedMean": 0.299,
+          "D4_textOnlyCosine": 0.553
+        },
+        {
+          "rank": 5,
+          "id": 28,
+          "answer": false,
+          "current": 0.096,
+          "textCos": 0.517,
+          "imageCos": null,
+          "D1_meanNormalized": 0.758,
+          "D2_meanCosine": 0.517,
+          "D3_calibratedMean": 0.244,
+          "D4_textOnlyCosine": 0.517
+        }
+      ]
+    },
+    {
+      "label": "P15 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 13,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.654,
+          "imageCos": null,
+          "D1_meanNormalized": 0.827,
+          "D2_meanCosine": 0.654,
+          "D3_calibratedMean": 0.458,
+          "D4_textOnlyCosine": 0.654
+        },
+        {
+          "rank": 2,
+          "id": 61,
+          "answer": false,
+          "current": 0.264,
+          "textCos": 0.578,
+          "imageCos": null,
+          "D1_meanNormalized": 0.789,
+          "D2_meanCosine": 0.578,
+          "D3_calibratedMean": 0.339,
+          "D4_textOnlyCosine": 0.578
+        },
+        {
+          "rank": 3,
+          "id": 56,
+          "answer": false,
+          "current": 0.194,
+          "textCos": 0.57,
+          "imageCos": null,
+          "D1_meanNormalized": 0.785,
+          "D2_meanCosine": 0.57,
+          "D3_calibratedMean": 0.327,
+          "D4_textOnlyCosine": 0.57
+        },
+        {
+          "rank": 4,
+          "id": 39,
+          "answer": false,
+          "current": 0.142,
+          "textCos": 0.565,
+          "imageCos": null,
+          "D1_meanNormalized": 0.782,
+          "D2_meanCosine": 0.565,
+          "D3_calibratedMean": 0.319,
+          "D4_textOnlyCosine": 0.565
+        },
+        {
+          "rank": 5,
+          "id": 14,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.55,
+          "imageCos": null,
+          "D1_meanNormalized": 0.775,
+          "D2_meanCosine": 0.55,
+          "D3_calibratedMean": 0.296,
+          "D4_textOnlyCosine": 0.55
+        }
+      ]
+    },
+    {
+      "label": "P15 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 5,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.654,
+          "imageCos": null,
+          "D1_meanNormalized": 0.827,
+          "D2_meanCosine": 0.654,
+          "D3_calibratedMean": 0.458,
+          "D4_textOnlyCosine": 0.654
+        },
+        {
+          "rank": 2,
+          "id": 30,
+          "answer": false,
+          "current": 0.841,
+          "textCos": 0.637,
+          "imageCos": null,
+          "D1_meanNormalized": 0.819,
+          "D2_meanCosine": 0.637,
+          "D3_calibratedMean": 0.432,
+          "D4_textOnlyCosine": 0.637
+        },
+        {
+          "rank": 3,
+          "id": 37,
+          "answer": false,
+          "current": 0.242,
+          "textCos": 0.573,
+          "imageCos": null,
+          "D1_meanNormalized": 0.786,
+          "D2_meanCosine": 0.573,
+          "D3_calibratedMean": 0.331,
+          "D4_textOnlyCosine": 0.573
+        },
+        {
+          "rank": 4,
+          "id": 6,
+          "answer": false,
+          "current": 0.05,
+          "textCos": 0.552,
+          "imageCos": null,
+          "D1_meanNormalized": 0.776,
+          "D2_meanCosine": 0.552,
+          "D3_calibratedMean": 0.299,
+          "D4_textOnlyCosine": 0.552
+        },
+        {
+          "rank": 5,
+          "id": 38,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.547,
+          "imageCos": null,
+          "D1_meanNormalized": 0.773,
+          "D2_meanCosine": 0.547,
+          "D3_calibratedMean": 0.29,
+          "D4_textOnlyCosine": 0.547
+        }
+      ]
+    },
+    {
+      "label": "P20 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 19,
+          "answer": false,
+          "current": 0.959,
+          "textCos": 0.761,
+          "imageCos": 0.91,
+          "D1_meanNormalized": 0.918,
+          "D2_meanCosine": 0.835,
+          "D3_calibratedMean": 0.681,
+          "D4_textOnlyCosine": 0.761
+        },
+        {
+          "rank": 2,
+          "id": 21,
+          "answer": true,
+          "current": 0.752,
+          "textCos": 0.681,
+          "imageCos": 0.927,
+          "D1_meanNormalized": 0.902,
+          "D2_meanCosine": 0.804,
+          "D3_calibratedMean": 0.643,
+          "D4_textOnlyCosine": 0.681
+        },
+        {
+          "rank": 3,
+          "id": 16,
+          "answer": false,
+          "current": 0.679,
+          "textCos": 0.709,
+          "imageCos": null,
+          "D1_meanNormalized": 0.854,
+          "D2_meanCosine": 0.709,
+          "D3_calibratedMean": 0.544,
+          "D4_textOnlyCosine": 0.709
+        },
+        {
+          "rank": 4,
+          "id": 5,
+          "answer": false,
+          "current": 0.278,
+          "textCos": 0.67,
+          "imageCos": 0.746,
+          "D1_meanNormalized": 0.854,
+          "D2_meanCosine": 0.708,
+          "D3_calibratedMean": 0.372,
+          "D4_textOnlyCosine": 0.67
+        },
+        {
+          "rank": 5,
+          "id": 22,
+          "answer": false,
+          "current": 0.11,
+          "textCos": 0.488,
+          "imageCos": 0.745,
+          "D1_meanNormalized": 0.808,
+          "D2_meanCosine": 0.617,
+          "D3_calibratedMean": 0.228,
+          "D4_textOnlyCosine": 0.488
+        }
+      ]
+    },
+    {
+      "label": "P20 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 10,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.681,
+          "imageCos": 0.927,
+          "D1_meanNormalized": 0.902,
+          "D2_meanCosine": 0.804,
+          "D3_calibratedMean": 0.643,
+          "D4_textOnlyCosine": 0.681
+        },
+        {
+          "rank": 2,
+          "id": 20,
+          "answer": false,
+          "current": 0.727,
+          "textCos": 0.646,
+          "imageCos": null,
+          "D1_meanNormalized": 0.823,
+          "D2_meanCosine": 0.646,
+          "D3_calibratedMean": 0.445,
+          "D4_textOnlyCosine": 0.646
+        },
+        {
+          "rank": 3,
+          "id": 30,
+          "answer": false,
+          "current": 0.164,
+          "textCos": 0.574,
+          "imageCos": null,
+          "D1_meanNormalized": 0.787,
+          "D2_meanCosine": 0.574,
+          "D3_calibratedMean": 0.333,
+          "D4_textOnlyCosine": 0.574
+        },
+        {
+          "rank": 4,
+          "id": 1,
+          "answer": false,
+          "current": 0.135,
+          "textCos": 0.588,
+          "imageCos": 0.715,
+          "D1_meanNormalized": 0.826,
+          "D2_meanCosine": 0.651,
+          "D3_calibratedMean": 0.261,
+          "D4_textOnlyCosine": 0.588
+        },
+        {
+          "rank": 5,
+          "id": 29,
+          "answer": false,
+          "current": 0.062,
+          "textCos": 0.421,
+          "imageCos": 0.728,
+          "D1_meanNormalized": 0.787,
+          "D2_meanCosine": 0.575,
+          "D3_calibratedMean": 0.15,
+          "D4_textOnlyCosine": 0.421
+        }
+      ]
+    },
+    {
+      "label": "P28 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 17,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.804,
+          "imageCos": null,
+          "D1_meanNormalized": 0.902,
+          "D2_meanCosine": 0.804,
+          "D3_calibratedMean": 0.694,
+          "D4_textOnlyCosine": 0.804
+        },
+        {
+          "rank": 2,
+          "id": 15,
+          "answer": false,
+          "current": 0.923,
+          "textCos": 0.781,
+          "imageCos": null,
+          "D1_meanNormalized": 0.89,
+          "D2_meanCosine": 0.781,
+          "D3_calibratedMean": 0.657,
+          "D4_textOnlyCosine": 0.781
+        },
+        {
+          "rank": 3,
+          "id": 60,
+          "answer": false,
+          "current": 0.233,
+          "textCos": 0.567,
+          "imageCos": null,
+          "D1_meanNormalized": 0.784,
+          "D2_meanCosine": 0.567,
+          "D3_calibratedMean": 0.323,
+          "D4_textOnlyCosine": 0.567
+        },
+        {
+          "rank": 4,
+          "id": 38,
+          "answer": false,
+          "current": 0.178,
+          "textCos": 0.55,
+          "imageCos": null,
+          "D1_meanNormalized": 0.775,
+          "D2_meanCosine": 0.55,
+          "D3_calibratedMean": 0.296,
+          "D4_textOnlyCosine": 0.55
+        },
+        {
+          "rank": 5,
+          "id": 40,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.495,
+          "imageCos": null,
+          "D1_meanNormalized": 0.748,
+          "D2_meanCosine": 0.495,
+          "D3_calibratedMean": 0.21,
+          "D4_textOnlyCosine": 0.495
+        }
+      ]
+    },
+    {
+      "label": "P28 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 9,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.804,
+          "imageCos": null,
+          "D1_meanNormalized": 0.902,
+          "D2_meanCosine": 0.804,
+          "D3_calibratedMean": 0.694,
+          "D4_textOnlyCosine": 0.804
+        },
+        {
+          "rank": 2,
+          "id": 26,
+          "answer": false,
+          "current": 0.152,
+          "textCos": 0.507,
+          "imageCos": null,
+          "D1_meanNormalized": 0.753,
+          "D2_meanCosine": 0.507,
+          "D3_calibratedMean": 0.227,
+          "D4_textOnlyCosine": 0.507
+        },
+        {
+          "rank": 3,
+          "id": 32,
+          "answer": false,
+          "current": 0.139,
+          "textCos": 0.502,
+          "imageCos": null,
+          "D1_meanNormalized": 0.751,
+          "D2_meanCosine": 0.502,
+          "D3_calibratedMean": 0.22,
+          "D4_textOnlyCosine": 0.502
+        },
+        {
+          "rank": 4,
+          "id": 20,
+          "answer": false,
+          "current": 0.124,
+          "textCos": 0.497,
+          "imageCos": null,
+          "D1_meanNormalized": 0.748,
+          "D2_meanCosine": 0.497,
+          "D3_calibratedMean": 0.212,
+          "D4_textOnlyCosine": 0.497
+        },
+        {
+          "rank": 5,
+          "id": 30,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.453,
+          "imageCos": null,
+          "D1_meanNormalized": 0.727,
+          "D2_meanCosine": 0.453,
+          "D3_calibratedMean": 0.143,
+          "D4_textOnlyCosine": 0.453
+        }
+      ]
+    },
+    {
+      "label": "P06 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 1,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.578,
+          "imageCos": null,
+          "D1_meanNormalized": 0.789,
+          "D2_meanCosine": 0.578,
+          "D3_calibratedMean": 0.339,
+          "D4_textOnlyCosine": 0.578
+        },
+        {
+          "rank": 2,
+          "id": 5,
+          "answer": false,
+          "current": 0.798,
+          "textCos": 0.56,
+          "imageCos": null,
+          "D1_meanNormalized": 0.78,
+          "D2_meanCosine": 0.56,
+          "D3_calibratedMean": 0.311,
+          "D4_textOnlyCosine": 0.56
+        },
+        {
+          "rank": 3,
+          "id": 35,
+          "answer": true,
+          "current": 0.712,
+          "textCos": 0.553,
+          "imageCos": null,
+          "D1_meanNormalized": 0.776,
+          "D2_meanCosine": 0.553,
+          "D3_calibratedMean": 0.299,
+          "D4_textOnlyCosine": 0.553
+        },
+        {
+          "rank": 4,
+          "id": 7,
+          "answer": false,
+          "current": 0.026,
+          "textCos": 0.492,
+          "imageCos": null,
+          "D1_meanNormalized": 0.746,
+          "D2_meanCosine": 0.492,
+          "D3_calibratedMean": 0.204,
+          "D4_textOnlyCosine": 0.492
+        },
+        {
+          "rank": 5,
+          "id": 24,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.489,
+          "imageCos": null,
+          "D1_meanNormalized": 0.745,
+          "D2_meanCosine": 0.489,
+          "D3_calibratedMean": 0.2,
+          "D4_textOnlyCosine": 0.489
+        }
+      ]
+    },
+    {
+      "label": "P06 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 1,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.605,
+          "imageCos": null,
+          "D1_meanNormalized": 0.803,
+          "D2_meanCosine": 0.605,
+          "D3_calibratedMean": 0.382,
+          "D4_textOnlyCosine": 0.605
+        },
+        {
+          "rank": 2,
+          "id": 22,
+          "answer": true,
+          "current": 0.702,
+          "textCos": 0.553,
+          "imageCos": null,
+          "D1_meanNormalized": 0.776,
+          "D2_meanCosine": 0.553,
+          "D3_calibratedMean": 0.299,
+          "D4_textOnlyCosine": 0.553
+        },
+        {
+          "rank": 3,
+          "id": 21,
+          "answer": false,
+          "current": 0.686,
+          "textCos": 0.55,
+          "imageCos": null,
+          "D1_meanNormalized": 0.775,
+          "D2_meanCosine": 0.55,
+          "D3_calibratedMean": 0.295,
+          "D4_textOnlyCosine": 0.55
+        },
+        {
+          "rank": 4,
+          "id": 26,
+          "answer": false,
+          "current": 0.06,
+          "textCos": 0.439,
+          "imageCos": null,
+          "D1_meanNormalized": 0.72,
+          "D2_meanCosine": 0.439,
+          "D3_calibratedMean": 0.122,
+          "D4_textOnlyCosine": 0.439
+        },
+        {
+          "rank": 5,
+          "id": 15,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.429,
+          "imageCos": null,
+          "D1_meanNormalized": 0.714,
+          "D2_meanCosine": 0.429,
+          "D3_calibratedMean": 0.105,
+          "D4_textOnlyCosine": 0.429
+        }
+      ]
+    },
+    {
+      "label": "P13 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 39,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.876,
+          "imageCos": null,
+          "D1_meanNormalized": 0.938,
+          "D2_meanCosine": 0.876,
+          "D3_calibratedMean": 0.806,
+          "D4_textOnlyCosine": 0.876
+        },
+        {
+          "rank": 2,
+          "id": 41,
+          "answer": false,
+          "current": 0.478,
+          "textCos": 0.713,
+          "imageCos": null,
+          "D1_meanNormalized": 0.857,
+          "D2_meanCosine": 0.713,
+          "D3_calibratedMean": 0.551,
+          "D4_textOnlyCosine": 0.713
+        },
+        {
+          "rank": 3,
+          "id": 36,
+          "answer": false,
+          "current": 0.159,
+          "textCos": 0.613,
+          "imageCos": null,
+          "D1_meanNormalized": 0.807,
+          "D2_meanCosine": 0.613,
+          "D3_calibratedMean": 0.395,
+          "D4_textOnlyCosine": 0.613
+        },
+        {
+          "rank": 4,
+          "id": 37,
+          "answer": false,
+          "current": 0.005,
+          "textCos": 0.566,
+          "imageCos": null,
+          "D1_meanNormalized": 0.783,
+          "D2_meanCosine": 0.566,
+          "D3_calibratedMean": 0.32,
+          "D4_textOnlyCosine": 0.566
+        },
+        {
+          "rank": 5,
+          "id": 61,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.564,
+          "imageCos": null,
+          "D1_meanNormalized": 0.782,
+          "D2_meanCosine": 0.564,
+          "D3_calibratedMean": 0.317,
+          "D4_textOnlyCosine": 0.564
+        }
+      ]
+    },
+    {
+      "label": "P13 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 28,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.876,
+          "imageCos": null,
+          "D1_meanNormalized": 0.938,
+          "D2_meanCosine": 0.876,
+          "D3_calibratedMean": 0.806,
+          "D4_textOnlyCosine": 0.876
+        },
+        {
+          "rank": 2,
+          "id": 30,
+          "answer": false,
+          "current": 0.519,
+          "textCos": 0.726,
+          "imageCos": null,
+          "D1_meanNormalized": 0.863,
+          "D2_meanCosine": 0.726,
+          "D3_calibratedMean": 0.571,
+          "D4_textOnlyCosine": 0.726
+        },
+        {
+          "rank": 3,
+          "id": 6,
+          "answer": false,
+          "current": 0.434,
+          "textCos": 0.7,
+          "imageCos": null,
+          "D1_meanNormalized": 0.85,
+          "D2_meanCosine": 0.7,
+          "D3_calibratedMean": 0.53,
+          "D4_textOnlyCosine": 0.7
+        },
+        {
+          "rank": 4,
+          "id": 24,
+          "answer": false,
+          "current": 0.069,
+          "textCos": 0.586,
+          "imageCos": null,
+          "D1_meanNormalized": 0.793,
+          "D2_meanCosine": 0.586,
+          "D3_calibratedMean": 0.352,
+          "D4_textOnlyCosine": 0.586
+        },
+        {
+          "rank": 5,
+          "id": 5,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.565,
+          "imageCos": null,
+          "D1_meanNormalized": 0.782,
+          "D2_meanCosine": 0.565,
+          "D3_calibratedMean": 0.319,
+          "D4_textOnlyCosine": 0.565
+        }
+      ]
+    },
+    {
+      "label": "P22 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 51,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.879,
+          "imageCos": null,
+          "D1_meanNormalized": 0.939,
+          "D2_meanCosine": 0.879,
+          "D3_calibratedMean": 0.81,
+          "D4_textOnlyCosine": 0.879
+        },
+        {
+          "rank": 2,
+          "id": 50,
+          "answer": false,
+          "current": 0.68,
+          "textCos": 0.788,
+          "imageCos": null,
+          "D1_meanNormalized": 0.894,
+          "D2_meanCosine": 0.788,
+          "D3_calibratedMean": 0.668,
+          "D4_textOnlyCosine": 0.788
+        },
+        {
+          "rank": 3,
+          "id": 53,
+          "answer": false,
+          "current": 0.234,
+          "textCos": 0.661,
+          "imageCos": null,
+          "D1_meanNormalized": 0.831,
+          "D2_meanCosine": 0.661,
+          "D3_calibratedMean": 0.469,
+          "D4_textOnlyCosine": 0.661
+        },
+        {
+          "rank": 4,
+          "id": 33,
+          "answer": false,
+          "current": 0.228,
+          "textCos": 0.66,
+          "imageCos": null,
+          "D1_meanNormalized": 0.83,
+          "D2_meanCosine": 0.66,
+          "D3_calibratedMean": 0.467,
+          "D4_textOnlyCosine": 0.66
+        },
+        {
+          "rank": 5,
+          "id": 32,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.595,
+          "imageCos": null,
+          "D1_meanNormalized": 0.797,
+          "D2_meanCosine": 0.595,
+          "D3_calibratedMean": 0.365,
+          "D4_textOnlyCosine": 0.595
+        }
+      ]
+    },
+    {
+      "label": "P22 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 32,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.879,
+          "imageCos": null,
+          "D1_meanNormalized": 0.939,
+          "D2_meanCosine": 0.879,
+          "D3_calibratedMean": 0.81,
+          "D4_textOnlyCosine": 0.879
+        },
+        {
+          "rank": 2,
+          "id": 20,
+          "answer": false,
+          "current": 0.095,
+          "textCos": 0.501,
+          "imageCos": null,
+          "D1_meanNormalized": 0.75,
+          "D2_meanCosine": 0.501,
+          "D3_calibratedMean": 0.218,
+          "D4_textOnlyCosine": 0.501
+        },
+        {
+          "rank": 3,
+          "id": 30,
+          "answer": false,
+          "current": 0.055,
+          "textCos": 0.484,
+          "imageCos": null,
+          "D1_meanNormalized": 0.742,
+          "D2_meanCosine": 0.484,
+          "D3_calibratedMean": 0.192,
+          "D4_textOnlyCosine": 0.484
+        },
+        {
+          "rank": 4,
+          "id": 29,
+          "answer": false,
+          "current": 0.014,
+          "textCos": 0.467,
+          "imageCos": null,
+          "D1_meanNormalized": 0.733,
+          "D2_meanCosine": 0.467,
+          "D3_calibratedMean": 0.165,
+          "D4_textOnlyCosine": 0.467
+        },
+        {
+          "rank": 5,
+          "id": 10,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.461,
+          "imageCos": null,
+          "D1_meanNormalized": 0.731,
+          "D2_meanCosine": 0.461,
+          "D3_calibratedMean": 0.156,
+          "D4_textOnlyCosine": 0.461
+        }
+      ]
+    },
+    {
+      "label": "P25 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 55,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.767,
+          "imageCos": null,
+          "D1_meanNormalized": 0.884,
+          "D2_meanCosine": 0.767,
+          "D3_calibratedMean": 0.636,
+          "D4_textOnlyCosine": 0.767
+        },
+        {
+          "rank": 2,
+          "id": 54,
+          "answer": false,
+          "current": 0.692,
+          "textCos": 0.678,
+          "imageCos": null,
+          "D1_meanNormalized": 0.839,
+          "D2_meanCosine": 0.678,
+          "D3_calibratedMean": 0.496,
+          "D4_textOnlyCosine": 0.678
+        },
+        {
+          "rank": 3,
+          "id": 48,
+          "answer": false,
+          "current": 0.354,
+          "textCos": 0.58,
+          "imageCos": null,
+          "D1_meanNormalized": 0.79,
+          "D2_meanCosine": 0.58,
+          "D3_calibratedMean": 0.343,
+          "D4_textOnlyCosine": 0.58
+        },
+        {
+          "rank": 4,
+          "id": 5,
+          "answer": false,
+          "current": 0.075,
+          "textCos": 0.499,
+          "imageCos": null,
+          "D1_meanNormalized": 0.75,
+          "D2_meanCosine": 0.499,
+          "D3_calibratedMean": 0.216,
+          "D4_textOnlyCosine": 0.499
+        },
+        {
+          "rank": 5,
+          "id": 1,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.478,
+          "imageCos": null,
+          "D1_meanNormalized": 0.739,
+          "D2_meanCosine": 0.478,
+          "D3_calibratedMean": 0.182,
+          "D4_textOnlyCosine": 0.478
+        }
+      ]
+    },
+    {
+      "label": "P25 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 34,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.767,
+          "imageCos": null,
+          "D1_meanNormalized": 0.884,
+          "D2_meanCosine": 0.767,
+          "D3_calibratedMean": 0.636,
+          "D4_textOnlyCosine": 0.767
+        },
+        {
+          "rank": 2,
+          "id": 18,
+          "answer": false,
+          "current": 0.243,
+          "textCos": 0.578,
+          "imageCos": null,
+          "D1_meanNormalized": 0.789,
+          "D2_meanCosine": 0.578,
+          "D3_calibratedMean": 0.338,
+          "D4_textOnlyCosine": 0.578
+        },
+        {
+          "rank": 3,
+          "id": 14,
+          "answer": false,
+          "current": 0.024,
+          "textCos": 0.523,
+          "imageCos": null,
+          "D1_meanNormalized": 0.761,
+          "D2_meanCosine": 0.523,
+          "D3_calibratedMean": 0.252,
+          "D4_textOnlyCosine": 0.523
+        },
+        {
+          "rank": 4,
+          "id": 26,
+          "answer": false,
+          "current": 0.022,
+          "textCos": 0.522,
+          "imageCos": null,
+          "D1_meanNormalized": 0.761,
+          "D2_meanCosine": 0.522,
+          "D3_calibratedMean": 0.252,
+          "D4_textOnlyCosine": 0.522
+        },
+        {
+          "rank": 5,
+          "id": 20,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.517,
+          "imageCos": null,
+          "D1_meanNormalized": 0.758,
+          "D2_meanCosine": 0.517,
+          "D3_calibratedMean": 0.243,
+          "D4_textOnlyCosine": 0.517
+        }
+      ]
+    },
+    {
+      "label": "P26 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 48,
+          "answer": true,
+          "current": 0.932,
+          "textCos": 0.655,
+          "imageCos": 0.827,
+          "D1_meanNormalized": 0.871,
+          "D2_meanCosine": 0.741,
+          "D3_calibratedMean": 0.478,
+          "D4_textOnlyCosine": 0.655
+        },
+        {
+          "rank": 2,
+          "id": 47,
+          "answer": false,
+          "current": 0.801,
+          "textCos": 0.679,
+          "imageCos": 0.762,
+          "D1_meanNormalized": 0.86,
+          "D2_meanCosine": 0.721,
+          "D3_calibratedMean": 0.402,
+          "D4_textOnlyCosine": 0.679
+        },
+        {
+          "rank": 3,
+          "id": 37,
+          "answer": false,
+          "current": 0.21,
+          "textCos": 0.347,
+          "imageCos": 0.697,
+          "D1_meanNormalized": 0.761,
+          "D2_meanCosine": 0.522,
+          "D3_calibratedMean": 0.059,
+          "D4_textOnlyCosine": 0.347
+        },
+        {
+          "rank": 4,
+          "id": 46,
+          "answer": false,
+          "current": 0.093,
+          "textCos": 0.301,
+          "imageCos": 0.678,
+          "D1_meanNormalized": 0.745,
+          "D2_meanCosine": 0.489,
+          "D3_calibratedMean": 0.031,
+          "D4_textOnlyCosine": 0.301
+        },
+        {
+          "rank": 5,
+          "id": 5,
+          "answer": false,
+          "current": 0.04,
+          "textCos": 0.51,
+          "imageCos": 0.622,
+          "D1_meanNormalized": 0.783,
+          "D2_meanCosine": 0.566,
+          "D3_calibratedMean": 0.116,
+          "D4_textOnlyCosine": 0.51
+        }
+      ]
+    },
+    {
+      "label": "P26 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 31,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.655,
+          "imageCos": 0.827,
+          "D1_meanNormalized": 0.871,
+          "D2_meanCosine": 0.741,
+          "D3_calibratedMean": 0.478,
+          "D4_textOnlyCosine": 0.655
+        },
+        {
+          "rank": 2,
+          "id": 34,
+          "answer": false,
+          "current": 0.583,
+          "textCos": 0.58,
+          "imageCos": null,
+          "D1_meanNormalized": 0.79,
+          "D2_meanCosine": 0.58,
+          "D3_calibratedMean": 0.343,
+          "D4_textOnlyCosine": 0.58
+        },
+        {
+          "rank": 3,
+          "id": 26,
+          "answer": false,
+          "current": 0.099,
+          "textCos": 0.494,
+          "imageCos": null,
+          "D1_meanNormalized": 0.747,
+          "D2_meanCosine": 0.494,
+          "D3_calibratedMean": 0.207,
+          "D4_textOnlyCosine": 0.494
+        },
+        {
+          "rank": 4,
+          "id": 20,
+          "answer": false,
+          "current": 0.088,
+          "textCos": 0.492,
+          "imageCos": null,
+          "D1_meanNormalized": 0.746,
+          "D2_meanCosine": 0.492,
+          "D3_calibratedMean": 0.204,
+          "D4_textOnlyCosine": 0.492
+        },
+        {
+          "rank": 5,
+          "id": 4,
+          "answer": false,
+          "current": 0.038,
+          "textCos": 0.261,
+          "imageCos": 0.607,
+          "D1_meanNormalized": 0.717,
+          "D2_meanCosine": 0.434,
+          "D3_calibratedMean": 0,
+          "D4_textOnlyCosine": 0.261
+        }
+      ]
+    },
+    {
+      "label": "P27 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 55,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.578,
+          "imageCos": null,
+          "D1_meanNormalized": 0.789,
+          "D2_meanCosine": 0.578,
+          "D3_calibratedMean": 0.338,
+          "D4_textOnlyCosine": 0.578
+        },
+        {
+          "rank": 2,
+          "id": 54,
+          "answer": false,
+          "current": 0.469,
+          "textCos": 0.523,
+          "imageCos": null,
+          "D1_meanNormalized": 0.761,
+          "D2_meanCosine": 0.523,
+          "D3_calibratedMean": 0.253,
+          "D4_textOnlyCosine": 0.523
+        },
+        {
+          "rank": 3,
+          "id": 47,
+          "answer": false,
+          "current": 0.101,
+          "textCos": 0.485,
+          "imageCos": null,
+          "D1_meanNormalized": 0.743,
+          "D2_meanCosine": 0.485,
+          "D3_calibratedMean": 0.194,
+          "D4_textOnlyCosine": 0.485
+        },
+        {
+          "rank": 4,
+          "id": 5,
+          "answer": false,
+          "current": 0.078,
+          "textCos": 0.483,
+          "imageCos": null,
+          "D1_meanNormalized": 0.741,
+          "D2_meanCosine": 0.483,
+          "D3_calibratedMean": 0.19,
+          "D4_textOnlyCosine": 0.483
+        },
+        {
+          "rank": 5,
+          "id": 48,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.475,
+          "imageCos": null,
+          "D1_meanNormalized": 0.737,
+          "D2_meanCosine": 0.475,
+          "D3_calibratedMean": 0.177,
+          "D4_textOnlyCosine": 0.475
+        }
+      ]
+    },
+    {
+      "label": "P27 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 19,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.439,
+          "imageCos": null,
+          "D1_meanNormalized": 0.72,
+          "D2_meanCosine": 0.439,
+          "D3_calibratedMean": 0.122,
+          "D4_textOnlyCosine": 0.439
+        },
+        {
+          "rank": 2,
+          "id": 31,
+          "answer": false,
+          "current": 0.268,
+          "textCos": 0.364,
+          "imageCos": null,
+          "D1_meanNormalized": 0.682,
+          "D2_meanCosine": 0.364,
+          "D3_calibratedMean": 0.005,
+          "D4_textOnlyCosine": 0.364
+        },
+        {
+          "rank": 3,
+          "id": 32,
+          "answer": false,
+          "current": 0.245,
+          "textCos": 0.362,
+          "imageCos": null,
+          "D1_meanNormalized": 0.681,
+          "D2_meanCosine": 0.362,
+          "D3_calibratedMean": 0.001,
+          "D4_textOnlyCosine": 0.362
+        },
+        {
+          "rank": 4,
+          "id": 3,
+          "answer": false,
+          "current": 0.057,
+          "textCos": 0.343,
+          "imageCos": null,
+          "D1_meanNormalized": 0.671,
+          "D2_meanCosine": 0.343,
+          "D3_calibratedMean": 0,
+          "D4_textOnlyCosine": 0.343
+        },
+        {
+          "rank": 5,
+          "id": 18,
+          "answer": true,
+          "current": 0,
+          "textCos": 0.337,
+          "imageCos": null,
+          "D1_meanNormalized": 0.669,
+          "D2_meanCosine": 0.337,
+          "D3_calibratedMean": 0,
+          "D4_textOnlyCosine": 0.337
+        }
+      ]
+    },
+    {
+      "label": "P29 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 40,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.657,
+          "imageCos": null,
+          "D1_meanNormalized": 0.829,
+          "D2_meanCosine": 0.657,
+          "D3_calibratedMean": 0.463,
+          "D4_textOnlyCosine": 0.657
+        },
+        {
+          "rank": 2,
+          "id": 38,
+          "answer": true,
+          "current": 0.852,
+          "textCos": 0.643,
+          "imageCos": null,
+          "D1_meanNormalized": 0.822,
+          "D2_meanCosine": 0.643,
+          "D3_calibratedMean": 0.441,
+          "D4_textOnlyCosine": 0.643
+        },
+        {
+          "rank": 3,
+          "id": 58,
+          "answer": false,
+          "current": 0.377,
+          "textCos": 0.599,
+          "imageCos": null,
+          "D1_meanNormalized": 0.799,
+          "D2_meanCosine": 0.599,
+          "D3_calibratedMean": 0.371,
+          "D4_textOnlyCosine": 0.599
+        },
+        {
+          "rank": 4,
+          "id": 5,
+          "answer": false,
+          "current": 0.326,
+          "textCos": 0.594,
+          "imageCos": null,
+          "D1_meanNormalized": 0.797,
+          "D2_meanCosine": 0.594,
+          "D3_calibratedMean": 0.364,
+          "D4_textOnlyCosine": 0.594
+        },
+        {
+          "rank": 5,
+          "id": 7,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.563,
+          "imageCos": null,
+          "D1_meanNormalized": 0.782,
+          "D2_meanCosine": 0.563,
+          "D3_calibratedMean": 0.316,
+          "D4_textOnlyCosine": 0.563
+        }
+      ]
+    },
+    {
+      "label": "P29 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 26,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.643,
+          "imageCos": null,
+          "D1_meanNormalized": 0.822,
+          "D2_meanCosine": 0.643,
+          "D3_calibratedMean": 0.441,
+          "D4_textOnlyCosine": 0.643
+        },
+        {
+          "rank": 2,
+          "id": 9,
+          "answer": false,
+          "current": 0.622,
+          "textCos": 0.55,
+          "imageCos": null,
+          "D1_meanNormalized": 0.775,
+          "D2_meanCosine": 0.55,
+          "D3_calibratedMean": 0.296,
+          "D4_textOnlyCosine": 0.55
+        },
+        {
+          "rank": 3,
+          "id": 20,
+          "answer": false,
+          "current": 0.351,
+          "textCos": 0.484,
+          "imageCos": null,
+          "D1_meanNormalized": 0.742,
+          "D2_meanCosine": 0.484,
+          "D3_calibratedMean": 0.192,
+          "D4_textOnlyCosine": 0.484
+        },
+        {
+          "rank": 4,
+          "id": 32,
+          "answer": false,
+          "current": 0.267,
+          "textCos": 0.463,
+          "imageCos": null,
+          "D1_meanNormalized": 0.732,
+          "D2_meanCosine": 0.463,
+          "D3_calibratedMean": 0.16,
+          "D4_textOnlyCosine": 0.463
+        },
+        {
+          "rank": 5,
+          "id": 30,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.398,
+          "imageCos": null,
+          "D1_meanNormalized": 0.699,
+          "D2_meanCosine": 0.398,
+          "D3_calibratedMean": 0.057,
+          "D4_textOnlyCosine": 0.398
+        }
+      ]
+    },
+    {
+      "label": "P30 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 29,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.677,
+          "imageCos": null,
+          "D1_meanNormalized": 0.839,
+          "D2_meanCosine": 0.677,
+          "D3_calibratedMean": 0.494,
+          "D4_textOnlyCosine": 0.677
+        },
+        {
+          "rank": 2,
+          "id": 19,
+          "answer": false,
+          "current": 0.34,
+          "textCos": 0.555,
+          "imageCos": null,
+          "D1_meanNormalized": 0.778,
+          "D2_meanCosine": 0.555,
+          "D3_calibratedMean": 0.303,
+          "D4_textOnlyCosine": 0.555
+        },
+        {
+          "rank": 3,
+          "id": 5,
+          "answer": false,
+          "current": 0.216,
+          "textCos": 0.532,
+          "imageCos": null,
+          "D1_meanNormalized": 0.766,
+          "D2_meanCosine": 0.532,
+          "D3_calibratedMean": 0.267,
+          "D4_textOnlyCosine": 0.532
+        },
+        {
+          "rank": 4,
+          "id": 2,
+          "answer": false,
+          "current": 0.04,
+          "textCos": 0.499,
+          "imageCos": null,
+          "D1_meanNormalized": 0.75,
+          "D2_meanCosine": 0.499,
+          "D3_calibratedMean": 0.216,
+          "D4_textOnlyCosine": 0.499
+        },
+        {
+          "rank": 5,
+          "id": 58,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.492,
+          "imageCos": null,
+          "D1_meanNormalized": 0.746,
+          "D2_meanCosine": 0.492,
+          "D3_calibratedMean": 0.204,
+          "D4_textOnlyCosine": 0.492
+        }
+      ]
+    },
+    {
+      "label": "P30 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 17,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.677,
+          "imageCos": null,
+          "D1_meanNormalized": 0.839,
+          "D2_meanCosine": 0.677,
+          "D3_calibratedMean": 0.494,
+          "D4_textOnlyCosine": 0.677
+        },
+        {
+          "rank": 2,
+          "id": 26,
+          "answer": false,
+          "current": 0.089,
+          "textCos": 0.498,
+          "imageCos": null,
+          "D1_meanNormalized": 0.749,
+          "D2_meanCosine": 0.498,
+          "D3_calibratedMean": 0.214,
+          "D4_textOnlyCosine": 0.498
+        },
+        {
+          "rank": 3,
+          "id": 16,
+          "answer": false,
+          "current": 0.079,
+          "textCos": 0.496,
+          "imageCos": null,
+          "D1_meanNormalized": 0.748,
+          "D2_meanCosine": 0.496,
+          "D3_calibratedMean": 0.211,
+          "D4_textOnlyCosine": 0.496
+        },
+        {
+          "rank": 4,
+          "id": 35,
+          "answer": false,
+          "current": 0.017,
+          "textCos": 0.484,
+          "imageCos": null,
+          "D1_meanNormalized": 0.742,
+          "D2_meanCosine": 0.484,
+          "D3_calibratedMean": 0.192,
+          "D4_textOnlyCosine": 0.484
+        },
+        {
+          "rank": 5,
+          "id": 13,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.481,
+          "imageCos": null,
+          "D1_meanNormalized": 0.74,
+          "D2_meanCosine": 0.481,
+          "D3_calibratedMean": 0.187,
+          "D4_textOnlyCosine": 0.481
+        }
+      ]
+    },
+    {
+      "label": "Q01 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 45,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.832,
+          "imageCos": 0.936,
+          "D1_meanNormalized": 0.942,
+          "D2_meanCosine": 0.884,
+          "D3_calibratedMean": 0.775,
+          "D4_textOnlyCosine": 0.832
+        },
+        {
+          "rank": 2,
+          "id": 46,
+          "answer": false,
+          "current": 0.408,
+          "textCos": 0.549,
+          "imageCos": 0.884,
+          "D1_meanNormalized": 0.858,
+          "D2_meanCosine": 0.717,
+          "D3_calibratedMean": 0.478,
+          "D4_textOnlyCosine": 0.549
+        },
+        {
+          "rank": 3,
+          "id": 44,
+          "answer": false,
+          "current": 0.202,
+          "textCos": 0.593,
+          "imageCos": null,
+          "D1_meanNormalized": 0.797,
+          "D2_meanCosine": 0.593,
+          "D3_calibratedMean": 0.363,
+          "D4_textOnlyCosine": 0.593
+        },
+        {
+          "rank": 4,
+          "id": 19,
+          "answer": false,
+          "current": 0.2,
+          "textCos": 0.302,
+          "imageCos": 0.763,
+          "D1_meanNormalized": 0.766,
+          "D2_meanCosine": 0.532,
+          "D3_calibratedMean": 0.154,
+          "D4_textOnlyCosine": 0.302
+        },
+        {
+          "rank": 5,
+          "id": 25,
+          "answer": false,
+          "current": 0.118,
+          "textCos": 0.568,
+          "imageCos": 0.611,
+          "D1_meanNormalized": 0.795,
+          "D2_meanCosine": 0.589,
+          "D3_calibratedMean": 0.162,
+          "D4_textOnlyCosine": 0.568
+        }
+      ]
+    },
+    {
+      "label": "Q01 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 29,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.832,
+          "imageCos": 0.936,
+          "D1_meanNormalized": 0.942,
+          "D2_meanCosine": 0.884,
+          "D3_calibratedMean": 0.775,
+          "D4_textOnlyCosine": 0.832
+        },
+        {
+          "rank": 2,
+          "id": 30,
+          "answer": false,
+          "current": 0.324,
+          "textCos": 0.629,
+          "imageCos": null,
+          "D1_meanNormalized": 0.815,
+          "D2_meanCosine": 0.629,
+          "D3_calibratedMean": 0.419,
+          "D4_textOnlyCosine": 0.629
+        },
+        {
+          "rank": 3,
+          "id": 3,
+          "answer": false,
+          "current": 0.254,
+          "textCos": 0.28,
+          "imageCos": 0.76,
+          "D1_meanNormalized": 0.76,
+          "D2_meanCosine": 0.52,
+          "D3_calibratedMean": 0.149,
+          "D4_textOnlyCosine": 0.28
+        },
+        {
+          "rank": 4,
+          "id": 32,
+          "answer": false,
+          "current": 0.116,
+          "textCos": 0.567,
+          "imageCos": null,
+          "D1_meanNormalized": 0.783,
+          "D2_meanCosine": 0.567,
+          "D3_calibratedMean": 0.322,
+          "D4_textOnlyCosine": 0.567
+        },
+        {
+          "rank": 5,
+          "id": 10,
+          "answer": false,
+          "current": 0.099,
+          "textCos": 0.383,
+          "imageCos": 0.723,
+          "D1_meanNormalized": 0.776,
+          "D2_meanCosine": 0.553,
+          "D3_calibratedMean": 0.113,
+          "D4_textOnlyCosine": 0.383
+        }
+      ]
+    },
+    {
+      "label": "Q02 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 58,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.752,
+          "imageCos": 0.925,
+          "D1_meanNormalized": 0.919,
+          "D2_meanCosine": 0.839,
+          "D3_calibratedMean": 0.697,
+          "D4_textOnlyCosine": 0.752
+        },
+        {
+          "rank": 2,
+          "id": 56,
+          "answer": false,
+          "current": 0.449,
+          "textCos": 0.702,
+          "imageCos": 0.726,
+          "D1_meanNormalized": 0.857,
+          "D2_meanCosine": 0.714,
+          "D3_calibratedMean": 0.367,
+          "D4_textOnlyCosine": 0.702
+        },
+        {
+          "rank": 3,
+          "id": 14,
+          "answer": false,
+          "current": 0.195,
+          "textCos": 0.577,
+          "imageCos": null,
+          "D1_meanNormalized": 0.788,
+          "D2_meanCosine": 0.577,
+          "D3_calibratedMean": 0.337,
+          "D4_textOnlyCosine": 0.577
+        },
+        {
+          "rank": 4,
+          "id": 13,
+          "answer": false,
+          "current": 0.177,
+          "textCos": 0.573,
+          "imageCos": null,
+          "D1_meanNormalized": 0.786,
+          "D2_meanCosine": 0.573,
+          "D3_calibratedMean": 0.331,
+          "D4_textOnlyCosine": 0.573
+        },
+        {
+          "rank": 5,
+          "id": 21,
+          "answer": false,
+          "current": 0.116,
+          "textCos": 0.372,
+          "imageCos": 0.723,
+          "D1_meanNormalized": 0.774,
+          "D2_meanCosine": 0.548,
+          "D3_calibratedMean": 0.105,
+          "D4_textOnlyCosine": 0.372
+        }
+      ]
+    },
+    {
+      "label": "Q02 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 37,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.752,
+          "imageCos": 0.925,
+          "D1_meanNormalized": 0.919,
+          "D2_meanCosine": 0.839,
+          "D3_calibratedMean": 0.697,
+          "D4_textOnlyCosine": 0.752
+        },
+        {
+          "rank": 2,
+          "id": 36,
+          "answer": false,
+          "current": 0.804,
+          "textCos": 0.72,
+          "imageCos": null,
+          "D1_meanNormalized": 0.86,
+          "D2_meanCosine": 0.72,
+          "D3_calibratedMean": 0.561,
+          "D4_textOnlyCosine": 0.72
+        },
+        {
+          "rank": 3,
+          "id": 11,
+          "answer": false,
+          "current": 0.063,
+          "textCos": 0.6,
+          "imageCos": 0.725,
+          "D1_meanNormalized": 0.831,
+          "D2_meanCosine": 0.663,
+          "D3_calibratedMean": 0.286,
+          "D4_textOnlyCosine": 0.6
+        },
+        {
+          "rank": 4,
+          "id": 26,
+          "answer": false,
+          "current": 0.059,
+          "textCos": 0.599,
+          "imageCos": null,
+          "D1_meanNormalized": 0.799,
+          "D2_meanCosine": 0.599,
+          "D3_calibratedMean": 0.371,
+          "D4_textOnlyCosine": 0.599
+        },
+        {
+          "rank": 5,
+          "id": 4,
+          "answer": false,
+          "current": 0.034,
+          "textCos": 0.521,
+          "imageCos": 0.72,
+          "D1_meanNormalized": 0.81,
+          "D2_meanCosine": 0.62,
+          "D3_calibratedMean": 0.217,
+          "D4_textOnlyCosine": 0.521
+        }
+      ]
+    },
+    {
+      "label": "Q03 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 36,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.736,
+          "imageCos": 0.939,
+          "D1_meanNormalized": 0.919,
+          "D2_meanCosine": 0.838,
+          "D3_calibratedMean": 0.704,
+          "D4_textOnlyCosine": 0.736
+        },
+        {
+          "rank": 2,
+          "id": 37,
+          "answer": false,
+          "current": 0.558,
+          "textCos": 0.605,
+          "imageCos": 0.889,
+          "D1_meanNormalized": 0.873,
+          "D2_meanCosine": 0.747,
+          "D3_calibratedMean": 0.528,
+          "D4_textOnlyCosine": 0.605
+        },
+        {
+          "rank": 3,
+          "id": 61,
+          "answer": false,
+          "current": 0.176,
+          "textCos": 0.567,
+          "imageCos": null,
+          "D1_meanNormalized": 0.784,
+          "D2_meanCosine": 0.567,
+          "D3_calibratedMean": 0.322,
+          "D4_textOnlyCosine": 0.567
+        },
+        {
+          "rank": 4,
+          "id": 14,
+          "answer": false,
+          "current": 0.086,
+          "textCos": 0.549,
+          "imageCos": null,
+          "D1_meanNormalized": 0.774,
+          "D2_meanCosine": 0.549,
+          "D3_calibratedMean": 0.293,
+          "D4_textOnlyCosine": 0.549
+        },
+        {
+          "rank": 5,
+          "id": 9,
+          "answer": false,
+          "current": 0.061,
+          "textCos": 0.447,
+          "imageCos": 0.745,
+          "D1_meanNormalized": 0.798,
+          "D2_meanCosine": 0.596,
+          "D3_calibratedMean": 0.196,
+          "D4_textOnlyCosine": 0.447
+        }
+      ]
+    },
+    {
+      "label": "Q03 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 24,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.747,
+          "imageCos": null,
+          "D1_meanNormalized": 0.874,
+          "D2_meanCosine": 0.747,
+          "D3_calibratedMean": 0.604,
+          "D4_textOnlyCosine": 0.747
+        },
+        {
+          "rank": 2,
+          "id": 23,
+          "answer": true,
+          "current": 0.968,
+          "textCos": 0.736,
+          "imageCos": 0.939,
+          "D1_meanNormalized": 0.919,
+          "D2_meanCosine": 0.838,
+          "D3_calibratedMean": 0.704,
+          "D4_textOnlyCosine": 0.736
+        },
+        {
+          "rank": 3,
+          "id": 4,
+          "answer": false,
+          "current": 0.323,
+          "textCos": 0.4,
+          "imageCos": 0.753,
+          "D1_meanNormalized": 0.788,
+          "D2_meanCosine": 0.577,
+          "D3_calibratedMean": 0.171,
+          "D4_textOnlyCosine": 0.4
+        },
+        {
+          "rank": 4,
+          "id": 11,
+          "answer": false,
+          "current": 0.279,
+          "textCos": 0.439,
+          "imageCos": 0.741,
+          "D1_meanNormalized": 0.795,
+          "D2_meanCosine": 0.59,
+          "D3_calibratedMean": 0.184,
+          "D4_textOnlyCosine": 0.439
+        },
+        {
+          "rank": 5,
+          "id": 28,
+          "answer": false,
+          "current": 0.223,
+          "textCos": 0.613,
+          "imageCos": null,
+          "D1_meanNormalized": 0.807,
+          "D2_meanCosine": 0.613,
+          "D3_calibratedMean": 0.395,
+          "D4_textOnlyCosine": 0.613
+        }
+      ]
+    },
+    {
+      "label": "Q04 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 43,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.756,
+          "imageCos": null,
+          "D1_meanNormalized": 0.878,
+          "D2_meanCosine": 0.756,
+          "D3_calibratedMean": 0.617,
+          "D4_textOnlyCosine": 0.756
+        },
+        {
+          "rank": 2,
+          "id": 42,
+          "answer": true,
+          "current": 0.915,
+          "textCos": 0.732,
+          "imageCos": null,
+          "D1_meanNormalized": 0.866,
+          "D2_meanCosine": 0.732,
+          "D3_calibratedMean": 0.58,
+          "D4_textOnlyCosine": 0.732
+        },
+        {
+          "rank": 3,
+          "id": 25,
+          "answer": false,
+          "current": 0.049,
+          "textCos": 0.492,
+          "imageCos": null,
+          "D1_meanNormalized": 0.746,
+          "D2_meanCosine": 0.492,
+          "D3_calibratedMean": 0.205,
+          "D4_textOnlyCosine": 0.492
+        },
+        {
+          "rank": 4,
+          "id": 5,
+          "answer": false,
+          "current": 0.012,
+          "textCos": 0.482,
+          "imageCos": null,
+          "D1_meanNormalized": 0.741,
+          "D2_meanCosine": 0.482,
+          "D3_calibratedMean": 0.189,
+          "D4_textOnlyCosine": 0.482
+        },
+        {
+          "rank": 5,
+          "id": 16,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.479,
+          "imageCos": null,
+          "D1_meanNormalized": 0.739,
+          "D2_meanCosine": 0.479,
+          "D3_calibratedMean": 0.184,
+          "D4_textOnlyCosine": 0.479
+        }
+      ]
+    },
+    {
+      "label": "Q04 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 27,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.732,
+          "imageCos": null,
+          "D1_meanNormalized": 0.866,
+          "D2_meanCosine": 0.732,
+          "D3_calibratedMean": 0.58,
+          "D4_textOnlyCosine": 0.732
+        },
+        {
+          "rank": 2,
+          "id": 10,
+          "answer": false,
+          "current": 0.269,
+          "textCos": 0.512,
+          "imageCos": null,
+          "D1_meanNormalized": 0.756,
+          "D2_meanCosine": 0.512,
+          "D3_calibratedMean": 0.236,
+          "D4_textOnlyCosine": 0.512
+        },
+        {
+          "rank": 3,
+          "id": 32,
+          "answer": false,
+          "current": 0.177,
+          "textCos": 0.485,
+          "imageCos": null,
+          "D1_meanNormalized": 0.742,
+          "D2_meanCosine": 0.485,
+          "D3_calibratedMean": 0.193,
+          "D4_textOnlyCosine": 0.485
+        },
+        {
+          "rank": 4,
+          "id": 11,
+          "answer": false,
+          "current": 0.128,
+          "textCos": 0.47,
+          "imageCos": null,
+          "D1_meanNormalized": 0.735,
+          "D2_meanCosine": 0.47,
+          "D3_calibratedMean": 0.17,
+          "D4_textOnlyCosine": 0.47
+        },
+        {
+          "rank": 5,
+          "id": 30,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.431,
+          "imageCos": null,
+          "D1_meanNormalized": 0.716,
+          "D2_meanCosine": 0.431,
+          "D3_calibratedMean": 0.109,
+          "D4_textOnlyCosine": 0.431
+        }
+      ]
+    },
+    {
+      "label": "Q05 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 61,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.672,
+          "imageCos": null,
+          "D1_meanNormalized": 0.836,
+          "D2_meanCosine": 0.672,
+          "D3_calibratedMean": 0.486,
+          "D4_textOnlyCosine": 0.672
+        },
+        {
+          "rank": 2,
+          "id": 60,
+          "answer": false,
+          "current": 0.445,
+          "textCos": 0.576,
+          "imageCos": null,
+          "D1_meanNormalized": 0.788,
+          "D2_meanCosine": 0.576,
+          "D3_calibratedMean": 0.336,
+          "D4_textOnlyCosine": 0.576
+        },
+        {
+          "rank": 3,
+          "id": 13,
+          "answer": false,
+          "current": 0.275,
+          "textCos": 0.547,
+          "imageCos": null,
+          "D1_meanNormalized": 0.773,
+          "D2_meanCosine": 0.547,
+          "D3_calibratedMean": 0.29,
+          "D4_textOnlyCosine": 0.547
+        },
+        {
+          "rank": 4,
+          "id": 41,
+          "answer": false,
+          "current": 0.198,
+          "textCos": 0.534,
+          "imageCos": null,
+          "D1_meanNormalized": 0.767,
+          "D2_meanCosine": 0.534,
+          "D3_calibratedMean": 0.27,
+          "D4_textOnlyCosine": 0.534
+        },
+        {
+          "rank": 5,
+          "id": 37,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.499,
+          "imageCos": null,
+          "D1_meanNormalized": 0.75,
+          "D2_meanCosine": 0.499,
+          "D3_calibratedMean": 0.216,
+          "D4_textOnlyCosine": 0.499
+        }
+      ]
+    },
+    {
+      "label": "Q05 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 38,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.672,
+          "imageCos": null,
+          "D1_meanNormalized": 0.836,
+          "D2_meanCosine": 0.672,
+          "D3_calibratedMean": 0.486,
+          "D4_textOnlyCosine": 0.672
+        },
+        {
+          "rank": 2,
+          "id": 30,
+          "answer": false,
+          "current": 0.925,
+          "textCos": 0.664,
+          "imageCos": null,
+          "D1_meanNormalized": 0.832,
+          "D2_meanCosine": 0.664,
+          "D3_calibratedMean": 0.474,
+          "D4_textOnlyCosine": 0.664
+        },
+        {
+          "rank": 3,
+          "id": 5,
+          "answer": false,
+          "current": 0.1,
+          "textCos": 0.578,
+          "imageCos": null,
+          "D1_meanNormalized": 0.789,
+          "D2_meanCosine": 0.578,
+          "D3_calibratedMean": 0.339,
+          "D4_textOnlyCosine": 0.578
+        },
+        {
+          "rank": 4,
+          "id": 6,
+          "answer": false,
+          "current": 0.013,
+          "textCos": 0.569,
+          "imageCos": null,
+          "D1_meanNormalized": 0.784,
+          "D2_meanCosine": 0.569,
+          "D3_calibratedMean": 0.324,
+          "D4_textOnlyCosine": 0.569
+        },
+        {
+          "rank": 5,
+          "id": 23,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.567,
+          "imageCos": null,
+          "D1_meanNormalized": 0.784,
+          "D2_meanCosine": 0.567,
+          "D3_calibratedMean": 0.322,
+          "D4_textOnlyCosine": 0.567
+        }
+      ]
+    },
+    {
+      "label": "Q06 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 52,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.726,
+          "imageCos": 0.922,
+          "D1_meanNormalized": 0.912,
+          "D2_meanCosine": 0.824,
+          "D3_calibratedMean": 0.671,
+          "D4_textOnlyCosine": 0.726
+        },
+        {
+          "rank": 2,
+          "id": 49,
+          "answer": false,
+          "current": 0.495,
+          "textCos": 0.59,
+          "imageCos": null,
+          "D1_meanNormalized": 0.795,
+          "D2_meanCosine": 0.59,
+          "D3_calibratedMean": 0.359,
+          "D4_textOnlyCosine": 0.59
+        },
+        {
+          "rank": 3,
+          "id": 20,
+          "answer": false,
+          "current": 0.272,
+          "textCos": 0.273,
+          "imageCos": 0.754,
+          "D1_meanNormalized": 0.757,
+          "D2_meanCosine": 0.514,
+          "D3_calibratedMean": 0.142,
+          "D4_textOnlyCosine": 0.273
+        },
+        {
+          "rank": 4,
+          "id": 5,
+          "answer": false,
+          "current": 0.134,
+          "textCos": 0.415,
+          "imageCos": 0.723,
+          "D1_meanNormalized": 0.784,
+          "D2_meanCosine": 0.569,
+          "D3_calibratedMean": 0.137,
+          "D4_textOnlyCosine": 0.415
+        },
+        {
+          "rank": 5,
+          "id": 22,
+          "answer": false,
+          "current": 0.084,
+          "textCos": 0.326,
+          "imageCos": 0.711,
+          "D1_meanNormalized": 0.759,
+          "D2_meanCosine": 0.518,
+          "D3_calibratedMean": 0.079,
+          "D4_textOnlyCosine": 0.326
+        }
+      ]
+    },
+    {
+      "label": "Q06 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 33,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.726,
+          "imageCos": 0.922,
+          "D1_meanNormalized": 0.912,
+          "D2_meanCosine": 0.824,
+          "D3_calibratedMean": 0.671,
+          "D4_textOnlyCosine": 0.726
+        },
+        {
+          "rank": 2,
+          "id": 11,
+          "answer": false,
+          "current": 0.18,
+          "textCos": 0.348,
+          "imageCos": 0.711,
+          "D1_meanNormalized": 0.765,
+          "D2_meanCosine": 0.529,
+          "D3_calibratedMean": 0.078,
+          "D4_textOnlyCosine": 0.348
+        },
+        {
+          "rank": 3,
+          "id": 1,
+          "answer": false,
+          "current": 0.15,
+          "textCos": 0.473,
+          "imageCos": 0.703,
+          "D1_meanNormalized": 0.794,
+          "D2_meanCosine": 0.588,
+          "D3_calibratedMean": 0.155,
+          "D4_textOnlyCosine": 0.473
+        },
+        {
+          "rank": 4,
+          "id": 7,
+          "answer": false,
+          "current": 0.09,
+          "textCos": 0.515,
+          "imageCos": null,
+          "D1_meanNormalized": 0.757,
+          "D2_meanCosine": 0.515,
+          "D3_calibratedMean": 0.24,
+          "D4_textOnlyCosine": 0.515
+        },
+        {
+          "rank": 5,
+          "id": 23,
+          "answer": false,
+          "current": 0.083,
+          "textCos": 0.278,
+          "imageCos": 0.686,
+          "D1_meanNormalized": 0.741,
+          "D2_meanCosine": 0.482,
+          "D3_calibratedMean": 0.042,
+          "D4_textOnlyCosine": 0.278
+        }
+      ]
+    },
+    {
+      "label": "Q07 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 32,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.779,
+          "imageCos": null,
+          "D1_meanNormalized": 0.89,
+          "D2_meanCosine": 0.779,
+          "D3_calibratedMean": 0.655,
+          "D4_textOnlyCosine": 0.779
+        },
+        {
+          "rank": 2,
+          "id": 33,
+          "answer": false,
+          "current": 0.872,
+          "textCos": 0.756,
+          "imageCos": null,
+          "D1_meanNormalized": 0.878,
+          "D2_meanCosine": 0.756,
+          "D3_calibratedMean": 0.617,
+          "D4_textOnlyCosine": 0.756
+        },
+        {
+          "rank": 3,
+          "id": 21,
+          "answer": false,
+          "current": 0.284,
+          "textCos": 0.646,
+          "imageCos": null,
+          "D1_meanNormalized": 0.823,
+          "D2_meanCosine": 0.646,
+          "D3_calibratedMean": 0.445,
+          "D4_textOnlyCosine": 0.646
+        },
+        {
+          "rank": 4,
+          "id": 2,
+          "answer": false,
+          "current": 0.051,
+          "textCos": 0.602,
+          "imageCos": null,
+          "D1_meanNormalized": 0.801,
+          "D2_meanCosine": 0.602,
+          "D3_calibratedMean": 0.377,
+          "D4_textOnlyCosine": 0.602
+        },
+        {
+          "rank": 5,
+          "id": 5,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.593,
+          "imageCos": null,
+          "D1_meanNormalized": 0.796,
+          "D2_meanCosine": 0.593,
+          "D3_calibratedMean": 0.362,
+          "D4_textOnlyCosine": 0.593
+        }
+      ]
+    },
+    {
+      "label": "Q07 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 20,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.779,
+          "imageCos": null,
+          "D1_meanNormalized": 0.89,
+          "D2_meanCosine": 0.779,
+          "D3_calibratedMean": 0.655,
+          "D4_textOnlyCosine": 0.779
+        },
+        {
+          "rank": 2,
+          "id": 32,
+          "answer": false,
+          "current": 0.363,
+          "textCos": 0.595,
+          "imageCos": null,
+          "D1_meanNormalized": 0.797,
+          "D2_meanCosine": 0.595,
+          "D3_calibratedMean": 0.365,
+          "D4_textOnlyCosine": 0.595
+        },
+        {
+          "rank": 3,
+          "id": 30,
+          "answer": false,
+          "current": 0.086,
+          "textCos": 0.514,
+          "imageCos": null,
+          "D1_meanNormalized": 0.757,
+          "D2_meanCosine": 0.514,
+          "D3_calibratedMean": 0.24,
+          "D4_textOnlyCosine": 0.514
+        },
+        {
+          "rank": 4,
+          "id": 1,
+          "answer": false,
+          "current": 0.061,
+          "textCos": 0.507,
+          "imageCos": null,
+          "D1_meanNormalized": 0.754,
+          "D2_meanCosine": 0.507,
+          "D3_calibratedMean": 0.228,
+          "D4_textOnlyCosine": 0.507
+        },
+        {
+          "rank": 5,
+          "id": 26,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.489,
+          "imageCos": null,
+          "D1_meanNormalized": 0.745,
+          "D2_meanCosine": 0.489,
+          "D3_calibratedMean": 0.2,
+          "D4_textOnlyCosine": 0.489
+        }
+      ]
+    },
+    {
+      "label": "Q08 L→F",
+      "items": [
+        {
+          "rank": 1,
+          "id": 59,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.619,
+          "imageCos": null,
+          "D1_meanNormalized": 0.809,
+          "D2_meanCosine": 0.619,
+          "D3_calibratedMean": 0.403,
+          "D4_textOnlyCosine": 0.619
+        },
+        {
+          "rank": 2,
+          "id": 57,
+          "answer": true,
+          "current": 0.963,
+          "textCos": 0.612,
+          "imageCos": null,
+          "D1_meanNormalized": 0.806,
+          "D2_meanCosine": 0.612,
+          "D3_calibratedMean": 0.392,
+          "D4_textOnlyCosine": 0.612
+        },
+        {
+          "rank": 3,
+          "id": 29,
+          "answer": false,
+          "current": 0.284,
+          "textCos": 0.484,
+          "imageCos": null,
+          "D1_meanNormalized": 0.742,
+          "D2_meanCosine": 0.484,
+          "D3_calibratedMean": 0.192,
+          "D4_textOnlyCosine": 0.484
+        },
+        {
+          "rank": 4,
+          "id": 5,
+          "answer": false,
+          "current": 0.041,
+          "textCos": 0.438,
+          "imageCos": null,
+          "D1_meanNormalized": 0.719,
+          "D2_meanCosine": 0.438,
+          "D3_calibratedMean": 0.12,
+          "D4_textOnlyCosine": 0.438
+        },
+        {
+          "rank": 5,
+          "id": 27,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.431,
+          "imageCos": null,
+          "D1_meanNormalized": 0.715,
+          "D2_meanCosine": 0.431,
+          "D3_calibratedMean": 0.108,
+          "D4_textOnlyCosine": 0.431
+        }
+      ]
+    },
+    {
+      "label": "Q08 F→L",
+      "items": [
+        {
+          "rank": 1,
+          "id": 35,
+          "answer": true,
+          "current": 1,
+          "textCos": 0.612,
+          "imageCos": null,
+          "D1_meanNormalized": 0.806,
+          "D2_meanCosine": 0.612,
+          "D3_calibratedMean": 0.392,
+          "D4_textOnlyCosine": 0.612
+        },
+        {
+          "rank": 2,
+          "id": 13,
+          "answer": false,
+          "current": 0.306,
+          "textCos": 0.465,
+          "imageCos": null,
+          "D1_meanNormalized": 0.732,
+          "D2_meanCosine": 0.465,
+          "D3_calibratedMean": 0.162,
+          "D4_textOnlyCosine": 0.465
+        },
+        {
+          "rank": 3,
+          "id": 16,
+          "answer": false,
+          "current": 0.25,
+          "textCos": 0.453,
+          "imageCos": null,
+          "D1_meanNormalized": 0.726,
+          "D2_meanCosine": 0.453,
+          "D3_calibratedMean": 0.143,
+          "D4_textOnlyCosine": 0.453
+        },
+        {
+          "rank": 4,
+          "id": 29,
+          "answer": false,
+          "current": 0.004,
+          "textCos": 0.4,
+          "imageCos": null,
+          "D1_meanNormalized": 0.7,
+          "D2_meanCosine": 0.4,
+          "D3_calibratedMean": 0.061,
+          "D4_textOnlyCosine": 0.4
+        },
+        {
+          "rank": 5,
+          "id": 20,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.4,
+          "imageCos": null,
+          "D1_meanNormalized": 0.7,
+          "D2_meanCosine": 0.4,
+          "D3_calibratedMean": 0.06,
+          "D4_textOnlyCosine": 0.4
+        }
+      ]
+    },
+    {
+      "label": "M01 손목시계 잃어버렸어요",
+      "items": [
+        {
+          "rank": 1,
+          "id": 54,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.488,
+          "imageCos": null,
+          "D1_meanNormalized": 0.744,
+          "D2_meanCosine": 0.488,
+          "D3_calibratedMean": 0.198,
+          "D4_textOnlyCosine": 0.488
+        },
+        {
+          "rank": 2,
+          "id": 5,
+          "answer": false,
+          "current": 0.699,
+          "textCos": 0.475,
+          "imageCos": null,
+          "D1_meanNormalized": 0.737,
+          "D2_meanCosine": 0.475,
+          "D3_calibratedMean": 0.178,
+          "D4_textOnlyCosine": 0.475
+        },
+        {
+          "rank": 3,
+          "id": 4,
+          "answer": false,
+          "current": 0.618,
+          "textCos": 0.471,
+          "imageCos": null,
+          "D1_meanNormalized": 0.736,
+          "D2_meanCosine": 0.471,
+          "D3_calibratedMean": 0.172,
+          "D4_textOnlyCosine": 0.471
+        },
+        {
+          "rank": 4,
+          "id": 14,
+          "answer": false,
+          "current": 0.139,
+          "textCos": 0.451,
+          "imageCos": null,
+          "D1_meanNormalized": 0.725,
+          "D2_meanCosine": 0.451,
+          "D3_calibratedMean": 0.14,
+          "D4_textOnlyCosine": 0.451
+        },
+        {
+          "rank": 5,
+          "id": 45,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.445,
+          "imageCos": null,
+          "D1_meanNormalized": 0.722,
+          "D2_meanCosine": 0.445,
+          "D3_calibratedMean": 0.13,
+          "D4_textOnlyCosine": 0.445
+        }
+      ]
+    },
+    {
+      "label": "M02 카메라 렌즈캡 주웠어요",
+      "items": [
+        {
+          "rank": 1,
+          "id": 26,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.472,
+          "imageCos": null,
+          "D1_meanNormalized": 0.736,
+          "D2_meanCosine": 0.472,
+          "D3_calibratedMean": 0.173,
+          "D4_textOnlyCosine": 0.472
+        },
+        {
+          "rank": 2,
+          "id": 32,
+          "answer": false,
+          "current": 0.64,
+          "textCos": 0.445,
+          "imageCos": null,
+          "D1_meanNormalized": 0.723,
+          "D2_meanCosine": 0.445,
+          "D3_calibratedMean": 0.131,
+          "D4_textOnlyCosine": 0.445
+        },
+        {
+          "rank": 3,
+          "id": 29,
+          "answer": false,
+          "current": 0.451,
+          "textCos": 0.431,
+          "imageCos": null,
+          "D1_meanNormalized": 0.716,
+          "D2_meanCosine": 0.431,
+          "D3_calibratedMean": 0.109,
+          "D4_textOnlyCosine": 0.431
+        },
+        {
+          "rank": 4,
+          "id": 3,
+          "answer": false,
+          "current": 0.125,
+          "textCos": 0.407,
+          "imageCos": null,
+          "D1_meanNormalized": 0.703,
+          "D2_meanCosine": 0.407,
+          "D3_calibratedMean": 0.071,
+          "D4_textOnlyCosine": 0.407
+        },
+        {
+          "rank": 5,
+          "id": 13,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.398,
+          "imageCos": null,
+          "D1_meanNormalized": 0.699,
+          "D2_meanCosine": 0.398,
+          "D3_calibratedMean": 0.057,
+          "D4_textOnlyCosine": 0.398
+        }
+      ]
+    },
+    {
+      "label": "M03 집게핀 주웠어요",
+      "items": [
+        {
+          "rank": 1,
+          "id": 14,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.526,
+          "imageCos": null,
+          "D1_meanNormalized": 0.763,
+          "D2_meanCosine": 0.526,
+          "D3_calibratedMean": 0.257,
+          "D4_textOnlyCosine": 0.526
+        },
+        {
+          "rank": 2,
+          "id": 32,
+          "answer": false,
+          "current": 0.579,
+          "textCos": 0.488,
+          "imageCos": null,
+          "D1_meanNormalized": 0.744,
+          "D2_meanCosine": 0.488,
+          "D3_calibratedMean": 0.198,
+          "D4_textOnlyCosine": 0.488
+        },
+        {
+          "rank": 3,
+          "id": 15,
+          "answer": false,
+          "current": 0.346,
+          "textCos": 0.467,
+          "imageCos": null,
+          "D1_meanNormalized": 0.733,
+          "D2_meanCosine": 0.467,
+          "D3_calibratedMean": 0.165,
+          "D4_textOnlyCosine": 0.467
+        },
+        {
+          "rank": 4,
+          "id": 26,
+          "answer": false,
+          "current": 0.299,
+          "textCos": 0.462,
+          "imageCos": null,
+          "D1_meanNormalized": 0.731,
+          "D2_meanCosine": 0.462,
+          "D3_calibratedMean": 0.158,
+          "D4_textOnlyCosine": 0.462
+        },
+        {
+          "rank": 5,
+          "id": 30,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.435,
+          "imageCos": null,
+          "D1_meanNormalized": 0.718,
+          "D2_meanCosine": 0.435,
+          "D3_calibratedMean": 0.116,
+          "D4_textOnlyCosine": 0.435
+        }
+      ]
+    },
+    {
+      "label": "M04 은반지 분실",
+      "items": [
+        {
+          "rank": 1,
+          "id": 7,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.611,
+          "imageCos": null,
+          "D1_meanNormalized": 0.805,
+          "D2_meanCosine": 0.611,
+          "D3_calibratedMean": 0.391,
+          "D4_textOnlyCosine": 0.611
+        },
+        {
+          "rank": 2,
+          "id": 54,
+          "answer": false,
+          "current": 0.564,
+          "textCos": 0.567,
+          "imageCos": null,
+          "D1_meanNormalized": 0.783,
+          "D2_meanCosine": 0.567,
+          "D3_calibratedMean": 0.322,
+          "D4_textOnlyCosine": 0.567
+        },
+        {
+          "rank": 3,
+          "id": 28,
+          "answer": false,
+          "current": 0.16,
+          "textCos": 0.526,
+          "imageCos": null,
+          "D1_meanNormalized": 0.763,
+          "D2_meanCosine": 0.526,
+          "D3_calibratedMean": 0.257,
+          "D4_textOnlyCosine": 0.526
+        },
+        {
+          "rank": 4,
+          "id": 55,
+          "answer": false,
+          "current": 0.128,
+          "textCos": 0.523,
+          "imageCos": null,
+          "D1_meanNormalized": 0.761,
+          "D2_meanCosine": 0.523,
+          "D3_calibratedMean": 0.252,
+          "D4_textOnlyCosine": 0.523
+        },
+        {
+          "rank": 5,
+          "id": 5,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.51,
+          "imageCos": null,
+          "D1_meanNormalized": 0.755,
+          "D2_meanCosine": 0.51,
+          "D3_calibratedMean": 0.232,
+          "D4_textOnlyCosine": 0.51
+        }
+      ]
+    },
+    {
+      "label": "M05 목베개 습득",
+      "items": [
+        {
+          "rank": 1,
+          "id": 32,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.572,
+          "imageCos": null,
+          "D1_meanNormalized": 0.786,
+          "D2_meanCosine": 0.572,
+          "D3_calibratedMean": 0.33,
+          "D4_textOnlyCosine": 0.572
+        },
+        {
+          "rank": 2,
+          "id": 20,
+          "answer": false,
+          "current": 0.586,
+          "textCos": 0.518,
+          "imageCos": null,
+          "D1_meanNormalized": 0.759,
+          "D2_meanCosine": 0.518,
+          "D3_calibratedMean": 0.245,
+          "D4_textOnlyCosine": 0.518
+        },
+        {
+          "rank": 3,
+          "id": 30,
+          "answer": false,
+          "current": 0.18,
+          "textCos": 0.464,
+          "imageCos": null,
+          "D1_meanNormalized": 0.732,
+          "D2_meanCosine": 0.464,
+          "D3_calibratedMean": 0.161,
+          "D4_textOnlyCosine": 0.464
+        },
+        {
+          "rank": 4,
+          "id": 9,
+          "answer": false,
+          "current": 0.108,
+          "textCos": 0.455,
+          "imageCos": null,
+          "D1_meanNormalized": 0.727,
+          "D2_meanCosine": 0.455,
+          "D3_calibratedMean": 0.146,
+          "D4_textOnlyCosine": 0.455
+        },
+        {
+          "rank": 5,
+          "id": 31,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.44,
+          "imageCos": null,
+          "D1_meanNormalized": 0.72,
+          "D2_meanCosine": 0.44,
+          "D3_calibratedMean": 0.124,
+          "D4_textOnlyCosine": 0.44
+        }
+      ]
+    },
+    {
+      "label": "M06 노트북 거치대 두고 왔어요",
+      "items": [
+        {
+          "rank": 1,
+          "id": 39,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.726,
+          "imageCos": null,
+          "D1_meanNormalized": 0.863,
+          "D2_meanCosine": 0.726,
+          "D3_calibratedMean": 0.571,
+          "D4_textOnlyCosine": 0.726
+        },
+        {
+          "rank": 2,
+          "id": 41,
+          "answer": false,
+          "current": 0.619,
+          "textCos": 0.689,
+          "imageCos": null,
+          "D1_meanNormalized": 0.845,
+          "D2_meanCosine": 0.689,
+          "D3_calibratedMean": 0.514,
+          "D4_textOnlyCosine": 0.689
+        },
+        {
+          "rank": 3,
+          "id": 61,
+          "answer": false,
+          "current": 0.357,
+          "textCos": 0.664,
+          "imageCos": null,
+          "D1_meanNormalized": 0.832,
+          "D2_meanCosine": 0.664,
+          "D3_calibratedMean": 0.474,
+          "D4_textOnlyCosine": 0.664
+        },
+        {
+          "rank": 4,
+          "id": 13,
+          "answer": false,
+          "current": 0.081,
+          "textCos": 0.637,
+          "imageCos": null,
+          "D1_meanNormalized": 0.819,
+          "D2_meanCosine": 0.637,
+          "D3_calibratedMean": 0.432,
+          "D4_textOnlyCosine": 0.637
+        },
+        {
+          "rank": 5,
+          "id": 45,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.629,
+          "imageCos": null,
+          "D1_meanNormalized": 0.815,
+          "D2_meanCosine": 0.629,
+          "D3_calibratedMean": 0.419,
+          "D4_textOnlyCosine": 0.629
+        }
+      ]
+    },
+    {
+      "label": "M07 줄넘기 주웠어요",
+      "items": [
+        {
+          "rank": 1,
+          "id": 35,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.431,
+          "imageCos": null,
+          "D1_meanNormalized": 0.715,
+          "D2_meanCosine": 0.431,
+          "D3_calibratedMean": 0.108,
+          "D4_textOnlyCosine": 0.431
+        },
+        {
+          "rank": 2,
+          "id": 25,
+          "answer": false,
+          "current": 0.364,
+          "textCos": 0.404,
+          "imageCos": null,
+          "D1_meanNormalized": 0.702,
+          "D2_meanCosine": 0.404,
+          "D3_calibratedMean": 0.066,
+          "D4_textOnlyCosine": 0.404
+        },
+        {
+          "rank": 3,
+          "id": 16,
+          "answer": false,
+          "current": 0.338,
+          "textCos": 0.403,
+          "imageCos": null,
+          "D1_meanNormalized": 0.701,
+          "D2_meanCosine": 0.403,
+          "D3_calibratedMean": 0.064,
+          "D4_textOnlyCosine": 0.403
+        },
+        {
+          "rank": 4,
+          "id": 20,
+          "answer": false,
+          "current": 0.325,
+          "textCos": 0.402,
+          "imageCos": null,
+          "D1_meanNormalized": 0.701,
+          "D2_meanCosine": 0.402,
+          "D3_calibratedMean": 0.063,
+          "D4_textOnlyCosine": 0.402
+        },
+        {
+          "rank": 5,
+          "id": 34,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.388,
+          "imageCos": null,
+          "D1_meanNormalized": 0.694,
+          "D2_meanCosine": 0.388,
+          "D3_calibratedMean": 0.042,
+          "D4_textOnlyCosine": 0.388
+        }
+      ]
+    },
+    {
+      "label": "M08 베이지 양산 잃어버렸어요",
+      "items": [
+        {
+          "rank": 1,
+          "id": 10,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.642,
+          "imageCos": null,
+          "D1_meanNormalized": 0.821,
+          "D2_meanCosine": 0.642,
+          "D3_calibratedMean": 0.439,
+          "D4_textOnlyCosine": 0.642
+        },
+        {
+          "rank": 2,
+          "id": 11,
+          "answer": false,
+          "current": 0.483,
+          "textCos": 0.563,
+          "imageCos": null,
+          "D1_meanNormalized": 0.781,
+          "D2_meanCosine": 0.563,
+          "D3_calibratedMean": 0.316,
+          "D4_textOnlyCosine": 0.563
+        },
+        {
+          "rank": 3,
+          "id": 59,
+          "answer": false,
+          "current": 0.032,
+          "textCos": 0.494,
+          "imageCos": null,
+          "D1_meanNormalized": 0.747,
+          "D2_meanCosine": 0.494,
+          "D3_calibratedMean": 0.208,
+          "D4_textOnlyCosine": 0.494
+        },
+        {
+          "rank": 4,
+          "id": 26,
+          "answer": false,
+          "current": 0.022,
+          "textCos": 0.493,
+          "imageCos": null,
+          "D1_meanNormalized": 0.746,
+          "D2_meanCosine": 0.493,
+          "D3_calibratedMean": 0.205,
+          "D4_textOnlyCosine": 0.493
+        },
+        {
+          "rank": 5,
+          "id": 19,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.489,
+          "imageCos": null,
+          "D1_meanNormalized": 0.745,
+          "D2_meanCosine": 0.489,
+          "D3_calibratedMean": 0.2,
+          "D4_textOnlyCosine": 0.489
+        }
+      ]
+    },
+    {
+      "label": "M09 손선풍기 주웠어요",
+      "items": [
+        {
+          "rank": 1,
+          "id": 16,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.502,
+          "imageCos": null,
+          "D1_meanNormalized": 0.751,
+          "D2_meanCosine": 0.502,
+          "D3_calibratedMean": 0.219,
+          "D4_textOnlyCosine": 0.502
+        },
+        {
+          "rank": 2,
+          "id": 13,
+          "answer": false,
+          "current": 0.821,
+          "textCos": 0.493,
+          "imageCos": null,
+          "D1_meanNormalized": 0.746,
+          "D2_meanCosine": 0.493,
+          "D3_calibratedMean": 0.205,
+          "D4_textOnlyCosine": 0.493
+        },
+        {
+          "rank": 3,
+          "id": 17,
+          "answer": false,
+          "current": 0.612,
+          "textCos": 0.482,
+          "imageCos": null,
+          "D1_meanNormalized": 0.741,
+          "D2_meanCosine": 0.482,
+          "D3_calibratedMean": 0.189,
+          "D4_textOnlyCosine": 0.482
+        },
+        {
+          "rank": 4,
+          "id": 3,
+          "answer": false,
+          "current": 0.479,
+          "textCos": 0.475,
+          "imageCos": null,
+          "D1_meanNormalized": 0.738,
+          "D2_meanCosine": 0.475,
+          "D3_calibratedMean": 0.179,
+          "D4_textOnlyCosine": 0.475
+        },
+        {
+          "rank": 5,
+          "id": 26,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.452,
+          "imageCos": null,
+          "D1_meanNormalized": 0.726,
+          "D2_meanCosine": 0.452,
+          "D3_calibratedMean": 0.141,
+          "D4_textOnlyCosine": 0.452
+        }
+      ]
+    },
+    {
+      "label": "M10 서류 든 L자 파일 분실",
+      "items": [
+        {
+          "rank": 1,
+          "id": 5,
+          "answer": false,
+          "current": 1,
+          "textCos": 0.571,
+          "imageCos": null,
+          "D1_meanNormalized": 0.785,
+          "D2_meanCosine": 0.571,
+          "D3_calibratedMean": 0.327,
+          "D4_textOnlyCosine": 0.571
+        },
+        {
+          "rank": 2,
+          "id": 1,
+          "answer": false,
+          "current": 0.939,
+          "textCos": 0.567,
+          "imageCos": null,
+          "D1_meanNormalized": 0.783,
+          "D2_meanCosine": 0.567,
+          "D3_calibratedMean": 0.322,
+          "D4_textOnlyCosine": 0.567
+        },
+        {
+          "rank": 3,
+          "id": 25,
+          "answer": false,
+          "current": 0.695,
+          "textCos": 0.553,
+          "imageCos": null,
+          "D1_meanNormalized": 0.776,
+          "D2_meanCosine": 0.553,
+          "D3_calibratedMean": 0.3,
+          "D4_textOnlyCosine": 0.553
+        },
+        {
+          "rank": 4,
+          "id": 22,
+          "answer": false,
+          "current": 0.139,
+          "textCos": 0.52,
+          "imageCos": null,
+          "D1_meanNormalized": 0.76,
+          "D2_meanCosine": 0.52,
+          "D3_calibratedMean": 0.249,
+          "D4_textOnlyCosine": 0.52
+        },
+        {
+          "rank": 5,
+          "id": 7,
+          "answer": false,
+          "current": 0,
+          "textCos": 0.512,
+          "imageCos": null,
+          "D1_meanNormalized": 0.756,
+          "D2_meanCosine": 0.512,
+          "D3_calibratedMean": 0.236,
+          "D4_textOnlyCosine": 0.512
+        }
+      ]
+    }
+  ]
+}

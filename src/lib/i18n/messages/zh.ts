@@ -151,7 +151,7 @@ export const zh: Dictionary = {
   "aiSearch.typeConflict": "带照片的 AI 搜索仅在选择失物或招领版块后才能使用。",
   "aiSearch.failed": "AI 搜索失败，请重试。",
   "aiSearch.resultNotice":
-    "这些是 AI 找到的相似招领物品。相似度越高，与您寻找的物品越接近。",
+    "这些是 AI 找到的相似招领物品。排名越靠前，与您寻找的物品越接近。",
   "aiSearch.empty.title": "没有找到相似的帖子。",
   "aiSearch.empty.description": "请换个搜索词或照片再试试。",
 

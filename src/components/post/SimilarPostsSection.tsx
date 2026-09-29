@@ -85,9 +85,8 @@ export function SimilarPostsSection({
           {recommendations.map((post) => (
             // AI 검색 고도화 Phase: shows "AI 유사도 0.xx" (scoreDisplay=
             // "decimal", see PostCard's own comment on why this is never
-            // ×100 -- it's recommendation/service.ts's min-max-normalized,
-            // then averaged score, the exact same shape AI 검색's combined
-            // text+image path produces via the shared rankFusion module),
+            // ×100 -- it's rankFusion.ts's absolute D3 AI 유사도; AI 검색
+            // results no longer show a score at all, see AISearchPanel),
             // except on the just-created-post auto-recommendation view
             // (showScore=false, see this component's own prop comment),
             // where the badge is hidden entirely instead.

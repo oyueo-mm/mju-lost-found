@@ -348,8 +348,16 @@ export function AISearchPanel({
             </div>
           ) : (
             <div className={SEARCH_RESULTS_GRID_CLASS}>
+              {/* AI 검색 점수 숨김 Phase: search results no longer show the
+                  "AI 유사도 0.xx" badge. A query <-> post AI 유사도 sits on a
+                  lower range than the post <-> post one the detail-page AI
+                  추천 shows, and the title-match bonus reorders results
+                  without changing their similarity, so a displayed number
+                  often disagreed with the order (docs/ai-eval-seed/
+                  search-calibration-2026-09-29.json). The ranking itself --
+                  and `post.score` in the API response -- are unchanged. */}
               {results.map((post) => (
-                <PostCard key={`${post.type}-${post.id}`} post={post} scoreLabel={t("post.score.ai")} scoreDisplay="decimal" />
+                <PostCard key={`${post.type}-${post.id}`} post={post} scoreDisplay="hidden" />
               ))}
             </div>
           )}

@@ -25,13 +25,35 @@ const basePost: PostDTO = {
   viewCount: 3,
 };
 
-function renderCard(post: PostDTO): string {
+function renderCard(post: PostDTO, props: Omit<Parameters<typeof PostCard>[0], "post"> = {}): string {
   return renderToStaticMarkup(
     <I18nProvider locale="ko" messages={ko}>
-      <PostCard post={post} />
+      <PostCard post={post} {...props} />
     </I18nProvider>,
   );
 }
+
+describe("PostCard score badge", () => {
+  const scored = { ...basePost, score: 0.6234 };
+
+  it("shows the detail-page AI 추천 score as 'AI 유사도 0.xx' (decimal, never a percentage)", () => {
+    const markup = renderCard(scored, { scoreLabel: ko["post.score.ai"], scoreDisplay: "decimal" });
+
+    expect(markup).toContain("AI 유사도 0.62");
+    expect(markup).not.toContain("62%");
+  });
+
+  // AI 검색 점수 숨김 Phase: AISearchPanel renders every result this way.
+  it("hides only the score badge when scoreDisplay is 'hidden', keeping the rest of the card", () => {
+    const markup = renderCard(scored, { scoreLabel: ko["post.score.ai"], scoreDisplay: "hidden" });
+
+    expect(markup).not.toContain("AI 유사도");
+    expect(markup).not.toContain("0.62");
+    expect(markup).toContain(basePost.title);
+    expect(markup).toContain(basePost.description);
+    expect(markup).toContain(basePost.location!);
+  });
+});
 
 describe("PostCard desktop layout", () => {
   it("renders a no-image description directly below the body on the card surface", () => {

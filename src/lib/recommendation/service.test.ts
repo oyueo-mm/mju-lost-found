@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AI_SIMILARITY_SCALE_ID, aiSimilarity } from "@/lib/ai/rankFusion";
+
 const lostPost = { findMany: vi.fn() };
 const foundPost = { findMany: vi.fn() };
 const matchCandidateCache = { findUnique: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() };
 const findSimilarPosts = vi.fn();
 const findSimilarPostsByImage = vi.fn();
+const findCandidateCosines = vi.fn();
 
 class FakeEmbeddingNotAvailableError extends Error {}
 
@@ -12,10 +15,12 @@ vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost, matchCandidat
 vi.mock("@/lib/ai/vectorSearch", () => ({
   findSimilarPosts,
   findSimilarPostsByImage,
+  findCandidateCosines,
   EmbeddingNotAvailableError: FakeEmbeddingNotAvailableError,
 }));
 
-const { findPostRecommendations, invalidateRecommendationCache } = await import("./service");
+const { applyRecommendationMinimum, findPostRecommendations, invalidateRecommendationCache, RECOMMENDATION_MIN_AI_SIMILARITY } =
+  await import("./service");
 
 const row = (overrides: Partial<Record<string, unknown>> = {}) => ({
   id: 5,
@@ -35,10 +40,13 @@ const row = (overrides: Partial<Record<string, unknown>> = {}) => ({
   ...overrides,
 });
 
+const d3 = (text: number | null, image: number | null) => aiSimilarity(text, image)!.score;
+
 beforeEach(() => {
   vi.clearAllMocks();
   matchCandidateCache.findUnique.mockResolvedValue(null);
   findSimilarPostsByImage.mockResolvedValue([]);
+  findCandidateCosines.mockResolvedValue([]);
 });
 
 describe("findPostRecommendations", () => {
@@ -49,6 +57,7 @@ describe("findPostRecommendations", () => {
 
     expect(findSimilarPosts).toHaveBeenCalledWith("lost", 1, expect.any(Number));
     expect(findSimilarPostsByImage).toHaveBeenCalledWith("lost", 1, expect.any(Number));
+    expect(findCandidateCosines).not.toHaveBeenCalled(); // empty pool -> nothing to score
     expect(foundPost.findMany).not.toHaveBeenCalled(); // no candidates -> no enrichment query needed
   });
 
@@ -79,14 +88,13 @@ describe("findPostRecommendations", () => {
 
   it("still returns image-only recommendations when the source has no text embedding", async () => {
     findSimilarPosts.mockRejectedValueOnce(new FakeEmbeddingNotAvailableError("no embedding"));
-    // A single candidate is trivially tied with itself on the image signal
-    // (min === max), so it normalizes to 1 -- see minMaxNormalize()'s tie case.
-    findSimilarPostsByImage.mockResolvedValueOnce([{ id: 5, score: 0.7 }]);
+    findSimilarPostsByImage.mockResolvedValueOnce([{ id: 5, score: 0.95 }]);
+    findCandidateCosines.mockResolvedValueOnce([{ id: 5, text: null, image: 0.9 }]);
     foundPost.findMany.mockResolvedValueOnce([row()]);
 
     const result = await findPostRecommendations("lost", 1);
 
-    expect(result).toEqual([expect.objectContaining({ id: 5, score: 1 })]);
+    expect(result).toEqual([expect.objectContaining({ id: 5, score: d3(null, 0.9) })]);
   });
 
   it("propagates a real (non-embedding) failure from the text search", async () => {
@@ -95,10 +103,9 @@ describe("findPostRecommendations", () => {
     await expect(findPostRecommendations("lost", 1)).rejects.toThrow("connection reset");
   });
 
-  it("enriches a text-only candidate with fully hydrated post details", async () => {
-    // Same tie case as the image-only test above -- a lone text candidate
-    // normalizes to 1.
+  it("enriches a candidate with fully hydrated post details and its absolute AI 유사도", async () => {
     findSimilarPosts.mockResolvedValueOnce([{ id: 5, score: 0.87 }]);
+    findCandidateCosines.mockResolvedValueOnce([{ id: 5, text: 0.74, image: null }]);
     foundPost.findMany.mockResolvedValueOnce([row()]);
 
     const result = await findPostRecommendations("lost", 1);
@@ -117,80 +124,83 @@ describe("findPostRecommendations", () => {
         title: "습득한 지갑",
         status: "보관 중",
         author: { id: 2, nickname: "홍길동", publicId: "pub-2" },
-        score: 1,
+        score: d3(0.74, null),
       }),
     ]);
+    // A lone candidate is no longer normalized to 1 (the old relative score).
+    expect(result[0].score).toBeLessThan(1);
   });
 
-  // Phase O-4: text/image cosine similarity sit on different absolute
-  // scales (Phase O-3's finding), so each signal is min-max normalized
-  // across the current candidate union before averaging -- never a plain
-  // average of the raw scores.
-  it("averages normalized text and image scores when a candidate appears in both rankings", async () => {
+  // D3-pool: the pool is the text top-K ∪ the image top-K, unchanged, but
+  // both signals are fetched for every pooled candidate and the pool is
+  // re-sorted by AI 유사도.
+  it("scores the text ∪ image candidate pool with both signals and sorts it by AI 유사도", async () => {
     findSimilarPosts.mockResolvedValueOnce([
-      { id: 5, score: 0.6 },
+      { id: 5, score: 0.85 },
       { id: 6, score: 0.8 },
-      { id: 7, score: 1.0 },
     ]);
-    findSimilarPostsByImage.mockResolvedValueOnce([
-      { id: 5, score: 0.5 },
-      { id: 6, score: 0.7 },
-      { id: 7, score: 0.9 },
+    findSimilarPostsByImage.mockResolvedValueOnce([{ id: 7, score: 0.97 }]);
+    findCandidateCosines.mockResolvedValueOnce([
+      { id: 5, text: 0.7, image: null },
+      { id: 6, text: 0.6, image: 0.95 }, // made only the text top-K, but has a strong image match
+      { id: 7, text: 0.3, image: 0.94 },
     ]);
     foundPost.findMany.mockResolvedValueOnce([row({ id: 5 }), row({ id: 6 }), row({ id: 7 })]);
 
     const result = await findPostRecommendations("lost", 1);
 
-    // Each signal spans the same min/max, so normalized text === normalized
-    // image for every id here, and the average equals that shared value:
-    // id5 -> 0, id6 -> 0.5, id7 -> 1.
-    const byId = new Map(result.map((r) => [r.id, r.score]));
-    expect(byId.get(5)).toBeCloseTo(0, 5);
-    expect(byId.get(6)).toBeCloseTo(0.5, 5);
-    expect(byId.get(7)).toBeCloseTo(1, 5);
+    expect(findCandidateCosines).toHaveBeenCalledWith("lost", 1, [5, 6, 7]);
+    expect(result.map((r) => r.id)).toEqual([6, 5, 7]);
+    expect(result.map((r) => r.score)).toEqual([d3(0.6, 0.95), d3(0.7, null), d3(0.3, 0.94)]);
   });
 
-  // Phase O-3's concrete finding: a candidate whose only advantage is
-  // having a (structurally inflated) image score used to outrank a
-  // no-image candidate with genuinely higher text relevance. Normalizing
-  // each signal within its own candidate set before averaging fixes this.
-  it("no longer lets a raw high image score outrank a no-image candidate with better relative text relevance", async () => {
+  // 추천 최소 AI 유사도 Phase.
+  it("hides candidates whose AI 유사도 is below RECOMMENDATION_MIN_AI_SIMILARITY", async () => {
     findSimilarPosts.mockResolvedValueOnce([
-      { id: 5, score: 0.65 }, // has an image; weaker text match
-      { id: 6, score: 0.75 }, // no image; stronger text match
-    ]);
-    findSimilarPostsByImage.mockResolvedValueOnce([{ id: 5, score: 0.95 }]);
-    foundPost.findMany.mockResolvedValueOnce([row({ id: 5 }), row({ id: 6 })]);
-
-    const result = await findPostRecommendations("lost", 1);
-
-    const byId = new Map(result.map((r) => [r.id, r.score]));
-    // Old plain-average behavior: id5 = (0.65+0.95)/2 = 0.8 > id6 = 0.75 (wrong).
-    // Normalized: text min/max = [0.65, 0.75] -> id5=0, id6=1; image is a
-    // singleton -> id5's image normalizes to 1 (tie case).
-    // id5 = avg(0, 1) = 0.5, id6 = 1 (text-only, untouched by image).
-    expect(byId.get(6)).toBeGreaterThan(byId.get(5)!);
-    expect(byId.get(5)).toBeCloseTo(0.5, 5);
-    expect(byId.get(6)).toBeCloseTo(1, 5);
-  });
-
-  it("handles a tied signal (all candidates score identically) without producing NaN or Infinity", async () => {
-    findSimilarPosts.mockResolvedValueOnce([
-      { id: 5, score: 0.7 },
+      { id: 5, score: 0.85 },
       { id: 6, score: 0.7 },
     ]);
-    foundPost.findMany.mockResolvedValueOnce([row({ id: 5 }), row({ id: 6 })]);
+    findCandidateCosines.mockResolvedValueOnce([
+      { id: 5, text: 0.7, image: null }, // D3 0.53 -- shown
+      { id: 6, text: 0.5, image: null }, // D3 0.22 -- hidden
+    ]);
+    foundPost.findMany.mockResolvedValueOnce([row({ id: 5 })]);
 
     const result = await findPostRecommendations("lost", 1);
 
-    for (const r of result) {
-      expect(Number.isFinite(r.score)).toBe(true);
-      expect(r.score).toBe(1); // tied signal -> treated as equally maximal, not 0
-    }
+    expect(d3(0.5, null)).toBeLessThan(RECOMMENDATION_MIN_AI_SIMILARITY);
+    expect(foundPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: { in: [5] } } }));
+    expect(result.map((r) => r.id)).toEqual([5]);
+  });
+
+  it("keeps a candidate scoring exactly the minimum", () => {
+    expect(applyRecommendationMinimum([{ id: 1, score: RECOMMENDATION_MIN_AI_SIMILARITY }])).toEqual([
+      { id: 1, score: RECOMMENDATION_MIN_AI_SIMILARITY },
+    ]);
+  });
+
+  it("returns the empty ('추천 없음') state when every candidate is below the minimum", async () => {
+    findSimilarPosts.mockResolvedValueOnce([
+      { id: 5, score: 0.7 },
+      { id: 6, score: 0.66 },
+    ]);
+    findCandidateCosines.mockResolvedValueOnce([
+      { id: 5, text: 0.5, image: null },
+      { id: 6, text: 0.33, image: null },
+    ]);
+
+    const result = await findPostRecommendations("lost", 1);
+
+    expect(result).toEqual([]);
+    expect(foundPost.findMany).not.toHaveBeenCalled();
   });
 
   it("drops a ranked candidate that no longer exists (deleted since ranking)", async () => {
     findSimilarPosts.mockResolvedValueOnce([{ id: 5, score: 0.8 }, { id: 6, score: 0.7 }]);
+    findCandidateCosines.mockResolvedValueOnce([
+      { id: 5, text: 0.7, image: null },
+      { id: 6, text: 0.65, image: null },
+    ]);
     foundPost.findMany.mockResolvedValueOnce([row({ id: 5 })]); // id 6 no longer exists
 
     const result = await findPostRecommendations("lost", 1);
@@ -200,12 +210,12 @@ describe("findPostRecommendations", () => {
 });
 
 describe("findPostRecommendations -- ranking cache", () => {
-  it("returns a cached ranking without calling findSimilarPosts again, but re-fetches fresh post rows", async () => {
+  it("returns a current-scale cached ranking without searching again, but re-fetches fresh post rows", async () => {
     matchCandidateCache.findUnique.mockResolvedValueOnce({
       id: 1,
       sourceType: "lost",
       sourcePostId: 1,
-      candidates: [{ id: 5, score: 0.9 }],
+      candidates: { scale: AI_SIMILARITY_SCALE_ID, ranking: [{ id: 5, score: 0.42 }] },
       computedAt: new Date(),
     });
     foundPost.findMany.mockResolvedValueOnce([row({ id: 5, title: "최신 제목" })]);
@@ -214,13 +224,84 @@ describe("findPostRecommendations -- ranking cache", () => {
 
     expect(findSimilarPosts).not.toHaveBeenCalled();
     expect(findSimilarPostsByImage).not.toHaveBeenCalled();
-    expect(result).toEqual([expect.objectContaining({ id: 5, title: "최신 제목", score: 0.9 })]);
+    expect(result).toEqual([expect.objectContaining({ id: 5, title: "최신 제목", score: 0.42 })]);
   });
 
-  it("computes and writes the (normalized) ranking to the cache on a cache miss", async () => {
-    // Lone candidate -> tie case -> normalizes to 1, same as the earlier
-    // text-only test.
+  it("treats a pre-D3 relative-score row (bare array) as a miss and overwrites it", async () => {
+    matchCandidateCache.findUnique.mockResolvedValueOnce({
+      id: 1,
+      sourceType: "lost",
+      sourcePostId: 1,
+      candidates: [{ id: 5, score: 1 }],
+      computedAt: new Date(),
+    });
     findSimilarPosts.mockResolvedValueOnce([{ id: 5, score: 0.87 }]);
+    findCandidateCosines.mockResolvedValueOnce([{ id: 5, text: 0.74, image: null }]);
+    foundPost.findMany.mockResolvedValueOnce([row()]);
+
+    const result = await findPostRecommendations("lost", 1);
+
+    expect(findSimilarPosts).toHaveBeenCalled();
+    expect(result).toEqual([expect.objectContaining({ id: 5, score: d3(0.74, null) })]);
+    expect(matchCandidateCache.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          candidates: { scale: AI_SIMILARITY_SCALE_ID, ranking: [{ id: 5, score: d3(0.74, null) }] },
+        }),
+      }),
+    );
+  });
+
+  it("caches the full ranking but applies the minimum when reading it", async () => {
+    findSimilarPosts.mockResolvedValueOnce([{ id: 5, score: 0.85 }, { id: 6, score: 0.7 }]);
+    findCandidateCosines.mockResolvedValueOnce([
+      { id: 5, text: 0.7, image: null },
+      { id: 6, text: 0.5, image: null },
+    ]);
+    foundPost.findMany.mockResolvedValueOnce([row({ id: 5 })]);
+
+    await findPostRecommendations("lost", 1);
+
+    expect(matchCandidateCache.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          candidates: { scale: AI_SIMILARITY_SCALE_ID, ranking: [{ id: 5, score: d3(0.7, null) }, { id: 6, score: d3(0.5, null) }] },
+        }),
+      }),
+    );
+
+    matchCandidateCache.findUnique.mockResolvedValueOnce({
+      id: 1,
+      sourceType: "lost",
+      sourcePostId: 1,
+      candidates: { scale: AI_SIMILARITY_SCALE_ID, ranking: [{ id: 5, score: 0.53 }, { id: 6, score: 0.2 }] },
+      computedAt: new Date(),
+    });
+    foundPost.findMany.mockResolvedValueOnce([row({ id: 5 })]);
+
+    const cached = await findPostRecommendations("lost", 1);
+
+    expect(cached.map((r) => r.id)).toEqual([5]);
+  });
+
+  it("treats a row from a different scale (e.g. changed baselines) as a miss", async () => {
+    matchCandidateCache.findUnique.mockResolvedValueOnce({
+      id: 1,
+      sourceType: "lost",
+      sourcePostId: 1,
+      candidates: { scale: "d3:text=0.3:image=0.6", ranking: [{ id: 5, score: 0.9 }] },
+      computedAt: new Date(),
+    });
+    findSimilarPosts.mockResolvedValueOnce([]);
+
+    await findPostRecommendations("lost", 1);
+
+    expect(findSimilarPosts).toHaveBeenCalled();
+  });
+
+  it("computes and writes the scale-tagged ranking to the cache on a cache miss", async () => {
+    findSimilarPosts.mockResolvedValueOnce([{ id: 5, score: 0.87 }]);
+    findCandidateCosines.mockResolvedValueOnce([{ id: 5, text: 0.74, image: null }]);
     foundPost.findMany.mockResolvedValueOnce([row()]);
 
     await findPostRecommendations("lost", 1);
@@ -228,7 +309,9 @@ describe("findPostRecommendations -- ranking cache", () => {
     expect(matchCandidateCache.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { sourceType_sourcePostId: { sourceType: "lost", sourcePostId: 1 } },
-        create: expect.objectContaining({ candidates: [{ id: 5, score: 1 }] }),
+        create: expect.objectContaining({
+          candidates: { scale: AI_SIMILARITY_SCALE_ID, ranking: [{ id: 5, score: d3(0.74, null) }] },
+        }),
       }),
     );
   });
@@ -239,7 +322,9 @@ describe("findPostRecommendations -- ranking cache", () => {
     await findPostRecommendations("lost", 1);
 
     expect(matchCandidateCache.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ create: expect.objectContaining({ candidates: [] }) }),
+      expect.objectContaining({
+        create: expect.objectContaining({ candidates: { scale: AI_SIMILARITY_SCALE_ID, ranking: [] } }),
+      }),
     );
   });
 });

@@ -1,0 +1,3411 @@
+{
+  "environment": "Preview (swqvlihgupranzfzjevb)",
+  "evaluatedAt": "2026-09-29T05:45:45.024Z",
+  "benchmark": "docs/ai-eval-seed/ground-truth.json (26 pairs, 37 hard negatives, 10 no-match, 99 posts)",
+  "notes": [
+    "알고리즘/점수 계산 미수정 상태의 baseline.",
+    "추천은 findPostRecommendations()와 동일한 함수 조합으로 계산(캐시 미기록).",
+    "semantic_title=분실글 제목, semantic_fulltext=분실글 제목+본문(100자 제한), semantic_demo=시연용 자연어 문장(일부 쌍만).",
+    "image=같은 물건을 다른 각도/배경으로 그린 합성 이미지(실사진 아님), 사진 있는 12쌍만."
+  ],
+  "overall_primary": {
+    "n": 64,
+    "top1": 0.609,
+    "recall3": 0.844,
+    "recall5": 0.891,
+    "mrr": 0.739
+  },
+  "byMethod": {
+    "semantic_title": {
+      "n": 26,
+      "top1": 0.462,
+      "recall3": 0.654,
+      "recall5": 0.769,
+      "mrr": 0.594
+    },
+    "semantic_fulltext": {
+      "n": 26,
+      "top1": 0.615,
+      "recall3": 0.808,
+      "recall5": 0.962,
+      "mrr": 0.75
+    },
+    "semantic_demo": {
+      "n": 10,
+      "top1": 0.5,
+      "recall3": 0.9,
+      "recall5": 0.9,
+      "mrr": 0.681
+    },
+    "rec_lost_to_found": {
+      "n": 26,
+      "top1": 0.692,
+      "recall3": 0.962,
+      "recall5": 0.962,
+      "mrr": 0.821
+    },
+    "rec_found_to_lost": {
+      "n": 26,
+      "top1": 0.885,
+      "recall3": 0.962,
+      "recall5": 1,
+      "mrr": 0.931
+    },
+    "image": {
+      "n": 12,
+      "top1": 0.75,
+      "recall3": 1,
+      "recall5": 1,
+      "mrr": 0.875
+    }
+  },
+  "byDifficulty": {
+    "semantic_title": {
+      "easy": {
+        "n": 7,
+        "top1": 0.857,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 0.929
+      },
+      "medium": {
+        "n": 11,
+        "top1": 0.273,
+        "recall3": 0.545,
+        "recall5": 0.727,
+        "mrr": 0.472
+      },
+      "hard": {
+        "n": 8,
+        "top1": 0.375,
+        "recall3": 0.5,
+        "recall5": 0.625,
+        "mrr": 0.469
+      }
+    },
+    "semantic_fulltext": {
+      "easy": {
+        "n": 7,
+        "top1": 1,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 1
+      },
+      "medium": {
+        "n": 11,
+        "top1": 0.364,
+        "recall3": 0.727,
+        "recall5": 1,
+        "mrr": 0.614
+      },
+      "hard": {
+        "n": 8,
+        "top1": 0.625,
+        "recall3": 0.75,
+        "recall5": 0.875,
+        "mrr": 0.719
+      }
+    },
+    "semantic_demo": {
+      "easy": {
+        "n": 2,
+        "top1": 1,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 1
+      },
+      "medium": {
+        "n": 6,
+        "top1": 0.333,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 0.611
+      },
+      "hard": {
+        "n": 2,
+        "top1": 0.5,
+        "recall3": 0.5,
+        "recall5": 0.5,
+        "mrr": 0.571
+      }
+    },
+    "rec_lost_to_found": {
+      "easy": {
+        "n": 7,
+        "top1": 1,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 1
+      },
+      "medium": {
+        "n": 11,
+        "top1": 0.545,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 0.773
+      },
+      "hard": {
+        "n": 8,
+        "top1": 0.625,
+        "recall3": 0.875,
+        "recall5": 0.875,
+        "mrr": 0.729
+      }
+    },
+    "rec_found_to_lost": {
+      "easy": {
+        "n": 7,
+        "top1": 1,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 1
+      },
+      "medium": {
+        "n": 11,
+        "top1": 1,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 1
+      },
+      "hard": {
+        "n": 8,
+        "top1": 0.625,
+        "recall3": 0.875,
+        "recall5": 1,
+        "mrr": 0.775
+      }
+    },
+    "image": {
+      "easy": {
+        "n": 3,
+        "top1": 1,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 1
+      },
+      "medium": {
+        "n": 8,
+        "top1": 0.625,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 0.813
+      },
+      "hard": {
+        "n": 1,
+        "top1": 1,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 1
+      }
+    }
+  },
+  "hardNegativeAboveAnswerRate": {
+    "semantic_title": {
+      "pairs": 22,
+      "above": 11,
+      "rate": 0.5
+    },
+    "semantic_fulltext": {
+      "pairs": 22,
+      "above": 8,
+      "rate": 0.364
+    },
+    "semantic_demo": {
+      "pairs": 8,
+      "above": 4,
+      "rate": 0.5
+    },
+    "rec_lost_to_found": {
+      "pairs": 22,
+      "above": 7,
+      "rate": 0.318
+    },
+    "rec_found_to_lost": {
+      "pairs": 7,
+      "above": 2,
+      "rate": 0.286
+    },
+    "image": {
+      "pairs": 12,
+      "above": 3,
+      "rate": 0.25
+    }
+  },
+  "noMatch": {
+    "recommendationShownRate": 1,
+    "recommendationTop1DisplayedAs1": 1,
+    "semanticShownRate": 1,
+    "semanticAvgShown": 8.8,
+    "items": [
+      {
+        "noMatchId": "M01",
+        "title": "손목시계 잃어버렸어요",
+        "board": "lost",
+        "recommendation": {
+          "shown": 5,
+          "top1": {
+            "title": "열쇠 두 개 달린 링",
+            "displayedScore": 1,
+            "rawTextSimilarity": 0.7439524502527545
+          }
+        },
+        "semantic": {
+          "shown": 10,
+          "top1": {
+            "title": "휴대폰 카드케이스 주웠어요",
+            "score": 0.7080050965579465
+          }
+        }
+      },
+      {
+        "noMatchId": "M02",
+        "title": "카메라 렌즈캡 주웠어요",
+        "board": "found",
+        "recommendation": {
+          "shown": 5,
+          "top1": {
+            "title": "스티커 붙은 보온병 분실",
+            "displayedScore": 1,
+            "rawTextSimilarity": 0.7359396135447125
+          }
+        },
+        "semantic": {
+          "shown": 10,
+          "top1": {
+            "title": "스티커 붙은 보온병 분실",
+            "score": 0.715327554701735
+          }
+        }
+      },
+      {
+        "noMatchId": "M03",
+        "title": "집게핀 주웠어요",
+        "board": "found",
+        "recommendation": {
+          "shown": 5,
+          "top1": {
+            "title": "은반지 분실",
+            "displayedScore": 1,
+            "rawTextSimilarity": 0.762918767233189
+          }
+        },
+        "semantic": {
+          "shown": 5,
+          "top1": {
+            "title": "은반지 분실",
+            "score": 0.688226010520576
+          }
+        }
+      },
+      {
+        "noMatchId": "M04",
+        "title": "은반지 분실",
+        "board": "lost",
+        "recommendation": {
+          "shown": 5,
+          "top1": {
+            "title": "투명 폰케이스만 주웠어요",
+            "displayedScore": 1,
+            "rawTextSimilarity": 0.8054786415540875
+          }
+        },
+        "semantic": {
+          "shown": 10,
+          "top1": {
+            "title": "휴대폰 카드케이스 주웠어요",
+            "score": 0.7079502975718525
+          }
+        }
+      },
+      {
+        "noMatchId": "M05",
+        "title": "목베개 습득",
+        "board": "found",
+        "recommendation": {
+          "shown": 5,
+          "top1": {
+            "title": "회색 후드집업 두고 왔어요",
+            "displayedScore": 1,
+            "rawTextSimilarity": 0.786182169459127
+          }
+        },
+        "semantic": {
+          "shown": 4,
+          "top1": {
+            "title": "회색 후드집업 두고 왔어요",
+            "score": 0.685341406227602
+          }
+        }
+      },
+      {
+        "noMatchId": "M06",
+        "title": "노트북 거치대 두고 왔어요",
+        "board": "lost",
+        "recommendation": {
+          "shown": 5,
+          "top1": {
+            "title": "검은색 노트북 보관 중",
+            "displayedScore": 1,
+            "rawTextSimilarity": 0.8631567249169185
+          }
+        },
+        "semantic": {
+          "shown": 10,
+          "top1": {
+            "title": "검은색 노트북 보관 중",
+            "score": 0.874378111771698
+          }
+        }
+      },
+      {
+        "noMatchId": "M07",
+        "title": "줄넘기 주웠어요",
+        "board": "found",
+        "recommendation": {
+          "shown": 5,
+          "top1": {
+            "title": "검은 볼캡 잃어버렸어요",
+            "displayedScore": 1,
+            "rawTextSimilarity": 0.715327298880712
+          }
+        },
+        "semantic": {
+          "shown": 9,
+          "top1": {
+            "title": "검은 볼캡 잃어버렸어요",
+            "score": 0.697805967796205
+          }
+        }
+      },
+      {
+        "noMatchId": "M08",
+        "title": "베이지 양산 잃어버렸어요",
+        "board": "lost",
+        "recommendation": {
+          "shown": 5,
+          "top1": {
+            "title": "정류장 벤치에 우산 두고 가셨어요",
+            "displayedScore": 1,
+            "rawTextSimilarity": 0.8209594572734276
+          }
+        },
+        "semantic": {
+          "shown": 10,
+          "top1": {
+            "title": "정류장 벤치에 우산 두고 가셨어요",
+            "score": 0.6817125217229195
+          }
+        }
+      },
+      {
+        "noMatchId": "M09",
+        "title": "손선풍기 주웠어요",
+        "board": "found",
+        "recommendation": {
+          "shown": 5,
+          "top1": {
+            "title": "베이지색 필통 잃어버렸어요",
+            "displayedScore": 1,
+            "rawTextSimilarity": 0.750771448154114
+          }
+        },
+        "semantic": {
+          "shown": 10,
+          "top1": {
+            "title": "작은 파우치 잃어버렸어요",
+            "score": 0.7260484185046054
+          }
+        }
+      },
+      {
+        "noMatchId": "M10",
+        "title": "서류 든 L자 파일 분실",
+        "board": "lost",
+        "recommendation": {
+          "shown": 5,
+          "top1": {
+            "title": "검정 카드지갑 주웠습니다",
+            "displayedScore": 1,
+            "rawTextSimilarity": 0.7852664886971095
+          }
+        },
+        "semantic": {
+          "shown": 10,
+          "top1": {
+            "title": "휴대폰 카드케이스 주웠어요",
+            "score": 0.7540629142058151
+          }
+        }
+      }
+    ]
+  },
+  "relativeScore": {
+    "pairsWhereRecTop1Displayed1000": 21,
+    "pairs": 26
+  },
+  "threshold": {
+    "rawCandidates": 620,
+    "removed": 14,
+    "queriesFullyFiltered": 0,
+    "queries": 62,
+    "removedRate": 0.023
+  },
+  "failureCounts": {
+    "titleBonus": 4,
+    "colorOverType": 1,
+    "categoryMismatch": 5,
+    "notInTopK": 6,
+    "thresholdRemovedAnswer": 0
+  },
+  "failureExamples": {
+    "titleBonus": [
+      "[semantic_fulltext] P08 \"에어팟 프로 찾아요 흰색 에어팟 프로를 잃어버렸어요. 케이스에 작은 파란색 스티커가 있습니다.\" 정답 3위→4위, 가산점 받은 \"에어팟 프로 습득 (초록 스티커)\", \"흰색 에어팟 주웠어요\", \"보조배터리 주웠습니다 (흰색)\"",
+      "[semantic_fulltext] P15 \"노트북 충전기만 없어졌어요 제5공학관 실습실에서 전날 수업 끝나고 정신없이 나왔는데 다음 날 보니 충전기가 없네요. 맥북용 C타입 충전기고 선이 좀 꼬여 있어요.\" 정답 1위→2위, 가산점 받은 \"검은색 노트북 보관 중\"",
+      "[semantic_fulltext] P29 \"스티커 붙은 보온병 분실 흰색 보온병에 여행 스티커 몇 개 붙여놨어요. 명진당 1층 휴게실에서 잃어버렸어요.\" 정답 3위→4위, 가산점 받은 \"흰 보온병 보관 중\", \"보조배터리 주웠습니다 (흰색)\"",
+      "[semantic_fulltext] Q07 \"체크무늬 목도리 분실 빨강이랑 초록 체크무늬 울 목도리예요. 학생회관 식당에서 밥 먹고 의자에 걸어두고 나왔어요.\" 정답 1위→2위, 가산점 받은 \"회색 목도리 주웠어요\""
+    ],
+    "colorOverType": [
+      "[semantic_title] Q08 \"검은 볼캡 잃어버렸어요\" → 1위 \"검은색 장지갑 주웠어요\" (정답 \"벤치에 모자 하나\" 미포함)"
+    ],
+    "categoryMismatch": [
+      "[semantic_title] P06 1위 \"휴대폰 카드케이스 주웠어요\"(지갑) vs 정답 \"체육문화관 앞에서 은행 카드 한 장\"(카드)",
+      "[semantic_fulltext] P06 1위 \"휴대폰 카드케이스 주웠어요\"(지갑) vs 정답 \"체육문화관 앞에서 은행 카드 한 장\"(카드)",
+      "[rec_lost_to_found] P06 1위 \"휴대폰 카드케이스 주웠어요\"(지갑) vs 정답 \"체육문화관 앞에서 은행 카드 한 장\"(카드)",
+      "[rec_found_to_lost] P06 1위 \"검은색 카드지갑 잃어버렸어요\"(지갑) vs 정답 \"지갑은 있는데 카드만 빠졌어요\"(카드)",
+      "[semantic_title] Q08 1위 \"검은색 장지갑 주웠어요\"(지갑) vs 정답 \"벤치에 모자 하나\"(의류)"
+    ],
+    "notInTopK": [
+      "[semantic_title] P15 \"노트북 충전기만 없어졌어요\" 정답 실제 순위 16위 (raw 0.668)",
+      "[semantic_title] P27 \"자취방 열쇠를 어디서 흘린 것 같아요\" 정답 실제 순위 59위 (raw 0.611)",
+      "[semantic_fulltext] P27 \"자취방 열쇠를 어디서 흘린 것 같아요 하루 종일 여기저기 돌아다녀서 정확히 어디인지 모르겠어요. 은색 열쇠 두 개에 작은 야구공 모양 키링이 같이 달려 있어요.\" 정답 실제 순위 46위 (raw 0.650)",
+      "[rec_lost_to_found] P27 \"자취방 열쇠를 어디서 흘린 것 같아요\" → 정답 top5 밖, 1위 \"열쇠 꾸러미 주웠어요\"",
+      "[semantic_title] P29 \"스티커 붙은 보온병 분실\" 정답 실제 순위 12위 (raw 0.693)",
+      "[semantic_title] Q08 \"검은 볼캡 잃어버렸어요\" 정답 실제 순위 20위 (raw 0.619)"
+    ],
+    "thresholdRemovedAnswer": []
+  },
+  "cases": [
+    {
+      "pairId": "P08",
+      "difficulty": "medium",
+      "itemType": "무선 이어폰",
+      "semantic_title": {
+        "query": "에어팟 프로 찾아요",
+        "rank": 5,
+        "rankWithoutTitleBonus": 5,
+        "trueRankAllPosts": 5,
+        "answerRawScore": 0.706044343474188,
+        "top3": [
+          {
+            "id": 6,
+            "score": 0.8591220483868045,
+            "title": "에어팟 프로 습득 (초록 스티커)"
+          },
+          {
+            "id": 9,
+            "score": 0.79713465664824,
+            "title": "흰색 에어팟 주웠어요"
+          },
+          {
+            "id": 14,
+            "score": 0.7243088155161065,
+            "title": "강의실 책상 밑 무선이어폰 한 짝"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "에어팟 프로 찾아요 흰색 에어팟 프로를 잃어버렸어요. 케이스에 작은 파란색 스티커가 있습니다.",
+        "rank": 4,
+        "rankWithoutTitleBonus": 3,
+        "trueRankAllPosts": 3,
+        "answerRawScore": 0.7485818120392935,
+        "top3": [
+          {
+            "id": 6,
+            "score": 0.855231696513445,
+            "title": "에어팟 프로 습득 (초록 스티커)"
+          },
+          {
+            "id": 9,
+            "score": 0.8044372054599056,
+            "title": "흰색 에어팟 주웠어요"
+          },
+          {
+            "id": 58,
+            "score": 0.7519322621822355,
+            "title": "보조배터리 주웠습니다 (흰색)"
+          }
+        ]
+      },
+      "semantic_demo": {
+        "query": "파란 스티커 붙은 흰색 에어팟 프로 잃어버렸어요",
+        "rank": 3,
+        "rankWithoutTitleBonus": 3,
+        "trueRankAllPosts": 3,
+        "answerRawScore": 0.75325126810319,
+        "top3": [
+          {
+            "id": 6,
+            "score": 0.8475582430736315,
+            "title": "에어팟 프로 습득 (초록 스티커)"
+          },
+          {
+            "id": 9,
+            "score": 0.819136685883412,
+            "title": "흰색 에어팟 주웠어요"
+          },
+          {
+            "id": 12,
+            "score": 0.75325126810319,
+            "title": "무선 이어폰 주웠습니다"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 2,
+        "top3": [
+          {
+            "id": 6,
+            "score": 0.9641284597696504,
+            "title": "에어팟 프로 습득 (초록 스티커)"
+          },
+          {
+            "id": 12,
+            "score": 0.6970891711900029,
+            "title": "무선 이어폰 주웠습니다"
+          },
+          {
+            "id": 9,
+            "score": 0.6329472993527128,
+            "title": "흰색 에어팟 주웠어요"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 4,
+            "score": 1,
+            "title": "에어팟 프로 찾아요"
+          },
+          {
+            "id": 10,
+            "score": 0.3376417571008867,
+            "title": "에코백 분실 (책이랑 필통)"
+          },
+          {
+            "id": 11,
+            "score": 0.20824871154812508,
+            "title": "아이패드 에어 + 애플펜슬 분실"
+          }
+        ]
+      },
+      "image": {
+        "queryImage": "DEMO-3.jpg",
+        "rank": 2,
+        "resultCount": 10,
+        "top3": [
+          {
+            "id": 6,
+            "score": 0.9500195384025575,
+            "title": "에어팟 프로 습득 (초록 스티커)"
+          },
+          {
+            "id": 12,
+            "score": 0.9422813653945925,
+            "title": "무선 이어폰 주웠습니다"
+          },
+          {
+            "id": 9,
+            "score": 0.9043716192245486,
+            "title": "흰색 에어팟 주웠어요"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P01",
+      "difficulty": "easy",
+      "itemType": "지갑",
+      "semantic_title": {
+        "query": "검은색 카드지갑 잃어버렸어요",
+        "rank": 1,
+        "rankWithoutTitleBonus": 2,
+        "trueRankAllPosts": 2,
+        "answerRawScore": 0.8100259345723515,
+        "top3": [
+          {
+            "id": 5,
+            "score": 0.8400259345723515,
+            "title": "검정 카드지갑 주웠습니다"
+          },
+          {
+            "id": 1,
+            "score": 0.8110598491221674,
+            "title": "휴대폰 카드케이스 주웠어요"
+          },
+          {
+            "id": 2,
+            "score": 0.790861427886673,
+            "title": "검은색 장지갑 주웠어요"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "검은색 카드지갑 잃어버렸어요 학생회관 2층 라운지에서 과제하다가 두고 나온 것 같아요. 무광 검은색 카드지갑이고 안에 체크카드랑 교통카드가 들어 있습니다. 보신 분 연락 부탁드려요",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.900484824065015,
+        "top3": [
+          {
+            "id": 5,
+            "score": 0.930484824065015,
+            "title": "검정 카드지갑 주웠습니다"
+          },
+          {
+            "id": 1,
+            "score": 0.8661484151615639,
+            "title": "휴대폰 카드케이스 주웠어요"
+          },
+          {
+            "id": 2,
+            "score": 0.8614892847233875,
+            "title": "검은색 장지갑 주웠어요"
+          }
+        ]
+      },
+      "semantic_demo": {
+        "query": "학생회관에서 검은색 카드지갑 잃어버렸어요",
+        "rank": 1,
+        "rankWithoutTitleBonus": 2,
+        "trueRankAllPosts": 2,
+        "answerRawScore": 0.83862483406815,
+        "top3": [
+          {
+            "id": 5,
+            "score": 0.86862483406815,
+            "title": "검정 카드지갑 주웠습니다"
+          },
+          {
+            "id": 1,
+            "score": 0.8476271551292135,
+            "title": "휴대폰 카드케이스 주웠어요"
+          },
+          {
+            "id": 2,
+            "score": 0.8372686561666516,
+            "title": "검은색 장지갑 주웠어요"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 5,
+            "score": 1,
+            "title": "검정 카드지갑 주웠습니다"
+          },
+          {
+            "id": 1,
+            "score": 0.6927900664285638,
+            "title": "휴대폰 카드케이스 주웠어요"
+          },
+          {
+            "id": 2,
+            "score": 0.38429487552329944,
+            "title": "검은색 장지갑 주웠어요"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 1,
+            "score": 1,
+            "title": "검은색 카드지갑 잃어버렸어요"
+          },
+          {
+            "id": 11,
+            "score": 0.30441939950442753,
+            "title": "아이패드 에어 + 애플펜슬 분실"
+          },
+          {
+            "id": 10,
+            "score": 0.2516015675701327,
+            "title": "에코백 분실 (책이랑 필통)"
+          }
+        ]
+      },
+      "image": {
+        "queryImage": "DEMO-1.jpg",
+        "rank": 1,
+        "resultCount": 10,
+        "top3": [
+          {
+            "id": 5,
+            "score": 0.9647463858127595,
+            "title": "검정 카드지갑 주웠습니다"
+          },
+          {
+            "id": 2,
+            "score": 0.883048337192784,
+            "title": "검은색 장지갑 주웠어요"
+          },
+          {
+            "id": 22,
+            "score": 0.863694727420807,
+            "title": "학생증 한 장 주웠어요"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P17",
+      "difficulty": "medium",
+      "itemType": "우산",
+      "semantic_title": {
+        "query": "투명 비닐우산 (나무 손잡이)",
+        "rank": 2,
+        "rankWithoutTitleBonus": 2,
+        "trueRankAllPosts": 2,
+        "answerRawScore": 0.7640144481689105,
+        "top3": [
+          {
+            "id": 11,
+            "score": 0.872648954032268,
+            "title": "투명 우산 주웠어요"
+          },
+          {
+            "id": 10,
+            "score": 0.7640144481689105,
+            "title": "정류장 벤치에 우산 두고 가셨어요"
+          },
+          {
+            "id": 3,
+            "score": 0.760191242150109,
+            "title": "나무 손잡이 장우산 보관 중"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "투명 비닐우산 (나무 손잡이) 정문 버스정류장 근처에서 잃어버렸어요. 투명한 우산인데 손잡이만 나무로 되어 있어서 조금 특이해요.",
+        "rank": 2,
+        "rankWithoutTitleBonus": 2,
+        "trueRankAllPosts": 2,
+        "answerRawScore": 0.8433217833405096,
+        "top3": [
+          {
+            "id": 11,
+            "score": 0.885472807074692,
+            "title": "투명 우산 주웠어요"
+          },
+          {
+            "id": 10,
+            "score": 0.8433217833405096,
+            "title": "정류장 벤치에 우산 두고 가셨어요"
+          },
+          {
+            "id": 3,
+            "score": 0.782050948876484,
+            "title": "나무 손잡이 장우산 보관 중"
+          }
+        ]
+      },
+      "semantic_demo": {
+        "query": "손잡이가 나무로 된 투명 우산",
+        "rank": 3,
+        "rankWithoutTitleBonus": 3,
+        "trueRankAllPosts": 3,
+        "answerRawScore": 0.7720997280837235,
+        "top3": [
+          {
+            "id": 11,
+            "score": 0.8411854274802225,
+            "title": "투명 우산 주웠어요"
+          },
+          {
+            "id": 3,
+            "score": 0.804579535499953,
+            "title": "나무 손잡이 장우산 보관 중"
+          },
+          {
+            "id": 10,
+            "score": 0.8020997280837235,
+            "title": "정류장 벤치에 우산 두고 가셨어요"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 2,
+        "top3": [
+          {
+            "id": 11,
+            "score": 0.9449638040601531,
+            "title": "투명 우산 주웠어요"
+          },
+          {
+            "id": 10,
+            "score": 0.9238492891551233,
+            "title": "정류장 벤치에 우산 두고 가셨어요"
+          },
+          {
+            "id": 3,
+            "score": 0.3950546659898994,
+            "title": "나무 손잡이 장우산 보관 중"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 3,
+            "score": 1,
+            "title": "투명 비닐우산 (나무 손잡이)"
+          },
+          {
+            "id": 13,
+            "score": 0.734552931368067,
+            "title": "베이지 양산 잃어버렸어요"
+          },
+          {
+            "id": 29,
+            "score": 0.21206816604891182,
+            "title": "안경 분실 (검정 뿔테)"
+          }
+        ]
+      },
+      "image": {
+        "queryImage": "DEMO-6.jpg",
+        "rank": 2,
+        "resultCount": 10,
+        "top3": [
+          {
+            "id": 11,
+            "score": 0.9495023251173109,
+            "title": "투명 우산 주웠어요"
+          },
+          {
+            "id": 10,
+            "score": 0.947902026897549,
+            "title": "정류장 벤치에 우산 두고 가셨어요"
+          },
+          {
+            "id": 37,
+            "score": 0.8620851718136571,
+            "title": "흰색 무선 마우스 습득"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P11",
+      "difficulty": "medium",
+      "itemType": "휴대폰",
+      "semantic_title": {
+        "query": "아이폰 15 분실 (투명 케이스)",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.785099791848736,
+        "top3": [
+          {
+            "id": 8,
+            "score": 0.815099791848736,
+            "title": "투명 케이스 아이폰 습득"
+          },
+          {
+            "id": 4,
+            "score": 0.7926027434819356,
+            "title": "아이폰 주웠어요 (가죽 케이스)"
+          },
+          {
+            "id": 7,
+            "score": 0.7409275543966245,
+            "title": "투명 폰케이스만 주웠어요"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "아이폰 15 분실 (투명 케이스) 아이폰 15 핑크색이고 투명 젤리 케이스 끼워놨어요. 케이스 안쪽에 영화 티켓 한 장 넣어둔 게 보일 거예요. MCC관에서 잃어버렸습니다.",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.7987743383529955,
+        "top3": [
+          {
+            "id": 8,
+            "score": 0.8287743383529955,
+            "title": "투명 케이스 아이폰 습득"
+          },
+          {
+            "id": 7,
+            "score": 0.8195643154176411,
+            "title": "투명 폰케이스만 주웠어요"
+          },
+          {
+            "id": 4,
+            "score": 0.8187041728362441,
+            "title": "아이폰 주웠어요 (가죽 케이스)"
+          }
+        ]
+      },
+      "semantic_demo": {
+        "query": "분홍색 아이폰인데 투명 케이스 안에 티켓이 들어있어요",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.842801729273723,
+        "top3": [
+          {
+            "id": 8,
+            "score": 0.872801729273723,
+            "title": "투명 케이스 아이폰 습득"
+          },
+          {
+            "id": 4,
+            "score": 0.8110555864009735,
+            "title": "아이폰 주웠어요 (가죽 케이스)"
+          },
+          {
+            "id": 6,
+            "score": 0.7874557793352275,
+            "title": "에어팟 프로 습득 (초록 스티커)"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 8,
+            "score": 1,
+            "title": "투명 케이스 아이폰 습득"
+          },
+          {
+            "id": 7,
+            "score": 0.6002936216464335,
+            "title": "투명 폰케이스만 주웠어요"
+          },
+          {
+            "id": 4,
+            "score": 0.5985626718258296,
+            "title": "아이폰 주웠어요 (가죽 케이스)"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 2,
+            "score": 1,
+            "title": "아이폰 15 분실 (투명 케이스)"
+          },
+          {
+            "id": 36,
+            "score": 0.40844738224247595,
+            "title": "분홍 맥세이프 배터리 분실"
+          },
+          {
+            "id": 11,
+            "score": 0.24281141317310745,
+            "title": "아이패드 에어 + 애플펜슬 분실"
+          }
+        ]
+      },
+      "image": {
+        "queryImage": "DEMO-4.jpg",
+        "rank": 1,
+        "resultCount": 10,
+        "top3": [
+          {
+            "id": 8,
+            "score": 0.9519359469413755,
+            "title": "투명 케이스 아이폰 습득"
+          },
+          {
+            "id": 7,
+            "score": 0.9045472741127015,
+            "title": "투명 폰케이스만 주웠어요"
+          },
+          {
+            "id": 4,
+            "score": 0.8860761591150674,
+            "title": "아이폰 주웠어요 (가죽 케이스)"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P05",
+      "difficulty": "medium",
+      "itemType": "카드(학생증)",
+      "semantic_title": {
+        "query": "융합소프트웨어학부 학생증 분실",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.7911757653250839,
+        "top3": [
+          {
+            "id": 25,
+            "score": 0.821175765325084,
+            "title": "공대 쪽에서 낡은 학생증 습득"
+          },
+          {
+            "id": 22,
+            "score": 0.7471649025226945,
+            "title": "학생증 한 장 주웠어요"
+          },
+          {
+            "id": 61,
+            "score": 0.72355397203243,
+            "title": "교탁 컴퓨터에 꽂혀 있던 USB"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "융합소프트웨어학부 학생증 분실 스크래치가 많이 난 학생증이에요. 케이스 없이 들고 다녔고, 오늘 오전 제5공학관 실습 끝나고 잃어버린 것 같습니다.",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.8638691685277725,
+        "top3": [
+          {
+            "id": 25,
+            "score": 0.8938691685277725,
+            "title": "공대 쪽에서 낡은 학생증 습득"
+          },
+          {
+            "id": 22,
+            "score": 0.823120224418711,
+            "title": "학생증 한 장 주웠어요"
+          },
+          {
+            "id": 1,
+            "score": 0.7853792088750955,
+            "title": "휴대폰 카드케이스 주웠어요"
+          }
+        ]
+      },
+      "semantic_demo": {
+        "query": "공대 건물에서 긁힌 학생증 잃어버렸어요",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.828069497357246,
+        "top3": [
+          {
+            "id": 25,
+            "score": 0.858069497357246,
+            "title": "공대 쪽에서 낡은 학생증 습득"
+          },
+          {
+            "id": 22,
+            "score": 0.7630125936329815,
+            "title": "학생증 한 장 주웠어요"
+          },
+          {
+            "id": 1,
+            "score": 0.7494005856039935,
+            "title": "휴대폰 카드케이스 주웠어요"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 25,
+            "score": 0.777228698834002,
+            "title": "공대 쪽에서 낡은 학생증 습득"
+          },
+          {
+            "id": 22,
+            "score": 0.7606268778493657,
+            "title": "학생증 한 장 주웠어요"
+          },
+          {
+            "id": 5,
+            "score": 0.15871998253098654,
+            "title": "검정 카드지갑 주웠습니다"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 12,
+            "score": 1,
+            "title": "융합소프트웨어학부 학생증 분실"
+          },
+          {
+            "id": 1,
+            "score": 0.26903824558072,
+            "title": "검은색 카드지갑 잃어버렸어요"
+          },
+          {
+            "id": 10,
+            "score": 0.15268419041009051,
+            "title": "에코백 분실 (책이랑 필통)"
+          }
+        ]
+      },
+      "image": {
+        "queryImage": "DEMO-2.jpg",
+        "rank": 2,
+        "resultCount": 10,
+        "top3": [
+          {
+            "id": 22,
+            "score": 0.977876588042873,
+            "title": "학생증 한 장 주웠어요"
+          },
+          {
+            "id": 25,
+            "score": 0.935824407214654,
+            "title": "공대 쪽에서 낡은 학생증 습득"
+          },
+          {
+            "id": 5,
+            "score": 0.8916505095854554,
+            "title": "검정 카드지갑 주웠습니다"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P09",
+      "difficulty": "hard",
+      "itemType": "무선 이어폰",
+      "semantic_title": {
+        "query": "이어폰 한쪽만 잃어버렸어요",
+        "rank": 1,
+        "rankWithoutTitleBonus": 2,
+        "trueRankAllPosts": 2,
+        "answerRawScore": 0.7449049946609245,
+        "top3": [
+          {
+            "id": 14,
+            "score": 0.7749049946609246,
+            "title": "강의실 책상 밑 무선이어폰 한 짝"
+          },
+          {
+            "id": 7,
+            "score": 0.7611472568696684,
+            "title": "투명 폰케이스만 주웠어요"
+          },
+          {
+            "id": 24,
+            "score": 0.742627893951739,
+            "title": "애플펜슬만 주웠어요"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "이어폰 한쪽만 잃어버렸어요 갤럭시 버즈2 프로 오른쪽 한쪽이 없어졌어요. 색은 짙은 회색이고 케이스는 저한테 있어요. 제2공학관에서 쉬는 시간에 귀에서 빼놨다가 못 챙긴 것 같아요",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.8000645309744515,
+        "top3": [
+          {
+            "id": 14,
+            "score": 0.8300645309744515,
+            "title": "강의실 책상 밑 무선이어폰 한 짝"
+          },
+          {
+            "id": 12,
+            "score": 0.7743625552762501,
+            "title": "무선 이어폰 주웠습니다"
+          },
+          {
+            "id": 4,
+            "score": 0.7685186506973636,
+            "title": "아이폰 주웠어요 (가죽 케이스)"
+          }
+        ]
+      },
+      "semantic_demo": {
+        "query": "갤럭시 버즈 오른쪽 한쪽만 잃어버렸어요",
+        "rank": 7,
+        "rankWithoutTitleBonus": 7,
+        "trueRankAllPosts": 7,
+        "answerRawScore": 0.6504754483416435,
+        "top3": [
+          {
+            "id": 7,
+            "score": 0.724353300645147,
+            "title": "투명 폰케이스만 주웠어요"
+          },
+          {
+            "id": 4,
+            "score": 0.6905800586593145,
+            "title": "아이폰 주웠어요 (가죽 케이스)"
+          },
+          {
+            "id": 24,
+            "score": 0.6851091025997325,
+            "title": "애플펜슬만 주웠어요"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 14,
+            "score": 1,
+            "title": "강의실 책상 밑 무선이어폰 한 짝"
+          },
+          {
+            "id": 4,
+            "score": 0.2935956369676218,
+            "title": "아이폰 주웠어요 (가죽 케이스)"
+          },
+          {
+            "id": 41,
+            "score": 0.1703055227782827,
+            "title": "은색 노트북 보관 중"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 8,
+            "score": 1,
+            "title": "이어폰 한쪽만 잃어버렸어요"
+          },
+          {
+            "id": 30,
+            "score": 0.793622292101188,
+            "title": "노트북 거치대 두고 왔어요"
+          },
+          {
+            "id": 7,
+            "score": 0.5382149404520981,
+            "title": "검은색 버즈 한쪽 분실"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P14",
+      "difficulty": "medium",
+      "itemType": "태블릿",
+      "semantic_title": {
+        "query": "아이패드 에어 + 애플펜슬 분실",
+        "rank": 8,
+        "rankWithoutTitleBonus": 8,
+        "trueRankAllPosts": 8,
+        "answerRawScore": 0.6912947595119475,
+        "top3": [
+          {
+            "id": 24,
+            "score": 0.8037568726773401,
+            "title": "애플펜슬만 주웠어요"
+          },
+          {
+            "id": 6,
+            "score": 0.758397875286591,
+            "title": "에어팟 프로 습득 (초록 스티커)"
+          },
+          {
+            "id": 9,
+            "score": 0.754482549696121,
+            "title": "흰색 에어팟 주웠어요"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "아이패드 에어 + 애플펜슬 분실 스페이스 그레이 아이패드 에어에 종이질감 필름 붙어 있고, 애플펜슬도 옆에 붙여놨어요. 방목학술정보관 4층 노트북 열람실에서 잃어버린 것 같아요.",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.845927415026298,
+        "top3": [
+          {
+            "id": 23,
+            "score": 0.845927415026298,
+            "title": "태블릿이랑 펜 같이 주웠어요"
+          },
+          {
+            "id": 24,
+            "score": 0.827408691125865,
+            "title": "애플펜슬만 주웠어요"
+          },
+          {
+            "id": 6,
+            "score": 0.8260434469814486,
+            "title": "에어팟 프로 습득 (초록 스티커)"
+          }
+        ]
+      },
+      "semantic_demo": {
+        "query": "도서관에서 아이패드랑 펜슬 같이 잃어버렸어요",
+        "rank": 2,
+        "rankWithoutTitleBonus": 2,
+        "trueRankAllPosts": 2,
+        "answerRawScore": 0.7397258102076785,
+        "top3": [
+          {
+            "id": 24,
+            "score": 0.8100012588506635,
+            "title": "애플펜슬만 주웠어요"
+          },
+          {
+            "id": 23,
+            "score": 0.7697258102076785,
+            "title": "태블릿이랑 펜 같이 주웠어요"
+          },
+          {
+            "id": 5,
+            "score": 0.710558881892905,
+            "title": "검정 카드지갑 주웠습니다"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 23,
+            "score": 1,
+            "title": "태블릿이랑 펜 같이 주웠어요"
+          },
+          {
+            "id": 20,
+            "score": 0.8373139418766944,
+            "title": "갤럭시탭 주웠어요"
+          },
+          {
+            "id": 24,
+            "score": 0.3211793780154669,
+            "title": "애플펜슬만 주웠어요"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 11,
+            "score": 1,
+            "title": "아이패드 에어 + 애플펜슬 분실"
+          },
+          {
+            "id": 30,
+            "score": 0.5457808740391141,
+            "title": "노트북 거치대 두고 왔어요"
+          },
+          {
+            "id": 1,
+            "score": 0.4209790409535544,
+            "title": "검은색 카드지갑 잃어버렸어요"
+          }
+        ]
+      },
+      "image": {
+        "queryImage": "DEMO-5.jpg",
+        "rank": 1,
+        "resultCount": 10,
+        "top3": [
+          {
+            "id": 23,
+            "score": 0.930005205571807,
+            "title": "태블릿이랑 펜 같이 주웠어요"
+          },
+          {
+            "id": 20,
+            "score": 0.9219390624183714,
+            "title": "갤럭시탭 주웠어요"
+          },
+          {
+            "id": 2,
+            "score": 0.8901668423513676,
+            "title": "검은색 장지갑 주웠어요"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P15",
+      "difficulty": "hard",
+      "itemType": "노트북 충전기",
+      "semantic_title": {
+        "query": "노트북 충전기만 없어졌어요",
+        "rank": null,
+        "rankWithoutTitleBonus": null,
+        "trueRankAllPosts": 16,
+        "answerRawScore": 0.6679023505362081,
+        "top3": [
+          {
+            "id": 56,
+            "score": 0.7522826798973135,
+            "title": "검은색 보조배터리 주웠어요"
+          },
+          {
+            "id": 24,
+            "score": 0.7518177336994655,
+            "title": "애플펜슬만 주웠어요"
+          },
+          {
+            "id": 39,
+            "score": 0.743921455302631,
+            "title": "검은색 노트북 보관 중"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "노트북 충전기만 없어졌어요 제5공학관 실습실에서 전날 수업 끝나고 정신없이 나왔는데 다음 날 보니 충전기가 없네요. 맥북용 C타입 충전기고 선이 좀 꼬여 있어요.",
+        "rank": 2,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.7984471090092224,
+        "top3": [
+          {
+            "id": 39,
+            "score": 0.7989941319840985,
+            "title": "검은색 노트북 보관 중"
+          },
+          {
+            "id": 13,
+            "score": 0.7984471090092224,
+            "title": "실습실 콘센트에 꽂힌 어댑터"
+          },
+          {
+            "id": 14,
+            "score": 0.7946318902340535,
+            "title": "강의실 책상 밑 무선이어폰 한 짝"
+          }
+        ]
+      },
+      "semantic_demo": {
+        "query": "실습실에 맥북 충전기 두고 왔어요",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.832174638769009,
+        "top3": [
+          {
+            "id": 13,
+            "score": 0.832174638769009,
+            "title": "실습실 콘센트에 꽂힌 어댑터"
+          },
+          {
+            "id": 61,
+            "score": 0.822282491138441,
+            "title": "교탁 컴퓨터에 꽂혀 있던 USB"
+          },
+          {
+            "id": 39,
+            "score": 0.8220397001623265,
+            "title": "검은색 노트북 보관 중"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 13,
+            "score": 1,
+            "title": "실습실 콘센트에 꽂힌 어댑터"
+          },
+          {
+            "id": 61,
+            "score": 0.26439377020505406,
+            "title": "교탁 컴퓨터에 꽂혀 있던 USB"
+          },
+          {
+            "id": 56,
+            "score": 0.19404399589409393,
+            "title": "검은색 보조배터리 주웠어요"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 5,
+            "score": 1,
+            "title": "노트북 충전기만 없어졌어요"
+          },
+          {
+            "id": 30,
+            "score": 0.8414227329433374,
+            "title": "노트북 거치대 두고 왔어요"
+          },
+          {
+            "id": 37,
+            "score": 0.24153303073605564,
+            "title": "흰색 보조배터리 잃어버렸어요"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P20",
+      "difficulty": "medium",
+      "itemType": "가방",
+      "semantic_title": {
+        "query": "에코백 분실 (책이랑 필통)",
+        "rank": 6,
+        "rankWithoutTitleBonus": 6,
+        "trueRankAllPosts": 6,
+        "answerRawScore": 0.7163397827374065,
+        "top3": [
+          {
+            "id": 19,
+            "score": 0.8332753223284766,
+            "title": "에코백 주웠어요"
+          },
+          {
+            "id": 5,
+            "score": 0.7607691145401705,
+            "title": "검정 카드지갑 주웠습니다"
+          },
+          {
+            "id": 16,
+            "score": 0.740889133108973,
+            "title": "쇼핑백에 전공책 두 권"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "에코백 분실 (책이랑 필통) 아이보리색 캔버스 에코백이에요. 안에 전공책 한 권이랑 파란 필통이 들어 있어요. 학생회관 2층에서 잃어버린 것 같아요.",
+        "rank": 4,
+        "rankWithoutTitleBonus": 4,
+        "trueRankAllPosts": 4,
+        "answerRawScore": 0.8058247352107305,
+        "top3": [
+          {
+            "id": 19,
+            "score": 0.8942763440115156,
+            "title": "에코백 주웠어요"
+          },
+          {
+            "id": 16,
+            "score": 0.856769253400674,
+            "title": "쇼핑백에 전공책 두 권"
+          },
+          {
+            "id": 5,
+            "score": 0.8183987330436,
+            "title": "검정 카드지갑 주웠습니다"
+          }
+        ]
+      },
+      "semantic_demo": {
+        "query": "전공책이랑 필통 들어있는 흰색 에코백",
+        "rank": 2,
+        "rankWithoutTitleBonus": 2,
+        "trueRankAllPosts": 2,
+        "answerRawScore": 0.8144828047423884,
+        "top3": [
+          {
+            "id": 16,
+            "score": 0.838388679603813,
+            "title": "쇼핑백에 전공책 두 권"
+          },
+          {
+            "id": 21,
+            "score": 0.8144828047423884,
+            "title": "천가방 하나 보관하고 있어요"
+          },
+          {
+            "id": 19,
+            "score": 0.7954288793801021,
+            "title": "에코백 주웠어요"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 2,
+        "top3": [
+          {
+            "id": 19,
+            "score": 0.9585728545450185,
+            "title": "에코백 주웠어요"
+          },
+          {
+            "id": 21,
+            "score": 0.7517986754070176,
+            "title": "천가방 하나 보관하고 있어요"
+          },
+          {
+            "id": 16,
+            "score": 0.6785121176329246,
+            "title": "쇼핑백에 전공책 두 권"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 10,
+            "score": 1,
+            "title": "에코백 분실 (책이랑 필통)"
+          },
+          {
+            "id": 20,
+            "score": 0.72695714189777,
+            "title": "체크무늬 목도리 분실"
+          },
+          {
+            "id": 30,
+            "score": 0.1641373589554596,
+            "title": "노트북 거치대 두고 왔어요"
+          }
+        ]
+      },
+      "image": {
+        "queryImage": "DEMO-7.jpg",
+        "rank": 1,
+        "resultCount": 10,
+        "top3": [
+          {
+            "id": 21,
+            "score": 0.9697731733322146,
+            "title": "천가방 하나 보관하고 있어요"
+          },
+          {
+            "id": 19,
+            "score": 0.9400139284138065,
+            "title": "에코백 주웠어요"
+          },
+          {
+            "id": 45,
+            "score": 0.859270304441452,
+            "title": "강의실 책상에 안경이 있었어요"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P28",
+      "difficulty": "easy",
+      "itemType": "텀블러",
+      "semantic_title": {
+        "query": "파란색 텀블러 잃어버렸어요",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.7838521515175341,
+        "top3": [
+          {
+            "id": 17,
+            "score": 0.8138521515175341,
+            "title": "파란 텀블러 주웠어요"
+          },
+          {
+            "id": 15,
+            "score": 0.7797226968655745,
+            "title": "검은색 텀블러 주웠어요"
+          },
+          {
+            "id": 60,
+            "score": 0.735162605296793,
+            "title": "파란 USB 주웠어요"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "파란색 텀블러 잃어버렸어요 스탠리 파란색 텀블러예요. 방목학술정보관 3층 열람실에 두고 나온 것 같아요.",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.8714914654038866,
+        "top3": [
+          {
+            "id": 17,
+            "score": 0.9014914654038866,
+            "title": "파란 텀블러 주웠어요"
+          },
+          {
+            "id": 15,
+            "score": 0.893616864789048,
+            "title": "검은색 텀블러 주웠어요"
+          },
+          {
+            "id": 60,
+            "score": 0.7794813014004295,
+            "title": "파란 USB 주웠어요"
+          }
+        ]
+      },
+      "semantic_demo": {
+        "query": "열람실에 파란 스탠리 텀블러 두고 나왔어요",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.886182191046808,
+        "top3": [
+          {
+            "id": 17,
+            "score": 0.916182191046808,
+            "title": "파란 텀블러 주웠어요"
+          },
+          {
+            "id": 15,
+            "score": 0.8565734527703295,
+            "title": "검은색 텀블러 주웠어요"
+          },
+          {
+            "id": 60,
+            "score": 0.833312592316394,
+            "title": "파란 USB 주웠어요"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 17,
+            "score": 1,
+            "title": "파란 텀블러 주웠어요"
+          },
+          {
+            "id": 15,
+            "score": 0.9234348474717786,
+            "title": "검은색 텀블러 주웠어요"
+          },
+          {
+            "id": 60,
+            "score": 0.233258080544319,
+            "title": "파란 USB 주웠어요"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 9,
+            "score": 1,
+            "title": "파란색 텀블러 잃어버렸어요"
+          },
+          {
+            "id": 26,
+            "score": 0.15213503230051448,
+            "title": "스티커 붙은 보온병 분실"
+          },
+          {
+            "id": 32,
+            "score": 0.1391001455041254,
+            "title": "회색 후드집업 두고 왔어요"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P06",
+      "difficulty": "hard",
+      "itemType": "카드(체크카드)",
+      "semantic_title": {
+        "query": "지갑은 있는데 카드만 빠졌어요",
+        "rank": 4,
+        "rankWithoutTitleBonus": 4,
+        "trueRankAllPosts": 4,
+        "answerRawScore": 0.7222439746042595,
+        "top3": [
+          {
+            "id": 1,
+            "score": 0.794537142945703,
+            "title": "휴대폰 카드케이스 주웠어요"
+          },
+          {
+            "id": 5,
+            "score": 0.7624906975773216,
+            "title": "검정 카드지갑 주웠습니다"
+          },
+          {
+            "id": 7,
+            "score": 0.748918577770848,
+            "title": "투명 폰케이스만 주웠어요"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "지갑은 있는데 카드만 빠졌어요 카드지갑에서 신한 체크카드 한 장만 없어졌어요. 체육관에서 운동하고 사물함 정리하다가 흘린 것 같습니다.",
+        "rank": 4,
+        "rankWithoutTitleBonus": 4,
+        "trueRankAllPosts": 4,
+        "answerRawScore": 0.752271428298103,
+        "top3": [
+          {
+            "id": 1,
+            "score": 0.783642546915509,
+            "title": "휴대폰 카드케이스 주웠어요"
+          },
+          {
+            "id": 5,
+            "score": 0.7733740643635956,
+            "title": "검정 카드지갑 주웠습니다"
+          },
+          {
+            "id": 7,
+            "score": 0.753593303798634,
+            "title": "투명 폰케이스만 주웠어요"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 3,
+        "top3": [
+          {
+            "id": 1,
+            "score": 1,
+            "title": "휴대폰 카드케이스 주웠어요"
+          },
+          {
+            "id": 5,
+            "score": 0.7976378557618848,
+            "title": "검정 카드지갑 주웠습니다"
+          },
+          {
+            "id": 35,
+            "score": 0.7116290632244823,
+            "title": "체육문화관 앞에서 은행 카드 한 장"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 2,
+        "top3": [
+          {
+            "id": 1,
+            "score": 1,
+            "title": "검은색 카드지갑 잃어버렸어요"
+          },
+          {
+            "id": 22,
+            "score": 0.7017634261474662,
+            "title": "지갑은 있는데 카드만 빠졌어요"
+          },
+          {
+            "id": 21,
+            "score": 0.6860451954876122,
+            "title": "체크카드 분실"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P13",
+      "difficulty": "easy",
+      "itemType": "노트북",
+      "semantic_title": {
+        "query": "검은색 노트북 두고 왔어요",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.786902810704381,
+        "top3": [
+          {
+            "id": 39,
+            "score": 0.816902810704381,
+            "title": "검은색 노트북 보관 중"
+          },
+          {
+            "id": 41,
+            "score": 0.795387873235979,
+            "title": "은색 노트북 보관 중"
+          },
+          {
+            "id": 2,
+            "score": 0.7645291813927605,
+            "title": "검은색 장지갑 주웠어요"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "검은색 노트북 두고 왔어요 제3공학관 3층 컴퓨터실에 LG 그램 검은색 노트북을 두고 나왔어요.",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.923181797455657,
+        "top3": [
+          {
+            "id": 39,
+            "score": 0.953181797455657,
+            "title": "검은색 노트북 보관 중"
+          },
+          {
+            "id": 41,
+            "score": 0.869655746262583,
+            "title": "은색 노트북 보관 중"
+          },
+          {
+            "id": 20,
+            "score": 0.777245912223569,
+            "title": "갤럭시탭 주웠어요"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 39,
+            "score": 1,
+            "title": "검은색 노트북 보관 중"
+          },
+          {
+            "id": 41,
+            "score": 0.47829663545015255,
+            "title": "은색 노트북 보관 중"
+          },
+          {
+            "id": 36,
+            "score": 0.15853699409697738,
+            "title": "실습실 서랍에서 마우스 발견"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 28,
+            "score": 1,
+            "title": "검은색 노트북 두고 왔어요"
+          },
+          {
+            "id": 30,
+            "score": 0.5191072912997314,
+            "title": "노트북 거치대 두고 왔어요"
+          },
+          {
+            "id": 6,
+            "score": 0.4340412334591918,
+            "title": "LG 그램 충전기 분실"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P22",
+      "difficulty": "easy",
+      "itemType": "의류",
+      "semantic_title": {
+        "query": "회색 후드집업 두고 왔어요",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.8175742408721756,
+        "top3": [
+          {
+            "id": 51,
+            "score": 0.8475742408721756,
+            "title": "회색 후드집업 주웠어요"
+          },
+          {
+            "id": 50,
+            "score": 0.828041367764312,
+            "title": "네이비 후드집업 주웠어요"
+          },
+          {
+            "id": 33,
+            "score": 0.805504656896134,
+            "title": "회색 목도리 주웠어요"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "회색 후드집업 두고 왔어요 창조예술관 2층 강의실에 회색 후드집업을 두고 나왔어요. 가슴에 작은 로고 자수가 있어요.",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.9163216649252199,
+        "top3": [
+          {
+            "id": 51,
+            "score": 0.94632166492522,
+            "title": "회색 후드집업 주웠어요"
+          },
+          {
+            "id": 50,
+            "score": 0.878726373759098,
+            "title": "네이비 후드집업 주웠어요"
+          },
+          {
+            "id": 33,
+            "score": 0.8445761141534225,
+            "title": "회색 목도리 주웠어요"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 51,
+            "score": 1,
+            "title": "회색 후드집업 주웠어요"
+          },
+          {
+            "id": 50,
+            "score": 0.6800475170328112,
+            "title": "네이비 후드집업 주웠어요"
+          },
+          {
+            "id": 53,
+            "score": 0.23354895162591147,
+            "title": "회색 맨투맨 주웠어요"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 32,
+            "score": 1,
+            "title": "회색 후드집업 두고 왔어요"
+          },
+          {
+            "id": 20,
+            "score": 0.09541956215923611,
+            "title": "체크무늬 목도리 분실"
+          },
+          {
+            "id": 30,
+            "score": 0.05526933625721902,
+            "title": "노트북 거치대 두고 왔어요"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P25",
+      "difficulty": "easy",
+      "itemType": "열쇠",
+      "semantic_title": {
+        "query": "열쇠 꾸러미 잃어버렸어요",
+        "rank": 1,
+        "rankWithoutTitleBonus": 2,
+        "trueRankAllPosts": 2,
+        "answerRawScore": 0.744053091325587,
+        "top3": [
+          {
+            "id": 55,
+            "score": 0.774053091325587,
+            "title": "열쇠 꾸러미 주웠어요"
+          },
+          {
+            "id": 1,
+            "score": 0.7677918480586106,
+            "title": "휴대폰 카드케이스 주웠어요"
+          },
+          {
+            "id": 5,
+            "score": 0.7437329349993775,
+            "title": "검정 카드지갑 주웠습니다"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "열쇠 꾸러미 잃어버렸어요 생활관 들어가다가 열쇠 꾸러미를 떨어뜨린 것 같아요. 열쇠 3개가 링에 달려 있어요.",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.876292441772123,
+        "top3": [
+          {
+            "id": 55,
+            "score": 0.906292441772123,
+            "title": "열쇠 꾸러미 주웠어요"
+          },
+          {
+            "id": 48,
+            "score": 0.8183896873461911,
+            "title": "곰 인형 매달린 열쇠"
+          },
+          {
+            "id": 54,
+            "score": 0.8171370575240431,
+            "title": "열쇠 두 개 달린 링"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 55,
+            "score": 1,
+            "title": "열쇠 꾸러미 주웠어요"
+          },
+          {
+            "id": 54,
+            "score": 0.6924785076782078,
+            "title": "열쇠 두 개 달린 링"
+          },
+          {
+            "id": 48,
+            "score": 0.35431420737067687,
+            "title": "곰 인형 매달린 열쇠"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 34,
+            "score": 1,
+            "title": "열쇠 꾸러미 잃어버렸어요"
+          },
+          {
+            "id": 18,
+            "score": 0.24304050535938768,
+            "title": "자취방 열쇠를 어디서 흘린 것 같아요"
+          },
+          {
+            "id": 14,
+            "score": 0.023800618596458177,
+            "title": "은반지 분실"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P26",
+      "difficulty": "medium",
+      "itemType": "열쇠",
+      "semantic_title": {
+        "query": "동아리방 열쇠 분실 (곰돌이 키링)",
+        "rank": 2,
+        "rankWithoutTitleBonus": 2,
+        "trueRankAllPosts": 2,
+        "answerRawScore": 0.768629691939662,
+        "top3": [
+          {
+            "id": 47,
+            "score": 0.8073386883759806,
+            "title": "토끼 키링 달린 열쇠"
+          },
+          {
+            "id": 48,
+            "score": 0.798629691939662,
+            "title": "곰 인형 매달린 열쇠"
+          },
+          {
+            "id": 54,
+            "score": 0.757457363524641,
+            "title": "열쇠 두 개 달린 링"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "동아리방 열쇠 분실 (곰돌이 키링) 학생회관 동아리방 열쇠인데 갈색 곰돌이 인형 키링이 달려 있어요. 저녁에 동아리 모임 끝나고 잃어버렸어요.",
+        "rank": 2,
+        "rankWithoutTitleBonus": 2,
+        "trueRankAllPosts": 2,
+        "answerRawScore": 0.804918436730379,
+        "top3": [
+          {
+            "id": 47,
+            "score": 0.84722986410205,
+            "title": "토끼 키링 달린 열쇠"
+          },
+          {
+            "id": 48,
+            "score": 0.834918436730379,
+            "title": "곰 인형 매달린 열쇠"
+          },
+          {
+            "id": 55,
+            "score": 0.756838637417396,
+            "title": "열쇠 꾸러미 주웠어요"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 48,
+            "score": 0.9316761496401275,
+            "title": "곰 인형 매달린 열쇠"
+          },
+          {
+            "id": 47,
+            "score": 0.8012640795625046,
+            "title": "토끼 키링 달린 열쇠"
+          },
+          {
+            "id": 37,
+            "score": 0.2095919009770245,
+            "title": "흰색 무선 마우스 습득"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 31,
+            "score": 1,
+            "title": "동아리방 열쇠 분실 (곰돌이 키링)"
+          },
+          {
+            "id": 34,
+            "score": 0.5834903684430383,
+            "title": "열쇠 꾸러미 잃어버렸어요"
+          },
+          {
+            "id": 26,
+            "score": 0.09949485558354683,
+            "title": "스티커 붙은 보온병 분실"
+          }
+        ]
+      },
+      "image": {
+        "queryImage": "P26.jpg",
+        "rank": 1,
+        "resultCount": 10,
+        "top3": [
+          {
+            "id": 48,
+            "score": 0.8887522402777615,
+            "title": "곰 인형 매달린 열쇠"
+          },
+          {
+            "id": 47,
+            "score": 0.8456554596834824,
+            "title": "토끼 키링 달린 열쇠"
+          },
+          {
+            "id": 37,
+            "score": 0.8336272636874165,
+            "title": "흰색 무선 마우스 습득"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P27",
+      "difficulty": "hard",
+      "itemType": "열쇠",
+      "semantic_title": {
+        "query": "자취방 열쇠를 어디서 흘린 것 같아요",
+        "rank": null,
+        "rankWithoutTitleBonus": null,
+        "trueRankAllPosts": 59,
+        "answerRawScore": 0.610519516464202,
+        "top3": [
+          {
+            "id": 55,
+            "score": 0.7879356972653815,
+            "title": "열쇠 꾸러미 주웠어요"
+          },
+          {
+            "id": 5,
+            "score": 0.7626263842438941,
+            "title": "검정 카드지갑 주웠습니다"
+          },
+          {
+            "id": 2,
+            "score": 0.7546436072039455,
+            "title": "검은색 장지갑 주웠어요"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "자취방 열쇠를 어디서 흘린 것 같아요 하루 종일 여기저기 돌아다녀서 정확히 어디인지 모르겠어요. 은색 열쇠 두 개에 작은 야구공 모양 키링이 같이 달려 있어요.",
+        "rank": null,
+        "rankWithoutTitleBonus": null,
+        "trueRankAllPosts": 46,
+        "answerRawScore": 0.6499337062061835,
+        "top3": [
+          {
+            "id": 55,
+            "score": 0.8218093788850245,
+            "title": "열쇠 꾸러미 주웠어요"
+          },
+          {
+            "id": 2,
+            "score": 0.7740074660804765,
+            "title": "검은색 장지갑 주웠어요"
+          },
+          {
+            "id": 54,
+            "score": 0.7661851003611325,
+            "title": "열쇠 두 개 달린 링"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": null,
+        "top3": [
+          {
+            "id": 55,
+            "score": 1,
+            "title": "열쇠 꾸러미 주웠어요"
+          },
+          {
+            "id": 54,
+            "score": 0.46860855096695997,
+            "title": "열쇠 두 개 달린 링"
+          },
+          {
+            "id": 47,
+            "score": 0.10052401394713563,
+            "title": "토끼 키링 달린 열쇠"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 5,
+        "top3": [
+          {
+            "id": 19,
+            "score": 1,
+            "title": "자동차 스마트키 분실"
+          },
+          {
+            "id": 31,
+            "score": 0.26766635508525494,
+            "title": "동아리방 열쇠 분실 (곰돌이 키링)"
+          },
+          {
+            "id": 32,
+            "score": 0.24548296592283433,
+            "title": "회색 후드집업 두고 왔어요"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P29",
+      "difficulty": "medium",
+      "itemType": "보온병",
+      "semantic_title": {
+        "query": "스티커 붙은 보온병 분실",
+        "rank": null,
+        "rankWithoutTitleBonus": null,
+        "trueRankAllPosts": 12,
+        "answerRawScore": 0.6933701491158405,
+        "top3": [
+          {
+            "id": 40,
+            "score": 0.7748712666448135,
+            "title": "흰 보온병 보관 중"
+          },
+          {
+            "id": 1,
+            "score": 0.7637851457660281,
+            "title": "휴대폰 카드케이스 주웠어요"
+          },
+          {
+            "id": 7,
+            "score": 0.747731156985314,
+            "title": "투명 폰케이스만 주웠어요"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "스티커 붙은 보온병 분실 흰색 보온병에 여행 스티커 몇 개 붙여놨어요. 명진당 1층 휴게실에서 잃어버렸어요.",
+        "rank": 4,
+        "rankWithoutTitleBonus": 3,
+        "trueRankAllPosts": 3,
+        "answerRawScore": 0.798079890699428,
+        "top3": [
+          {
+            "id": 40,
+            "score": 0.840090688773174,
+            "title": "흰 보온병 보관 중"
+          },
+          {
+            "id": 58,
+            "score": 0.8187255205243225,
+            "title": "보조배터리 주웠습니다 (흰색)"
+          },
+          {
+            "id": 5,
+            "score": 0.802625631816573,
+            "title": "검정 카드지갑 주웠습니다"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 2,
+        "top3": [
+          {
+            "id": 40,
+            "score": 1,
+            "title": "흰 보온병 보관 중"
+          },
+          {
+            "id": 38,
+            "score": 0.8522795801231017,
+            "title": "휴게실에 텀블러 하나"
+          },
+          {
+            "id": 58,
+            "score": 0.3772936586310921,
+            "title": "보조배터리 주웠습니다 (흰색)"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 26,
+            "score": 1,
+            "title": "스티커 붙은 보온병 분실"
+          },
+          {
+            "id": 9,
+            "score": 0.6215665527146772,
+            "title": "파란색 텀블러 잃어버렸어요"
+          },
+          {
+            "id": 20,
+            "score": 0.3513002139125039,
+            "title": "체크무늬 목도리 분실"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "P30",
+      "difficulty": "hard",
+      "itemType": "파우치",
+      "semantic_title": {
+        "query": "작은 파우치 잃어버렸어요",
+        "rank": 1,
+        "rankWithoutTitleBonus": 2,
+        "trueRankAllPosts": 2,
+        "answerRawScore": 0.750054471206113,
+        "top3": [
+          {
+            "id": 29,
+            "score": 0.780054471206113,
+            "title": "트랙 옆에서 화장품 파우치 습득"
+          },
+          {
+            "id": 5,
+            "score": 0.7594044649955956,
+            "title": "검정 카드지갑 주웠습니다"
+          },
+          {
+            "id": 1,
+            "score": 0.749380148780991,
+            "title": "휴대폰 카드케이스 주웠어요"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "작은 파우치 잃어버렸어요 어제 저녁 대운동장 쪽에서 산책하다 뭔가 떨어뜨린 것 같아요. 손바닥만 한 베이지색 파우치에 립밤이랑 핸드크림이 들어 있어요.",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.8150070215759885,
+        "top3": [
+          {
+            "id": 29,
+            "score": 0.8450070215759885,
+            "title": "트랙 옆에서 화장품 파우치 습득"
+          },
+          {
+            "id": 19,
+            "score": 0.779813348155014,
+            "title": "에코백 주웠어요"
+          },
+          {
+            "id": 5,
+            "score": 0.764162759732382,
+            "title": "검정 카드지갑 주웠습니다"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 29,
+            "score": 1,
+            "title": "트랙 옆에서 화장품 파우치 습득"
+          },
+          {
+            "id": 19,
+            "score": 0.34020797995730195,
+            "title": "에코백 주웠어요"
+          },
+          {
+            "id": 5,
+            "score": 0.21571355153138574,
+            "title": "검정 카드지갑 주웠습니다"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 17,
+            "score": 1,
+            "title": "작은 파우치 잃어버렸어요"
+          },
+          {
+            "id": 26,
+            "score": 0.08881561918027682,
+            "title": "스티커 붙은 보온병 분실"
+          },
+          {
+            "id": 16,
+            "score": 0.07922327688509519,
+            "title": "베이지색 필통 잃어버렸어요"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "Q01",
+      "difficulty": "medium",
+      "itemType": "안경",
+      "semantic_title": {
+        "query": "안경 분실 (검정 뿔테)",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.743897556167415,
+        "top3": [
+          {
+            "id": 45,
+            "score": 0.7738975561674151,
+            "title": "강의실 책상에 안경이 있었어요"
+          },
+          {
+            "id": 46,
+            "score": 0.733692196139884,
+            "title": "금테 안경 주웠어요"
+          },
+          {
+            "id": 44,
+            "score": 0.7160261530907475,
+            "title": "검은 뿔테 선글라스 습득"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "안경 분실 (검정 뿔테) 도수 높은 검정 뿔테 안경이에요. 함박관 3층 강의실에서 시험 끝나고 벗어두고 나온 것 같아요. 왼쪽 다리 끝이 살짝 휘어 있어요.",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.9123525478209475,
+        "top3": [
+          {
+            "id": 45,
+            "score": 0.9423525478209476,
+            "title": "강의실 책상에 안경이 있었어요"
+          },
+          {
+            "id": 44,
+            "score": 0.8072234613362645,
+            "title": "검은 뿔테 선글라스 습득"
+          },
+          {
+            "id": 46,
+            "score": 0.785662709474571,
+            "title": "금테 안경 주웠어요"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 45,
+            "score": 1,
+            "title": "강의실 책상에 안경이 있었어요"
+          },
+          {
+            "id": 46,
+            "score": 0.4076976960727031,
+            "title": "금테 안경 주웠어요"
+          },
+          {
+            "id": 44,
+            "score": 0.20159470116848677,
+            "title": "검은 뿔테 선글라스 습득"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 29,
+            "score": 1,
+            "title": "안경 분실 (검정 뿔테)"
+          },
+          {
+            "id": 30,
+            "score": 0.3240674953944817,
+            "title": "노트북 거치대 두고 왔어요"
+          },
+          {
+            "id": 3,
+            "score": 0.25405078629250205,
+            "title": "투명 비닐우산 (나무 손잡이)"
+          }
+        ]
+      },
+      "image": {
+        "queryImage": "Q01.jpg",
+        "rank": 1,
+        "resultCount": 10,
+        "top3": [
+          {
+            "id": 45,
+            "score": 0.9652995467185975,
+            "title": "강의실 책상에 안경이 있었어요"
+          },
+          {
+            "id": 46,
+            "score": 0.9403694868087771,
+            "title": "금테 안경 주웠어요"
+          },
+          {
+            "id": 19,
+            "score": 0.87680740287326,
+            "title": "에코백 주웠어요"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "Q02",
+      "difficulty": "easy",
+      "itemType": "보조배터리",
+      "semantic_title": {
+        "query": "흰색 보조배터리 잃어버렸어요",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.8073956761137411,
+        "top3": [
+          {
+            "id": 58,
+            "score": 0.8373956761137411,
+            "title": "보조배터리 주웠습니다 (흰색)"
+          },
+          {
+            "id": 56,
+            "score": 0.8255660203408935,
+            "title": "검은색 보조배터리 주웠어요"
+          },
+          {
+            "id": 9,
+            "score": 0.7504902707069495,
+            "title": "흰색 에어팟 주웠어요"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "흰색 보조배터리 잃어버렸어요 샤오미 흰색 보조배터리에 C타입 케이블이 꽂혀 있어요. 명진당 2층 열람실 콘센트 근처에서 잃어버렸습니다.",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.8680451920045971,
+        "top3": [
+          {
+            "id": 58,
+            "score": 0.8980451920045971,
+            "title": "보조배터리 주웠습니다 (흰색)"
+          },
+          {
+            "id": 56,
+            "score": 0.867687731567814,
+            "title": "검은색 보조배터리 주웠어요"
+          },
+          {
+            "id": 13,
+            "score": 0.805422846488105,
+            "title": "실습실 콘센트에 꽂힌 어댑터"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 58,
+            "score": 1,
+            "title": "보조배터리 주웠습니다 (흰색)"
+          },
+          {
+            "id": 56,
+            "score": 0.4490099894034676,
+            "title": "검은색 보조배터리 주웠어요"
+          },
+          {
+            "id": 14,
+            "score": 0.19515169142096506,
+            "title": "강의실 책상 밑 무선이어폰 한 짝"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 37,
+            "score": 1,
+            "title": "흰색 보조배터리 잃어버렸어요"
+          },
+          {
+            "id": 36,
+            "score": 0.8038049545495395,
+            "title": "분홍 맥세이프 배터리 분실"
+          },
+          {
+            "id": 11,
+            "score": 0.06255328460281925,
+            "title": "아이패드 에어 + 애플펜슬 분실"
+          }
+        ]
+      },
+      "image": {
+        "queryImage": "Q02.jpg",
+        "rank": 1,
+        "resultCount": 10,
+        "top3": [
+          {
+            "id": 58,
+            "score": 0.9451839327812225,
+            "title": "보조배터리 주웠습니다 (흰색)"
+          },
+          {
+            "id": 56,
+            "score": 0.8929257861287341,
+            "title": "검은색 보조배터리 주웠어요"
+          },
+          {
+            "id": 23,
+            "score": 0.867165646980146,
+            "title": "태블릿이랑 펜 같이 주웠어요"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "Q03",
+      "difficulty": "hard",
+      "itemType": "마우스",
+      "semantic_title": {
+        "query": "무소음 마우스 찾습니다",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.7757254571587471,
+        "top3": [
+          {
+            "id": 36,
+            "score": 0.8057254571587471,
+            "title": "실습실 서랍에서 마우스 발견"
+          },
+          {
+            "id": 37,
+            "score": 0.7568312140207765,
+            "title": "흰색 무선 마우스 습득"
+          },
+          {
+            "id": 9,
+            "score": 0.6652049571275724,
+            "title": "흰색 에어팟 주웠어요"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "무소음 마우스 찾습니다 로지텍 무선 마우스인데 클릭 소리가 안 나는 모델이에요. 색은 흑연색 같은 짙은 회색이고, USB 수신기는 노트북에 꽂혀 있어서 마우스만 없어졌어요. 제4공",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.8277010384030146,
+        "top3": [
+          {
+            "id": 36,
+            "score": 0.8577010384030146,
+            "title": "실습실 서랍에서 마우스 발견"
+          },
+          {
+            "id": 37,
+            "score": 0.7870999298572501,
+            "title": "흰색 무선 마우스 습득"
+          },
+          {
+            "id": 61,
+            "score": 0.778475387056369,
+            "title": "교탁 컴퓨터에 꽂혀 있던 USB"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 36,
+            "score": 1,
+            "title": "실습실 서랍에서 마우스 발견"
+          },
+          {
+            "id": 37,
+            "score": 0.5577505521229478,
+            "title": "흰색 무선 마우스 습득"
+          },
+          {
+            "id": 61,
+            "score": 0.17588459633046735,
+            "title": "교탁 컴퓨터에 꽂혀 있던 USB"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 2,
+        "top3": [
+          {
+            "id": 24,
+            "score": 1,
+            "title": "게이밍 마우스 잃어버렸어요"
+          },
+          {
+            "id": 23,
+            "score": 0.9677329184491696,
+            "title": "무소음 마우스 찾습니다"
+          },
+          {
+            "id": 4,
+            "score": 0.3229236051946701,
+            "title": "에어팟 프로 찾아요"
+          }
+        ]
+      },
+      "image": {
+        "queryImage": "Q03.jpg",
+        "rank": 1,
+        "resultCount": 10,
+        "top3": [
+          {
+            "id": 36,
+            "score": 0.976036278965252,
+            "title": "실습실 서랍에서 마우스 발견"
+          },
+          {
+            "id": 37,
+            "score": 0.9463720885737005,
+            "title": "흰색 무선 마우스 습득"
+          },
+          {
+            "id": 20,
+            "score": 0.8714497089386015,
+            "title": "갤럭시탭 주웠어요"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "Q04",
+      "difficulty": "medium",
+      "itemType": "전공서적",
+      "semantic_title": {
+        "query": "경영통계 전공책 잃어버렸어요",
+        "rank": 2,
+        "rankWithoutTitleBonus": 2,
+        "trueRankAllPosts": 2,
+        "answerRawScore": 0.70655392369311,
+        "top3": [
+          {
+            "id": 43,
+            "score": 0.744486211744487,
+            "title": "초록 표지 경제학원론 주웠어요"
+          },
+          {
+            "id": 42,
+            "score": 0.70655392369311,
+            "title": "통계 교재 한 권 보관 중"
+          },
+          {
+            "id": 49,
+            "score": 0.6864356358157585,
+            "title": "일반 계산기 습득"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "경영통계 전공책 잃어버렸어요 초록색 표지 경영통계학 책이에요. 앞쪽 몇 장에 포스트잇이 잔뜩 붙어 있어요. 미래관 스터디룸에서 두고 나온 것 같습니다.",
+        "rank": 2,
+        "rankWithoutTitleBonus": 2,
+        "trueRankAllPosts": 2,
+        "answerRawScore": 0.8442401475620704,
+        "top3": [
+          {
+            "id": 43,
+            "score": 0.8957951493019276,
+            "title": "초록 표지 경제학원론 주웠어요"
+          },
+          {
+            "id": 42,
+            "score": 0.8442401475620704,
+            "title": "통계 교재 한 권 보관 중"
+          },
+          {
+            "id": 16,
+            "score": 0.775063304901151,
+            "title": "쇼핑백에 전공책 두 권"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 2,
+        "top3": [
+          {
+            "id": 43,
+            "score": 1,
+            "title": "초록 표지 경제학원론 주웠어요"
+          },
+          {
+            "id": 42,
+            "score": 0.9146552709117851,
+            "title": "통계 교재 한 권 보관 중"
+          },
+          {
+            "id": 25,
+            "score": 0.04910363258984408,
+            "title": "공대 쪽에서 낡은 학생증 습득"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 27,
+            "score": 1,
+            "title": "경영통계 전공책 잃어버렸어요"
+          },
+          {
+            "id": 10,
+            "score": 0.2694417591138904,
+            "title": "에코백 분실 (책이랑 필통)"
+          },
+          {
+            "id": 32,
+            "score": 0.177359338227293,
+            "title": "회색 후드집업 두고 왔어요"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "Q05",
+      "difficulty": "hard",
+      "itemType": "USB",
+      "semantic_title": {
+        "query": "발표 자료 든 USB 급하게 찾아요",
+        "rank": 2,
+        "rankWithoutTitleBonus": 2,
+        "trueRankAllPosts": 2,
+        "answerRawScore": 0.747926816962122,
+        "top3": [
+          {
+            "id": 60,
+            "score": 0.78651536687751,
+            "title": "파란 USB 주웠어요"
+          },
+          {
+            "id": 61,
+            "score": 0.7779268169621221,
+            "title": "교탁 컴퓨터에 꽂혀 있던 USB"
+          },
+          {
+            "id": 13,
+            "score": 0.741684827202026,
+            "title": "실습실 콘센트에 꽂힌 어댑터"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "발표 자료 든 USB 급하게 찾아요 빨간색 샌디스크 USB인데 조별과제 발표 파일이 들어 있어요. 오늘 베리타스홀에서 발표하고 나서 노트북에서 뽑은 기억이 없어요.",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.813626419685697,
+        "top3": [
+          {
+            "id": 61,
+            "score": 0.8436264196856971,
+            "title": "교탁 컴퓨터에 꽂혀 있던 USB"
+          },
+          {
+            "id": 60,
+            "score": 0.791912658100566,
+            "title": "파란 USB 주웠어요"
+          },
+          {
+            "id": 13,
+            "score": 0.74678885975017,
+            "title": "실습실 콘센트에 꽂힌 어댑터"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 61,
+            "score": 1,
+            "title": "교탁 컴퓨터에 꽂혀 있던 USB"
+          },
+          {
+            "id": 60,
+            "score": 0.4447148376524818,
+            "title": "파란 USB 주웠어요"
+          },
+          {
+            "id": 13,
+            "score": 0.2752945115532161,
+            "title": "실습실 콘센트에 꽂힌 어댑터"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 38,
+            "score": 1,
+            "title": "발표 자료 든 USB 급하게 찾아요"
+          },
+          {
+            "id": 30,
+            "score": 0.9251291723864198,
+            "title": "노트북 거치대 두고 왔어요"
+          },
+          {
+            "id": 5,
+            "score": 0.09966201932360864,
+            "title": "노트북 충전기만 없어졌어요"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "Q06",
+      "difficulty": "easy",
+      "itemType": "계산기",
+      "semantic_title": {
+        "query": "공학용 계산기 잃어버렸어요",
+        "rank": 2,
+        "rankWithoutTitleBonus": 3,
+        "trueRankAllPosts": 3,
+        "answerRawScore": 0.7119457171028135,
+        "top3": [
+          {
+            "id": 49,
+            "score": 0.7728281324319595,
+            "title": "일반 계산기 습득"
+          },
+          {
+            "id": 52,
+            "score": 0.7419457171028135,
+            "title": "카시오 계산기 주웠어요"
+          },
+          {
+            "id": 61,
+            "score": 0.7195602597116685,
+            "title": "교탁 컴퓨터에 꽂혀 있던 USB"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "공학용 계산기 잃어버렸어요 카시오 fx-570 공학용 계산기예요. 뒷면에 작은 노란 스티커가 붙어 있어요. 제2공학관에서 시험 끝나고 잃어버렸어요.",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.8470628791005326,
+        "top3": [
+          {
+            "id": 52,
+            "score": 0.8770628791005326,
+            "title": "카시오 계산기 주웠어요"
+          },
+          {
+            "id": 49,
+            "score": 0.7985480735955346,
+            "title": "일반 계산기 습득"
+          },
+          {
+            "id": 25,
+            "score": 0.7318163354287385,
+            "title": "공대 쪽에서 낡은 학생증 습득"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 52,
+            "score": 1,
+            "title": "카시오 계산기 주웠어요"
+          },
+          {
+            "id": 49,
+            "score": 0.49494192676703025,
+            "title": "일반 계산기 습득"
+          },
+          {
+            "id": 20,
+            "score": 0.2717817397593634,
+            "title": "갤럭시탭 주웠어요"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 33,
+            "score": 1,
+            "title": "공학용 계산기 잃어버렸어요"
+          },
+          {
+            "id": 11,
+            "score": 0.17956526353401484,
+            "title": "아이패드 에어 + 애플펜슬 분실"
+          },
+          {
+            "id": 1,
+            "score": 0.15023053925655644,
+            "title": "검은색 카드지갑 잃어버렸어요"
+          }
+        ]
+      },
+      "image": {
+        "queryImage": "Q06.jpg",
+        "rank": 1,
+        "resultCount": 10,
+        "top3": [
+          {
+            "id": 52,
+            "score": 0.9774322821240335,
+            "title": "카시오 계산기 주웠어요"
+          },
+          {
+            "id": 20,
+            "score": 0.884389132261279,
+            "title": "갤럭시탭 주웠어요"
+          },
+          {
+            "id": 5,
+            "score": 0.8632789470719671,
+            "title": "검정 카드지갑 주웠습니다"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "Q07",
+      "difficulty": "medium",
+      "itemType": "목도리",
+      "semantic_title": {
+        "query": "체크무늬 목도리 분실",
+        "rank": 5,
+        "rankWithoutTitleBonus": 5,
+        "trueRankAllPosts": 5,
+        "answerRawScore": 0.6892696187989105,
+        "top3": [
+          {
+            "id": 33,
+            "score": 0.794207010581628,
+            "title": "회색 목도리 주웠어요"
+          },
+          {
+            "id": 59,
+            "score": 0.712635009792159,
+            "title": "검은색 비니 습득"
+          },
+          {
+            "id": 5,
+            "score": 0.7097201164806359,
+            "title": "검정 카드지갑 주웠습니다"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "체크무늬 목도리 분실 빨강이랑 초록 체크무늬 울 목도리예요. 학생회관 식당에서 밥 먹고 의자에 걸어두고 나왔어요.",
+        "rank": 2,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.851467537705122,
+        "top3": [
+          {
+            "id": 33,
+            "score": 0.877668782463515,
+            "title": "회색 목도리 주웠어요"
+          },
+          {
+            "id": 32,
+            "score": 0.851467537705122,
+            "title": "타탄체크 머플러 보관 중"
+          },
+          {
+            "id": 21,
+            "score": 0.790266644533461,
+            "title": "천가방 하나 보관하고 있어요"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 32,
+            "score": 1,
+            "title": "타탄체크 머플러 보관 중"
+          },
+          {
+            "id": 33,
+            "score": 0.871979530563466,
+            "title": "회색 목도리 주웠어요"
+          },
+          {
+            "id": 21,
+            "score": 0.2838473431615976,
+            "title": "천가방 하나 보관하고 있어요"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 20,
+            "score": 1,
+            "title": "체크무늬 목도리 분실"
+          },
+          {
+            "id": 32,
+            "score": 0.3630949275656067,
+            "title": "회색 후드집업 두고 왔어요"
+          },
+          {
+            "id": 30,
+            "score": 0.08636833555641882,
+            "title": "노트북 거치대 두고 왔어요"
+          }
+        ]
+      }
+    },
+    {
+      "pairId": "Q08",
+      "difficulty": "hard",
+      "itemType": "모자",
+      "semantic_title": {
+        "query": "검은 볼캡 잃어버렸어요",
+        "rank": null,
+        "rankWithoutTitleBonus": null,
+        "trueRankAllPosts": 20,
+        "answerRawScore": 0.619388812628079,
+        "top3": [
+          {
+            "id": 2,
+            "score": 0.6917827415466495,
+            "title": "검은색 장지갑 주웠어요"
+          },
+          {
+            "id": 46,
+            "score": 0.660983647586875,
+            "title": "금테 안경 주웠어요"
+          },
+          {
+            "id": 1,
+            "score": 0.658851836885587,
+            "title": "휴대폰 카드케이스 주웠어요"
+          }
+        ]
+      },
+      "semantic_fulltext": {
+        "query": "검은 볼캡 잃어버렸어요 앞에 작은 흰색 자수 로고가 있는 검은색 볼캡이에요. 운동장에서 풋살하고 벤치에 벗어뒀는데 깜빡했어요.",
+        "rank": 1,
+        "rankWithoutTitleBonus": 1,
+        "trueRankAllPosts": 1,
+        "answerRawScore": 0.787207151984318,
+        "top3": [
+          {
+            "id": 57,
+            "score": 0.817207151984318,
+            "title": "벤치에 모자 하나"
+          },
+          {
+            "id": 59,
+            "score": 0.807874461475782,
+            "title": "검은색 비니 습득"
+          },
+          {
+            "id": 10,
+            "score": 0.7391069942180606,
+            "title": "정류장 벤치에 우산 두고 가셨어요"
+          }
+        ]
+      },
+      "rec_lost_to_found": {
+        "rank": 2,
+        "top3": [
+          {
+            "id": 59,
+            "score": 1,
+            "title": "검은색 비니 습득"
+          },
+          {
+            "id": 57,
+            "score": 0.9632678805889662,
+            "title": "벤치에 모자 하나"
+          },
+          {
+            "id": 29,
+            "score": 0.2835400616924631,
+            "title": "트랙 옆에서 화장품 파우치 습득"
+          }
+        ]
+      },
+      "rec_found_to_lost": {
+        "rank": 1,
+        "top3": [
+          {
+            "id": 35,
+            "score": 1,
+            "title": "검은 볼캡 잃어버렸어요"
+          },
+          {
+            "id": 13,
+            "score": 0.3061769162413483,
+            "title": "베이지 양산 잃어버렸어요"
+          },
+          {
+            "id": 16,
+            "score": 0.2499133474111518,
+            "title": "베이지색 필통 잃어버렸어요"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -169,7 +169,7 @@ export const ko = {
   "aiSearch.typeConflict": "사진을 포함한 AI 검색은 분실물 또는 습득물 게시판을 선택한 경우에만 사용할 수 있습니다.",
   "aiSearch.failed": "AI 검색에 실패했습니다. 다시 시도해주세요.",
   "aiSearch.resultNotice":
-    "AI가 찾은 비슷한 습득물이에요. 유사도 점수가 높을수록 찾는 물건과 더 비슷해요.",
+    "AI가 찾은 비슷한 습득물이에요. 위에 있을수록 찾는 물건과 더 비슷해요.",
   "aiSearch.empty.title": "비슷한 게시글을 찾지 못했어요.",
   "aiSearch.empty.description": "다른 검색어나 사진으로 다시 시도해보세요.",
 

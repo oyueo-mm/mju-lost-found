@@ -5,8 +5,9 @@ import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { EMBEDDING_INPUT_FIELDS, embedPostBestEffort } from "@/lib/ai/postEmbedding";
 import { getEmbeddingProvider } from "@/lib/ai/embedding";
 import { getImageEmbeddingProvider } from "@/lib/ai/imageEmbedding";
-import { findPostsByImageQuery, findPostsBySemanticQuery } from "@/lib/ai/vectorSearch";
-import { combineRankings } from "@/lib/ai/rankFusion";
+import { findCandidateCosinesForQuery, findPostsByImageQuery, findPostsBySemanticQuery } from "@/lib/ai/vectorSearch";
+import { aiSimilarity, candidatePool, rankByAiSimilarity } from "@/lib/ai/rankFusion";
+import { cosineFromNormalizedScore } from "@/lib/ai/matching";
 import { invalidateRecommendationCache } from "@/lib/recommendation/service";
 import { validateOrganizationPosting } from "@/lib/organization/service";
 import { notifyKeywordAlertSubscribers } from "@/lib/keywordAlert/matcher";
@@ -295,6 +296,26 @@ function queryTokens(query: string): string[] {
     .filter((token) => token.length >= 2);
 }
 
+// AI 유사도 척도 통일 Phase: which number a single-signal search result
+// carries as `score`. Only the displayed value differs -- the ranking,
+// the AI_SEARCH_MIN_SIMILARITY filter and the title bonus are identical
+// either way.
+// - "search": the legacy mode=semantic / mode=image endpoints' own
+//   normalizeScore'd cosine (+ the text title bonus), shown as
+//   "검색 유사도 XX%" on the /lost, /found and /search pages.
+// - "ai": AI 검색 (searchPostsAI) -- rankFusion.ts's D3 formula applied to
+//   the same raw cosine. The title bonus is a ranking tie-breaker, not
+//   similarity, so it's never added to it. Since the AI 검색 점수 숨김 Phase
+//   the UI no longer displays this value (AISearchPanel): a query <-> post
+//   D3 runs lower than the post <-> post D3 the AI 추천 shows, so the same
+//   number would not mean the same thing. It stays in the API response.
+type SearchScoreScale = "search" | "ai";
+
+function aiSimilarityForSignal(signal: "text" | "image", normalizedScore: number): number {
+  const cosine = cosineFromNormalizedScore(normalizedScore);
+  return aiSimilarity(signal === "text" ? cosine : null, signal === "image" ? cosine : null)!.score;
+}
+
 // Shared by searchPostsSemantic() (single board) and
 // searchPostsSemanticAll() (Phase 11-2, both boards merged) -- ranks one
 // board's embedding column against an already-embedded query vector and
@@ -302,12 +323,25 @@ function queryTokens(query: string): string[] {
 // unpaginated array; both callers own their own sort/slice, since
 // searchPostsSemanticAll's sort has to happen *after* concatenating both
 // boards' candidates, not per-board.
+//
+// Each item carries `rankScore` (the sort key: normalized cosine + title
+// bonus) separately from `score` (what's displayed, per `scoreScale`) --
+// both callers sort by rankScore and then drop it via withoutRankScore().
+type RankedSemanticItem = PostDTO & { score: number; rankScore: number };
+
+function withoutRankScore(item: RankedSemanticItem): PostDTO {
+  const { rankScore, ...dto } = item;
+  void rankScore;
+  return dto;
+}
+
 async function rankSemanticCandidates(
   type: PostType,
   queryVector: number[],
   query: string,
   filters: Omit<ListParams, "page" | "limit">,
-): Promise<(PostDTO & { score: number })[]> {
+  scoreScale: SearchScoreScale,
+): Promise<RankedSemanticItem[]> {
   const ranked = filterAiSearchResults(await findPostsBySemanticQuery(type, queryVector, SEMANTIC_SEARCH_TOP_K, filters));
   if (ranked.length === 0) return [];
 
@@ -328,9 +362,12 @@ async function rankSemanticCandidates(
   // The lexical title-match bonus (see LEXICAL_TITLE_MATCH_BONUS above) is
   // applied here, not in findPostsBySemanticQuery(), because it needs the
   // post's title text -- vectorSearch.ts only ever sees id+similarity, and
-  // stays a pure pgvector-query function. Applying the bonus to `score`
-  // itself (rather than only to an internal sort key) keeps the displayed
-  // "검색 유사도" percentage consistent with the actual result order.
+  // stays a pure pgvector-query function. On the "search" scale the bonus
+  // is part of the displayed score too, which keeps the "검색 유사도"
+  // percentage consistent with the actual result order. On the "ai" scale
+  // it only reorders -- AI 유사도 stays pure similarity (see
+  // SearchScoreScale), so a bonus-promoted result can show a slightly lower
+  // AI 유사도 than the one below it.
   const tokens = queryTokens(query);
   return ids
     .map((id) => rowById.get(id))
@@ -339,8 +376,9 @@ async function rankSemanticCandidates(
       const dto = type === "lost" ? toLostPostDTO(row as Parameters<typeof toLostPostDTO>[0]) : toFoundPostDTO(row as Parameters<typeof toFoundPostDTO>[0]);
       const baseScore = scoreById.get(row.id) ?? 0;
       const titleMatchesQuery = tokens.some((token) => row.title.includes(token));
-      const score = titleMatchesQuery ? Math.min(1, baseScore + LEXICAL_TITLE_MATCH_BONUS) : baseScore;
-      return { ...dto, score };
+      const rankScore = titleMatchesQuery ? Math.min(1, baseScore + LEXICAL_TITLE_MATCH_BONUS) : baseScore;
+      const score = scoreScale === "ai" ? aiSimilarityForSignal("text", baseScore) : rankScore;
+      return { ...dto, score, rankScore };
     });
 }
 
@@ -355,11 +393,12 @@ async function searchPostsSemantic(
   type: PostType,
   query: string,
   { page, limit, ...filters }: ListParams,
+  scoreScale: SearchScoreScale = "search",
 ): Promise<PagedResult<PostDTO>> {
   const vector = await getEmbeddingProvider().embed(query);
-  const items = (await rankSemanticCandidates(type, vector, query, filters)).sort(
-    (a, b) => (b.score ?? 0) - (a.score ?? 0) || a.id - b.id,
-  );
+  const items = (await rankSemanticCandidates(type, vector, query, filters, scoreScale))
+    .sort((a, b) => b.rankScore - a.rankScore || a.id - b.id)
+    .map(withoutRankScore);
 
   const total = items.length;
   const skip = (page - 1) * limit;
@@ -393,11 +432,12 @@ async function searchPostsSemantic(
 async function searchPostsSemanticAll(
   query: string,
   { page, limit, ...filters }: ListParams,
+  scoreScale: SearchScoreScale = "search",
 ): Promise<PagedResult<PostDTO>> {
   const vector = await getEmbeddingProvider().embed(query);
   const [lostResult, foundResult] = await Promise.allSettled([
-    rankSemanticCandidates("lost", vector, query, filters),
-    rankSemanticCandidates("found", vector, query, filters),
+    rankSemanticCandidates("lost", vector, query, filters, scoreScale),
+    rankSemanticCandidates("found", vector, query, filters, scoreScale),
   ]);
 
   if (lostResult.status === "rejected") {
@@ -412,7 +452,9 @@ async function searchPostsSemanticAll(
 
   const lostItems = lostResult.status === "fulfilled" ? lostResult.value : [];
   const foundItems = foundResult.status === "fulfilled" ? foundResult.value : [];
-  const items = [...lostItems, ...foundItems].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.id - b.id);
+  const items = [...lostItems, ...foundItems]
+    .sort((a, b) => b.rankScore - a.rankScore || a.id - b.id)
+    .map(withoutRankScore);
 
   const total = items.length;
   const skip = (page - 1) * limit;
@@ -462,6 +504,7 @@ export async function searchPostsByImage(
   targetType: PostType,
   image: Blob,
   { page, limit, ...filters }: ListParams,
+  scoreScale: SearchScoreScale = "search",
 ): Promise<PagedResult<PostDTO>> {
   const vector = await getImageEmbeddingProvider().embed(image);
   const ranked = filterAiSearchResults(await findPostsByImageQuery(targetType, vector, IMAGE_SEARCH_TOP_K, filters));
@@ -480,7 +523,9 @@ export async function searchPostsByImage(
 
   // Re-order to match the similarity ranking and drop any id whose row
   // vanished between the two queries -- same reasoning as
-  // searchPostsSemantic()'s own identical comment.
+  // searchPostsSemantic()'s own identical comment. The displayed score is
+  // a monotonic function of the ranking score on either scale, so the
+  // order and the numbers always agree here.
   const items: PostDTO[] = ids
     .map((id) => rowById.get(id))
     .filter((row): row is NonNullable<typeof row> => row !== undefined)
@@ -489,7 +534,8 @@ export async function searchPostsByImage(
         targetType === "lost"
           ? toLostPostDTO(row as Parameters<typeof toLostPostDTO>[0])
           : toFoundPostDTO(row as Parameters<typeof toFoundPostDTO>[0]);
-      return { ...dto, score: scoreById.get(row.id) };
+      const normalizedScore = scoreById.get(row.id) ?? 0;
+      return { ...dto, score: scoreScale === "ai" ? aiSimilarityForSignal("image", normalizedScore) : normalizedScore };
     });
 
   const total = items.length;
@@ -508,17 +554,17 @@ export async function searchPostsByImage(
 //                       type=all은 불가 -- 이미지 검색은 항상 특정 게시판
 //                       하나의 imageEmbedding 컬럼만 조회할 수 있다).
 //   텍스트 + 이미지 -> findPostsBySemanticQuery()/findPostsByImageQuery()를
-//                       병렬로 돌리고, src/lib/recommendation/service.ts의
-//                       게시글 상세 AI 추천이 쓰는 것과 완전히 동일한
-//                       rankFusion.combineRankings()로 합친다. 각 raw vector
-//                       candidate는 먼저 동일한 normalized-score threshold를
-//                       통과해야 한다. 이 경우 반환되는 score는
-//                       raw cosine similarity가 아니라 후보 풀 내에서
-//                       min-max 정규화한 뒤 평균한 값이다 (combineRankings의
-//                       own comment 참고) -- 즉 게시글 상세 AI 추천이 "AI
-//                       유사도"로 보여주는 값과 정확히 같은 의미이므로, 이
-//                       검색 결과에도 동일하게 "AI 유사도"라는 라벨을 써도
-//                       의미가 어긋나지 않는다.
+//                       병렬로 돌리고(각 후보는 먼저 동일한 normalized-score
+//                       threshold를 통과해야 한다), 두 결과의 합집합을
+//                       src/lib/recommendation/service.ts의 게시글 상세 AI
+//                       추천과 완전히 같은 rankFusion.rankByAiSimilarity()
+//                       (D3-pool)로 정렬한다.
+// AI 유사도 척도 통일 Phase: 세 경우 모두 반환되는 score는 rankFusion.ts의
+// D3 식으로 계산한 값이다(텍스트만/이미지만은 scoreScale="ai"로 점수만 D3로
+// 바꾸고 순위는 그대로). 다만 검색어↔게시글 D3는 AI 추천의 게시글↔게시글
+// D3보다 낮게 나오므로, AI 검색 점수 숨김 Phase부터 화면에는 표시하지
+// 않는다(AISearchPanel). 같은 함수를 쓰는 기존 mode=semantic / mode=image
+// 엔드포인트는 여전히 "검색 유사도 XX%" 척도(scoreScale="search")다.
 // 호출자(POST /api/posts?mode=ai)가 "텍스트/이미지 둘 다 없음"과 "이미지가
 // 있는데 type=all"을 이미 400으로 거른 뒤에만 이 함수를 부르므로, 그 두
 // 불변조건은 여기서 다시 검증하지 않는다(대신 방어적으로 assert만 한다).
@@ -538,13 +584,13 @@ export async function searchPostsAI(
 
   if (hasQuery && !hasImage) {
     return type === "all"
-      ? searchPostsSemanticAll(trimmedQuery, { page, limit, ...filters })
-      : searchPostsSemantic(type, trimmedQuery, { page, limit, ...filters });
+      ? searchPostsSemanticAll(trimmedQuery, { page, limit, ...filters }, "ai")
+      : searchPostsSemantic(type, trimmedQuery, { page, limit, ...filters }, "ai");
   }
 
   if (hasImage && !hasQuery) {
     if (type === "all") throw new Error("Image search requires a specific board (lost or found)");
-    return searchPostsByImage(type, image, { page, limit, ...filters });
+    return searchPostsByImage(type, image, { page, limit, ...filters }, "ai");
   }
 
   if (type === "all") throw new Error("Image search requires a specific board (lost or found)");
@@ -565,12 +611,13 @@ async function searchPostsByTextAndImage(
     findPostsBySemanticQuery(targetType, textVector, SEMANTIC_SEARCH_TOP_K, filters).then(filterAiSearchResults),
     findPostsByImageQuery(targetType, imageVector, IMAGE_SEARCH_TOP_K, filters).then(filterAiSearchResults),
   ]);
-  const combined = combineRankings(textRanked, imageRanked);
+  const pool = candidatePool(textRanked, imageRanked);
 
-  if (combined.length === 0) {
+  if (pool.length === 0) {
     return { items: [], page, limit, total: 0, totalPages: 1 };
   }
 
+  const combined = rankByAiSimilarity(await findCandidateCosinesForQuery(targetType, textVector, imageVector, pool));
   const scoreById = new Map(combined.map((r) => [r.id, r.score]));
   const ids = combined.map((r) => r.id);
   const rows =

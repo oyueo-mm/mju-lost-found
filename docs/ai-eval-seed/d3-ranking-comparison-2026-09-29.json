@@ -1,0 +1,768 @@
+{
+  "environment": "Preview (swqvlihgupranzfzjevb)",
+  "evaluatedAt": "2026-09-29T05:55:02.018Z",
+  "baselines": {
+    "b_text": 0.361,
+    "b_image": 0.657
+  },
+  "overall": {
+    "current": {
+      "n": 52,
+      "top1": 0.788,
+      "recall3": 0.962,
+      "recall5": 0.981,
+      "mrr": 0.876
+    },
+    "d3_all": {
+      "n": 52,
+      "top1": 0.788,
+      "recall3": 0.962,
+      "recall5": 0.962,
+      "mrr": 0.872
+    },
+    "d3_pool": {
+      "n": 52,
+      "top1": 0.788,
+      "recall3": 0.962,
+      "recall5": 0.981,
+      "mrr": 0.876
+    }
+  },
+  "byDirection": {
+    "L→F": {
+      "current": {
+        "n": 26,
+        "top1": 0.692,
+        "recall3": 0.962,
+        "recall5": 0.962,
+        "mrr": 0.821
+      },
+      "d3_all": {
+        "n": 26,
+        "top1": 0.654,
+        "recall3": 0.962,
+        "recall5": 0.962,
+        "mrr": 0.801
+      },
+      "d3_pool": {
+        "n": 26,
+        "top1": 0.654,
+        "recall3": 0.962,
+        "recall5": 0.962,
+        "mrr": 0.801
+      }
+    },
+    "F→L": {
+      "current": {
+        "n": 26,
+        "top1": 0.885,
+        "recall3": 0.962,
+        "recall5": 1,
+        "mrr": 0.931
+      },
+      "d3_all": {
+        "n": 26,
+        "top1": 0.923,
+        "recall3": 0.962,
+        "recall5": 0.962,
+        "mrr": 0.942
+      },
+      "d3_pool": {
+        "n": 26,
+        "top1": 0.923,
+        "recall3": 0.962,
+        "recall5": 1,
+        "mrr": 0.95
+      }
+    }
+  },
+  "byDifficulty": {
+    "easy": {
+      "current": {
+        "n": 14,
+        "top1": 1,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 1
+      },
+      "d3_all": {
+        "n": 14,
+        "top1": 1,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 1
+      },
+      "d3_pool": {
+        "n": 14,
+        "top1": 1,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 1
+      }
+    },
+    "medium": {
+      "current": {
+        "n": 22,
+        "top1": 0.773,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 0.886
+      },
+      "d3_all": {
+        "n": 22,
+        "top1": 0.727,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 0.864
+      },
+      "d3_pool": {
+        "n": 22,
+        "top1": 0.727,
+        "recall3": 1,
+        "recall5": 1,
+        "mrr": 0.864
+      }
+    },
+    "hard": {
+      "current": {
+        "n": 16,
+        "top1": 0.625,
+        "recall3": 0.875,
+        "recall5": 0.938,
+        "mrr": 0.752
+      },
+      "d3_all": {
+        "n": 16,
+        "top1": 0.688,
+        "recall3": 0.875,
+        "recall5": 0.875,
+        "mrr": 0.771
+      },
+      "d3_pool": {
+        "n": 16,
+        "top1": 0.688,
+        "recall3": 0.875,
+        "recall5": 0.938,
+        "mrr": 0.783
+      }
+    }
+  },
+  "hardNegativeAbove": {
+    "current": {
+      "all": "9/29 = 0.31",
+      "L→F": "7/22 = 0.318",
+      "F→L": "2/7 = 0.286"
+    },
+    "d3_all": {
+      "all": "9/29 = 0.31",
+      "L→F": "8/22 = 0.364",
+      "F→L": "1/7 = 0.143"
+    },
+    "d3_pool": {
+      "all": "9/29 = 0.31",
+      "L→F": "8/22 = 0.364",
+      "F→L": "1/7 = 0.143"
+    }
+  },
+  "noMatchBestD3": {
+    "dist": {
+      "n": 10,
+      "min": 0.109,
+      "p25": 0.199,
+      "p50": 0.328,
+      "p75": 0.391,
+      "max": 0.572
+    },
+    "items": [
+      {
+        "noMatchId": "M01",
+        "title": "손목시계 잃어버렸어요",
+        "bestD3": 0.199
+      },
+      {
+        "noMatchId": "M02",
+        "title": "카메라 렌즈캡 주웠어요",
+        "bestD3": 0.174
+      },
+      {
+        "noMatchId": "M03",
+        "title": "집게핀 주웠어요",
+        "bestD3": 0.258
+      },
+      {
+        "noMatchId": "M04",
+        "title": "은반지 분실",
+        "bestD3": 0.391
+      },
+      {
+        "noMatchId": "M05",
+        "title": "목베개 습득",
+        "bestD3": 0.331
+      },
+      {
+        "noMatchId": "M06",
+        "title": "노트북 거치대 두고 왔어요",
+        "bestD3": 0.572
+      },
+      {
+        "noMatchId": "M07",
+        "title": "줄넘기 주웠어요",
+        "bestD3": 0.109
+      },
+      {
+        "noMatchId": "M08",
+        "title": "베이지 양산 잃어버렸어요",
+        "bestD3": 0.44
+      },
+      {
+        "noMatchId": "M09",
+        "title": "손선풍기 주웠어요",
+        "bestD3": 0.22
+      },
+      {
+        "noMatchId": "M10",
+        "title": "서류 든 L자 파일 분실",
+        "bestD3": 0.328
+      }
+    ]
+  },
+  "answerD3": {
+    "n": 52,
+    "min": 0,
+    "p25": 0.479,
+    "p50": 0.617,
+    "p75": 0.694,
+    "max": 0.81
+  },
+  "thresholdSweep": [
+    {
+      "threshold": 0.2,
+      "noMatchSuppressed": "3/10",
+      "answersBelow": "2/52"
+    },
+    {
+      "threshold": 0.3,
+      "noMatchSuppressed": "5/10",
+      "answersBelow": "2/52"
+    },
+    {
+      "threshold": 0.35,
+      "noMatchSuppressed": "7/10",
+      "answersBelow": "4/52"
+    },
+    {
+      "threshold": 0.4,
+      "noMatchSuppressed": "8/10",
+      "answersBelow": "6/52"
+    },
+    {
+      "threshold": 0.45,
+      "noMatchSuppressed": "9/10",
+      "answersBelow": "10/52"
+    },
+    {
+      "threshold": 0.5,
+      "noMatchSuppressed": "9/10",
+      "answersBelow": "18/52"
+    }
+  ],
+  "changedCases": [
+    {
+      "pairId": "P05",
+      "direction": "L→F",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 2,
+      "d3_pool": 2,
+      "answerD3": 0.617
+    },
+    {
+      "pairId": "P27",
+      "direction": "F→L",
+      "difficulty": "hard",
+      "current": 5,
+      "d3_all": null,
+      "d3_pool": 5,
+      "answerD3": 0
+    },
+    {
+      "pairId": "Q03",
+      "direction": "F→L",
+      "difficulty": "hard",
+      "current": 2,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.705
+    }
+  ],
+  "cases": [
+    {
+      "pairId": "P08",
+      "direction": "L→F",
+      "difficulty": "medium",
+      "current": 2,
+      "d3_all": 2,
+      "d3_pool": 2,
+      "answerD3": 0.622
+    },
+    {
+      "pairId": "P08",
+      "direction": "F→L",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.622
+    },
+    {
+      "pairId": "P01",
+      "direction": "L→F",
+      "difficulty": "easy",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.785
+    },
+    {
+      "pairId": "P01",
+      "direction": "F→L",
+      "difficulty": "easy",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.785
+    },
+    {
+      "pairId": "P17",
+      "direction": "L→F",
+      "difficulty": "medium",
+      "current": 2,
+      "d3_all": 2,
+      "d3_pool": 2,
+      "answerD3": 0.611
+    },
+    {
+      "pairId": "P17",
+      "direction": "F→L",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.611
+    },
+    {
+      "pairId": "P11",
+      "direction": "L→F",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.61
+    },
+    {
+      "pairId": "P11",
+      "direction": "F→L",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.61
+    },
+    {
+      "pairId": "P05",
+      "direction": "L→F",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 2,
+      "d3_pool": 2,
+      "answerD3": 0.617
+    },
+    {
+      "pairId": "P05",
+      "direction": "F→L",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.617
+    },
+    {
+      "pairId": "P09",
+      "direction": "L→F",
+      "difficulty": "hard",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.417
+    },
+    {
+      "pairId": "P09",
+      "direction": "F→L",
+      "difficulty": "hard",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.417
+    },
+    {
+      "pairId": "P14",
+      "direction": "L→F",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.585
+    },
+    {
+      "pairId": "P14",
+      "direction": "F→L",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.585
+    },
+    {
+      "pairId": "P15",
+      "direction": "L→F",
+      "difficulty": "hard",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.459
+    },
+    {
+      "pairId": "P15",
+      "direction": "F→L",
+      "difficulty": "hard",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.459
+    },
+    {
+      "pairId": "P20",
+      "direction": "L→F",
+      "difficulty": "medium",
+      "current": 2,
+      "d3_all": 2,
+      "d3_pool": 2,
+      "answerD3": 0.643
+    },
+    {
+      "pairId": "P20",
+      "direction": "F→L",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.643
+    },
+    {
+      "pairId": "P28",
+      "direction": "L→F",
+      "difficulty": "easy",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.694
+    },
+    {
+      "pairId": "P28",
+      "direction": "F→L",
+      "difficulty": "easy",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.694
+    },
+    {
+      "pairId": "P06",
+      "direction": "L→F",
+      "difficulty": "hard",
+      "current": 3,
+      "d3_all": 3,
+      "d3_pool": 3,
+      "answerD3": 0.3
+    },
+    {
+      "pairId": "P06",
+      "direction": "F→L",
+      "difficulty": "hard",
+      "current": 2,
+      "d3_all": 2,
+      "d3_pool": 2,
+      "answerD3": 0.3
+    },
+    {
+      "pairId": "P13",
+      "direction": "L→F",
+      "difficulty": "easy",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.806
+    },
+    {
+      "pairId": "P13",
+      "direction": "F→L",
+      "difficulty": "easy",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.806
+    },
+    {
+      "pairId": "P22",
+      "direction": "L→F",
+      "difficulty": "easy",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.81
+    },
+    {
+      "pairId": "P22",
+      "direction": "F→L",
+      "difficulty": "easy",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.81
+    },
+    {
+      "pairId": "P25",
+      "direction": "L→F",
+      "difficulty": "easy",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.636
+    },
+    {
+      "pairId": "P25",
+      "direction": "F→L",
+      "difficulty": "easy",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.636
+    },
+    {
+      "pairId": "P26",
+      "direction": "L→F",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.479
+    },
+    {
+      "pairId": "P26",
+      "direction": "F→L",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.479
+    },
+    {
+      "pairId": "P27",
+      "direction": "L→F",
+      "difficulty": "hard",
+      "current": null,
+      "d3_all": null,
+      "d3_pool": null,
+      "answerD3": 0
+    },
+    {
+      "pairId": "P27",
+      "direction": "F→L",
+      "difficulty": "hard",
+      "current": 5,
+      "d3_all": null,
+      "d3_pool": 5,
+      "answerD3": 0
+    },
+    {
+      "pairId": "P29",
+      "direction": "L→F",
+      "difficulty": "medium",
+      "current": 2,
+      "d3_all": 2,
+      "d3_pool": 2,
+      "answerD3": 0.442
+    },
+    {
+      "pairId": "P29",
+      "direction": "F→L",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.442
+    },
+    {
+      "pairId": "P30",
+      "direction": "L→F",
+      "difficulty": "hard",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.495
+    },
+    {
+      "pairId": "P30",
+      "direction": "F→L",
+      "difficulty": "hard",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.495
+    },
+    {
+      "pairId": "Q01",
+      "direction": "L→F",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.776
+    },
+    {
+      "pairId": "Q01",
+      "direction": "F→L",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.776
+    },
+    {
+      "pairId": "Q02",
+      "direction": "L→F",
+      "difficulty": "easy",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.697
+    },
+    {
+      "pairId": "Q02",
+      "direction": "F→L",
+      "difficulty": "easy",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.697
+    },
+    {
+      "pairId": "Q03",
+      "direction": "L→F",
+      "difficulty": "hard",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.705
+    },
+    {
+      "pairId": "Q03",
+      "direction": "F→L",
+      "difficulty": "hard",
+      "current": 2,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.705
+    },
+    {
+      "pairId": "Q04",
+      "direction": "L→F",
+      "difficulty": "medium",
+      "current": 2,
+      "d3_all": 2,
+      "d3_pool": 2,
+      "answerD3": 0.581
+    },
+    {
+      "pairId": "Q04",
+      "direction": "F→L",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.581
+    },
+    {
+      "pairId": "Q05",
+      "direction": "L→F",
+      "difficulty": "hard",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.486
+    },
+    {
+      "pairId": "Q05",
+      "direction": "F→L",
+      "difficulty": "hard",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.486
+    },
+    {
+      "pairId": "Q06",
+      "direction": "L→F",
+      "difficulty": "easy",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.671
+    },
+    {
+      "pairId": "Q06",
+      "direction": "F→L",
+      "difficulty": "easy",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.671
+    },
+    {
+      "pairId": "Q07",
+      "direction": "L→F",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.655
+    },
+    {
+      "pairId": "Q07",
+      "direction": "F→L",
+      "difficulty": "medium",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.655
+    },
+    {
+      "pairId": "Q08",
+      "direction": "L→F",
+      "difficulty": "hard",
+      "current": 2,
+      "d3_all": 2,
+      "d3_pool": 2,
+      "answerD3": 0.393
+    },
+    {
+      "pairId": "Q08",
+      "direction": "F→L",
+      "difficulty": "hard",
+      "current": 1,
+      "d3_all": 1,
+      "d3_pool": 1,
+      "answerD3": 0.393
+    }
+  ]
+}

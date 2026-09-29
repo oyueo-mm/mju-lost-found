@@ -52,7 +52,7 @@ export const fr: Dictionary = {
   "aiSearch.empty.title": "Aucune annonce similaire trouvée.",
   "aiSearch.empty.description": "Essayez un autre terme ou une autre photo.",
   "aiSearch.hint": "Décrivez l'objet. L'IA recherchera les objets trouvés les plus similaires.",
-  "aiSearch.resultNotice": "Voici les objets trouvés similaires identifiés par l'IA. Plus le score est élevé, plus l'objet ressemble à celui que vous recherchez.",
+  "aiSearch.resultNotice": "Voici les objets trouvés similaires identifiés par l'IA. Plus un objet est placé haut dans la liste, plus il ressemble à celui que vous recherchez.",
   "chat.title": "Discussions",
   "chat.empty.title": "Vous n'avez pas encore de discussion.",
   "chat.noMessages": "Aucun message pour le moment.",
