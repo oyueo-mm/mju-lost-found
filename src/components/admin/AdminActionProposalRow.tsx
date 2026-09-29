@@ -50,6 +50,12 @@ export function AdminActionProposalRow({
   const [error, setError] = useState<string | null>(null);
 
   async function handleApprove() {
+    if (
+      proposal.canCurrentAdminSoleExecute &&
+      !confirm("현재 활성 관리자가 본인 1명뿐이라 승인 없이 바로 실행됩니다. 실행하시겠습니까?")
+    ) {
+      return;
+    }
     setPending(true);
     setError(null);
     const result = await approveProposalAction(proposal.id);
@@ -74,7 +80,12 @@ export function AdminActionProposalRow({
     router.refresh();
   }
 
-  const approvalsNeeded = proposal.requiredApprovals - proposal.approvals.length;
+  // 관리자 승인 인원 정책 Phase: requiredApprovals / countedApprovals /
+  // approvalsNeeded come from the server -- min(2, eligible approvers right
+  // now), counting only approvals by currently eligible approvers -- so this
+  // row never re-derives them.
+  const { approvalsNeeded } = proposal;
+  const uncountedApprovals = proposal.status === "pending" ? proposal.approvals.length - proposal.countedApprovals : 0;
 
   return (
     <div className="flex flex-col gap-2 border-b border-border p-4 text-sm last:border-b-0">
@@ -111,11 +122,26 @@ export function AdminActionProposalRow({
       )}
 
       <p className="text-xs text-muted-foreground">
-        승인 {proposal.approvals.length}/{proposal.requiredApprovals}
-        {proposal.approvals.length > 0 &&
-          ` (${proposal.approvals.map((a) => a.approvedBy.nickname ?? "알 수 없음").join(", ")})`}
-        {proposal.status === "pending" && approvalsNeeded > 0 && ` · ${approvalsNeeded}명 승인 필요`}
+        {proposal.executedBySoleAdminException ? (
+          "단독 관리자 예외로 승인 없이 실행됨 (실행 당시 활성 관리자 1명)"
+        ) : (
+          <>
+            승인 {proposal.countedApprovals}/{proposal.requiredApprovals}
+            {proposal.approvals.length > 0 &&
+              ` (${proposal.approvals.map((a) => a.approvedBy.nickname ?? "알 수 없음").join(", ")})`}
+            {uncountedApprovals > 0 && ` · 정지된 관리자 승인 ${uncountedApprovals}건 제외`}
+            {proposal.status === "pending" && approvalsNeeded > 0 && ` · ${approvalsNeeded}명 승인 필요`}
+            {proposal.status === "pending" && proposal.canCurrentAdminSoleExecute && " · 활성 관리자 1명: 단독 실행 가능"}
+          </>
+        )}
       </p>
+
+      {proposal.status === "pending" && proposal.insufficientApprovers && (
+        <p className="text-xs text-destructive">
+          제안자·대상자를 제외하면 승인할 수 있는 활성 관리자가 없어요. 관리자 권한 해제·관리자 정지는 단독으로 실행할 수
+          없으므로, 다른 활성 관리자가 생기면 그 관리자가 승인할 수 있어요.
+        </p>
+      )}
 
       <p className="text-xs text-muted-foreground">
         생성: {formatDate(proposal.createdAt)} · 만료: {formatDate(proposal.expiresAt)}
@@ -127,9 +153,9 @@ export function AdminActionProposalRow({
 
       {proposal.status === "pending" && (
         <div className="flex gap-2">
-          {proposal.canCurrentAdminApprove && (
+          {(proposal.canCurrentAdminApprove || proposal.canCurrentAdminSoleExecute) && (
             <Button type="button" size="sm" onClick={handleApprove} disabled={pending}>
-              {pending ? "처리 중..." : "승인"}
+              {pending ? "처리 중..." : proposal.canCurrentAdminSoleExecute ? "단독 실행" : "승인"}
             </Button>
           )}
           {proposal.currentAdminHasApproved && !proposal.canCurrentAdminApprove && (

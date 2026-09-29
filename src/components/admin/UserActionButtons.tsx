@@ -40,7 +40,8 @@ export function UserActionButtons({ user, isSelf }: UserActionButtonsProps) {
   const [pending, setPending] = useState<"role" | "suspend" | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Phase 관리자 승인제: set when the server responded 202 instead of 200 --
-  // the target required two-admin approval, so nothing was applied yet;
+  // the target required admin approval, so (unless the sole-admin exception
+  // applied) nothing was applied yet;
   // this is what tells the admin "제안이 생성되었습니다" instead of letting
   // them assume the action already happened.
   const [notice, setNotice] = useState<string | null>(null);
@@ -85,8 +86,14 @@ export function UserActionButtons({ user, isSelf }: UserActionButtonsProps) {
       // this is never 200. Nothing on this row actually changed yet, so
       // router.refresh() would show no visible difference; the notice is
       // what tells the admin what really happened.
+      // 관리자 승인 인원 정책 Phase: a grant_admin by the only active admin
+      // comes back already executed (the sole-admin exception).
       if (res.status === 202) {
-        setNotice("이 사용자는 관리자입니다. 즉시 적용되지 않고 관리자 조치 제안으로 등록되었습니다 (/admin/proposals에서 승인 대기).");
+        setNotice(
+          json.data?.status === "executed"
+            ? "활성 관리자가 1명뿐이라 단독 관리자 예외로 즉시 적용되었습니다 (감사 로그에 기록됨)."
+            : `즉시 적용되지 않고 관리자 조치 제안으로 등록되었습니다. ${json.data?.approvalsNeeded ?? ""}명의 승인이 필요합니다 (/admin/proposals).`,
+        );
       }
       setSuspendMenuOpen(false);
       router.refresh();

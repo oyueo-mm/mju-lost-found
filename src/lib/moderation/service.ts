@@ -231,7 +231,10 @@ export type AdminMutationResult<T> =
   // report; an AdminActionProposal was created instead, returned here so
   // the caller can respond 202 with the proposal id instead of a plain
   // success. The report itself stays PENDING.
-  | { kind: "proposal_created"; data: AdminActionProposalDTO };
+  | { kind: "proposal_created"; data: AdminActionProposalDTO }
+  // 관리자 승인 인원 정책 Phase: suspending this admin would leave 0 active
+  // admins (see admin/proposals.ts's LastActiveAdminError).
+  | { kind: "last_admin" };
 
 export type PagedReportsForAdmin = {
   items: ReportAdminDTO[];
@@ -440,6 +443,7 @@ export async function applyReportAction(
       if (proposal.kind === "reason_required") return { kind: "reason_required" };
       if (proposal.kind === "not_found") return { kind: "target_gone" };
       if (proposal.kind === "forbidden") return { kind: "forbidden" };
+      if (proposal.kind === "last_admin") return { kind: "last_admin" };
       if (proposal.kind !== "ok") return { kind: "target_gone" };
       return { kind: "proposal_created", data: proposal.data };
     }

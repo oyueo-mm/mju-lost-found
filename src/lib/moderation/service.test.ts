@@ -23,7 +23,11 @@ const txReport = { updateMany: vi.fn(), findUniqueOrThrow: vi.fn() };
 const txLostPost = { delete: vi.fn() };
 const txFoundPost = { delete: vi.fn() };
 const txMessage = { update: vi.fn() };
-const txUser = { update: vi.fn() };
+// 관리자 승인 인원 정책 Phase: createAdminActionProposal() also reads the
+// active admins (findMany) and takes an advisory lock ($executeRaw) inside
+// its transaction.
+const txUser = { update: vi.fn(), findMany: vi.fn() };
+const txExecuteRaw = vi.fn();
 const txComment = { delete: vi.fn() };
 const txModerationAction = { create: vi.fn() };
 const txNotification = { create: vi.fn() };
@@ -47,6 +51,7 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
     notification: txNotification,
     adminActionProposal: txAdminActionProposal,
     adminActionAuditLog: txAdminActionAuditLog,
+    $executeRaw: txExecuteRaw,
   }),
 );
 
@@ -78,8 +83,11 @@ vi.mock("@/generated/prisma/client", () => ({
     GRANT_ADMIN: "GRANT_ADMIN",
     REVOKE_ADMIN: "REVOKE_ADMIN",
   },
-  AdminActionAuditEvent: { CREATED: "CREATED" },
-  Prisma: { PrismaClientKnownRequestError: FakePrismaClientKnownRequestError },
+  AdminActionAuditEvent: { CREATED: "CREATED", EXECUTED: "EXECUTED" },
+  Prisma: {
+    PrismaClientKnownRequestError: FakePrismaClientKnownRequestError,
+    sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values }),
+  },
 }));
 
 const {
@@ -501,6 +509,8 @@ describe("applyReportAction", () => {
       // lookup (a second, independent call) both share this mock.
       userTable.findUnique.mockResolvedValueOnce({ isAdmin: true });
       userTable.findUnique.mockResolvedValueOnce({ id: 88, isAdmin: true });
+      // Active admins: the processing admin and the reported admin.
+      txUser.findMany.mockResolvedValueOnce([{ id: admin.id }, { id: 88 }]);
       txAdminActionProposal.create.mockResolvedValueOnce({
         id: 42,
         targetUserId: 88,
@@ -537,6 +547,23 @@ describe("applyReportAction", () => {
       expect(txModerationAction.create).not.toHaveBeenCalled();
       expect(txReport.updateMany).not.toHaveBeenCalled();
       expect(txAdminActionProposal.create).toHaveBeenCalledTimes(1);
+    });
+
+    // 관리자 승인 인원 정책 Phase.
+    it("returns last_admin (not target_gone) when suspending the reported admin would leave no active admin", async () => {
+      report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "USER", targetId: 88 }));
+      userTable.findUnique.mockResolvedValueOnce({ isAdmin: true });
+      userTable.findUnique.mockResolvedValueOnce({ id: 88, isAdmin: true });
+      txUser.findMany.mockResolvedValueOnce([{ id: 88 }]); // the reported admin is the only active one
+
+      const result = await applyReportAction(admin, 10, "suspend_user", {
+        actionReasonCategory: "욕설/비방",
+        actionReason: "반복적인 욕설",
+      });
+
+      expect(result).toEqual({ kind: "last_admin" });
+      expect(txAdminActionProposal.create).not.toHaveBeenCalled();
+      expect(txUser.update).not.toHaveBeenCalled();
     });
 
     it("still requires a reason category and detail for an admin-target suspend, same as a direct one", async () => {

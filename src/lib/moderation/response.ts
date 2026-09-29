@@ -26,5 +26,7 @@ export function adminMutationResultToResponse<T>(result: AdminMutationResult<T>,
     // convention as admin/response.ts's own "proposal_created" case.
     case "proposal_created":
       return jsonOk(result.data, { status: 202 });
+    case "last_admin":
+      return jsonError(409, "활성 관리자가 0명이 되는 조치는 할 수 없습니다.");
   }
 }

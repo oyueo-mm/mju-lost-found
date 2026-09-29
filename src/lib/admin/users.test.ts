@@ -17,10 +17,15 @@ const moderationAction = { create: vi.fn() };
 // its own $transaction writing adminActionProposal + adminActionAuditLog --
 // added to the same tx object alongside user/notification/moderationAction
 // so both code paths share one mock shape.
-const adminActionProposal = { create: vi.fn(), findUnique: vi.fn() };
+const adminActionProposal = { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() };
 const adminActionAuditLog = { create: vi.fn() };
+// 관리자 승인 인원 정책 Phase: createAdminActionProposal() now also takes the
+// admin-membership advisory lock ($executeRaw) and reads the active admins
+// (user.findMany) inside its transaction; a sole-admin grant also updates
+// the proposal to EXECUTED (adminActionProposal.update).
+const $executeRaw = vi.fn();
 const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
-  fn({ user, notification, moderationAction, adminActionProposal, adminActionAuditLog }),
+  fn({ user, notification, moderationAction, adminActionProposal, adminActionAuditLog, $executeRaw }),
 );
 // Phase P-1: getUserDetailForAdmin's own count queries -- separate spies
 // per table, same convention as the rest of this mock.
@@ -57,7 +62,8 @@ vi.mock("@/generated/prisma/client", () => ({
     GRANT_ADMIN: "GRANT_ADMIN",
     REVOKE_ADMIN: "REVOKE_ADMIN",
   },
-  AdminActionAuditEvent: { CREATED: "CREATED" },
+  AdminActionAuditEvent: { CREATED: "CREATED", EXECUTED: "EXECUTED" },
+  Prisma: { sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values }) },
 }));
 
 const { listUsersForAdmin, updateUserByAdmin, getUserDetailForAdmin } = await import("./users");
@@ -222,6 +228,8 @@ describe("updateUserByAdmin", () => {
   it("never promotes directly -- always creates an AdminActionProposal instead", async () => {
     user.findUnique.mockResolvedValueOnce(baseRow); // updateUserByAdmin's own `existing` lookup
     user.findUnique.mockResolvedValueOnce(baseRow); // createAdminActionProposal's own target lookup
+    // Two active admins -- the sole-admin exception doesn't apply.
+    user.findMany.mockResolvedValueOnce([{ id: admin.id }, { id: 99 }]);
     adminActionProposal.create.mockResolvedValueOnce({
       id: 1,
       targetUserId: 5,
@@ -272,6 +280,7 @@ describe("updateUserByAdmin", () => {
   it("routes a demote against a currently-admin target to a proposal instead of writing isAdmin directly", async () => {
     user.findUnique.mockResolvedValueOnce({ ...baseRow, isAdmin: true }); // existing
     user.findUnique.mockResolvedValueOnce({ ...baseRow, isAdmin: true }); // createAdminActionProposal's own lookup
+    user.findMany.mockResolvedValueOnce([{ id: admin.id }, { id: 5 }, { id: 99 }]); // active admins
     adminActionProposal.create.mockResolvedValueOnce({
       id: 2,
       targetUserId: 5,
@@ -297,6 +306,64 @@ describe("updateUserByAdmin", () => {
     expect(user.update).not.toHaveBeenCalled();
     expect(result.kind).toBe("proposal_created");
     if (result.kind === "proposal_created") expect(result.data.actionType).toBe("revoke_admin");
+  });
+
+  it("applies a promote immediately when the admin is the only active admin (sole-admin exception)", async () => {
+    const pendingRow = {
+      id: 3,
+      targetUserId: 5,
+      actionType: "GRANT_ADMIN",
+      reasonCategory: null,
+      reason: null,
+      suspendDurationDays: null,
+      status: "PENDING",
+      proposedByUserId: admin.id,
+      createdAt: new Date("2026-01-01"),
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      executedAt: null,
+      cancelledAt: null,
+      cancelledByUserId: null,
+      targetUser: { id: 5, nickname: baseRow.nickname, publicId: baseRow.publicId, isAdmin: false },
+      proposedBy: { id: admin.id, nickname: null },
+      cancelledBy: null,
+      approvals: [],
+    };
+    user.findUnique.mockResolvedValueOnce(baseRow);
+    user.findUnique.mockResolvedValueOnce(baseRow);
+    user.findMany.mockResolvedValueOnce([{ id: admin.id }]); // before: only the proposer is active
+    user.findMany.mockResolvedValueOnce([{ id: admin.id }, { id: 5 }]); // after the grant
+    adminActionProposal.create.mockResolvedValueOnce(pendingRow);
+    adminActionProposal.update.mockResolvedValueOnce({
+      ...pendingRow,
+      status: "EXECUTED",
+      executedAt: new Date(),
+      targetUser: { ...pendingRow.targetUser, isAdmin: true },
+    });
+
+    const result = await updateUserByAdmin(admin as never, 5, "promote");
+
+    expect(user.update).toHaveBeenCalledWith({ where: { id: 5 }, data: { isAdmin: true } });
+    expect(result.kind).toBe("proposal_created");
+    if (result.kind === "proposal_created") expect(result.data.status).toBe("executed");
+    expect(adminActionAuditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        event: "EXECUTED",
+        actorUserId: admin.id,
+        detail: expect.stringContaining("단독 관리자 예외"),
+      }),
+    });
+  });
+
+  it("returns last_admin instead of creating a proposal that would leave no active admin", async () => {
+    user.findUnique.mockResolvedValueOnce({ ...baseRow, isAdmin: true });
+    user.findUnique.mockResolvedValueOnce({ ...baseRow, isAdmin: true });
+    user.findMany.mockResolvedValueOnce([{ id: 5 }]); // the target is the only active admin
+
+    const result = await updateUserByAdmin(admin as never, 5, "demote");
+
+    expect(result).toEqual({ kind: "last_admin" });
+    expect(adminActionProposal.create).not.toHaveBeenCalled();
+    expect(user.update).not.toHaveBeenCalled();
   });
 
   it("suspends permanently when no duration is given", async () => {

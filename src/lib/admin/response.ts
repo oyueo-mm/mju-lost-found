@@ -27,8 +27,12 @@ export function adminUserMutationResultToResponse<T>(
     // (Accepted: recorded, not yet applied), never 200.
     case "proposal_created":
       return jsonOk(result.data, { status: 202 });
+    case "last_admin":
+      return jsonError(409, LAST_ADMIN_MESSAGE);
   }
 }
+
+export const LAST_ADMIN_MESSAGE = "활성 관리자가 0명이 되는 조치는 할 수 없습니다.";
 
 export function adminActionProposalMutationResultToResponse<T>(
   result: AdminProposalMutationResult<T>,
@@ -55,6 +59,8 @@ export function adminActionProposalMutationResultToResponse<T>(
       return jsonError(409, "이미 승인한 제안입니다.");
     case "reason_required":
       return jsonError(400, "정지 제안에는 사유 카테고리와 상세 사유가 모두 필요합니다.");
+    case "last_admin":
+      return jsonError(409, LAST_ADMIN_MESSAGE);
   }
 }
 

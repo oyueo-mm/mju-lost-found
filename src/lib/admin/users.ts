@@ -180,12 +180,15 @@ export type AdminUserMutationResult<T> =
   // blank -- mirrors moderation/service.ts's applyReportAction's own
   // "reason_required" kind for the report-flow suspend path.
   | { kind: "reason_required" }
-  // Phase 관리자 승인제: the target requires two-admin approval (see
+  // Phase 관리자 승인제: the target requires admin approval (see
   // updateUserByAdmin()'s own comment on exactly which action/target
-  // combinations trigger this) -- nothing was written to the target's
-  // User row; an AdminActionProposal was created instead, returned here so
-  // the caller can show "제안이 생성되었습니다" instead of a plain success.
-  | { kind: "proposal_created"; data: AdminActionProposalDTO };
+  // combinations trigger this) -- an AdminActionProposal was created and
+  // returned here so the caller can show what actually happened. Usually
+  // it's still PENDING; with the sole-admin exception (관리자 승인 인원
+  // 정책 Phase) a grant_admin comes back already EXECUTED.
+  | { kind: "proposal_created"; data: AdminActionProposalDTO }
+  // 관리자 승인 인원 정책 Phase: the action would leave 0 active admins.
+  | { kind: "last_admin" };
 
 export type PagedAdminUsers = {
   items: AdminUserDTO[];
@@ -300,6 +303,7 @@ export async function updateUserByAdmin(
     if (proposal.kind === "reason_required") return { kind: "reason_required" };
     if (proposal.kind === "not_found") return { kind: "not_found" };
     if (proposal.kind === "forbidden") return { kind: "forbidden" };
+    if (proposal.kind === "last_admin") return { kind: "last_admin" };
     if (proposal.kind !== "ok") return { kind: "not_found" };
     return { kind: "proposal_created", data: proposal.data };
   }

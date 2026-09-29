@@ -14,7 +14,10 @@ const LOCKED_KIND_MESSAGES: Record<string, string> = {
   self_proposer: "제안자는 자신의 제안을 승인할 수 없습니다.",
   target_cannot_approve: "조치 대상 관리자는 이 제안을 승인할 수 없습니다.",
   already_approved: "이미 승인한 제안입니다.",
-  forbidden: "관리자 권한이 필요합니다.",
+  // Also returned for a suspended admin, who doesn't count toward (or take
+  // part in) approvals -- see approveAdminActionProposal().
+  forbidden: "활성 관리자만 처리할 수 있습니다.",
+  last_admin: "활성 관리자가 0명이 되는 조치는 할 수 없습니다.",
 };
 
 // requireAdmin() re-verifies both "logged in" and "DB-flagged admin" from a
