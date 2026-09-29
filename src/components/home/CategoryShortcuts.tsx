@@ -48,7 +48,9 @@ const CATEGORY_ICONS: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
 // (`{mode !== "ai" && children}`), 카테고리를 눌러도 해당 카테고리
 // 게시글 대신 텅 빈 AI 검색창만 보이는 것이 이 버그의 실제 원인이었다.
 //
-// 그래서 URL에 `mode=keyword`를 명시한다 -- SearchFilterBar는 URL의
+// 그래서 URL에 키워드 모드를 명시한다 -- 검색 모드 URL 상태 Phase부터는
+// 화면 모드 파라미터가 `searchMode=keyword`다(API의 `mode`와 분리, 자세한
+// 이유는 components/search/searchModeParams.ts). SearchFilterBar는 URL의
 // 명시적 mode를 defaultMode보다 항상 우선하므로 키워드 모드로 열리고,
 // 서버(search/page.tsx)의 listQuerySchema도 "keyword"를 그대로 받아
 // (SEARCH_MODES의 기본값이자 유효값) 기존 키워드 검색 경로를 탄다 --
@@ -62,7 +64,7 @@ const CATEGORY_ICONS: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
 // 방향 그대로이고, 명시해 두면 SearchFilterBar의 게시판 select도
 // URL과 항상 일치한다. /search에 직접 들어갔을 때의 AI 검색 기본값은
 // 이 변경과 무관하게 그대로다(URL에 mode가 아예 없는 경우이므로).
-const CATEGORY_SEARCH_PARAMS = { mode: "keyword", type: "found" } as const;
+const CATEGORY_SEARCH_PARAMS = { searchMode: "keyword", type: "found" } as const;
 
 // 별도 함수로 빼 둔 이유: 이 링크가 만들어내는 쿼리가 곧 이 컴포넌트의
 // 계약이라, JSX를 렌더링하지 않고도 단위 테스트로 고정해 둘 수 있게

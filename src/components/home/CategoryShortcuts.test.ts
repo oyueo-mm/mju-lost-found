@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { categorySearchHref } from "./CategoryShortcuts";
 import { CATEGORIES, listQuerySchema } from "@/lib/posts/schema";
+import { resolveSearchUiMode } from "@/components/search/searchModeParams";
 
 // 홈 카테고리 버그 수정 Phase: 이 바로가기는 "AI 검색을 실행하는 버튼"이
 // 아니라 "이 카테고리 게시글을 보여달라"는 필터 버튼이다. 예전에는
@@ -18,7 +19,14 @@ function paramsOf(href: string): URLSearchParams {
 
 describe("categorySearchHref", () => {
   it("asks /search for keyword mode explicitly, never AI mode", () => {
-    expect(paramsOf(categorySearchHref("전자기기")).get("mode")).toBe("keyword");
+    const params = paramsOf(categorySearchHref("전자기기"));
+    expect(params.get("searchMode")).toBe("keyword");
+    // /search's own default is AI -- the link must still open in keyword mode.
+    expect(resolveSearchUiMode(params, "ai")).toBe("keyword");
+  });
+
+  it("uses the page's searchMode parameter, not the search API's legacy mode", () => {
+    expect(paramsOf(categorySearchHref("전자기기")).get("mode")).toBeNull();
   });
 
   it("carries the category as the exact value stored in the DB, not a translated label", () => {

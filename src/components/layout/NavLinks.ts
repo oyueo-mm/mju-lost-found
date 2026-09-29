@@ -78,9 +78,13 @@ export const DESKTOP_NAV_ITEMS: NavItem[] = [
     key: "search",
     href: "/search",
     labelKey: "nav.search",
+    // 검색 모드 URL 상태 Phase: the page's UI mode is `searchMode` (see
+    // components/search/searchModeParams.ts), never the API's `mode`.
+    // /search already opens in AI mode and on the 습득물 board by default,
+    // so AI 검색 needs no parameters; 키워드 검색 states its mode explicitly.
     children: [
-      { href: "/search?mode=semantic&type=found", labelKey: "nav.searchAi", icon: "search" },
-      { href: "/search?mode=keyword&type=found", labelKey: "nav.searchKeyword", icon: "search" },
+      { href: "/search", labelKey: "nav.searchAi", icon: "search" },
+      { href: "/search?searchMode=keyword", labelKey: "nav.searchKeyword", icon: "search" },
     ],
   },
   { key: "chat", href: "/chat", labelKey: "nav.chat" },
