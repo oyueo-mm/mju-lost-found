@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import { getTranslator } from "@/lib/i18n/server";
 
+import { getPaginationItems } from "./paginationItems";
+
 type PaginationProps = {
   basePath: string;
   currentSearchParams: Record<string, string | undefined>;
@@ -25,12 +27,36 @@ export async function Pagination({ basePath, currentSearchParams, page, totalPag
     return `${basePath}?${params.toString()}`;
   }
 
-  const windowStart = Math.max(1, page - 2);
-  const windowEnd = Math.min(totalPages, windowStart + 4);
-  const pageNumbers = Array.from(
-    { length: windowEnd - windowStart + 1 },
-    (_, i) => windowStart + i,
-  );
+  // First/last page always shown, the current page's neighbors around it,
+  // and "…" for the gaps (see getPaginationItems). Two variants of the same
+  // list: ±2 neighbors from `sm` up, ±1 on narrow screens -- only one is
+  // ever displayed (the other is display:none, so screen readers skip it
+  // too).
+  function pageList(siblings: number, className: string) {
+    return (
+      <div className={className}>
+        {getPaginationItems(page, totalPages, siblings).map((item) =>
+          typeof item !== "number" ? (
+            <span key={item} aria-hidden="true" className="px-1.5 py-1.5 text-muted-foreground">
+              …
+            </span>
+          ) : item === page ? (
+            <span
+              key={item}
+              aria-current="page"
+              className="rounded-lg bg-primary px-3 py-1.5 font-medium text-primary-foreground"
+            >
+              {item}
+            </span>
+          ) : (
+            <Link key={item} href={hrefFor(item)} className="rounded-lg px-3 py-1.5 text-foreground hover:bg-muted">
+              {item}
+            </Link>
+          ),
+        )}
+      </div>
+    );
+  }
 
   return (
     <nav className="flex items-center justify-center gap-2 text-sm">
@@ -42,17 +68,8 @@ export async function Pagination({ basePath, currentSearchParams, page, totalPag
         <span className="px-3 py-1.5 text-muted-foreground/50">{t("search.pagination.prev")}</span>
       )}
 
-      {pageNumbers.map((n) =>
-        n === page ? (
-          <span key={n} className="rounded-lg bg-primary px-3 py-1.5 font-medium text-primary-foreground">
-            {n}
-          </span>
-        ) : (
-          <Link key={n} href={hrefFor(n)} className="rounded-lg px-3 py-1.5 text-foreground hover:bg-muted">
-            {n}
-          </Link>
-        ),
-      )}
+      {pageList(2, "hidden items-center gap-1 sm:flex")}
+      {pageList(1, "flex items-center gap-1 sm:hidden")}
 
       {page < totalPages ? (
         <Link href={hrefFor(page + 1)} className="rounded-lg px-3 py-1.5 text-foreground hover:bg-muted">
