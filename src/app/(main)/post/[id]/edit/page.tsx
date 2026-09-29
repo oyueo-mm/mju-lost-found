@@ -3,14 +3,10 @@ import { notFound } from "next/navigation";
 import { requireReadyUser } from "@/lib/auth/session";
 import { getFoundPost, getLostPost } from "@/lib/posts/service";
 import { postTypeSchema } from "@/lib/posts/schema";
+import { toKstDateTimeLocalValue } from "@/lib/posts/kstDateTime";
 import { getMyOrganizationMemberships } from "@/lib/organization/service";
 import { PostForm } from "@/components/post/PostForm";
 
-function toDateTimeLocalValue(date: Date): string {
-  // datetime-local wants "YYYY-MM-DDTHH:mm" in local time, not UTC.
-  const offsetMs = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
-}
 
 export default async function EditPostPage({
   params,
@@ -71,7 +67,7 @@ export default async function EditPostPage({
           // a real Date is converted to the datetime-local string format.
           // PostForm's own dateUnknown toggle is what decides, from this,
           // whether to seed the date input as unknown or pre-filled.
-          dateValue: dateValue ? toDateTimeLocalValue(dateValue) : null,
+          dateValue: dateValue ? toKstDateTimeLocalValue(dateValue) : null,
           // getLostPost/getFoundPost always include this (ordered by
           // displayOrder) -- defaulting to [] only satisfies the type for
           // PostDTO's other, list-producing callers, which never reach here.

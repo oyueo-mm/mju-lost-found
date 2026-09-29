@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { interpretDateTimeLocalAsKst } from "./kstDateTime";
+
 // Same two enums as prisma/schema.prisma's LostPostStatus/FoundPostStatus
 // (which @map to these exact Korean strings) -- kept here as plain string
 // literals so this module has no Prisma import and can be unit tested
@@ -195,6 +197,13 @@ const campus = z.enum(CAMPUSES, "캠퍼스를 선택해주세요.");
 // actually allowed to attribute to that organization).
 const organizationId = z.number().int().positive().nullable().optional();
 
+// 분실/습득 일시: a timezone-less datetime-local value is a KST wall-clock
+// time (see kstDateTime.ts for why it must not be parsed in the server's
+// own timezone); null stays null (시간 모름).
+function eventDateTime(message: string) {
+  return z.preprocess(interpretDateTimeLocalAsKst, z.coerce.date(message).nullable());
+}
+
 export const createLostPostSchema = z.object({
   title,
   description,
@@ -204,7 +213,7 @@ export const createLostPostSchema = z.object({
   // Phase P-5: same nullable-not-optional shape as `location` above --
   // always present, either a real coerced Date or an explicit null for
   // "시간 미상" (see PostForm.tsx's dateUnknown toggle).
-  lostAt: z.coerce.date("분실 일시가 올바르지 않습니다.").nullable(),
+  lostAt: eventDateTime("분실 일시가 올바르지 않습니다."),
   status: z.enum(LOST_STATUSES).optional(),
   organizationId,
 });
@@ -227,7 +236,7 @@ export const createFoundPostSchema = z.object({
   category,
   location,
   campus,
-  foundAt: z.coerce.date("습득 일시가 올바르지 않습니다.").nullable(),
+  foundAt: eventDateTime("습득 일시가 올바르지 않습니다."),
   status: z.enum(FOUND_STATUSES).optional(),
   organizationId,
 });

@@ -27,6 +27,7 @@ import { PostAsSelector } from "@/components/organization/PostAsSelector";
 import { useI18n } from "@/lib/i18n/client";
 import { campusLabelKey, categoryLabelKey } from "@/lib/i18n/labels";
 import type { TranslationKey } from "@/lib/i18n/translate";
+import { nowAsKstDateTimeLocalValue } from "@/lib/posts/kstDateTime";
 
 const FIELD_CLASS =
   "rounded-lg border border-border bg-transparent px-3 py-2.5 text-sm text-foreground disabled:opacity-60";
@@ -92,16 +93,6 @@ const DESCRIPTION_PLACEHOLDER_KEY: Record<PostType, TranslationKey> = {
   found: "form.found.descriptionPlaceholder",
 };
 
-// datetime-local wants "YYYY-MM-DDTHH:mm" in local time, not UTC -- same
-// conversion the edit page already does for an existing post's date
-// (post/[id]/edit/page.tsx's toDateTimeLocalValue), duplicated here rather
-// than shared since one is a Server Component helper and this one only
-// ever needs "now" (create mode has no post to read a date from yet).
-function nowAsDateTimeLocalValue(): string {
-  const now = new Date();
-  const offsetMs = now.getTimezoneOffset() * 60_000;
-  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 16);
-}
 
 // Phase H-5-3: in edit mode, only include a field in the PATCH body when it
 // actually differs from the value the form was seeded with -- this is what
@@ -780,7 +771,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             name="date"
             type="datetime-local"
             required={!dateUnknown}
-            defaultValue={initialValues?.dateValue ?? nowAsDateTimeLocalValue()}
+            defaultValue={initialValues?.dateValue ?? nowAsKstDateTimeLocalValue()}
             disabled={pending || dateUnknown}
             className={FIELD_CLASS}
           />

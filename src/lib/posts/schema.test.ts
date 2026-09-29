@@ -187,6 +187,23 @@ describe("updateLostPostSchema", () => {
     if (result.success) expect(result.data.lostAt).toBeInstanceOf(Date);
   });
 
+  // datetime-local timezone fix: a timezone-less value is a KST wall-clock
+  // time, whatever timezone the server runs in (UTC on Vercel).
+  it("stores a datetime-local lostAt/foundAt as the matching KST instant, on create and update", () => {
+    const created = createLostPostSchema.parse({ ...validLost, lostAt: "2026-09-30T14:00" });
+    expect(created.lostAt?.toISOString()).toBe("2026-09-30T05:00:00.000Z");
+    const updated = updateLostPostSchema.parse({ lostAt: "2026-09-30T14:00" });
+    expect(updated.lostAt?.toISOString()).toBe("2026-09-30T05:00:00.000Z");
+    const found = createFoundPostSchema.parse({ ...validLost, lostAt: undefined, foundAt: "2026-09-30T14:00" });
+    expect(found.foundAt?.toISOString()).toBe("2026-09-30T05:00:00.000Z");
+  });
+
+  it("keeps an explicit-offset / UTC value as that exact instant", () => {
+    expect(createLostPostSchema.parse({ ...validLost, lostAt: "2026-09-30T05:00:00.000Z" }).lostAt?.toISOString()).toBe(
+      "2026-09-30T05:00:00.000Z",
+    );
+  });
+
   it("still allows omitting location/lostAt entirely (unchanged)", () => {
     expect(updateLostPostSchema.safeParse({ title: "새 제목" }).success).toBe(true);
   });
