@@ -8,6 +8,7 @@ import type { PostListType, PostType, SortOption } from "@/lib/posts/schema";
 import { AISearchPanel } from "./AISearchPanel";
 import { EventPeriodFilter } from "./EventPeriodFilter";
 import { isPeriodRangeInvalid, periodStateToEntries, readPeriodState, withPeriodParams, type PeriodState } from "./periodParams";
+import { resolveSearchUiMode, SEARCH_MODE_PARAM, withSearchMode } from "./searchModeParams";
 import { SearchModeToggle, type SearchUiMode } from "./SearchModeToggle";
 import { SearchIcon } from "@/components/icons";
 import { useI18n } from "@/lib/i18n/client";
@@ -125,10 +126,26 @@ export function SearchFilterBar({
   // 명시돼 있으면 항상 그 값이 defaultMode보다 우선한다 -- 예전에 유효
   // 했던 `mode=semantic`/`mode=image` 북마크처럼 둘 다 아닌 값은
   // defaultMode로 떨어진다.
-  const urlMode = searchParams.get("mode");
-  const [mode, setMode] = useState<SearchUiMode>(
-    urlMode === "ai" || urlMode === "keyword" ? urlMode : defaultMode,
-  );
+  // 검색 모드 URL 상태 Phase: the mode now lives in the URL
+  // (`searchMode=ai|keyword`, see searchModeParams.ts for why not `mode`)
+  // and is derived from it on every render, so a refresh, a shared link and
+  // the back/forward buttons all restore it. Switching pushes a history
+  // entry (Next.js syncs native pushState with useSearchParams) and keeps
+  // every other parameter -- period, category, type, ... -- untouched.
+  const mode: SearchUiMode = resolveSearchUiMode(searchParams, defaultMode);
+
+  function changeMode(next: SearchUiMode) {
+    if (next === mode) return;
+    const query = withSearchMode(window.location.search, next, defaultMode);
+    window.history.pushState(null, "", query ? `${window.location.pathname}?${query}` : window.location.pathname);
+  }
+
+  // Where a keyword submit / 필터 초기화 navigates must still say "keyword"
+  // on a page whose default is AI (/search) -- otherwise it reopens in AI.
+  const keepModeParam = (params: URLSearchParams) => {
+    if (mode !== defaultMode) params.set(SEARCH_MODE_PARAM, mode);
+    return params;
+  };
   // 검색 대상 및 게시글 목록 UX 개선 Phase §1/§6: URL에 `type`이 전혀 없는
   // 첫 방문(/search를 바로 열었을 때)의 기본 검색 대상은 습득물이다 --
   // 잃어버린 물건을 찾으려고 검색하는 서비스이므로 "찾고 있는 물건이
@@ -181,6 +198,7 @@ export function SearchFilterBar({
     // navigate to a URL the server would reject.
     if (isPeriodRangeInvalid(periodState)) return;
     for (const [key, value] of periodStateToEntries(periodState)) params.set(key, value);
+    keepModeParam(params);
     // A new search always starts from page 1 -- keeping the old page
     // number here could point past the end of the new result set.
 
@@ -220,7 +238,7 @@ export function SearchFilterBar({
           -- 그 자체는 이번 Phase의 지적 대상이 아니었다. */}
       {imageSearchEnabled && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <SearchModeToggle mode={mode} onChange={setMode} />
+          <SearchModeToggle mode={mode} onChange={changeMode} />
           {mode === "ai" && showTypeFilter && (
             <select
               value={type}
@@ -357,7 +375,10 @@ export function SearchFilterBar({
             {hasActiveFilters && (
               <button
                 type="button"
-                onClick={() => router.push(basePath)}
+                onClick={() => {
+                  const query = keepModeParam(new URLSearchParams()).toString();
+                  router.push(query ? `${basePath}?${query}` : basePath);
+                }}
                 className="self-center text-xs text-muted-foreground underline hover:text-foreground"
               >
                 {t("search.resetFilters")}

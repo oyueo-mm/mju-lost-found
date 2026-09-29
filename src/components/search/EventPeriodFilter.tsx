@@ -70,28 +70,32 @@ export function EventPeriodFilter({
         ))}
       </select>
 
+      {/* No min/max on the date inputs: they made the browser show its own
+          validation bubble on submit on top of the inline message below
+          (the inline check and the server's 400 stay the single source of
+          the "종료일 < 시작일" error). Below sm the two dates stack
+          full-width and the "~" is hidden, so it can never be left alone at
+          the end of a line; from sm up the row is unchanged. */}
       {value.period === "custom" && (
-        <>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <input
             type="date"
             aria-label={t("search.period.from")}
             value={value.from}
-            max={value.to || undefined}
             onChange={(e) => onChange({ ...value, from: e.target.value })}
-            className={control}
+            className={`${control} w-full sm:w-auto`}
           />
-          <span aria-hidden="true" className="text-xs text-muted-foreground">
+          <span aria-hidden="true" className="hidden text-xs text-muted-foreground sm:inline">
             ~
           </span>
           <input
             type="date"
             aria-label={t("search.period.to")}
             value={value.to}
-            min={value.from || undefined}
             onChange={(e) => onChange({ ...value, to: e.target.value })}
-            className={control}
+            className={`${control} w-full sm:w-auto`}
           />
-        </>
+        </div>
       )}
 
       {value.period && (
