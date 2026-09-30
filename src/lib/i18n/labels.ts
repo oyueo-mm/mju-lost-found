@@ -1,4 +1,10 @@
-import type { CategoryCode, SubcategoryCode } from "@/lib/posts/categoryTaxonomy";
+import {
+  isCategoryCode,
+  isSubcategoryCode,
+  parentCategoryOf,
+  type CategoryCode,
+  type SubcategoryCode,
+} from "@/lib/posts/categoryTaxonomy";
 import type { PostType } from "@/lib/posts/schema";
 import type { TranslationKey } from "./translate";
 
@@ -70,6 +76,26 @@ export function taxonomyCategoryLabelKey(code: CategoryCode): TranslationKey {
 
 export function taxonomySubcategoryLabelKey(code: SubcategoryCode): TranslationKey {
   return `taxonomy.subcategory.${code}`;
+}
+
+// 게시글의 표시용 카테고리: categoryCode가 있으면 새 taxonomy 라벨(소분류가
+// 있고 부모가 맞으면 소분류 라벨도), 없으면(아직 검수/이전 전인 글) 기존
+// category 라벨로 fallback한다. 두 키가 모두 null이면 호출부는 기존 category
+// 원문을 그대로 보여준다(목록 밖 자유 입력 값).
+export function postCategoryLabelKeys(post: {
+  category: string;
+  categoryCode?: string | null;
+  subcategory?: string | null;
+}): { categoryKey: TranslationKey | null; subcategoryKey: TranslationKey | null } {
+  if (isCategoryCode(post.categoryCode)) {
+    const subcategory = post.subcategory;
+    const subcategoryKey =
+      isSubcategoryCode(subcategory) && parentCategoryOf(subcategory) === post.categoryCode
+        ? taxonomySubcategoryLabelKey(subcategory)
+        : null;
+    return { categoryKey: taxonomyCategoryLabelKey(post.categoryCode), subcategoryKey };
+  }
+  return { categoryKey: categoryLabelKey(post.category), subcategoryKey: null };
 }
 
 export function campusLabelKey(campus: string): TranslationKey | null {

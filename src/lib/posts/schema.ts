@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { DATE_ONLY, EVENT_PERIODS, kstStartOfDay, resolveEventRange } from "./eventPeriod";
 import { interpretDateTimeLocalAsKst } from "./kstDateTime";
+import { resolveCategoryWrite, type ResolvedCategoryWrite } from "./categoryWrite";
 
 // Same two enums as prisma/schema.prisma's LostPostStatus/FoundPostStatus
 // (which @map to these exact Korean strings) -- kept here as plain string
@@ -247,10 +248,52 @@ function eventDateTime(message: string) {
   return z.preprocess(interpretDateTimeLocalAsKst, z.coerce.date(message).nullable());
 }
 
-export const createLostPostSchema = z.object({
+// 카테고리 대분류-소분류: a request carries either the new
+// categoryCode/subcategory (current PostForm) or only the legacy
+// `category` (clients from before the taxonomy). Both are optional at the
+// field level; resolveCategoryWrite() (categoryWrite.ts) then requires one
+// on create, checks the parent-child pair, and normalizes the result into
+// all three columns (dual-write) -- see applyCategoryWrite below.
+const categoryFields = {
+  category: category.optional(),
+  categoryCode: z.string().trim().max(50).optional(),
+  subcategory: z.string().trim().max(100).nullable().optional(),
+};
+
+type CategoryFieldKeys = "category" | "categoryCode" | "subcategory";
+type RawCategoryFields = { category?: string; categoryCode?: string; subcategory?: string | null };
+
+// What a create hands to the service: `category` is always set; the new
+// columns are optional in the type only so older service-level callers
+// (and their tests) that pass just a legacy category still type-check --
+// the schema itself always fills all three.
+type CreateCategoryWrite = Pick<ResolvedCategoryWrite, "category"> & Partial<Omit<ResolvedCategoryWrite, "category">>;
+
+// Replaces the raw category fields with resolveCategoryWrite()'s result:
+// on create always {category, categoryCode, subcategory}; on update the
+// same three, or none of them when the request didn't touch the category.
+function applyCategoryWrite<T extends RawCategoryFields>(data: T, ctx: z.RefinementCtx, mode: "create" | "update") {
+  const { category: legacy, categoryCode, subcategory, ...rest } = data;
+  const result = resolveCategoryWrite({ category: legacy, categoryCode, subcategory }, mode);
+  if (!result.ok) {
+    ctx.addIssue({ code: "custom", message: result.message, path: ["categoryCode"] });
+    return z.NEVER;
+  }
+  return { ...rest, ...(result.value ?? {}) };
+}
+
+function createWithCategory<T extends RawCategoryFields>(data: T, ctx: z.RefinementCtx) {
+  return applyCategoryWrite(data, ctx, "create") as Omit<T, CategoryFieldKeys> & CreateCategoryWrite;
+}
+
+function updateWithCategory<T extends RawCategoryFields>(data: T, ctx: z.RefinementCtx) {
+  return applyCategoryWrite(data, ctx, "update") as Omit<T, CategoryFieldKeys> & Partial<ResolvedCategoryWrite>;
+}
+
+const lostPostFields = z.object({
   title,
   description,
-  category,
+  ...categoryFields,
   location,
   campus,
   // Phase P-5: same nullable-not-optional shape as `location` above --
@@ -260,6 +303,8 @@ export const createLostPostSchema = z.object({
   status: z.enum(LOST_STATUSES).optional(),
   organizationId,
 });
+
+export const createLostPostSchema = lostPostFields.transform(createWithCategory);
 export type CreateLostPostInput = z.infer<typeof createLostPostSchema>;
 
 // Phase 12-7: organizationId is now editable (this phase reverses Phase
@@ -270,21 +315,23 @@ export type CreateLostPostInput = z.infer<typeof createLostPostSchema>;
 // integer is re-validated against the *current* user's membership by
 // validateOrganizationPosting() in updateLostPost/updateFoundPost, never
 // trusted from this schema alone.
-export const updateLostPostSchema = createLostPostSchema.partial();
+export const updateLostPostSchema = lostPostFields.partial().transform(updateWithCategory);
 export type UpdateLostPostInput = z.infer<typeof updateLostPostSchema>;
 
-export const createFoundPostSchema = z.object({
+const foundPostFields = z.object({
   title,
   description,
-  category,
+  ...categoryFields,
   location,
   campus,
   foundAt: eventDateTime("습득 일시가 올바르지 않습니다."),
   status: z.enum(FOUND_STATUSES).optional(),
   organizationId,
 });
+
+export const createFoundPostSchema = foundPostFields.transform(createWithCategory);
 export type CreateFoundPostInput = z.infer<typeof createFoundPostSchema>;
 
 // See updateLostPostSchema's own comment -- identical shape/reasoning.
-export const updateFoundPostSchema = createFoundPostSchema.partial();
+export const updateFoundPostSchema = foundPostFields.partial().transform(updateWithCategory);
 export type UpdateFoundPostInput = z.infer<typeof updateFoundPostSchema>;

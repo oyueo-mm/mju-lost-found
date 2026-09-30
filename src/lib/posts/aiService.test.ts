@@ -669,6 +669,63 @@ describe("updateLostPost", () => {
     expect(matchCandidateCache.deleteMany).not.toHaveBeenCalled();
   });
 
+  // 카테고리 대분류-소분류: the schema dual-writes `category` on every
+  // category change, so a subcategory-only edit carries the post's current
+  // legacy category -- which must not count as an embedding-input change.
+  it("does not re-embed for a subcategory-only change (legacy category unchanged)", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, category: "전자기기" });
+    lostPost.update.mockResolvedValueOnce({
+      id: 1,
+      title: "t",
+      description: "d",
+      category: "전자기기",
+      categoryCode: "electronics",
+      subcategory: "electronics.earphones",
+      location: "l",
+      status: "SEARCHING",
+      imageUrl: null,
+      lostAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+    });
+
+    await updateLostPost(1, 1, { category: "전자기기", categoryCode: "electronics", subcategory: "electronics.earphones" });
+    await flushAfterCallbacks();
+
+    expect(lostPost.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { categoryCode: "electronics", subcategory: "electronics.earphones" } }),
+    );
+    expect(embedPostBestEffort).not.toHaveBeenCalled();
+  });
+
+  it("re-embeds when a category change also changes the legacy category", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, category: "카드" });
+    lostPost.update.mockResolvedValueOnce({
+      id: 1,
+      title: "t",
+      description: "d",
+      category: "지갑",
+      categoryCode: "wallet",
+      subcategory: "wallet.card_wallet",
+      location: "l",
+      status: "SEARCHING",
+      imageUrl: null,
+      lostAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+    });
+
+    await updateLostPost(1, 1, { category: "지갑", categoryCode: "wallet", subcategory: "wallet.card_wallet" });
+    await flushAfterCallbacks();
+
+    expect(lostPost.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { category: "지갑", categoryCode: "wallet", subcategory: "wallet.card_wallet" } }),
+    );
+    expect(embedPostBestEffort).toHaveBeenCalledTimes(1);
+  });
+
   // No "image-only update -> no re-embed" test here: image changes never
   // go through updateLostPost()/updateFoundPost() at all -- they're a
   // separate code path (src/lib/images/service.ts's setPostImage()/

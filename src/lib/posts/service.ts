@@ -81,7 +81,16 @@ export type LostPostDTO = {
   type: "lost";
   title: string;
   description: string;
+  // Legacy free-text category -- still what search filters, keyword alerts
+  // and embeddings read (dual-written from categoryCode, see
+  // posts/categoryWrite.ts).
   category: string;
+  // 카테고리 대분류-소분류: taxonomy codes (posts/categoryTaxonomy.ts). null =
+  // not migrated/unclassified yet -- display then falls back to `category`
+  // (see postCategoryLabelKeys in i18n/labels.ts). Optional only so
+  // hand-built DTOs (tests) needn't spell them out; every DB-backed DTO has them.
+  categoryCode?: string | null;
+  subcategory?: string | null;
   // Phase P-5: null means "the poster doesn't know" -- see schema.prisma's
   // own comment on LostPost.location.
   location: string | null;
@@ -122,6 +131,9 @@ export type FoundPostDTO = {
   title: string;
   description: string;
   category: string;
+  // See LostPostDTO.categoryCode/subcategory's own comment.
+  categoryCode?: string | null;
+  subcategory?: string | null;
   location: string | null;
   campus: string;
   status: string;
@@ -299,6 +311,8 @@ export function toLostPostDTO(row: {
   title: string;
   description: string;
   category: string;
+  categoryCode?: string | null;
+  subcategory?: string | null;
   location: string | null;
   campus: string;
   status: PrismaLostPostStatus;
@@ -337,6 +351,8 @@ export function toFoundPostDTO(row: {
   title: string;
   description: string;
   category: string;
+  categoryCode?: string | null;
+  subcategory?: string | null;
   location: string | null;
   campus: string;
   status: PrismaFoundPostStatus;

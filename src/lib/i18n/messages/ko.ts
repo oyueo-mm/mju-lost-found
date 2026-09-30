@@ -142,6 +142,14 @@ export const ko = {
   "taxonomy.subcategory.living.tumbler_bottle": "텀블러·물병",
   "taxonomy.subcategory.living.hobby_sports": "취미·운동용품",
   "taxonomy.subcategory.living.other": "기타 생활용품",
+  "form.categorySelectPlaceholder": "대분류 선택",
+  "form.subcategory": "소분류",
+  "form.subcategoryOptional": "(선택)",
+  "form.subcategoryNone": "선택 안 함",
+  "form.categorySuggestion": "{label}에 더 가까워 보여요.",
+  "form.categorySuggestionApply": "이 분류로 선택",
+  "form.categorySuggestionDismiss": "닫기",
+  "form.legacyCategoryNotice": "기존 분류 ‘{category}’는 아직 새 분류로 옮겨지지 않았어요. 새 분류를 고르지 않으면 기존 분류가 그대로 유지돼요.",
 
   // ---------- 캠퍼스 ----------
   "campus.인문캠퍼스": "인문캠퍼스",

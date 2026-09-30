@@ -6,7 +6,6 @@ import Link from "next/link";
 
 import {
   CAMPUSES,
-  CATEGORIES,
   DEFAULT_CAMPUS,
   POST_DESCRIPTION_MAX_LENGTH,
   POST_TITLE_MAX_LENGTH,
@@ -22,10 +21,12 @@ import {
   type GalleryItem,
 } from "@/lib/images/galleryState";
 import { PostImageManager } from "./PostImageManager";
+import { CategoryPicker } from "./CategoryPicker";
+import { categoryBodyFields, initialCategoryState, type CategoryFormValue } from "./categoryFormState";
 import { Button } from "@/components/ui/Button";
 import { PostAsSelector } from "@/components/organization/PostAsSelector";
 import { useI18n } from "@/lib/i18n/client";
-import { campusLabelKey, categoryLabelKey } from "@/lib/i18n/labels";
+import { campusLabelKey } from "@/lib/i18n/labels";
 import type { TranslationKey } from "@/lib/i18n/translate";
 import { nowAsKstDateTimeLocalValue } from "@/lib/posts/kstDateTime";
 
@@ -44,7 +45,12 @@ function RequiredMark() {
 type PostFormValues = {
   title: string;
   description: string;
+  // Legacy category (always set) plus the taxonomy codes, null when the
+  // post hasn't been migrated yet -- see categoryFormState.ts's
+  // initialCategoryState for how the picker is seeded from them.
   category: string;
+  categoryCode: string | null;
+  subcategory: string | null;
   // Phase P-5: null means the poster marked this as unknown -- see
   // schema.prisma's own comment on LostPost.location/lostAt. Never an
   // empty string or a "미상" placeholder.
@@ -181,6 +187,18 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
   // empty string. Create mode has no initialValues at all, so both default
   // to false (알고 있음), matching the form's pre-P-5 behavior exactly when
   // never touched.
+  // 카테고리 대분류-소분류: controlled selection (not FormData) so the
+  // subcategory chips and the suggestion can follow it. initialCategory is
+  // what an edit compares against to decide whether to send the category.
+  const initialCategory = initialCategoryState(initialValues);
+  const [categoryValue, setCategoryValue] = useState<CategoryFormValue>({
+    categoryCode: initialCategory.categoryCode,
+    subcategory: initialCategory.subcategory,
+  });
+  // Mirrors of the (still uncontrolled) title/description inputs, read only
+  // by CategoryPicker's suggestion hint.
+  const [titleText, setTitleText] = useState(initialValues?.title ?? "");
+  const [descriptionText, setDescriptionText] = useState(initialValues?.description ?? "");
   const [locationUnknown, setLocationUnknown] = useState(initialValues?.location === null);
   const [dateUnknown, setDateUnknown] = useState(initialValues?.dateValue === null);
 
@@ -377,7 +395,6 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
     const formData = new FormData(event.currentTarget);
     const title = String(formData.get("title") ?? "");
     const description = String(formData.get("description") ?? "");
-    const category = String(formData.get("category") ?? "");
     // Phase P-5: null (never an empty string or a "미상" placeholder) when
     // the poster toggled 위치/시간 미상 -- read from this component's own
     // toggle state, not from the (disabled, so browser-excluded anyway)
@@ -392,7 +409,10 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
       type,
       ...fieldIfChanged(isEdit, "title", title, initialValues?.title),
       ...fieldIfChanged(isEdit, "description", description, initialValues?.description),
-      ...fieldIfChanged(isEdit, "category", category, initialValues?.category),
+      // 카테고리 대분류-소분류: categoryCode/subcategory only; the server
+      // derives the legacy `category` from them (dual-write, see
+      // posts/categoryWrite.ts). On edit, only sent when the selection changed.
+      ...categoryBodyFields(isEdit, categoryValue, initialCategory),
       ...fieldIfChanged(isEdit, "location", location, initialValues?.location),
       // Not a form field (see the toggle-button group below, same reason
       // `type` itself is added directly rather than read from FormData) --
@@ -521,6 +541,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             maxLength={POST_TITLE_MAX_LENGTH}
             placeholder={t(TITLE_PLACEHOLDER_KEY[type])}
             defaultValue={initialValues?.title}
+            onChange={(event) => setTitleText(event.target.value)}
             disabled={pending}
             className={FIELD_CLASS}
           />
@@ -538,6 +559,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             maxLength={POST_DESCRIPTION_MAX_LENGTH}
             placeholder={t(DESCRIPTION_PLACEHOLDER_KEY[type])}
             defaultValue={initialValues?.description}
+            onChange={(event) => setDescriptionText(event.target.value)}
             disabled={pending}
             className={FIELD_CLASS}
           />
@@ -592,38 +614,17 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
       <section className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("form.classification")}</h2>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium text-foreground">
-              {t("form.category")}
-              <RequiredMark />
-            </span>
-            <select
-              name="category"
-              required
-              defaultValue={initialValues?.category ?? CATEGORIES[0]}
-              disabled={pending}
-              className={FIELD_CLASS}
-            >
-              {/* An existing post's category can be a value from before this
-                  fixed list existed (or set directly via the API) -- rather
-                  than silently dropping it (which would submit a different
-                  category than the one shown), it's kept as an extra
-                  selectable option instead of being erased. */}
-              {initialValues?.category && !(CATEGORIES as readonly string[]).includes(initialValues.category) && (
-                <option value={initialValues.category}>{initialValues.category}</option>
-              )}
-              {CATEGORIES.map((c) => {
-                const key = categoryLabelKey(c);
-                return (
-                  <option key={c} value={c}>
-                    {key ? t(key) : c}
-                  </option>
-                );
-              })}
-            </select>
-          </label>
+        <CategoryPicker
+          value={categoryValue}
+          onChange={setCategoryValue}
+          required={!(postId !== undefined && initialCategory.categoryCode === null)}
+          legacyUnmapped={initialCategory.legacyUnmapped}
+          title={titleText}
+          description={descriptionText}
+          disabled={pending}
+        />
 
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5 text-sm">
             {/* Plain <span>, not a <label> -- these buttons don't label or
                 control a native form field, `campus` is submitted directly

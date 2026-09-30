@@ -52,6 +52,19 @@ import {
 
 // ---------- Mutations (create/update trigger embedPostBestEffort) ----------
 
+// 카테고리 대분류-소분류: the schema derives the legacy `category` from
+// categoryCode on every category change (dual-write), so a subcategory-only
+// edit still carries `category` -- with the same value the post already
+// has. Dropping it keeps the embedding-trigger check below
+// (EMBEDDING_INPUT_FIELDS, which includes "category") from re-embedding
+// text that didn't change.
+function dropUnchangedLegacyCategory<T extends { category?: string }>(input: T, existingCategory: string): T {
+  if (input.category === undefined || input.category !== existingCategory) return input;
+  const rest = { ...input };
+  delete rest.category;
+  return rest;
+}
+
 export async function createLostPost(
   author: User,
   input: CreateLostPostInput,
@@ -135,7 +148,7 @@ export async function updateLostPost(
     if (check.kind === "forbidden") return { kind: "forbidden", reason: "organization_not_member" };
   }
 
-  const { status, ...rest } = input;
+  const { status, ...rest } = dropUnchangedLegacyCategory(input, existing.category);
   const row = await prisma.lostPost.update({
     where: { id },
     data: {
@@ -224,7 +237,7 @@ export async function updateFoundPost(
     if (check.kind === "forbidden") return { kind: "forbidden", reason: "organization_not_member" };
   }
 
-  const { status, ...rest } = input;
+  const { status, ...rest } = dropUnchangedLegacyCategory(input, existing.category);
   const row = await prisma.foundPost.update({
     where: { id },
     data: {

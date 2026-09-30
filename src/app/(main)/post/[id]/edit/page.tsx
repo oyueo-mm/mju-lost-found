@@ -61,6 +61,8 @@ export default async function EditPostPage({
           title: post.title,
           description: post.description,
           category: post.category,
+          categoryCode: post.categoryCode ?? null,
+          subcategory: post.subcategory ?? null,
           location: post.location,
           campus: post.campus,
           // Phase P-5: null (time marked unknown) stays null here -- only
