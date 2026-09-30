@@ -1,3 +1,4 @@
+import type { CategoryCode, SubcategoryCode } from "@/lib/posts/categoryTaxonomy";
 import type { PostType } from "@/lib/posts/schema";
 import type { TranslationKey } from "./translate";
 
@@ -58,6 +59,17 @@ const REPORT_REASON_KEYS: Record<string, TranslationKey> = {
 
 export function categoryLabelKey(category: string): TranslationKey | null {
   return CATEGORY_KEYS[category] ?? null;
+}
+
+// 대분류-소분류 taxonomy(posts/categoryTaxonomy.ts)는 한국어 문자열이 아니라
+// 안정적인 code로 식별하므로, 라벨 키도 code에서 기계적으로 만든다. 반환
+// 타입이 TranslationKey라서 ko 사전에 키가 빠지면 typecheck에서 잡힌다.
+export function taxonomyCategoryLabelKey(code: CategoryCode): TranslationKey {
+  return `taxonomy.category.${code}`;
+}
+
+export function taxonomySubcategoryLabelKey(code: SubcategoryCode): TranslationKey {
+  return `taxonomy.subcategory.${code}`;
 }
 
 export function campusLabelKey(campus: string): TranslationKey | null {
