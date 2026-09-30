@@ -76,17 +76,17 @@ export default async function FoundListPage({
           <div className="flex flex-col gap-4">
             <EmptyState
               title={
-                raw.q || raw.category || raw.campus || raw.status
+                raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status
                   ? t("search.empty.title")
                   : t("board.found.empty.title")
               }
               description={
-                raw.q || raw.category || raw.campus || raw.status
+                raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status
                   ? t("search.empty.description")
                   : t("board.found.empty.description")
               }
               action={
-                !(raw.q || raw.category || raw.campus || raw.status) && (
+                !(raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status) && (
                   <LinkButton href="/found/new">{t("board.found.newCta")}</LinkButton>
                 )
               }

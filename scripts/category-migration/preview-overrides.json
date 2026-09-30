@@ -1,0 +1,9 @@
+{
+  "_comment": "Manual category decisions for the Preview posts where suggestCategory() (suggester 2026-09-30.2) is missing, too generic or wrong after reading the title and description. Keys are <board>:<id>. Every other post uses the suggestion; see scripts/categoryFinalize.ts.",
+  "found:35": { "subcategory": "card_id.debit_card", "reason": "은행 카드 한 장 -- 설명의 '신…' 체크카드(분실 lost:22 신한 체크카드와 같은 물건)" },
+  "found:83": { "subcategory": "card_id.debit_card", "reason": "파란색 은행카드 -- 체크/신용 구분 단서 없음, 학생 은행카드로 보고 체크카드로 판단(모호)" },
+  "found:151": { "subcategory": "card_id.debit_card", "reason": "ATM 옆 카카오뱅크 카드 -- 카카오뱅크 카드는 체크카드(분실 lost:92 라이언 체크카드)" },
+  "found:127": { "subcategory": "wallet.card_wallet", "reason": "폰 뒤 자석 가죽 카드홀더 = 맥세이프 카드지갑(분실 lost:83 카드 포켓과 같은 물건)" },
+  "found:42": { "subcategory": "book_document.major_book", "reason": "녹색 표지 통계 책 -- 전공 통계서(분실 lost:27 경영통계 전공책과 같은 물건)" },
+  "lost:60": { "subcategory": "accessory.other", "reason": "카드 없는 빨간 목걸이 줄(카드 목걸이 스트랩) -- 주얼리가 아님" }
+}

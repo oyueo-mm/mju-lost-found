@@ -3,6 +3,7 @@ import { z } from "zod";
 import { DATE_ONLY, EVENT_PERIODS, kstStartOfDay, resolveEventRange } from "./eventPeriod";
 import { interpretDateTimeLocalAsKst } from "./kstDateTime";
 import { resolveCategoryWrite, type ResolvedCategoryWrite } from "./categoryWrite";
+import { isCategoryCode, isSubcategoryCode, parentCategoryOf } from "./categoryTaxonomy";
 
 // Same two enums as prisma/schema.prisma's LostPostStatus/FoundPostStatus
 // (which @map to these exact Korean strings) -- kept here as plain string
@@ -123,6 +124,43 @@ function withEventRange<T extends EventPeriodInput>(data: T) {
 
 export const eventPeriodQuerySchema = z.object(eventPeriodFields).superRefine(refineEventPeriod).transform(withEventRange);
 
+// 카테고리 대분류-소분류 검색 필터: categoryCode (대분류 전체) and/or
+// subcategory (그 소분류만 -- implies its own parent, so ?subcategory= alone
+// works too). Filters the new category_code/subcategory columns; the legacy
+// free-text `category` param keeps filtering the legacy column unchanged.
+// Shared by listQuerySchema and the AI search route. An empty value means
+// "no filter", same as the other optional search params.
+const categoryFilterFields = {
+  categoryCode: z.string().trim().max(50).optional(),
+  subcategory: z.string().trim().max(100).optional(),
+};
+
+type CategoryFilterInput = { categoryCode?: string; subcategory?: string };
+
+function refineCategoryFilter(data: CategoryFilterInput, ctx: z.RefinementCtx) {
+  if (data.categoryCode && !isCategoryCode(data.categoryCode)) {
+    ctx.addIssue({ code: "custom", path: ["categoryCode"], message: "카테고리 값이 올바르지 않습니다." });
+  }
+  if (data.subcategory) {
+    if (!isSubcategoryCode(data.subcategory)) {
+      ctx.addIssue({ code: "custom", path: ["subcategory"], message: "소분류 값이 올바르지 않습니다." });
+    } else if (data.categoryCode && parentCategoryOf(data.subcategory) !== data.categoryCode) {
+      ctx.addIssue({ code: "custom", path: ["subcategory"], message: "소분류가 선택한 카테고리에 속하지 않습니다." });
+    }
+  }
+}
+
+function withCategoryFilter<T extends CategoryFilterInput>(data: T) {
+  const subcategory = data.subcategory && isSubcategoryCode(data.subcategory) ? data.subcategory : undefined;
+  const categoryCode = data.categoryCode || (subcategory ? parentCategoryOf(subcategory) : undefined);
+  return { ...data, categoryCode: categoryCode || undefined, subcategory };
+}
+
+export const categoryFilterQuerySchema = z
+  .object(categoryFilterFields)
+  .superRefine(refineCategoryFilter)
+  .transform(withCategoryFilter);
+
 export const listQuerySchema = z
   .object({
     type: postListTypeSchema,
@@ -132,6 +170,7 @@ export const listQuerySchema = z
     // client mistake and is rejected with 400 rather than silently ignored.
     q: z.string().trim().max(MAX_SEARCH_QUERY_LENGTH, "검색어는 100자를 넘을 수 없습니다.").optional(),
     category: z.string().trim().max(100).optional(),
+    ...categoryFilterFields,
     // Phase 31: replaces the old free-text `location` search filter --
     // campus is a fixed enum (unlike category, an out-of-list value is
     // rejected rather than silently kept, since there's no legacy data to
@@ -161,6 +200,7 @@ export const listQuerySchema = z
   })
   .superRefine((data, ctx) => {
     refineEventPeriod(data, ctx);
+    refineCategoryFilter(data, ctx);
     if (data.status !== undefined) {
       // type=all merges LostPost and FoundPost, which don't share a status
       // vocabulary -- rather than guess which board a bare status string was
@@ -201,7 +241,7 @@ export const listQuerySchema = z
       }
     }
   })
-  .transform(withEventRange);
+  .transform((data) => withCategoryFilter(withEventRange(data)));
 export type ListQuery = z.infer<typeof listQuerySchema>;
 
 // Shared fields between LostPost/FoundPost -- title/description/category/

@@ -13,6 +13,7 @@ import {
   DEFAULT_PAGE,
   MAX_LIMIT,
   MAX_SEARCH_QUERY_LENGTH,
+  categoryFilterQuerySchema,
   eventPeriodQuerySchema,
   listQuerySchema,
   postListTypeSchema,
@@ -174,6 +175,14 @@ async function handleAiSearch(request: NextRequest) {
   }
   const { eventFrom, eventTo, includeUnknownEventTime } = period.data;
 
+  // 카테고리 대분류-소분류 필터: the same categoryCode/subcategory URL
+  // parameters and validation as the GET search (posts/schema.ts).
+  const categoryFilter = categoryFilterQuerySchema.safeParse(Object.fromEntries(searchParams));
+  if (!categoryFilter.success) {
+    return jsonError(400, categoryFilter.error.issues[0]?.message ?? "카테고리 필터가 올바르지 않습니다.");
+  }
+  const { categoryCode, subcategory } = categoryFilter.data;
+
   let result;
   try {
     result = await searchPostsAI(typeResult.data, query, image, {
@@ -182,6 +191,8 @@ async function handleAiSearch(request: NextRequest) {
       eventFrom,
       eventTo,
       includeUnknownEventTime,
+      categoryCode,
+      subcategory,
     });
   } catch (error) {
     console.error("AI search failed:", error);

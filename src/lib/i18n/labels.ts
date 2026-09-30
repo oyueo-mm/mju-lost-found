@@ -98,6 +98,17 @@ export function postCategoryLabelKeys(post: {
   return { categoryKey: categoryLabelKey(post.category), subcategoryKey: null };
 }
 
+// 카드/상세에 보이는 카테고리 한 줄: "전자기기 · 이어폰" (소분류가 없으면
+// 대분류만, 새 분류가 없으면 기존 category 라벨이나 원문).
+export function postCategoryLabel(
+  post: { category: string; categoryCode?: string | null; subcategory?: string | null },
+  t: (key: TranslationKey) => string,
+): string {
+  const { categoryKey, subcategoryKey } = postCategoryLabelKeys(post);
+  const main = categoryKey ? t(categoryKey) : post.category;
+  return subcategoryKey ? `${main} · ${t(subcategoryKey)}` : main;
+}
+
 export function campusLabelKey(campus: string): TranslationKey | null {
   return CAMPUS_KEYS[campus] ?? null;
 }

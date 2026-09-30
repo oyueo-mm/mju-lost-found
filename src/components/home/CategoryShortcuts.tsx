@@ -1,9 +1,9 @@
 import Link from "next/link";
 import type { ComponentType, SVGProps } from "react";
 
-import { CATEGORIES } from "@/lib/posts/schema";
+import { CATEGORY_CODES, type CategoryCode } from "@/lib/posts/categoryTaxonomy";
 import { getTranslator } from "@/lib/i18n/server";
-import { categoryLabelKey } from "@/lib/i18n/labels";
+import { taxonomyCategoryLabelKey } from "@/lib/i18n/labels";
 import {
   BagIcon,
   BookIcon,
@@ -27,16 +27,18 @@ import {
 // -- 새 아이콘 라이브러리나 의존성은 추가하지 않았고, 색도 아이콘이
 // 스스로 정하지 않고 부모의 text 색을 물려받으므로 라이트/다크 모드가
 // 자동으로 맞는다.
-const CATEGORY_ICONS: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
-  전자기기: HeadphonesIcon,
-  필기구: PenIcon,
-  책: BookIcon,
-  지갑: WalletIcon,
-  카드: CardIcon,
-  의류: ShirtIcon,
-  가방: BagIcon,
-  액세서리: RingIcon,
-  기타: GridIcon,
+// 카테고리 대분류-소분류: 바로가기는 새 대분류 code 9개를 쓴다(기존 9개
+// 한국어 값과 1:1 -- 생활용품만 예전 "기타" 자리).
+const CATEGORY_ICONS: Record<CategoryCode, ComponentType<SVGProps<SVGSVGElement>>> = {
+  electronics: HeadphonesIcon,
+  wallet: WalletIcon,
+  card_id: CardIcon,
+  bag: BagIcon,
+  clothing: ShirtIcon,
+  accessory: RingIcon,
+  book_document: BookIcon,
+  stationery: PenIcon,
+  living: GridIcon,
 };
 
 // 홈 카테고리 버튼 동작 수정 Phase: 이 바로가기는 "AI 검색을 실행하는
@@ -70,8 +72,10 @@ const CATEGORY_SEARCH_PARAMS = { searchMode: "keyword", type: "found" } as const
 // 계약이라, JSX를 렌더링하지 않고도 단위 테스트로 고정해 둘 수 있게
 // 한다(CategoryShortcuts.test.ts -- mode/type/category/q 네 가지를 전부
 // 검증하고, 실제 listQuerySchema로 파싱까지 해 본다).
-export function categorySearchHref(category: string): string {
-  return `/search?${new URLSearchParams({ ...CATEGORY_SEARCH_PARAMS, category }).toString()}`;
+// 카테고리 대분류-소분류: 필터는 legacy `category`가 아니라 `categoryCode`로
+// 건다(SearchFilterBar의 대분류 select가 읽는 값과 같다).
+export function categorySearchHref(categoryCode: CategoryCode): string {
+  return `/search?${new URLSearchParams({ ...CATEGORY_SEARCH_PARAMS, categoryCode }).toString()}`;
 }
 
 export async function CategoryShortcuts() {
@@ -113,20 +117,17 @@ export async function CategoryShortcuts() {
     // - 카테고리명은 text-foreground 그대로 둔다 -- 아이콘(primary/70)
     //   보다 대비가 높아 여전히 이름이 먼저 읽힌다.
     <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-9">
-      {CATEGORIES.map((category) => {
-        // 다국어(i18n) Phase: URL의 `category` 값은 언제나 DB/스키마가
-        // 아는 한국어 원문 그대로다(번역된 값을 보내면 검색이 0건이 된다)
-        // -- 버튼에 보이는 글자만 현재 언어로 바뀐다.
-        const labelKey = categoryLabelKey(category);
-        const Icon = CATEGORY_ICONS[category] ?? GridIcon;
+      {CATEGORY_CODES.map((categoryCode) => {
+        // URL에는 언어와 무관한 code가 들어가고, 버튼 글자만 현재 언어로 바뀐다.
+        const Icon = CATEGORY_ICONS[categoryCode] ?? GridIcon;
         return (
           <Link
-            key={category}
-            href={categorySearchHref(category)}
+            key={categoryCode}
+            href={categorySearchHref(categoryCode)}
             className="group flex flex-col items-center gap-2 rounded-lg border border-border bg-muted/60 px-2 py-3 text-center transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:border-primary/40 hover:bg-primary-muted hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-safe:md:hover:-translate-y-1 motion-reduce:transition-none"
           >
             <Icon className="size-5 text-primary/70 transition-colors group-hover:text-primary" />
-            <span className="text-xs font-medium text-foreground">{labelKey ? t(labelKey) : category}</span>
+            <span className="text-xs font-medium text-foreground">{t(taxonomyCategoryLabelKey(categoryCode))}</span>
           </Link>
         );
       })}

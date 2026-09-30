@@ -18,15 +18,15 @@
 // Main category code -> its subcategory keys, both in display order. The last
 // entry of every category is "other".
 export const TAXONOMY = {
-  electronics: ["phone", "earphones", "laptop_tablet", "charger_cable_battery", "peripheral_storage", "other"],
-  wallet: ["card_wallet", "bifold_long", "other"],
-  card_id: ["student_id", "payment_card", "transit_card", "other"],
-  bag: ["backpack", "tote_eco", "pouch", "shopping_bag", "other"],
-  clothing: ["top_outer", "bottom", "hat", "scarf_gloves", "shoes", "other"],
-  accessory: ["glasses", "watch_jewelry", "hair", "keyring_charm", "other"],
-  book_document: ["textbook", "general_book", "notebook", "document_file", "other"],
-  stationery: ["pencil_case", "pen_pencil", "calculator", "other"],
-  living: ["key", "umbrella", "tumbler_bottle", "hobby_sports", "other"],
+  electronics: ["phone", "earphones", "headphones", "laptop", "tablet", "charger", "cable", "power_bank", "peripheral", "storage", "other"],
+  wallet: ["card_wallet", "card_case", "bifold", "long_wallet", "other"],
+  card_id: ["student_id", "id_card", "credit_card", "debit_card", "transit_card", "other"],
+  bag: ["backpack", "tote", "eco_bag", "pouch", "shopping_bag", "other"],
+  clothing: ["top", "outer", "bottom", "hat", "scarf", "gloves", "shoes", "other"],
+  accessory: ["glasses", "sunglasses", "watch", "jewelry", "hair", "keyring", "charm", "other"],
+  book_document: ["major_book", "textbook", "general_book", "notebook", "planner", "document", "file", "other"],
+  stationery: ["pencil_case", "pen", "mechanical_pencil", "calculator", "other"],
+  living: ["key", "umbrella", "parasol", "tumbler", "water_bottle", "hobby", "sports", "other"],
 } as const;
 
 type Taxonomy = typeof TAXONOMY;

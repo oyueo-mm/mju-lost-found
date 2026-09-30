@@ -3,16 +3,23 @@
 import { useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { CAMPUSES, CATEGORIES } from "@/lib/posts/schema";
+import { CAMPUSES } from "@/lib/posts/schema";
 import type { PostListType, PostType, SortOption } from "@/lib/posts/schema";
 import { AISearchPanel } from "./AISearchPanel";
+import { CategoryFilterSelects } from "./CategoryFilterSelects";
+import {
+  categoryFilterToEntries,
+  readCategoryFilterState,
+  withCategoryFilterParams,
+  type CategoryFilterState,
+} from "./categoryFilterParams";
 import { EventPeriodFilter } from "./EventPeriodFilter";
 import { isPeriodRangeInvalid, periodStateToEntries, readPeriodState, withPeriodParams, type PeriodState } from "./periodParams";
 import { resolveSearchUiMode, SEARCH_MODE_PARAM, withSearchMode } from "./searchModeParams";
 import { SearchModeToggle, type SearchUiMode } from "./SearchModeToggle";
 import { SearchIcon } from "@/components/icons";
 import { useI18n } from "@/lib/i18n/client";
-import { campusLabelKey, categoryLabelKey } from "@/lib/i18n/labels";
+import { campusLabelKey } from "@/lib/i18n/labels";
 import type { TranslationKey } from "@/lib/i18n/translate";
 
 type StatusOption = { value: string; label: string };
@@ -109,7 +116,7 @@ export function SearchFilterBar({
   const searchParams = useSearchParams();
   const { t } = useI18n();
 
-  const hasActiveFilters = ["q", "category", "campus", "status", "sort", "mode", "period"].some((key) =>
+  const hasActiveFilters = ["q", "category", "categoryCode", "subcategory", "campus", "status", "sort", "mode", "period"].some((key) =>
     searchParams.get(key),
   );
 
@@ -170,11 +177,23 @@ export function SearchFilterBar({
   // mode (which never navigates) sends it with each search and mirrors it
   // into the current URL right away so the address bar stays shareable.
   const [periodState, setPeriodState] = useState<PeriodState>(() => readPeriodState(searchParams));
-  const aiPeriodQuery = new URLSearchParams(periodStateToEntries(periodState)).toString();
+  // 카테고리 대분류 -> 소분류 필터: same URL-backed pattern as the period
+  // filter above (categoryFilterParams.ts), shared by both modes.
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilterState>(() => readCategoryFilterState(searchParams));
+  const aiFilterQuery = new URLSearchParams([
+    ...periodStateToEntries(periodState),
+    ...categoryFilterToEntries(categoryFilter),
+  ]).toString();
 
   function handleAiPeriodChange(next: PeriodState) {
     setPeriodState(next);
     const query = withPeriodParams(window.location.search, next);
+    window.history.replaceState(null, "", query ? `${window.location.pathname}?${query}` : window.location.pathname);
+  }
+
+  function handleAiCategoryChange(next: CategoryFilterState) {
+    setCategoryFilter(next);
+    const query = withCategoryFilterParams(window.location.search, next);
     window.history.replaceState(null, "", query ? `${window.location.pathname}?${query}` : window.location.pathname);
   }
 
@@ -188,12 +207,13 @@ export function SearchFilterBar({
     const formData = new FormData(event.currentTarget);
     const params = new URLSearchParams();
 
-    for (const key of ["q", "type", "category", "campus", "status", "sort", "mode"]) {
+    for (const key of ["q", "type", "campus", "status", "sort", "mode"]) {
       const value = formData.get(key);
       if (typeof value === "string" && value.trim() !== "") {
         params.set(key, value.trim());
       }
     }
+    for (const [key, value] of categoryFilterToEntries(categoryFilter)) params.set(key, value);
     // An inverted custom range is shown inline by EventPeriodFilter; don't
     // navigate to a URL the server would reject.
     if (isPeriodRangeInvalid(periodState)) return;
@@ -206,11 +226,6 @@ export function SearchFilterBar({
     router.push(query ? `${basePath}?${query}` : basePath);
   }
 
-  // Editing an existing post can leave a post's category outside
-  // CATEGORIES (see PostForm's own handling of the same situation) -- if
-  // the current filter value is one of those, it's kept selectable here
-  // too rather than being silently reset to "전체" on the next render.
-  const currentCategory = searchParams.get("category") ?? "";
   const currentStatus = searchParams.get("status") ?? defaultStatus ?? "";
   const currentCampus = searchParams.get("campus") ?? "";
 
@@ -258,7 +273,14 @@ export function SearchFilterBar({
       {mode === "ai" && imageSearchEnabled ? (
         <>
           <EventPeriodFilter value={periodState} onChange={handleAiPeriodChange} boardType={aiSearchType} size="sm" />
-          <AISearchPanel type={aiSearchType} extraQuery={aiPeriodQuery} />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <CategoryFilterSelects
+              value={categoryFilter}
+              onChange={handleAiCategoryChange}
+              selectClassName="max-w-full rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-foreground shadow-sm"
+            />
+          </div>
+          <AISearchPanel type={aiSearchType} extraQuery={aiFilterQuery} />
         </>
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
@@ -300,30 +322,14 @@ export function SearchFilterBar({
               </select>
             )}
 
-            <select
-              name="category"
-              aria-label={t("search.filter.category")}
-              defaultValue={currentCategory}
-              className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
-            >
-              <option value="">{t("search.filter.categoryAll")}</option>
-              {currentCategory && !(CATEGORIES as readonly string[]).includes(currentCategory) && (
-                <option value={currentCategory}>{currentCategory}</option>
-              )}
-              {/* 다국어(i18n) Phase: value는 항상 DB에 저장된 한국어
-                  원문이고(그래야 검색/필터가 그대로 동작한다), 표시
-                  라벨만 번역한다 -- labels.ts의 categoryLabelKey가
-                  목록에 없는 값에는 null을 돌려주므로 예전 자유 입력
-                  카테고리는 원문 그대로 보인다. */}
-              {CATEGORIES.map((c) => {
-                const key = categoryLabelKey(c);
-                return (
-                  <option key={c} value={c}>
-                    {key ? t(key) : c}
-                  </option>
-                );
-              })}
-            </select>
+            {/* 카테고리 대분류-소분류: value는 언어와 무관한 taxonomy code이고
+                라벨만 번역한다. 예전 ?category= 링크는 대응하는 대분류로
+                읽힌다(categoryFilterParams.ts). */}
+            <CategoryFilterSelects
+              value={categoryFilter}
+              onChange={setCategoryFilter}
+              selectClassName="max-w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
+            />
 
             {statusOptions && (
               <select

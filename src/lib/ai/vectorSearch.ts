@@ -92,6 +92,10 @@ async function hasEmbedding(type: PostType, id: number): Promise<boolean> {
 
 export type SemanticSearchFilters = {
   category?: string;
+  // 카테고리 대분류-소분류: exact matches on category_code / subcategory --
+  // same contract as posts/service.ts's PostFilters.
+  categoryCode?: string;
+  subcategory?: string;
   // Phase 31: exact match, same as category -- see posts/service.ts's
   // buildSearchWhere() comment on the same replacement of the old
   // free-text `location` filter with the fixed campus enum.
@@ -134,6 +138,18 @@ export function eventTimeCondition(
     : Prisma.sql`(${inRange})`;
 }
 
+// 카테고리 대분류-소분류 filter (categoryCode = 대분류 전체, subcategory = 그
+// 소분류만) -- bound parameters, same as every other condition here, and the
+// same HNSW + LIMIT caveat as eventTimeCondition above.
+export function categoryCodeConditions(
+  filters: Pick<SemanticSearchFilters, "categoryCode" | "subcategory">,
+): InstanceType<typeof Prisma.Sql>[] {
+  const conditions: InstanceType<typeof Prisma.Sql>[] = [];
+  if (filters.categoryCode) conditions.push(Prisma.sql`category_code = ${filters.categoryCode}`);
+  if (filters.subcategory) conditions.push(Prisma.sql`subcategory = ${filters.subcategory}`);
+  return conditions;
+}
+
 // Phase 12: free-text semantic search. Unlike findSimilarPosts() above,
 // there is no source *post* here -- a search query is never saved to the
 // DB -- so the caller (posts/service.ts) computes the query embedding
@@ -173,6 +189,7 @@ export async function findPostsBySemanticQuery(
   // fragment keeps its own bound parameter.
   const conditions: InstanceType<typeof Prisma.Sql>[] = [Prisma.sql`embedding IS NOT NULL`];
   if (filters.category) conditions.push(Prisma.sql`category = ${filters.category}`);
+  conditions.push(...categoryCodeConditions(filters));
   if (filters.campus) conditions.push(Prisma.sql`campus = ${filters.campus}`);
   if (filters.status) conditions.push(Prisma.sql`status = ${filters.status}::${statusType}`);
   const eventTime = eventTimeCondition(targetType, filters);
@@ -293,6 +310,7 @@ export async function findPostsByImageQuery(
 
   const conditions: InstanceType<typeof Prisma.Sql>[] = [Prisma.sql`"imageEmbedding" IS NOT NULL`];
   if (filters.category) conditions.push(Prisma.sql`category = ${filters.category}`);
+  conditions.push(...categoryCodeConditions(filters));
   if (filters.campus) conditions.push(Prisma.sql`campus = ${filters.campus}`);
   if (filters.status) conditions.push(Prisma.sql`status = ${filters.status}::${statusType}`);
   const eventTime = eventTimeCondition(targetType, filters);

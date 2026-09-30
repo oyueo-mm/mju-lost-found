@@ -87,17 +87,17 @@ export default async function LostListPage({
           <div className="flex flex-col gap-4">
             <EmptyState
               title={
-                raw.q || raw.category || raw.campus || raw.status
+                raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status
                   ? t("search.empty.title")
                   : t("board.lost.empty.title")
               }
               description={
-                raw.q || raw.category || raw.campus || raw.status
+                raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status
                   ? t("search.empty.description")
                   : t("board.lost.empty.description")
               }
               action={
-                !(raw.q || raw.category || raw.campus || raw.status) && (
+                !(raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status) && (
                   <LinkButton href="/lost/new">{t("board.lost.newCta")}</LinkButton>
                 )
               }

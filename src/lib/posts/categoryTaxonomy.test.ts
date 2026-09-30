@@ -31,15 +31,15 @@ describe("category taxonomy", () => {
     ]);
   });
 
-  it("gives every category 3-6 subcategories ending in its own 'other'", () => {
+  it("gives every category 5-11 single-item subcategories ending in its own 'other'", () => {
     for (const category of CATEGORY_CODES) {
       const subs = subcategoriesOf(category);
-      expect(subs.length).toBeGreaterThanOrEqual(3);
-      expect(subs.length).toBeLessThanOrEqual(6);
+      expect(subs.length).toBeGreaterThanOrEqual(5);
+      expect(subs.length).toBeLessThanOrEqual(11);
       expect(subs.at(-1)).toBe(otherSubcategoryOf(category));
       expect(subs.filter(isOtherSubcategory)).toEqual([`${category}.other`]);
     }
-    expect(SUBCATEGORY_CODES).toHaveLength(43);
+    expect(SUBCATEGORY_CODES).toHaveLength(65);
   });
 
   it("uses unique codes that are prefixed by their parent and are plain ASCII", () => {
@@ -111,7 +111,7 @@ describe("validateCategorySelection", () => {
 describe("taxonomy labels", () => {
   it("has a non-empty label for every category and subcategory in all 7 locales", () => {
     const keys = [...CATEGORY_CODES.map(taxonomyCategoryLabelKey), ...SUBCATEGORY_CODES.map(taxonomySubcategoryLabelKey)];
-    expect(keys).toHaveLength(52);
+    expect(keys).toHaveLength(74);
     for (const [locale, dictionary] of Object.entries(DICTIONARIES)) {
       for (const key of keys) {
         expect(dictionary[key], `${locale} ${key}`).toBeTruthy();
@@ -133,15 +133,34 @@ describe("taxonomy labels", () => {
       "생활용품",
     ]);
     expect(subcategoriesOf("clothing").map((code) => ko[taxonomySubcategoryLabelKey(code)])).toEqual([
-      "상의·아우터",
+      "상의",
+      "아우터",
       "하의",
       "모자",
-      "목도리·장갑",
+      "목도리",
+      "장갑",
       "신발",
       "기타 의류",
     ]);
-    expect(ko[taxonomySubcategoryLabelKey("electronics.charger_cable_battery")]).toBe("충전기·케이블·보조배터리");
+    expect(subcategoriesOf("electronics").map((code) => ko[taxonomySubcategoryLabelKey(code)])).toEqual([
+      "휴대폰",
+      "이어폰",
+      "헤드폰",
+      "노트북",
+      "태블릿",
+      "충전기",
+      "케이블",
+      "보조배터리",
+      "주변기기",
+      "저장장치",
+      "기타 전자기기",
+    ]);
     expect(ko[taxonomySubcategoryLabelKey("living.other")]).toBe("기타 생활용품");
+    // Every subcategory other than the "기타 ○○" ones and 헤어 액세서리 names one kind of item.
+    for (const code of SUBCATEGORY_CODES) {
+      const label = ko[taxonomySubcategoryLabelKey(code)] ?? "";
+      if (!isOtherSubcategory(code)) expect(label, code).not.toMatch(/·/);
+    }
   });
 
   it("keeps labels distinct within each category in every locale", () => {

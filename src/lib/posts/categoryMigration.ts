@@ -18,7 +18,7 @@ import type { CategoryCode } from "./categoryTaxonomy";
 
 // Bump when RULES in categorySuggest.ts change, so stored candidates can be
 // told apart from ones a newer suggester would produce.
-export const CATEGORY_SUGGESTER_VERSION = "2026-09-30.1";
+export const CATEGORY_SUGGESTER_VERSION = "2026-09-30.2";
 
 export const LEGACY_CATEGORY_TO_CODE: Readonly<Record<string, CategoryCode>> = {
   전자기기: "electronics",

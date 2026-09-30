@@ -22,7 +22,7 @@ import { AttributionLink } from "@/components/user/AttributionLink";
 import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
 import { getLocale, getTranslator } from "@/lib/i18n/server";
 import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
-import { campusLabelKey, postCategoryLabelKeys, postTypeLabelKey } from "@/lib/i18n/labels";
+import { campusLabelKey, postCategoryLabel, postTypeLabelKey } from "@/lib/i18n/labels";
 
 // 다국어(i18n) Phase: 하드코딩된 "ko-KR" 대신 현재 언어의 Intl 태그를
 // 쓴다. 타임존은 언제나 Asia/Seoul 그대로 -- 캠퍼스에서 실제로 일어난
@@ -163,8 +163,9 @@ export default async function PostDetailPage({
     }
   }
 
-  // 카테고리 대분류-소분류: categoryCode가 있으면 새 분류, 없으면 기존 category.
-  const { categoryKey, subcategoryKey } = postCategoryLabelKeys(post);
+  // 카테고리 대분류-소분류: "전자기기 · 이어폰" -- categoryCode가 있으면 새
+  // 분류, 없으면 기존 category(PostCard와 같은 postCategoryLabel).
+  const categoryLine = postCategoryLabel(post, t);
   const campusKey = campusLabelKey(post.campus);
 
   const [comments, { recommendations, recommendationsFailed }, myOrganizations, organizationChat] = await Promise.all([
@@ -295,10 +296,7 @@ export default async function PostDetailPage({
           {/* 다국어(i18n) Phase: 카테고리/캠퍼스는 DB에 한국어 원문으로
               저장돼 있다 -- 표시용 라벨만 번역하고, 목록에 없는 값(예전
               자유 입력으로 들어간 카테고리 등)은 원문을 그대로 보여준다. */}
-          <span>
-            {categoryKey ? t(categoryKey) : post.category}
-            {subcategoryKey && ` · ${t(subcategoryKey)}`}
-          </span>
+          <span data-post-category>{categoryLine}</span>
           <span className="rounded-full bg-primary-muted px-2.5 py-0.5 text-xs font-medium text-primary">
             {campusKey ? t(campusKey) : post.campus}
           </span>

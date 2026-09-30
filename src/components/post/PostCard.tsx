@@ -9,7 +9,7 @@ import { AttributionLink } from "@/components/user/AttributionLink";
 import { PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
 import { useI18n } from "@/lib/i18n/client";
 import { LOCALE_INTL_TAG } from "@/lib/i18n/config";
-import { postTypeLabelKey } from "@/lib/i18n/labels";
+import { postCategoryLabel, postTypeLabelKey } from "@/lib/i18n/labels";
 import type { Locale } from "@/lib/i18n/config";
 
 function formatDate(date: Date, locale: Locale): string {
@@ -155,6 +155,10 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage" }: Post
           {post.title}
         </h3>
         <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+          {/* 카테고리 대분류-소분류: "전자기기 · 이어폰", legacy category로 fallback. */}
+          <span className="truncate font-medium text-foreground/80" data-post-category>
+            {postCategoryLabel(post, t)}
+          </span>
           <span className="flex items-center gap-1 truncate">
             <PinIcon className="size-3.5 shrink-0" />
             <span className="truncate">{post.location ?? t("post.locationUnknown")}</span>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { postCategoryLabelKeys } from "@/lib/i18n/labels";
+import { postCategoryLabel, postCategoryLabelKeys } from "@/lib/i18n/labels";
+import { ko } from "@/lib/i18n/messages/ko";
 import { categoryBodyFields, initialCategoryState, shouldShowSuggestion, suggestionKey } from "./categoryFormState";
 
 describe("initialCategoryState", () => {
@@ -113,6 +114,19 @@ describe("postCategoryLabelKeys (read compatibility)", () => {
     });
     expect(postCategoryLabelKeys({ category: "카드" })).toEqual({ categoryKey: "category.카드", subcategoryKey: null });
     expect(postCategoryLabelKeys({ category: "우산", categoryCode: null })).toEqual({ categoryKey: null, subcategoryKey: null });
+  });
+
+  it("formats '대분류 · 소분류' for cards and the detail page, with legacy fallback", () => {
+    const t = (key: keyof typeof ko) => ko[key];
+    expect(postCategoryLabel({ category: "전자기기", categoryCode: "electronics", subcategory: "electronics.earphones" }, t)).toBe(
+      "전자기기 · 이어폰",
+    );
+    expect(postCategoryLabel({ category: "기타", categoryCode: "living", subcategory: "living.other" }, t)).toBe(
+      "생활용품 · 기타 생활용품",
+    );
+    expect(postCategoryLabel({ category: "카드", categoryCode: "card_id", subcategory: null }, t)).toBe("카드·신분증");
+    expect(postCategoryLabel({ category: "카드", categoryCode: null, subcategory: null }, t)).toBe("카드");
+    expect(postCategoryLabel({ category: "우산" }, t)).toBe("우산");
   });
 
   it("ignores a subcategory under the wrong parent", () => {

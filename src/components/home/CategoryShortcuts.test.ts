@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { categorySearchHref } from "./CategoryShortcuts";
-import { CATEGORIES, listQuerySchema } from "@/lib/posts/schema";
+import { listQuerySchema } from "@/lib/posts/schema";
+import { CATEGORY_CODES } from "@/lib/posts/categoryTaxonomy";
 import { resolveSearchUiMode } from "@/components/search/searchModeParams";
 
 // 홈 카테고리 버그 수정 Phase: 이 바로가기는 "AI 검색을 실행하는 버튼"이
@@ -19,44 +20,43 @@ function paramsOf(href: string): URLSearchParams {
 
 describe("categorySearchHref", () => {
   it("asks /search for keyword mode explicitly, never AI mode", () => {
-    const params = paramsOf(categorySearchHref("전자기기"));
+    const params = paramsOf(categorySearchHref("electronics"));
     expect(params.get("searchMode")).toBe("keyword");
     // /search's own default is AI -- the link must still open in keyword mode.
     expect(resolveSearchUiMode(params, "ai")).toBe("keyword");
   });
 
   it("uses the page's searchMode parameter, not the search API's legacy mode", () => {
-    expect(paramsOf(categorySearchHref("전자기기")).get("mode")).toBeNull();
+    expect(paramsOf(categorySearchHref("electronics")).get("mode")).toBeNull();
   });
 
-  it("carries the category as the exact value stored in the DB, not a translated label", () => {
-    for (const category of CATEGORIES) {
-      expect(paramsOf(categorySearchHref(category)).get("category")).toBe(category);
+  it("filters by the taxonomy categoryCode, not the legacy category string", () => {
+    for (const code of CATEGORY_CODES) {
+      const params = paramsOf(categorySearchHref(code));
+      expect(params.get("categoryCode")).toBe(code);
+      expect(params.get("category")).toBeNull();
+      expect(params.get("subcategory")).toBeNull();
     }
   });
 
   it("targets the 습득물 board, matching /search's own default", () => {
-    expect(paramsOf(categorySearchHref("가방")).get("type")).toBe("found");
+    expect(paramsOf(categorySearchHref("bag")).get("type")).toBe("found");
   });
 
   it("never invents a search term", () => {
-    expect(paramsOf(categorySearchHref("지갑")).get("q")).toBeNull();
-  });
-
-  it("percent-encodes the Korean category so the link is a valid URL", () => {
-    expect(categorySearchHref("전자기기")).toContain(`category=${encodeURIComponent("전자기기")}`);
+    expect(paramsOf(categorySearchHref("wallet")).get("q")).toBeNull();
   });
 
   it("produces a query the server's own list schema accepts as a keyword search", () => {
     // 서버(/search/page.tsx)가 실제로 통과시키는 경로와 같은 검증이다 --
     // 여기서 통과해야 키워드 검색 결과가 렌더링된다.
-    for (const category of CATEGORIES) {
-      const params = Object.fromEntries(paramsOf(categorySearchHref(category)));
+    for (const code of CATEGORY_CODES) {
+      const params = Object.fromEntries(paramsOf(categorySearchHref(code)));
       const parsed = listQuerySchema.safeParse({ type: "found", ...params });
       expect(parsed.success).toBe(true);
       if (parsed.success) {
         expect(parsed.data.mode).toBe("keyword");
-        expect(parsed.data.category).toBe(category);
+        expect(parsed.data.categoryCode).toBe(code);
         expect(parsed.data.type).toBe("found");
       }
     }

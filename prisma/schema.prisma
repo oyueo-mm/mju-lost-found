@@ -1557,6 +1557,10 @@ model PostCategoryReview {
   ambiguities           String[]   @default([])
   // "pending" | "accepted" | "overridden" | "dismissed"
   status                String     @default("pending") @db.Text
+  // "auto" (suggester output confirmed as-is) | "manual" (a person decided:
+  // legacy 기타, policy moves, vague titles, description-based or overridden
+  // suggestions) | null while pending
+  resolutionMethod      String?    @map("resolution_method") @db.Text
   resolvedCategoryCode  String?    @map("resolved_category_code") @db.Text
   resolvedSubcategory   String?    @map("resolved_subcategory") @db.Text
   reviewedByUserId      Int?       @map("reviewed_by_user_id")

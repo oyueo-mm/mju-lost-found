@@ -142,7 +142,7 @@ export function AISearchPanel({
     };
   }, [previewUrl]);
 
-  // Results on screen were fetched for the previous period -- clear them
+  // Results on screen were fetched for the previous period/category -- clear them
   // rather than show them under a filter they don't match (React's "adjust
   // state when a prop changes" pattern: compared during render, no effect).
   const [resultsExtraQuery, setResultsExtraQuery] = useState(extraQuery);

@@ -182,6 +182,11 @@ export type PagedResult<T> = {
 export type PostFilters = {
   q?: string;
   category?: string;
+  // 카테고리 대분류-소분류: exact matches on the taxonomy columns
+  // (category_code / subcategory), validated by listQuerySchema /
+  // categoryFilterQuerySchema. Independent of the legacy `category` above.
+  categoryCode?: string;
+  subcategory?: string;
   // Phase 31: replaces the old free-text `location` search filter with an
   // exact match on the fixed campus enum -- see buildSearchWhere's own
   // comment. `location` remains a real post field (LostPostDTO/
@@ -252,6 +257,8 @@ function buildSearchWhere<S extends PrismaLostPostStatus | PrismaFoundPostStatus
     | { description: { contains: string; mode: "insensitive" } }
   )[];
   category?: string;
+  categoryCode?: string;
+  subcategory?: string;
   // Phase 31: exact match, same as category -- campus is a fixed enum
   // (see CAMPUSES in posts/schema.ts), not free text, so there's no
   // partial/contains match to make here the way the old `location` filter
@@ -268,6 +275,8 @@ function buildSearchWhere<S extends PrismaLostPostStatus | PrismaFoundPostStatus
     ];
   }
   if (filters.category) where.category = filters.category;
+  if (filters.categoryCode) where.categoryCode = filters.categoryCode;
+  if (filters.subcategory) where.subcategory = filters.subcategory;
   if (filters.campus) where.campus = filters.campus;
   if (filters.authorQuery) {
     where.user = { nickname: { contains: filters.authorQuery, mode: "insensitive" } };

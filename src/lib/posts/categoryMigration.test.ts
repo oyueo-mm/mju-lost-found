@@ -46,7 +46,7 @@ describe("planCategoryMigration", () => {
       legacyCategoryCode: "card_id",
       autoCategoryCode: null,
       reviewReason: "category_conflict",
-      suggestion: { category: "wallet", subcategory: "wallet.card_wallet" },
+      suggestion: { category: "wallet", subcategory: "wallet.card_case" },
     });
     expect(plan("액세서리", "에어팟 실리콘 커버만 잃어버렸어요")).toMatchObject({
       autoCategoryCode: null,
