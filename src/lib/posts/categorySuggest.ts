@@ -116,6 +116,15 @@ function match(text: string): RuleTarget | null {
   return null;
 }
 
+// First rule naming a subcategory of `category` -- other rules are skipped,
+// so a description's side details ("뱃지가 달린 배낭") can't hide the kind.
+function matchSubcategoryWithin(text: string, category: CategoryCode): SubcategoryCode | null {
+  for (const [pattern, target] of RULES) {
+    if (isSubcategoryCode(target) && parentCategoryOf(target) === category && pattern.test(text)) return target;
+  }
+  return null;
+}
+
 function toSuggestion(target: RuleTarget, source: CategorySuggestion["source"]): CategorySuggestion {
   return isSubcategoryCode(target)
     ? { category: parentCategoryOf(target), subcategory: target, source }
@@ -128,7 +137,17 @@ export function suggestCategory(input: { title?: string | null; description?: st
   const title = input.title?.trim() ?? "";
   const description = input.description?.trim() ?? "";
   const fromTitle = title ? match(title) : null;
-  if (fromTitle) return toSuggestion(fromTitle, "title");
+  if (fromTitle) {
+    const titleSuggestion = toSuggestion(fromTitle, "title");
+    // A generic title ("카드 한 장") keeps its category, but the description
+    // may name the kind ("티머니 로고만 있는 흰 카드") -- only a kind within
+    // that same category is taken from it.
+    if (titleSuggestion.subcategory === null && description) {
+      const subcategory = matchSubcategoryWithin(description, titleSuggestion.category);
+      if (subcategory) return { category: titleSuggestion.category, subcategory, source: "description" };
+    }
+    return titleSuggestion;
+  }
   const fromDescription = description ? match(description) : null;
   return fromDescription ? toSuggestion(fromDescription, "description") : null;
 }

@@ -439,6 +439,7 @@ model User {
   // 키워드 알림 Phase: 이 User가 만든 키워드 알림 규칙 전체 -- FK 경로가
   // 하나뿐이라(userId) 다른 관계들처럼 별도 관계명이 필요 없다.
   keywordAlerts                KeywordAlert[]
+  postCategoryReviews          PostCategoryReview[]
 
   @@map("User")
 }
@@ -456,6 +457,16 @@ model LostPost {
   // to filter by category later -- adding an index/enum is a decision for
   // whichever phase builds that filter, not this one.
   category       String                      @db.Text
+  // 카테고리 대분류-소분류 전환: stable codes from
+  // src/lib/posts/categoryTaxonomy.ts, next to the legacy free-text
+  // `category` above (kept as-is for compatibility -- forms, search,
+  // keyword alerts and embeddings still read it). null = unclassified;
+  // "<category>.other" = deliberately classified as 기타. Only confirmed
+  // values go here: suggestions live in PostCategoryReview. The
+  // migration adds a CHECK that a subcategory sits under its own
+  // categoryCode.
+  categoryCode   String?                     @map("category_code") @db.Text
+  subcategory    String?                     @db.Text
   // Phase P-5: nullable, not an empty-string/"미상" placeholder -- null
   // means "the poster genuinely doesn't know the location", a real,
   // distinct state from an empty required field. buildEmbeddingText()
@@ -530,9 +541,11 @@ model LostPost {
   // relation is additive only; nothing in this phase actually writes to
   // it from the upload/edit flow yet (see PostImage's own comment).
   images          PostImage[]
+  categoryReview  PostCategoryReview?
 
   @@index([userId], map: "idx_lostpost_user_id")
   @@index([organizationId], map: "idx_lostpost_organization_id")
+  @@index([categoryCode, subcategory], map: "idx_lostpost_category_code")
   @@map("LostPost")
 }
 
@@ -545,6 +558,9 @@ model FoundPost {
   title          String                      @db.Text
   description    String                      @db.Text
   category       String                      @db.Text
+  // See LostPost.categoryCode's comment -- identical shape/reasoning.
+  categoryCode   String?                     @map("category_code") @db.Text
+  subcategory    String?                     @db.Text
   // See LostPost.location's comment -- identical shape/reasoning.
   location       String?                     @db.Text
   // See LostPost.campus's comment -- identical shape/reasoning.
@@ -569,9 +585,11 @@ model FoundPost {
   directChatRooms ChatRoom[]  @relation("ChatRoomDirectFoundPost")
   // See LostPost.images's own comment -- identical shape/reasoning.
   images          PostImage[]
+  categoryReview  PostCategoryReview?
 
   @@index([userId], map: "idx_foundpost_user_id")
   @@index([organizationId], map: "idx_foundpost_organization_id")
+  @@index([categoryCode, subcategory], map: "idx_foundpost_category_code")
   @@map("FoundPost")
 }
 
@@ -1511,3 +1529,42 @@ model OrganizationJoinRequest {
 //   CREATE UNIQUE INDEX idx_org_join_request_pending_unique
 //     ON "OrganizationJoinRequest"(organization_id, user_id)
 //     WHERE status = 'pending';
+
+// ---------- PostCategoryReview (카테고리 대분류-소분류 전환) ----------
+
+// One row per post during the move from the legacy free-text `category`
+// to LostPost/FoundPost.categoryCode/subcategory: a snapshot of the legacy
+// value, the suggestCategory() candidate (suggested* -- never written to
+// the post by itself), why the post needs review, and the review outcome.
+// Filled by scripts/categoryBackfill.ts. Same "exactly one of two nullable
+// post FKs" shape and CHECK as PostImage; the status/exactly-one CHECKs
+// live in migration 20261018000000_add_post_category_code.
+model PostCategoryReview {
+  id                    Int        @id @default(autoincrement())
+  lostPostId            Int?       @unique(map: "idx_postcategoryreview_lost_post_unique") @map("lost_post_id")
+  lostPost              LostPost?  @relation(fields: [lostPostId], references: [id], onDelete: Cascade)
+  foundPostId           Int?       @unique(map: "idx_postcategoryreview_found_post_unique") @map("found_post_id")
+  foundPost             FoundPost? @relation(fields: [foundPostId], references: [id], onDelete: Cascade)
+  legacyCategory        String     @map("legacy_category") @db.Text
+  suggestedCategoryCode String?    @map("suggested_category_code") @db.Text
+  suggestedSubcategory  String?    @map("suggested_subcategory") @db.Text
+  // "title" | "description" | null (no suggestion)
+  suggestionSource      String?    @map("suggestion_source") @db.Text
+  suggesterVersion      String     @map("suggester_version") @db.Text
+  // "legacy_other" | "category_conflict" | "unknown_legacy" | null (main
+  // category auto-confirmed 1:1; only the subcategory candidate is open)
+  reviewReason          String?    @map("review_reason") @db.Text
+  ambiguities           String[]   @default([])
+  // "pending" | "accepted" | "overridden" | "dismissed"
+  status                String     @default("pending") @db.Text
+  resolvedCategoryCode  String?    @map("resolved_category_code") @db.Text
+  resolvedSubcategory   String?    @map("resolved_subcategory") @db.Text
+  reviewedByUserId      Int?       @map("reviewed_by_user_id")
+  reviewedBy            User?      @relation(fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  reviewedAt            DateTime?  @map("reviewed_at")
+  createdAt             DateTime   @default(now()) @map("created_at")
+  updatedAt             DateTime   @updatedAt @map("updated_at")
+
+  @@index([status, reviewReason], map: "idx_postcategoryreview_status_reason")
+  @@map("PostCategoryReview")
+}

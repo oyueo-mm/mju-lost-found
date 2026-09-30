@@ -97,6 +97,25 @@ describe("suggestCategory", () => {
     ).toEqual({ category: "bag", subcategory: "bag.backpack", source: "description" });
   });
 
+  it("fills a generic title's subcategory from the description only within the same category", () => {
+    expect(suggestCategory({ title: "정문 셔틀 정류장에서 하얀 카드 한 장", description: "티머니 로고만 있는 흰 카드" })).toEqual({
+      category: "card_id",
+      subcategory: "card_id.transit_card",
+      source: "description",
+    });
+    expect(suggestCategory({ title: "행정동 벤치에 가방 하나", description: "베이지색 배낭이 놓여 있었어요. 뱃지가 잔뜩 달려 있어요." })).toEqual({
+      category: "bag",
+      subcategory: "bag.backpack",
+      source: "description",
+    });
+    // The description names a different category: keep the title's category, subcategory unknown.
+    expect(suggestCategory({ title: "카드 한 장 주웠어요", description: "에어팟 옆에 떨어져 있었어요" })).toEqual({
+      category: "card_id",
+      subcategory: null,
+      source: "title",
+    });
+  });
+
   it("returns null instead of guessing 'other' when nothing matches", () => {
     expect(suggestCategory({ title: "이거 주인 찾아요", description: "정문 앞에 있었어요" })).toBeNull();
     expect(suggestCategory({ title: "", description: null })).toBeNull();
