@@ -8,4 +8,7 @@
 // doesn't need a bump. Comparison against User.termsVersion is a plain
 // string equality check (see session.ts's requireReadyUser()); there is no
 // automatic "is this change important enough" detection.
-export const CURRENT_TERMS_VERSION = "2026-09-27";
+//
+// 2026-10-03: terms art. 2 (admin-approved external members) and privacy
+// policy art. 4/7 changed before the public beta -- every user re-agrees.
+export const CURRENT_TERMS_VERSION = "2026-10-03";
