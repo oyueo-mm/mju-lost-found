@@ -25,6 +25,17 @@ vi.mock("@/lib/posts/aiService", () => ({
   createLostPost,
   createFoundPost,
 }));
+// AI search is rate-limited per user (or hashed IP for anonymous
+// visitors); post creation per user. The limiter itself is tested in
+// src/lib/rateLimit -- here only which bucket each request is charged to,
+// and that a 429 stops the request before any search/create work.
+const getCurrentUser = vi.fn();
+vi.mock("@/lib/auth/session", () => ({ getCurrentUser }));
+const enforceRateLimit = vi.fn();
+vi.mock("@/lib/rateLimit", () => ({
+  enforceRateLimit,
+  clientIpFrom: (headers: Headers) => headers.get("x-forwarded-for"),
+}));
 
 const { GET, POST } = await import("./route");
 
@@ -32,6 +43,8 @@ const sessionUser = { id: 1, nickname: "닉네임" };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getCurrentUser.mockResolvedValue(null);
+  enforceRateLimit.mockResolvedValue(null);
 });
 
 describe("GET /api/posts", () => {
@@ -337,5 +350,73 @@ describe("POST /api/posts", () => {
 
     expect(res.status).toBe(201);
     expect(createFoundPost).toHaveBeenCalled();
+  });
+});
+
+describe("rate limits", () => {
+  const tooMany = async () => {
+    const { NextResponse } = await import("next/server");
+    return NextResponse.json({ error: "요청이 너무 많습니다." }, { status: 429 });
+  };
+
+  it("charges anonymous AI search to the caller's IP and stops with 429 before searching", async () => {
+    enforceRateLimit.mockResolvedValueOnce(await tooMany());
+    const form = new FormData();
+    form.set("q", "지갑");
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/posts?mode=ai&type=lost", {
+        method: "POST",
+        body: form,
+        headers: { "x-forwarded-for": "198.51.100.7" },
+      }),
+    );
+
+    expect(res.status).toBe(429);
+    expect(enforceRateLimit).toHaveBeenCalledWith("aiSearch", { ip: "198.51.100.7" });
+    expect(searchPostsAI).not.toHaveBeenCalled();
+  });
+
+  it("charges a signed-in user's semantic search to their user id", async () => {
+    getCurrentUser.mockResolvedValueOnce({ id: 42 });
+    enforceRateLimit.mockResolvedValueOnce(await tooMany());
+
+    const res = await GET(new NextRequest("http://localhost/api/posts?type=lost&mode=semantic&q=지갑"));
+
+    expect(res.status).toBe(429);
+    expect(enforceRateLimit).toHaveBeenCalledWith("aiSearch", { userId: 42 });
+    expect(searchPosts).not.toHaveBeenCalled();
+  });
+
+  it("does not rate-limit plain keyword search", async () => {
+    searchPosts.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 0, totalPages: 1 });
+
+    await GET(new NextRequest("http://localhost/api/posts?type=lost&q=지갑"));
+
+    expect(enforceRateLimit).not.toHaveBeenCalled();
+  });
+
+  it("stops post creation with 429 once over the limit", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    enforceRateLimit.mockResolvedValueOnce(await tooMany());
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/posts", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "lost",
+          title: "지갑을 잃어버렸어요",
+          description: "검은색 지갑",
+          category: "지갑",
+          location: "학생회관",
+          campus: "인문캠퍼스",
+          lostAt: "2026-01-01T10:00",
+        }),
+      }),
+    );
+
+    expect(res.status).toBe(429);
+    expect(enforceRateLimit).toHaveBeenCalledWith("postCreate", { userId: 1 });
+    expect(createLostPost).not.toHaveBeenCalled();
   });
 });

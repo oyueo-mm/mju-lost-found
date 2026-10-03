@@ -697,15 +697,37 @@ export type AdminChatRoomDTO = {
 // since none of that is meaningful for a non-participant and this link
 // only exists to give an admin surrounding context, not a feature-
 // complete chat client (no compose/reply/react/edit/delete capability is
-// exposed here). Performs no authorization itself -- same convention as
-// getMessage()'s own comment -- the caller (the admin page) gates with
-// requireAdmin().
-export async function getChatRoomForAdmin(chatRoomId: number): Promise<AdminChatRoomDTO | null> {
+// exposed here).
+//
+// Admin chat access Phase: an admin may open a room only *for a report*:
+// reportId must be a MESSAGE report whose reported message is in this
+// room (isReportForChatRoom) -- any other report id, or a room id the
+// report doesn't point at, is refused. Every allowed view is written to
+// AdminAccessLog (admin, room, report, time) before the room is returned.
+export type AdminChatRoomResult =
+  | { kind: "ok"; data: AdminChatRoomDTO }
+  | { kind: "not_found" }
+  | { kind: "forbidden" };
+
+export async function isReportForChatRoom(reportId: number, chatRoomId: number): Promise<boolean> {
+  const report = await prisma.report.findUnique({ where: { id: reportId }, select: { targetType: true, targetId: true } });
+  if (!report || report.targetType !== "MESSAGE") return false;
+  const reported = await prisma.message.findUnique({ where: { id: report.targetId }, select: { chatRoomId: true } });
+  return reported?.chatRoomId === chatRoomId;
+}
+
+export async function getChatRoomForAdmin(chatRoomId: number, reportId: number, admin: User): Promise<AdminChatRoomResult> {
+  if (!admin.isAdmin) return { kind: "forbidden" };
+  if (!(await isReportForChatRoom(reportId, chatRoomId))) return { kind: "forbidden" };
   const room = await findChatRoomRow(chatRoomId);
-  if (!room) return null;
+  if (!room) return { kind: "not_found" };
   const participantIds = await participantIdsOf(room);
-  if (!participantIds) return null;
+  if (!participantIds) return { kind: "not_found" };
   const post = roomPostOf(room);
+
+  await prisma.adminAccessLog.create({
+    data: { adminUserId: admin.id, resource: "chat_room", chatRoomId, reportId },
+  });
 
   const [participants, rows] = await Promise.all([
     Promise.all([...participantIds].map((id) => resolveCounterpart(id))),
@@ -717,18 +739,26 @@ export async function getChatRoomForAdmin(chatRoomId: number): Promise<AdminChat
   ]);
 
   return {
-    id: room.id,
-    post: { id: post.id, type: post.type, title: post.title, deleted: post.deleted },
-    participants,
-    messages: rows.map((m) => ({
-      id: m.id,
-      senderUserId: m.senderUserId,
-      senderNickname: m.sender.nickname,
-      content: maskedContent(m),
-      imageUrl: messageImageUrl(chatRoomId, m),
-      isDeleted: Boolean(m.hiddenAt),
-      createdAt: m.createdAt,
-    })),
+    kind: "ok",
+    data: {
+      id: room.id,
+      post: { id: post.id, type: post.type, title: post.title, deleted: post.deleted },
+      participants,
+      messages: rows.map((m) => {
+        const imageUrl = messageImageUrl(chatRoomId, m);
+        return {
+          id: m.id,
+          senderUserId: m.senderUserId,
+          senderNickname: m.sender.nickname,
+          content: maskedContent(m),
+          // An admin fetches the image through the same report, so the
+          // image endpoint can check (and log) it the same way.
+          imageUrl: imageUrl ? `${imageUrl}?report=${reportId}` : null,
+          isDeleted: Boolean(m.hiddenAt),
+          createdAt: m.createdAt,
+        };
+      }),
+    },
   };
 }
 
@@ -1400,12 +1430,18 @@ export async function getChatImageForViewer(
   chatRoomId: number,
   messageId: number,
   viewer: User,
+  reportId?: number,
 ): Promise<ChatImageAccessResult> {
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
   const participantIds = await participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
-  if (!participantIds.has(viewer.id) && !viewer.isAdmin) return { kind: "forbidden" };
+  const isParticipant = participantIds.has(viewer.id);
+  // Admin chat access Phase: a non-participant admin needs a MESSAGE
+  // report for this room, same rule as getChatRoomForAdmin.
+  const viaReport =
+    !isParticipant && viewer.isAdmin && reportId !== undefined && (await isReportForChatRoom(reportId, chatRoomId));
+  if (!isParticipant && !viaReport) return { kind: "forbidden" };
 
   const message = await prisma.message.findUnique({
     where: { id: messageId },
@@ -1415,6 +1451,11 @@ export async function getChatImageForViewer(
     return { kind: "not_found" };
   }
   if (parseChatImagePathname(message.imagePath)?.chatRoomId !== chatRoomId) return { kind: "not_found" };
+  if (viaReport && reportId !== undefined) {
+    await prisma.adminAccessLog.create({
+      data: { adminUserId: viewer.id, resource: "chat_image", chatRoomId, messageId, reportId },
+    });
+  }
   return { kind: "ok", path: message.imagePath };
 }
 

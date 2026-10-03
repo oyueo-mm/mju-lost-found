@@ -21,6 +21,16 @@ import {
 } from "@/lib/posts/schema";
 import { createFoundPost, createLostPost, searchPosts, searchPostsAI, searchPostsByImage } from "@/lib/posts/aiService";
 import { ALLOWED_IMAGE_CONTENT_TYPES, MAX_IMAGE_SIZE_BYTES, isAllowedImageContentType } from "@/lib/images/config";
+import { getCurrentUser } from "@/lib/auth/session";
+import { clientIpFrom, enforceRateLimit } from "@/lib/rateLimit";
+
+// AI search (semantic / image / ai modes) runs embedding models in this
+// function on every request, so it's rate-limited per signed-in user, or
+// per (hashed) IP for anonymous visitors -- search stays public.
+async function limitAiSearch(request: NextRequest): Promise<NextResponse | null> {
+  const user = await getCurrentUser();
+  return enforceRateLimit("aiSearch", user ? { userId: user.id } : { ip: clientIpFrom(request.headers) });
+}
 
 // POST creates a post, which triggers embedPostBestEffort() -- real
 // ONNX Runtime inference (@huggingface/transformers, a native addon) that
@@ -32,6 +42,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const query = listQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
   if (!query.success) {
     return jsonError(400, query.error.issues[0]?.message ?? "잘못된 검색 조건입니다.");
+  }
+  if (query.data.mode === "semantic") {
+    const limited = await limitAiSearch(request);
+    if (limited) return limited;
   }
 
   const result = await searchPosts(query.data);
@@ -215,11 +229,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   // search (posts/service.ts) -- no auth gate, checked before
   // requireUserForApi() below (which only ever applies to the "create a
   // post" path).
-  if (request.nextUrl.searchParams.get("mode") === "image") {
-    return handleImageSearch(request);
-  }
-  if (request.nextUrl.searchParams.get("mode") === "ai") {
-    return handleAiSearch(request);
+  const mode = request.nextUrl.searchParams.get("mode");
+  if (mode === "image" || mode === "ai") {
+    const limited = await limitAiSearch(request);
+    if (limited) return limited;
+    return mode === "image" ? handleImageSearch(request) : handleAiSearch(request);
   }
 
   const auth = await requireUserForApi();
@@ -243,6 +257,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     if (!parsed.success) {
       return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
     }
+    const limited = await enforceRateLimit("postCreate", { userId: auth.user.id });
+    if (limited) return limited;
     const result = await createLostPost(auth.user, parsed.data);
     return postMutationResultToResponse(result, 201);
   }
@@ -251,6 +267,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   if (!parsed.success) {
     return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
   }
+  const limited = await enforceRateLimit("postCreate", { userId: auth.user.id });
+  if (limited) return limited;
   const result = await createFoundPost(auth.user, parsed.data);
   return postMutationResultToResponse(result, 201);
 });

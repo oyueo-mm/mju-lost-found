@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# Any other env-style file anywhere (e.g. `vercel env pull foo.env` output).
+*.env
+*.env.*
 !.env.example
 
 # vercel

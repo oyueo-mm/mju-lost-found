@@ -57,8 +57,13 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
 // chat code path still touched prisma.match, it would throw "Cannot read
 // properties of undefined", proving the Match domain is genuinely gone
 // from this service.
+// Admin chat access Phase: report lookups + the access audit log.
+const reportTable = { findUnique: vi.fn() };
+const adminAccessLog = { create: vi.fn() };
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
+    report: reportTable,
+    adminAccessLog,
     chatRoom,
     message,
     messageReaction,
@@ -214,6 +219,16 @@ function orgRoom(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 const sender = { id: lostOwner, nickname: "닉네임", isSuspended: false, suspendedUntil: null } as unknown as User;
+
+// Opens a room the way the admin page does: through report 5, a MESSAGE
+// report whose reported message is in that room.
+const adminUser = { id: 77, isAdmin: true } as unknown as User;
+async function openAsAdmin(roomId: number) {
+  reportTable.findUnique.mockResolvedValueOnce({ targetType: "MESSAGE", targetId: 4242 });
+  message.findUnique.mockResolvedValueOnce({ chatRoomId: roomId });
+  const result = await getChatRoomForAdmin(roomId, 5, adminUser);
+  return result.kind === "ok" ? result.data : null;
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -789,13 +804,55 @@ describe("getChatRoomForUser", () => {
   });
 });
 
-// Phase 11-1: admin-only read view, deliberately not gated by
-// participantIds (unlike getChatRoomForUser above, which this test suite
-// never touches) -- a non-participant admin can read any room.
+// Phase 11-1: admin-only read view. Admin chat access Phase: only through a
+// MESSAGE report whose reported message is in that room, and every view is
+// written to AdminAccessLog.
 describe("getChatRoomForAdmin", () => {
-  it("returns null for a nonexistent room", async () => {
+  it("returns not_found for a nonexistent room", async () => {
+    reportTable.findUnique.mockResolvedValueOnce({ targetType: "MESSAGE", targetId: 4242 });
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 999 });
     chatRoom.findUnique.mockResolvedValueOnce(null);
-    expect(await getChatRoomForAdmin(999)).toBeNull();
+    expect(await getChatRoomForAdmin(999, 5, adminUser)).toEqual({ kind: "not_found" });
+  });
+
+  it("logs the admin, room and report before returning the room", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findMany.mockResolvedValueOnce([]);
+
+    expect(await openAsAdmin(100)).not.toBeNull();
+    expect(adminAccessLog.create).toHaveBeenCalledWith({
+      data: { adminUserId: 77, resource: "chat_room", chatRoomId: 100, reportId: 5 },
+    });
+  });
+
+  it("refuses a report whose reported message is in a different room (room-id swap)", async () => {
+    reportTable.findUnique.mockResolvedValueOnce({ targetType: "MESSAGE", targetId: 4242 });
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 555 });
+
+    expect(await getChatRoomForAdmin(100, 5, adminUser)).toEqual({ kind: "forbidden" });
+    expect(chatRoom.findUnique).not.toHaveBeenCalled();
+    expect(adminAccessLog.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a report that isn't about a message (post / comment / user report ids)", async () => {
+    for (const targetType of ["POST", "COMMENT", "USER"]) {
+      reportTable.findUnique.mockResolvedValueOnce({ targetType, targetId: 100 });
+      expect(await getChatRoomForAdmin(100, 5, adminUser)).toEqual({ kind: "forbidden" });
+    }
+    expect(adminAccessLog.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a report id that doesn't exist, and a reported message that no longer exists", async () => {
+    reportTable.findUnique.mockResolvedValueOnce(null);
+    expect(await getChatRoomForAdmin(100, 5, adminUser)).toEqual({ kind: "forbidden" });
+    reportTable.findUnique.mockResolvedValueOnce({ targetType: "MESSAGE", targetId: 4242 });
+    message.findUnique.mockResolvedValueOnce(null);
+    expect(await getChatRoomForAdmin(100, 5, adminUser)).toEqual({ kind: "forbidden" });
+  });
+
+  it("refuses a non-admin even with a valid report", async () => {
+    expect(await getChatRoomForAdmin(100, 5, sender)).toEqual({ kind: "forbidden" });
+    expect(reportTable.findUnique).not.toHaveBeenCalled();
   });
 
   it("returns both participants and every message, for a non-participant admin", async () => {
@@ -816,7 +873,7 @@ describe("getChatRoomForAdmin", () => {
       },
     ]);
 
-    const room = await getChatRoomForAdmin(100);
+    const room = await openAsAdmin(100);
 
     expect(room).not.toBeNull();
     expect(room?.post).toEqual({ id: 1, type: "lost", title: "지갑 분실", deleted: false });
@@ -858,7 +915,7 @@ describe("getChatRoomForAdmin", () => {
       },
     ]);
 
-    const room = await getChatRoomForAdmin(100);
+    const room = await openAsAdmin(100);
 
     expect(room?.messages[0]).toMatchObject({
       content: "삭제된 메시지입니다.",
@@ -2341,7 +2398,7 @@ describe("rooms whose post was deleted", () => {
     userTable.findUnique.mockResolvedValue({ id: lostOwner, nickname: "분실자", publicId: "p" });
     message.findMany.mockResolvedValueOnce([]);
 
-    const room = await getChatRoomForAdmin(200);
+    const room = await openAsAdmin(200);
 
     expect(room?.post).toEqual({ id: null, type: "lost", title: "검은 지갑", deleted: true });
   });
@@ -2415,11 +2472,26 @@ describe("getChatImageForViewer", () => {
     expect(await getChatImageForViewer(404, 7, user(lostOwner))).toEqual({ kind: "not_found" });
   });
 
-  it("lets an admin through, the same as the existing admin chat view (server-checked isAdmin)", async () => {
+  it("lets a non-participant admin through only with a message report for this room, and logs it", async () => {
     chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
-    message.findUnique.mockResolvedValueOnce(imageMessage());
+    reportTable.findUnique.mockResolvedValueOnce({ targetType: "MESSAGE", targetId: 4242 });
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 100 }).mockResolvedValueOnce(imageMessage());
 
-    expect(await getChatImageForViewer(100, 7, user(stranger, true))).toEqual({ kind: "ok", path: "chat/100/a.webp" });
+    expect(await getChatImageForViewer(100, 7, user(stranger, true), 5)).toEqual({ kind: "ok", path: "chat/100/a.webp" });
+    expect(adminAccessLog.create).toHaveBeenCalledWith({
+      data: { adminUserId: stranger, resource: "chat_image", chatRoomId: 100, messageId: 7, reportId: 5 },
+    });
+  });
+
+  it("refuses a non-participant admin without a report, or with another room's report", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    expect(await getChatImageForViewer(100, 7, user(stranger, true))).toEqual({ kind: "forbidden" });
+
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    reportTable.findUnique.mockResolvedValueOnce({ targetType: "MESSAGE", targetId: 4242 });
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 555 });
+    expect(await getChatImageForViewer(100, 7, user(stranger, true), 5)).toEqual({ kind: "forbidden" });
+    expect(adminAccessLog.create).not.toHaveBeenCalled();
   });
 
   it("organization inquiry room: the inquirer and current managers may see it, a plain member may not", async () => {

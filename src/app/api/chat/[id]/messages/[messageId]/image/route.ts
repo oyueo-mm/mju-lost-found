@@ -12,12 +12,13 @@ const NO_STORE = "private, no-store, max-age=0";
 // GET /api/chat/[id]/messages/[messageId]/image -- the only way a chat
 // image is ever served. Chat images live in the private chat-images
 // bucket; this checks the signed-in viewer against the room
-// (getChatImageForViewer: participant or admin) and only then redirects to
+// (getChatImageForViewer: participant, or an admin with a MESSAGE report
+// for this room via ?report=) and only then redirects to
 // a short-lived signed URL. 401 without a session, 403 for a non-
 // participant, 404 for a message that isn't in this room, has no image, or
 // was hidden/deleted.
 export const GET = withErrorHandling(
-  async (_request: NextRequest, { params }: { params: Promise<{ id: string; messageId: string }> }) => {
+  async (request: NextRequest, { params }: { params: Promise<{ id: string; messageId: string }> }) => {
     const auth = await requireUserForApi();
     if ("response" in auth) {
       auth.response.headers.set("Cache-Control", NO_STORE);
@@ -31,7 +32,12 @@ export const GET = withErrorHandling(
       return withNoStore(jsonError(400, "id가 올바르지 않습니다."));
     }
 
-    const access = await getChatImageForViewer(chatRoomId, messageId, auth.user);
+    // ?report= is only used for an admin who isn't a participant: the
+    // image is then served (and logged) only for a MESSAGE report in this
+    // room.
+    const reportParam = request.nextUrl.searchParams.get("report");
+    const reportId = reportParam !== null && /^\d+$/.test(reportParam) ? Number(reportParam) : undefined;
+    const access = await getChatImageForViewer(chatRoomId, messageId, auth.user, reportId);
     if (access.kind === "forbidden") return withNoStore(jsonError(403, "이 이미지를 볼 권한이 없습니다."));
     if (access.kind === "not_found") return withNoStore(jsonError(404, "이미지를 찾을 수 없습니다."));
 

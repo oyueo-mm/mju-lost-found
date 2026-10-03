@@ -6,6 +6,7 @@ import { getChatRoomForUser } from "@/lib/chat/service";
 import { isAllowedImageContentType } from "@/lib/images/config";
 import { buildChatImagePathname } from "@/lib/images/pathname";
 import { createChatImageUploadUrl } from "@/lib/images/chatStorage";
+import { enforceRateLimit } from "@/lib/rateLimit";
 
 const requestSchema = z.object({ contentType: z.string() });
 
@@ -49,6 +50,9 @@ export const POST = withErrorHandling(
     if (room.kind !== "ok") {
       return jsonError(403, "이 채팅방에 이미지를 업로드할 권한이 없습니다.");
     }
+
+    const limited = await enforceRateLimit("imageUpload", { userId: auth.user.id });
+    if (limited) return limited;
 
     const pathname = buildChatImagePathname(chatRoomId, contentType);
 

@@ -29,18 +29,34 @@ export default async function AdminChatRoomPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ report?: string }>;
 }) {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
   const { id: idParam } = await params;
   const id = Number(idParam);
   if (!Number.isInteger(id)) notFound();
 
   const { report: reportIdParam } = await searchParams;
-  const reportId = reportIdParam ? Number(reportIdParam) : null;
-  const backHref = Number.isInteger(reportId) && reportId !== null ? `/admin/reports/${reportId}` : "/admin/reports";
+  const reportId = reportIdParam && /^\d+$/.test(reportIdParam) ? Number(reportIdParam) : null;
+  const backHref = reportId !== null ? `/admin/reports/${reportId}` : "/admin/reports";
 
-  const room = await getChatRoomForAdmin(id);
-  if (!room) notFound();
+  // Admin chat access Phase: only through a message report for this very
+  // room (checked and logged in getChatRoomForAdmin) -- no report, another
+  // report, or a room the report doesn't point at shows nothing.
+  const result = reportId !== null ? await getChatRoomForAdmin(id, reportId, admin) : ({ kind: "forbidden" } as const);
+  if (result.kind === "not_found") notFound();
+  if (result.kind === "forbidden") {
+    return (
+      <div className="flex flex-col gap-3">
+        <Link href={backHref} className="text-sm text-muted-foreground hover:underline">
+          ← 신고 목록으로 돌아가기
+        </Link>
+        <div className="rounded-card border border-border bg-card p-6 text-sm text-muted-foreground">
+          채팅방은 해당 채팅방의 메시지를 대상으로 한 신고에서만 열람할 수 있습니다.
+        </div>
+      </div>
+    );
+  }
+  const room = result.data;
 
   return (
     <div className="flex flex-col gap-5">

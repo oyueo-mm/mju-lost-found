@@ -13,6 +13,10 @@ vi.mock("@/lib/report/http", async () => {
   return { ...response, ...reportResponse, requireUserForApi };
 });
 vi.mock("@/lib/report/service", () => ({ createReport, listReportsForUser }));
+// Rate limiting is tested in src/lib/rateLimit; here only that the route
+// stops with its 429 before creating anything.
+const enforceRateLimit = vi.fn();
+vi.mock("@/lib/rateLimit", () => ({ enforceRateLimit }));
 
 const { GET, POST } = await import("./route");
 
@@ -20,6 +24,7 @@ const sessionUser = { id: 1, nickname: "닉네임" };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  enforceRateLimit.mockResolvedValue(null);
 });
 
 describe("GET /api/reports", () => {
@@ -224,5 +229,24 @@ describe("POST /api/reports", () => {
       sessionUser,
       expect.objectContaining({ targetType: "post", targetId: 5, reason: "기타" }),
     );
+  });
+});
+
+describe("POST /api/reports rate limit", () => {
+  it("returns 429 and creates nothing once the user is over the report limit", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    const { NextResponse } = await import("next/server");
+    enforceRateLimit.mockResolvedValueOnce(NextResponse.json({ error: "요청이 너무 많습니다." }, { status: 429 }));
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/reports", {
+        method: "POST",
+        body: JSON.stringify({ targetType: "post", targetId: 1, reason: "욕설/비방" }),
+      }),
+    );
+
+    expect(res.status).toBe(429);
+    expect(enforceRateLimit).toHaveBeenCalledWith("reportCreate", { userId: 1 });
+    expect(createReport).not.toHaveBeenCalled();
   });
 });

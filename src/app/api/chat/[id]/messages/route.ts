@@ -18,6 +18,7 @@ import {
   sendMessage,
   toggleMessageReaction,
 } from "@/lib/chat/service";
+import { enforceRateLimit } from "@/lib/rateLimit";
 
 // GET /api/chat/[id]/messages?before= -- oldest-first page of messages,
 // only for a participant (listMessages re-verifies). Mirrors the legacy
@@ -93,6 +94,9 @@ export const POST = withErrorHandling(
     if (!parsed.success) {
       return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
     }
+
+    const limited = await enforceRateLimit("chatMessage", { userId: auth.user.id });
+    if (limited) return limited;
 
     const result = await sendMessage(
       id,

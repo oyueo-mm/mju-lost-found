@@ -9,6 +9,7 @@ import { isAllowedImageContentType } from "@/lib/images/config";
 import { buildImagePathname } from "@/lib/images/pathname";
 import { createSignedUploadUrl } from "@/lib/images/supabaseAdmin";
 import { postTypeSchema } from "@/lib/posts/schema";
+import { enforceRateLimit } from "@/lib/rateLimit";
 
 const requestSchema = z.object({
   postType: postTypeSchema,
@@ -65,6 +66,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   if (!post || post.author.id !== user.id) {
     return jsonError(403, "본인 게시물에만 이미지를 업로드할 수 있습니다.");
   }
+
+  const limited = await enforceRateLimit("imageUpload", { userId: user.id });
+  if (limited) return limited;
 
   const pathname = buildImagePathname(postType, postId, contentType);
 

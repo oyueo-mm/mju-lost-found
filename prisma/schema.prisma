@@ -440,6 +440,7 @@ model User {
   // 하나뿐이라(userId) 다른 관계들처럼 별도 관계명이 필요 없다.
   keywordAlerts                KeywordAlert[]
   postCategoryReviews          PostCategoryReview[]
+  adminAccessLogs              AdminAccessLog[]
 
   @@map("User")
 }
@@ -951,6 +952,7 @@ model Report {
   adminNote         String?          @map("admin_note") @db.Text
 
   moderationAction ModerationAction?
+  adminAccessLogs  AdminAccessLog[]
 
   @@unique([reporterUserId, targetType, targetId])
   @@index([reporterUserId], map: "idx_report_reporter_user_id")
@@ -1589,4 +1591,46 @@ model PostCategoryReview {
 
   @@index([status, reviewReason], map: "idx_postcategoryreview_status_reason")
   @@map("PostCategoryReview")
+}
+
+// ---------- AdminAccessLog ----------
+
+// One row per time an admin opens a user's chat for a report: the admin
+// chat view (resource "chat_room") or a chat image through the image
+// endpoint (resource "chat_image", with messageId). An admin may only open
+// a chat room through a MESSAGE report whose reported message is in that
+// room (chat/service.ts::isReportForChatRoom); every allowed view is
+// written here before anything is shown. Never updated or deleted by the
+// app.
+model AdminAccessLog {
+  id          Int      @id @default(autoincrement())
+  adminUserId Int      @map("admin_user_id")
+  admin       User     @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
+  resource    String   @db.Text
+  chatRoomId  Int      @map("chat_room_id")
+  messageId   Int?     @map("message_id")
+  reportId    Int      @map("report_id")
+  report      Report   @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  accessedAt  DateTime @default(now()) @map("accessed_at")
+
+  @@index([adminUserId, accessedAt], map: "idx_adminaccesslog_admin_accessed")
+  @@index([chatRoomId], map: "idx_adminaccesslog_chat_room")
+  @@map("AdminAccessLog")
+}
+
+// ---------- RateLimitCounter ----------
+
+// Fixed-window request counters shared by every server instance (in the
+// DB, not process memory): one row per (key, window start). key is
+// "{action}:{u:userId | ip:hash}:{windowSeconds}" -- an anonymous caller's
+// IP is stored only as a salted hash. See src/lib/rateLimit. Rows older
+// than two days are pruned opportunistically by the limiter itself.
+model RateLimitCounter {
+  key         String   @db.Text
+  windowStart DateTime @map("window_start")
+  count       Int      @default(0)
+
+  @@id([key, windowStart])
+  @@index([windowStart], map: "idx_ratelimitcounter_window_start")
+  @@map("RateLimitCounter")
 }

@@ -5,6 +5,13 @@
 .env
 .env.*
 !.env.example
+# Any other env-style file, at any depth -- e.g. a `vercel env pull foo.env`
+# that lands in the repo by mistake (pv-pull.env once did, briefly).
+**/*.env
+**/*.env.*
+**/.env
+**/.env.*
+!.env.example
 
 # Local Claude Code settings -- not part of the app.
 .claude

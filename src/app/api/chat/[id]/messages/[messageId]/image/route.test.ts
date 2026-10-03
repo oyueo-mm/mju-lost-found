@@ -17,8 +17,8 @@ vi.mock("@/lib/images/chatStorage", () => ({ createChatImageSignedUrl }));
 const { GET } = await import("./route");
 
 const viewer = { id: 1, nickname: "닉네임", isAdmin: false };
-const call = (id: string, messageId: string) =>
-  GET(new NextRequest(`http://localhost/api/chat/${id}/messages/${messageId}/image`), {
+const call = (id: string, messageId: string, query = "") =>
+  GET(new NextRequest(`http://localhost/api/chat/${id}/messages/${messageId}/image${query}`), {
     params: Promise.resolve({ id, messageId }),
   });
 
@@ -58,6 +58,17 @@ describe("GET /api/chat/[id]/messages/[messageId]/image", () => {
     expect(createChatImageSignedUrl).not.toHaveBeenCalled();
   });
 
+  it("passes ?report= through (used only for a non-participant admin), ignoring a malformed value", async () => {
+    requireUserForApi.mockResolvedValue({ user: viewer });
+    getChatImageForViewer.mockResolvedValue({ kind: "forbidden" });
+
+    await call("1", "2", "?report=5");
+    await call("1", "2", "?report=5abc");
+
+    expect(getChatImageForViewer).toHaveBeenNthCalledWith(1, 1, 2, viewer, 5);
+    expect(getChatImageForViewer).toHaveBeenNthCalledWith(2, 1, 2, viewer, undefined);
+  });
+
   it("400 for non-numeric ids", async () => {
     requireUserForApi.mockResolvedValueOnce({ user: viewer });
 
@@ -74,7 +85,7 @@ describe("GET /api/chat/[id]/messages/[messageId]/image", () => {
 
     const res = await call("1", "2");
 
-    expect(getChatImageForViewer).toHaveBeenCalledWith(1, 2, viewer);
+    expect(getChatImageForViewer).toHaveBeenCalledWith(1, 2, viewer, undefined);
     expect(createChatImageSignedUrl).toHaveBeenCalledWith("chat/1/a.webp");
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("https://storage.example/object/sign/chat-images/chat/1/a.webp?token=t");

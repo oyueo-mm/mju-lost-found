@@ -9,6 +9,7 @@ import {
 } from "@/lib/report/http";
 import { createReportSchema } from "@/lib/report/schema";
 import { createReport, listReportsForUser } from "@/lib/report/service";
+import { enforceRateLimit } from "@/lib/rateLimit";
 
 // GET /api/reports -- the current user's own filed reports only. Mirrors
 // legacy list_reports_by_reporter(): always scoped to the caller, no
@@ -34,6 +35,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   if (!parsed.success) {
     return jsonError(400, parsed.error.issues[0]?.message ?? "요청이 올바르지 않습니다.");
   }
+
+  const limited = await enforceRateLimit("reportCreate", { userId: auth.user.id });
+  if (limited) return limited;
 
   const result = await createReport(auth.user, parsed.data);
   return createReportResultToResponse(result);
