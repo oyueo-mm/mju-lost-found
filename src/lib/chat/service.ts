@@ -6,7 +6,7 @@ import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { NotificationType, OrganizationRole, OrganizationStatus, Prisma, type User } from "@/generated/prisma/client";
 import type { PostType } from "@/lib/posts/schema";
 import { parseChatImagePathname } from "@/lib/images/pathname";
-import { deleteObjectSafely, publicUrlFor } from "@/lib/images/supabaseAdmin";
+import { chatImageExists, deleteChatImageSafely } from "@/lib/images/chatStorage";
 import { getMembership } from "@/lib/organization/authz";
 import { fanOutToOrganizationManagers } from "@/lib/notification/adminFanout";
 import { broadcastChatEvent } from "./realtimeAdmin";
@@ -196,7 +196,7 @@ function maskedContent(raw: { content: string; hiddenAt: Date | null; hiddenByUs
 const MESSAGE_REPLY_SELECT = {
   id: true,
   content: true,
-  imageUrl: true,
+  imagePath: true,
   hiddenAt: true,
   // Phase P-6: needed by maskedContent() to tell a self-delete apart from
   // an admin hide, same as the top-level message list below.
@@ -208,7 +208,7 @@ const MESSAGE_REPLY_SELECT = {
 type RawReplyTarget = {
   id: number;
   content: string;
-  imageUrl: string | null;
+  imagePath: string | null;
   hiddenAt: Date | null;
   hiddenByUserId: number | null;
   senderUserId: number;
@@ -221,8 +221,22 @@ function toReplyPreview(raw: RawReplyTarget | null): MessageReplyPreview | null 
     id: raw.id,
     senderNickname: raw.sender.nickname,
     content: maskedContent(raw),
-    hasImage: raw.hiddenAt ? false : Boolean(raw.imageUrl),
+    hasImage: raw.hiddenAt ? false : Boolean(raw.imagePath),
   };
+}
+
+// Chat image Phase: the only image URL a client ever gets for a chat
+// message. It points at our own endpoint, which re-checks the viewer's
+// access and redirects to a short-lived signed URL for the private
+// chat-images object (see getChatImageForViewer). The Storage path itself
+// (Message.imagePath) never leaves the server. A hidden or deleted
+// message has no image URL at all.
+export function chatImageUrlFor(chatRoomId: number, messageId: number): string {
+  return `/api/chat/${chatRoomId}/messages/${messageId}/image`;
+}
+
+function messageImageUrl(chatRoomId: number, m: { id: number; imagePath: string | null; hiddenAt: Date | null }): string | null {
+  return !m.hiddenAt && m.imagePath ? chatImageUrlFor(chatRoomId, m.id) : null;
 }
 
 // Phase D-4: shared by listMessages (grouping many messages' worth of
@@ -711,7 +725,7 @@ export async function getChatRoomForAdmin(chatRoomId: number): Promise<AdminChat
       senderUserId: m.senderUserId,
       senderNickname: m.sender.nickname,
       content: maskedContent(m),
-      imageUrl: m.hiddenAt ? null : m.imageUrl,
+      imageUrl: messageImageUrl(chatRoomId, m),
       isDeleted: Boolean(m.hiddenAt),
       createdAt: m.createdAt,
     })),
@@ -894,7 +908,7 @@ export async function listMessages(
     // altered, only masked for display" rule as `content` above (an admin
     // hiding a message shouldn't leave its photo visible while its text
     // is replaced).
-    imageUrl: m.hiddenAt ? null : m.imageUrl,
+    imageUrl: messageImageUrl(chatRoomId, m),
     createdAt: m.createdAt,
     // A hidden/deleted message never shows an "edited" mark -- its real
     // content is masked either way, so "was it edited before being
@@ -1044,11 +1058,16 @@ export async function sendMessage(
 
   const trimmed = content.trim();
 
-  let imageUrl: string | null = null;
+  // Chat image Phase: what's stored is the object path itself, in the
+  // private chat-images bucket. It must name this room and the object must
+  // really have been uploaded; Message.imagePath is unique, so the same
+  // object can't be attached to a second message either (P2002 below).
+  let storedImagePath: string | null = null;
   if (imagePath) {
     const parsed = parseChatImagePathname(imagePath);
     if (!parsed || parsed.chatRoomId !== chatRoomId) return { kind: "invalid_image" };
-    imageUrl = publicUrlFor(imagePath);
+    if (!(await chatImageExists(imagePath))) return { kind: "invalid_image" };
+    storedImagePath = imagePath;
   }
 
   // An image-only message stores "" for content (the column stays
@@ -1056,7 +1075,7 @@ export async function sendMessage(
   // "nothing at all" is only rejected when there's no image either,
   // matching the API schema's own .refine() (defense-in-depth; that
   // schema already rejects this shape before it reaches here).
-  if (!trimmed && !imageUrl) return { kind: "invalid_content" };
+  if (!trimmed && !storedImagePath) return { kind: "invalid_content" };
 
   // Phase D-3: resolved once, up front (same pattern as
   // comment/service.ts's own parent-comment check) -- re-checked against
@@ -1096,33 +1115,43 @@ export async function sendMessage(
     notifyUserId = otherUserId !== sender.id ? otherUserId : null;
   }
 
-  const message = await prisma.$transaction(async (tx) => {
-    const created = await tx.message.create({
-      data: {
-        chatRoomId,
-        senderUserId: sender.id,
-        content: trimmed,
-        imageUrl,
-        replyToMessageId: replyTarget?.id ?? null,
-      },
-      include: { sender: { select: { nickname: true } } },
-    });
-
-    if (notifyUserId !== null) {
-      await notifyUser(tx, {
+  let message;
+  try {
+    message = await prisma.$transaction(async (tx) => {
+      const created = await tx.message.create({
         data: {
-          userId: notifyUserId,
-          type: NotificationType.MESSAGE,
-          title: "새 메시지가 도착했습니다",
-          content: `${sender.nickname ?? "상대방"}님이 메시지를 보냈습니다.`,
-          relatedType: "message",
-          relatedId: created.id,
+          chatRoomId,
+          senderUserId: sender.id,
+          content: trimmed,
+          imagePath: storedImagePath,
+          replyToMessageId: replyTarget?.id ?? null,
         },
+        include: { sender: { select: { nickname: true } } },
       });
-    }
 
-    return created;
-  });
+      if (notifyUserId !== null) {
+        await notifyUser(tx, {
+          data: {
+            userId: notifyUserId,
+            type: NotificationType.MESSAGE,
+            title: "새 메시지가 도착했습니다",
+            content: `${sender.nickname ?? "상대방"}님이 메시지를 보냈습니다.`,
+            relatedType: "message",
+            relatedId: created.id,
+          },
+        });
+      }
+
+      return created;
+    });
+  } catch (error) {
+    // Message.imagePath is unique: this object already backs another
+    // message, so it can't be attached again.
+    if (storedImagePath && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { kind: "invalid_image" };
+    }
+    throw error;
+  }
 
   // Phase N: best-effort, after the transaction already committed -- see
   // realtimeAdmin.ts's own comment. The other participant's (and, subject
@@ -1140,7 +1169,7 @@ export async function sendMessage(
       senderUserId: message.senderUserId,
       senderNickname: message.sender.nickname,
       content: message.content,
-      imageUrl: message.imageUrl,
+      imageUrl: messageImageUrl(chatRoomId, message),
       createdAt: message.createdAt,
       editedAt: null, // freshly created -- never edited yet
       isDeleted: false,
@@ -1269,7 +1298,7 @@ export async function editMessage(
       senderUserId: updated.senderUserId,
       senderNickname: updated.sender.nickname,
       content: updated.content,
-      imageUrl: updated.imageUrl,
+      imageUrl: messageImageUrl(chatRoomId, updated),
       createdAt: updated.createdAt,
       editedAt: updated.editedAt,
       isDeleted: false, // editMessage already rejects editing a hidden/deleted message above
@@ -1308,7 +1337,7 @@ export async function deleteMessage(
 
   const existing = await prisma.message.findUnique({
     where: { id: messageId },
-    select: { chatRoomId: true, senderUserId: true, hiddenAt: true, imageUrl: true },
+    select: { chatRoomId: true, senderUserId: true, hiddenAt: true, imagePath: true },
   });
   if (!existing || existing.chatRoomId !== chatRoomId) return { kind: "invalid_message" };
   if (existing.senderUserId !== requester.id && !requester.isAdmin) {
@@ -1332,28 +1361,61 @@ export async function deleteMessage(
     // evidence for a later review, the same reason Report/ModerationAction
     // rows themselves are never purged (see Phase 10A's retention policy).
     const isSelfDelete = existing.senderUserId === requester.id;
-    const imageToDelete = isSelfDelete ? existing.imageUrl : null;
+    const imageToDelete = isSelfDelete ? existing.imagePath : null;
 
-    // DB write first, Storage cleanup after -- same order/reasoning as
-    // posts/service.ts's deleteLostPost: the message is already hidden in
-    // the DB either way, so a Storage failure here is only logged (see
-    // deleteObjectSafely's own try/catch), never surfaced as a failed
-    // delete or left inconsistent with what's displayed (imageUrl: null
-    // and hiddenAt together are what MessageDTO/hasImage already key off).
+    // DB write first, Storage cleanup after the response (after()) -- the
+    // message is already hidden and its imagePath cleared in the DB either
+    // way, so a Storage failure is only logged (deleteChatImageSafely never
+    // rejects) and the leftover object shows up in
+    // scripts/reportChatImageOrphans.ts. Only this message's own object
+    // path is ever removed (imagePath is unique per message).
     await prisma.message.update({
       where: { id: messageId },
       data: {
         hiddenAt: new Date(),
         hiddenByUserId: requester.id,
         hiddenReason: null,
-        ...(imageToDelete ? { imageUrl: null } : {}),
+        ...(imageToDelete ? { imagePath: null } : {}),
       },
     });
-    if (imageToDelete) await deleteObjectSafely(imageToDelete);
+    if (imageToDelete) after(() => deleteChatImageSafely(imageToDelete));
     after(() => broadcastChatEvent(chatRoomId, { event: "message", payload: { messageId } }));
   }
 
   return { kind: "ok", data: { messageId } };
+}
+
+export type ChatImageAccessResult = { kind: "ok"; path: string } | { kind: "not_found" } | { kind: "forbidden" };
+
+// Chat image Phase: who may see a chat message's image -- exactly who may
+// read that room's messages: its participants (for an organization
+// inquiry room, the inquirer plus the organization's current
+// LEADER/ADMINs, via participantIdsOf), or an admin, the same rule
+// deleteMessage() and the admin room view already apply. Checked from the
+// DB on every request. The message must belong to *this* room (so a
+// participant of room A can't reach room B's image by pairing A's id with
+// B's message id), must not be hidden/deleted (those show no image), and
+// its stored path must itself name this room.
+export async function getChatImageForViewer(
+  chatRoomId: number,
+  messageId: number,
+  viewer: User,
+): Promise<ChatImageAccessResult> {
+  const room = await findChatRoomRow(chatRoomId);
+  if (!room) return { kind: "not_found" };
+  const participantIds = await participantIdsOf(room);
+  if (!participantIds) return { kind: "not_found" };
+  if (!participantIds.has(viewer.id) && !viewer.isAdmin) return { kind: "forbidden" };
+
+  const message = await prisma.message.findUnique({
+    where: { id: messageId },
+    select: { chatRoomId: true, imagePath: true, hiddenAt: true },
+  });
+  if (!message || message.chatRoomId !== chatRoomId || message.hiddenAt || !message.imagePath) {
+    return { kind: "not_found" };
+  }
+  if (parseChatImagePathname(message.imagePath)?.chatRoomId !== chatRoomId) return { kind: "not_found" };
+  return { kind: "ok", path: message.imagePath };
 }
 
 // Phase 11: resolves a "message"-type Notification's relatedId (a Message

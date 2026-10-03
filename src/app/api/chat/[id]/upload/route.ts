@@ -5,7 +5,7 @@ import { jsonError, jsonOk, requireUserForApi, withErrorHandling } from "@/lib/c
 import { getChatRoomForUser } from "@/lib/chat/service";
 import { isAllowedImageContentType } from "@/lib/images/config";
 import { buildChatImagePathname } from "@/lib/images/pathname";
-import { createSignedUploadUrl } from "@/lib/images/supabaseAdmin";
+import { createChatImageUploadUrl } from "@/lib/images/chatStorage";
 
 const requestSchema = z.object({ contentType: z.string() });
 
@@ -53,7 +53,8 @@ export const POST = withErrorHandling(
     const pathname = buildChatImagePathname(chatRoomId, contentType);
 
     try {
-      const { path, token } = await createSignedUploadUrl(pathname);
+      // Private chat-images bucket -- never the public post-images one.
+      const { path, token } = await createChatImageUploadUrl(pathname);
       return jsonOk({ path, token });
     } catch (error) {
       console.error("Failed to create signed upload URL for chat image:", error);

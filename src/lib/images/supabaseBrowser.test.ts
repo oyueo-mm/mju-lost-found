@@ -6,7 +6,7 @@ const createClient = vi.fn(() => ({ storage: { from } }));
 
 vi.mock("@supabase/supabase-js", () => ({ createClient }));
 
-const { uploadToSignedUrl: uploadFn } = await import("./supabaseBrowser");
+const { uploadToSignedUrl: uploadFn, uploadChatImageToSignedUrl } = await import("./supabaseBrowser");
 
 function makeFile(): File {
   return new File([new Uint8Array(4)], "test.jpg", { type: "image/jpeg" });
@@ -55,5 +55,18 @@ describe("uploadToSignedUrl", () => {
       blob,
       expect.objectContaining({ contentType: "image/webp" }),
     );
+  });
+});
+
+describe("uploadChatImageToSignedUrl", () => {
+  it("uploads to the private chat-images bucket with a cache lifetime no longer than the signed URLs", async () => {
+    uploadToSignedUrl.mockResolvedValueOnce({ data: { path: "chat/1/x.webp" }, error: null });
+    const blob = new Blob([new Uint8Array(4)], { type: "image/webp" });
+
+    await uploadChatImageToSignedUrl("chat/1/x.webp", "tok", blob);
+
+    expect(from).toHaveBeenCalledWith("chat-images");
+    expect(from).not.toHaveBeenCalledWith("post-images");
+    expect(uploadToSignedUrl).toHaveBeenCalledWith("chat/1/x.webp", "tok", blob, { contentType: "image/webp", cacheControl: "60" });
   });
 });

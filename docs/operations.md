@@ -100,6 +100,27 @@ Preview에서 실패하면 Production에 배포하지 않는다. 문제가 생�
    `Failed to broadcast chat realtime event` 메시지를 확인한다(서버는 `after()`로 응답 후에도 전송을 마친다).
 6. 로그인 문제: OAuth redirect URI, Vercel의 `GOOGLE_*`/`AUTH_SECRET` 값, 테스트 모드 설정을 확인한다.
 
+## 8-1. Storage bucket
+
+| bucket | 공개 | 용도 | 제한 |
+|---|---|---|---|
+| `post-images` | 공개 | 게시글 이미지(누구나 보는 게시글에 붙는 사진) | 10MB, jpeg/png/webp |
+| `chat-images` | **비공개** | 1:1 채팅·단체 문의 채팅 이미지 | 10MB, jpeg/png/webp |
+
+- `chat-images`는 공개로 바꾸지 않는다. 앱은 공개 URL을 만들지 않고, DB(`Message.image_url` 컬럼, 코드에서는 `imagePath`)에
+  object path(`chat/{roomId}/{uuid}.{ext}`)만 저장한다.
+- 채팅 이미지는 `GET /api/chat/{roomId}/messages/{messageId}/image`로만 제공된다. 서버가 로그인(401)과 채팅방 참여자·관리자 여부(403)를
+  확인한 뒤 60초짜리 signed URL로 redirect한다. 응답은 `Cache-Control: private, no-store`. 업로드할 때 object의 cache 수명도 60초로 둔다.
+- 화면에서는 `next/image`의 `unoptimized`로 표시한다(`/_next/image` 공용 캐시에 남지 않게).
+- **bucket 생성/확인** (새 Supabase 프로젝트를 만들 때도 같은 방법):
+  1. dry run: `npx tsx --env-file=.env.preview.local scripts/ensureChatImagesBucket.ts`
+  2. 생성: 같은 명령에 `--apply` (Production은 `--env-file=.env ... --apply --confirm-production`)
+  - 이미 있으면 설정만 검사한다(비공개, 10MB, 이미지 타입). 다르면 실패로 끝나고 기존 bucket은 바꾸지 않는다.
+- storage RLS 정책은 두지 않는다. 비공개 bucket은 service role(서버)만 접근하고, 업로드는 서버가 발급한 signed upload URL로만 한다.
+- **고아 채팅 이미지 점검** (업로드만 하고 전송하지 않은 파일, Storage 삭제 실패):
+  `npx tsx --env-file=.env scripts/reportChatImageOrphans.ts` — 읽기 전용. 24시간 넘게 어떤 메시지도 참조하지 않는 파일과,
+  메시지가 가리키는데 실제로는 없는 파일을 보고한다. 자동 삭제는 하지 않는다. 지워야 하면 보고서의 path를 확인한 뒤 그 path만 삭제한다.
+
 ## 9. 데이터 삭제 시 주의사항
 
 - Production 데이터 초기화는 2026-10-03 운영 시작 시 1회 수행했다. **이후 Production 데이터 일괄 삭제·초기화는 하지 않는다.**

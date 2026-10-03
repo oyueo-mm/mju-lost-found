@@ -839,14 +839,18 @@ model Message {
   hiddenByUserId   Int?              @map("hidden_by_user_id")
   hiddenBy         User?             @relation("MessageHiddenBy", fields: [hiddenByUserId], references: [id], onDelete: Restrict)
   hiddenReason     String?           @map("hidden_reason") @db.Text
-  // Phase 28-3: same "public Storage URL string, nullable" shape as
-  // LostPost/FoundPost.imageUrl -- a message can carry an image instead
-  // of (or alongside) text; `content` stays a required column (an
-  // image-only message stores "" there, see chat/service.ts::sendMessage),
-  // so this is a purely additive column with zero migration needed for
-  // any existing row (defaults to NULL, meaning "no image", for every
-  // message sent before this phase).
-  imageUrl         String?           @map("image_url") @db.Text
+  // Phase 28-3: a message can carry an image instead of (or alongside)
+  // text; `content` stays a required column (an image-only message
+  // stores "" there, see chat/service.ts::sendMessage). NULL = no image.
+  //
+  // Chat image Phase: this is the object *path* in the private
+  // chat-images bucket (chat/{roomId}/{uuid}.{ext}), never a URL -- the
+  // column keeps its old name (image_url) but the field is imagePath.
+  // Clients only ever see /api/chat/{roomId}/messages/{id}/image, which
+  // checks access and redirects to a short-lived signed URL. Unique, so
+  // one object can never back two messages (deleting one message's image
+  // must never break another's).
+  imagePath        String?           @unique @map("image_url") @db.Text
   // Phase D-3: unlike Comment.parentId (Cascade, capped at one level),
   // replies here have no depth limit -- replying to a reply is normal
   // chat UX (KakaoTalk/Instagram DMs both allow it) -- and use

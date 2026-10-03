@@ -3,7 +3,7 @@ import {
   MAX_IMAGE_SIZE_BYTES,
   type AllowedImageContentType,
 } from "./config";
-import { uploadToSignedUrl } from "./supabaseBrowser";
+import { uploadChatImageToSignedUrl, uploadToSignedUrl } from "./supabaseBrowser";
 import type { PostType } from "@/lib/posts/schema";
 
 export type ImageValidationError = { code: "type" | "size"; message: string };
@@ -157,7 +157,7 @@ export async function uploadChatImage(chatRoomId: number, file: File): Promise<{
   }
   const { data } = (await res.json()) as { data: { path: string; token: string } };
 
-  await uploadToSignedUrl(data.path, data.token, blob);
+  await uploadChatImageToSignedUrl(data.path, data.token, blob);
 
   return { path: data.path };
 }

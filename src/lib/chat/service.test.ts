@@ -99,11 +99,12 @@ vi.mock("@/lib/auth/suspension", () => ({
 // follows) so these tests control exactly what a "valid" vs "wrong room"
 // path looks like without depending on the real regex.
 const parseChatImagePathname = vi.fn();
-const publicUrlFor = vi.fn();
+// Chat image Phase: private chat-images bucket helpers.
+const chatImageExists = vi.fn();
 // Phase 10B: deleteMessage()'s own self-delete image cleanup.
-const deleteObjectSafely = vi.fn();
+const deleteChatImageSafely = vi.fn();
 vi.mock("@/lib/images/pathname", () => ({ parseChatImagePathname }));
-vi.mock("@/lib/images/supabaseAdmin", () => ({ publicUrlFor, deleteObjectSafely }));
+vi.mock("@/lib/images/chatStorage", () => ({ chatImageExists, deleteChatImageSafely }));
 // Phase N: every write path (sendMessage/toggleMessageReaction/
 // markChatRoomRead) fires a best-effort realtime broadcast -- mocked
 // wholesale here (same convention as every other collaborator in this
@@ -131,6 +132,7 @@ const {
   countUnreadMessagesForUser,
   deleteMessage,
   editMessage,
+  getChatImageForViewer,
   getChatRoomForAdmin,
   getChatRoomForUser,
   getChatRoomParticipantIds,
@@ -217,7 +219,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   afterCallbacks = [];
   userTable.findUnique.mockResolvedValue({ id: foundOwner, nickname: "상대닉네임" });
-  publicUrlFor.mockImplementation((path: string) => `https://storage.example/post-images/${path}`);
+  chatImageExists.mockResolvedValue(true);
   // Phase D-4: listMessages() always batches a reaction query for the
   // page it just fetched -- default to "no reactions" so every
   // pre-existing test in this file (written before reactions existed)
@@ -806,7 +808,7 @@ describe("getChatRoomForAdmin", () => {
         id: 1,
         senderUserId: lostOwner,
         content: "안녕하세요",
-        imageUrl: null,
+        imagePath: null,
         hiddenAt: null,
         hiddenByUserId: null,
         createdAt: new Date("2026-01-01T00:00:00Z"),
@@ -848,7 +850,7 @@ describe("getChatRoomForAdmin", () => {
         id: 2,
         senderUserId: lostOwner,
         content: "삭제될 내용",
-        imageUrl: "https://storage.example/post-images/chat/100/photo.jpg",
+        imagePath: "chat/100/photo.jpg",
         hiddenAt: new Date("2026-01-02T00:00:00Z"),
         hiddenByUserId: lostOwner,
         createdAt: new Date("2026-01-01T00:00:00Z"),
@@ -1091,14 +1093,14 @@ describe("listMessages", () => {
   });
 
   // Phase 28-3
-  it("passes an image message's imageUrl through unmasked", async () => {
+  it("serves an image message through the access-checked image endpoint", async () => {
     chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findMany.mockResolvedValueOnce([
       {
         id: 1,
         senderUserId: lostOwner,
         content: "",
-        imageUrl: "https://x/y.jpg",
+        imagePath: "chat/100/y.jpg",
         createdAt: new Date(),
         readAt: null,
         hiddenAt: null,
@@ -1109,7 +1111,8 @@ describe("listMessages", () => {
     const result = await listMessages(100, lostOwner);
 
     expect(result.kind).toBe("ok");
-    if (result.kind === "ok") expect(result.data.items[0].imageUrl).toBe("https://x/y.jpg");
+    // Clients get our access-checked endpoint, never the Storage path.
+    if (result.kind === "ok") expect(result.data.items[0].imageUrl).toBe("/api/chat/100/messages/1/image");
   });
 
   it("masks a hidden message's image too, not just its text", async () => {
@@ -1119,7 +1122,7 @@ describe("listMessages", () => {
         id: 1,
         senderUserId: foundOwner,
         content: "real content",
-        imageUrl: "https://x/y.jpg",
+        imagePath: "chat/100/y.jpg",
         createdAt: new Date(),
         readAt: null,
         hiddenAt: new Date(),
@@ -1148,7 +1151,7 @@ describe("listMessages", () => {
         replyToMessage: {
           id: 1,
           content: "원본 내용",
-          imageUrl: null,
+          imagePath: null,
           hiddenAt: new Date(),
           // Admin-hidden, not self-deleted: hiddenByUserId (an admin, here
           // just any id distinct from the sender) differs from
@@ -1583,7 +1586,7 @@ describe("sendMessage", () => {
         id: 1,
         senderUserId: lostOwner,
         content: "",
-        imageUrl: "https://storage.example/post-images/chat/100/y.jpg",
+        imagePath: "chat/100/y.jpg",
         createdAt: new Date(),
         readAt: null,
         sender: { nickname: "닉네임" },
@@ -1596,12 +1599,13 @@ describe("sendMessage", () => {
         expect.objectContaining({
           data: expect.objectContaining({
             content: "",
-            imageUrl: "https://storage.example/post-images/chat/100/y.jpg",
+            imagePath: "chat/100/y.jpg",
           }),
         }),
       );
       if (result.kind === "ok") {
-        expect(result.data.imageUrl).toBe("https://storage.example/post-images/chat/100/y.jpg");
+        // Stored as the object path; returned as the access-checked endpoint.
+        expect(result.data.imageUrl).toBe("/api/chat/100/messages/1/image");
       }
     });
 
@@ -1612,7 +1616,7 @@ describe("sendMessage", () => {
         id: 1,
         senderUserId: lostOwner,
         content: "이거 본인 물건 맞나요?",
-        imageUrl: "https://storage.example/post-images/chat/100/y.jpg",
+        imagePath: "chat/100/y.jpg",
         createdAt: new Date(),
         readAt: null,
         sender: { nickname: "닉네임" },
@@ -1624,7 +1628,7 @@ describe("sendMessage", () => {
         expect.objectContaining({
           data: expect.objectContaining({
             content: "이거 본인 물건 맞나요?",
-            imageUrl: "https://storage.example/post-images/chat/100/y.jpg",
+            imagePath: "chat/100/y.jpg",
           }),
         }),
       );
@@ -1648,7 +1652,7 @@ describe("sendMessage", () => {
         id: 5,
         chatRoomId: 100,
         content: "원본 메시지",
-        imageUrl: null,
+        imagePath: null,
         hiddenAt: null,
         sender: { nickname: "상대방" },
       });
@@ -1656,7 +1660,7 @@ describe("sendMessage", () => {
         id: 6,
         senderUserId: lostOwner,
         content: "네 맞아요",
-        imageUrl: null,
+        imagePath: null,
         createdAt: new Date(),
         readAt: null,
         sender: { nickname: "닉네임" },
@@ -1698,7 +1702,7 @@ describe("sendMessage", () => {
         id: 5,
         chatRoomId: 999,
         content: "다른 방의 메시지",
-        imageUrl: null,
+        imagePath: null,
         hiddenAt: null,
         sender: { nickname: "상대방" },
       });
@@ -1715,7 +1719,7 @@ describe("sendMessage", () => {
         id: 5,
         chatRoomId: 100,
         content: "실제 원본 내용",
-        imageUrl: "https://x/y.jpg",
+        imagePath: "chat/100/y.jpg",
         hiddenAt: new Date(),
         // Admin-hidden, not self-deleted -- see the identical comment on
         // listMessages' own "masked preview" test above.
@@ -1727,7 +1731,7 @@ describe("sendMessage", () => {
         id: 6,
         senderUserId: lostOwner,
         content: "네 맞아요",
-        imageUrl: null,
+        imagePath: null,
         createdAt: new Date(),
         readAt: null,
         sender: { nickname: "닉네임" },
@@ -2044,7 +2048,7 @@ describe("editMessage", () => {
       id: 1,
       senderUserId: lostOwner,
       content: "수정된 내용",
-      imageUrl: null,
+      imagePath: null,
       createdAt: new Date("2026-01-01"),
       editedAt,
       sender: { nickname: "닉네임" },
@@ -2169,13 +2173,13 @@ describe("deleteMessage", () => {
   // display -- see Phase 10A's retention policy (a self-deleted photo has
   // no remaining reason to stay in Storage, unlike an admin-hidden one).
   describe("self-delete image cleanup (Phase 10B)", () => {
-    it("deletes the Storage object and nulls imageUrl when the sender deletes their own message with an image", async () => {
+    it("deletes the Storage object and nulls imagePath when the sender deletes their own message with an image", async () => {
       chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
       message.findUnique.mockResolvedValueOnce({
         chatRoomId: 100,
         senderUserId: lostOwner,
         hiddenAt: null,
-        imageUrl: "https://storage.example/post-images/chat/100/photo.jpg",
+        imagePath: "chat/100/photo.jpg",
       });
       message.update.mockResolvedValueOnce({});
 
@@ -2188,10 +2192,13 @@ describe("deleteMessage", () => {
           hiddenAt: expect.any(Date),
           hiddenByUserId: lostOwner,
           hiddenReason: null,
-          imageUrl: null,
+          imagePath: null,
         },
       });
-      expect(deleteObjectSafely).toHaveBeenCalledWith("https://storage.example/post-images/chat/100/photo.jpg");
+      // Storage cleanup runs after the response (after()), never inline.
+      expect(deleteChatImageSafely).not.toHaveBeenCalled();
+      await flushAfterCallbacks();
+      expect(deleteChatImageSafely).toHaveBeenCalledWith("chat/100/photo.jpg");
     });
 
     it("does not touch Storage for a self-deleted message with no image", async () => {
@@ -2200,13 +2207,14 @@ describe("deleteMessage", () => {
         chatRoomId: 100,
         senderUserId: lostOwner,
         hiddenAt: null,
-        imageUrl: null,
+        imagePath: null,
       });
       message.update.mockResolvedValueOnce({});
 
       await deleteMessage(100, 1, sender);
 
-      expect(deleteObjectSafely).not.toHaveBeenCalled();
+      await flushAfterCallbacks();
+      expect(deleteChatImageSafely).not.toHaveBeenCalled();
       expect(message.update).toHaveBeenCalledWith({
         where: { id: 1 },
         data: { hiddenAt: expect.any(Date), hiddenByUserId: lostOwner, hiddenReason: null },
@@ -2223,7 +2231,7 @@ describe("deleteMessage", () => {
         chatRoomId: 100,
         senderUserId: foundOwner,
         hiddenAt: null,
-        imageUrl: "https://storage.example/post-images/chat/100/photo.jpg",
+        imagePath: "chat/100/photo.jpg",
       });
       message.update.mockResolvedValueOnce({});
 
@@ -2231,7 +2239,8 @@ describe("deleteMessage", () => {
       const result = await deleteMessage(100, 1, admin);
 
       expect(result).toEqual({ kind: "ok", data: { messageId: 1 } });
-      expect(deleteObjectSafely).not.toHaveBeenCalled();
+      await flushAfterCallbacks();
+      expect(deleteChatImageSafely).not.toHaveBeenCalled();
       expect(message.update).toHaveBeenCalledWith({
         where: { id: 1 },
         data: { hiddenAt: expect.any(Date), hiddenByUserId: 77, hiddenReason: null },
@@ -2297,7 +2306,7 @@ describe("rooms whose post was deleted", () => {
         chatRoomId: 200,
         senderUserId: lostOwner,
         content: "아직 가지고 계신가요?",
-        imageUrl: null,
+        imagePath: null,
         createdAt: new Date(),
         editedAt: null,
         hiddenAt: null,
@@ -2335,5 +2344,141 @@ describe("rooms whose post was deleted", () => {
     const room = await getChatRoomForAdmin(200);
 
     expect(room?.post).toEqual({ id: null, type: "lost", title: "검은 지갑", deleted: true });
+  });
+});
+
+// Chat image Phase: who may fetch a chat image (GET .../image), and what
+// sendMessage accepts as an image. Images live in the private chat-images
+// bucket; Message.imagePath holds the object path.
+describe("getChatImageForViewer", () => {
+  const user = (id: number, isAdmin = false) => ({ id, isAdmin }) as unknown as User;
+  const imageMessage = (overrides: Partial<Record<string, unknown>> = {}) => ({
+    chatRoomId: 100,
+    imagePath: "chat/100/a.webp",
+    hiddenAt: null,
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    parseChatImagePathname.mockImplementation((path: string) => {
+      const m = /^chat\/(\d+)\//.exec(path);
+      return m ? { chatRoomId: Number(m[1]) } : null;
+    });
+  });
+
+  it("lets both participants of the room see the image", async () => {
+    for (const viewer of [lostOwner, foundOwner]) {
+      chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+      message.findUnique.mockResolvedValueOnce(imageMessage());
+
+      expect(await getChatImageForViewer(100, 7, user(viewer))).toEqual({ kind: "ok", path: "chat/100/a.webp" });
+    }
+  });
+
+  it("forbids a signed-in user who isn't a participant, without even reading the message", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+
+    expect(await getChatImageForViewer(100, 7, user(stranger))).toEqual({ kind: "forbidden" });
+    expect(message.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("can't be bypassed by pairing my own room's id with another room's message id", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners()); // room 100: viewer is a participant
+    message.findUnique.mockResolvedValueOnce(imageMessage({ chatRoomId: 555, imagePath: "chat/555/b.webp" }));
+
+    expect(await getChatImageForViewer(100, 7, user(lostOwner))).toEqual({ kind: "not_found" });
+  });
+
+  it("refuses a stored path that names a different room", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce(imageMessage({ imagePath: "chat/555/b.webp" }));
+
+    expect(await getChatImageForViewer(100, 7, user(lostOwner))).toEqual({ kind: "not_found" });
+  });
+
+  it("serves nothing for a hidden/deleted message or one without an image", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce(imageMessage({ hiddenAt: new Date() }));
+    expect(await getChatImageForViewer(100, 7, user(lostOwner))).toEqual({ kind: "not_found" });
+
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce(imageMessage({ imagePath: null }));
+    expect(await getChatImageForViewer(100, 7, user(lostOwner))).toEqual({ kind: "not_found" });
+
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce(null);
+    expect(await getChatImageForViewer(100, 7, user(lostOwner))).toEqual({ kind: "not_found" });
+  });
+
+  it("returns not_found for a room that doesn't exist", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(null);
+    expect(await getChatImageForViewer(404, 7, user(lostOwner))).toEqual({ kind: "not_found" });
+  });
+
+  it("lets an admin through, the same as the existing admin chat view (server-checked isAdmin)", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce(imageMessage());
+
+    expect(await getChatImageForViewer(100, 7, user(stranger, true))).toEqual({ kind: "ok", path: "chat/100/a.webp" });
+  });
+
+  it("organization inquiry room: the inquirer and current managers may see it, a plain member may not", async () => {
+    const room = () => orgRoom({ id: 100 });
+    // manager
+    chatRoom.findUnique.mockResolvedValueOnce(room());
+    organizationMember.findMany.mockResolvedValueOnce([{ userId: 31 }]);
+    message.findUnique.mockResolvedValueOnce(imageMessage());
+    expect((await getChatImageForViewer(100, 7, user(31))).kind).toBe("ok");
+    // inquirer
+    chatRoom.findUnique.mockResolvedValueOnce(room());
+    organizationMember.findMany.mockResolvedValueOnce([{ userId: 31 }]);
+    message.findUnique.mockResolvedValueOnce(imageMessage());
+    expect((await getChatImageForViewer(100, 7, user(stranger))).kind).toBe("ok");
+    // anyone else (e.g. a plain MEMBER, who isn't in the LEADER/ADMIN list)
+    chatRoom.findUnique.mockResolvedValueOnce(room());
+    organizationMember.findMany.mockResolvedValueOnce([{ userId: 31 }]);
+    expect((await getChatImageForViewer(100, 7, user(32))).kind).toBe("forbidden");
+  });
+});
+
+describe("sendMessage image validation (private bucket)", () => {
+  beforeEach(() => {
+    parseChatImagePathname.mockReturnValue({ chatRoomId: 100 });
+  });
+
+  it("rejects an image path whose object was never uploaded", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    chatImageExists.mockResolvedValueOnce(false);
+
+    expect(await sendMessage(100, sender, "", "chat/100/never-uploaded.webp")).toEqual({ kind: "invalid_image" });
+    expect($transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects an object that already backs another message (unique imagePath)", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    $transaction.mockRejectedValueOnce(new FakePrismaClientKnownRequestError("P2002"));
+
+    expect(await sendMessage(100, sender, "", "chat/100/used.webp")).toEqual({ kind: "invalid_image" });
+  });
+
+  it("stores the object path itself, never a URL", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    txMessageCreate.mockResolvedValueOnce({
+      id: 9,
+      chatRoomId: 100,
+      senderUserId: lostOwner,
+      content: "",
+      imagePath: "chat/100/x.webp",
+      hiddenAt: null,
+      createdAt: new Date(),
+      sender: { nickname: "닉네임" },
+    });
+
+    const result = await sendMessage(100, sender, "", "chat/100/x.webp");
+
+    expect(txMessageCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ imagePath: "chat/100/x.webp" }) }),
+    );
+    expect(result.kind === "ok" && result.data.imageUrl).toBe("/api/chat/100/messages/9/image");
   });
 });

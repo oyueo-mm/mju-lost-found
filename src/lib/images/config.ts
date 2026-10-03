@@ -10,6 +10,19 @@
 // isn't sensitive, so it's fine in a shared/client-reachable module too.
 export const POST_IMAGES_BUCKET = "post-images";
 
+// Private bucket for 1:1 / organization-inquiry chat images. Never served
+// by public URL: the app stores only the object path (Message.imagePath)
+// and hands images out through GET /api/chat/[id]/messages/[messageId]/image,
+// which checks the viewer and redirects to a short-lived signed URL. Same
+// type/size limits as post images. Created by
+// scripts/ensureChatImagesBucket.ts (see docs/operations.md).
+export const CHAT_IMAGES_BUCKET = "chat-images";
+
+// How long (seconds) a signed chat-image URL stays valid, and how long the
+// browser / Supabase CDN may cache the object (set at upload time). Kept
+// equal so a deleted image can't outlive either for long.
+export const CHAT_IMAGE_URL_TTL_SECONDS = 60;
+
 export const ALLOWED_IMAGE_CONTENT_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 export type AllowedImageContentType = (typeof ALLOWED_IMAGE_CONTENT_TYPES)[number];
 

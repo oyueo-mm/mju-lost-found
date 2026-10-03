@@ -604,7 +604,15 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
                   )}
                   {m.imageUrl && (
                     <div className="mb-1 max-w-[240px] overflow-hidden rounded-2xl border border-border">
+                      {/* m.imageUrl is our own /api/chat/.../image endpoint
+                          (access-checked, redirects to a short-lived signed
+                          URL for the private chat-images bucket).
+                          unoptimized: the browser fetches it directly with
+                          the viewer's own session -- never through the
+                          shared /_next/image cache, which can't be
+                          invalidated and would outlive a deleted image. */}
                       <Image
+                        unoptimized
                         src={m.imageUrl}
                         alt={t("chatThread.sentImageAlt")}
                         width={480}

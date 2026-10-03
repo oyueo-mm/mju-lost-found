@@ -1,6 +1,6 @@
 import { getSupabaseBrowserClient } from "@/lib/supabase/browserClient";
 
-import { POST_IMAGES_BUCKET } from "./config";
+import { CHAT_IMAGES_BUCKET, CHAT_IMAGE_URL_TTL_SECONDS, POST_IMAGES_BUCKET } from "./config";
 
 // Phase N: the client singleton itself moved to src/lib/supabase/
 // browserClient.ts (shared with the new chat Realtime hook) -- this file
@@ -28,5 +28,15 @@ export async function uploadToSignedUrl(path: string, token: string, blob: Blob)
   const { error } = await getSupabaseBrowserClient()
     .storage.from(POST_IMAGES_BUCKET)
     .uploadToSignedUrl(path, token, blob, { contentType: blob.type });
+  if (error) throw error;
+}
+
+// Chat images go to the private chat-images bucket. cacheControl is kept as
+// short as the signed URLs that serve them (CHAT_IMAGE_URL_TTL_SECONDS), so
+// neither the browser nor the Supabase CDN keeps a copy for long.
+export async function uploadChatImageToSignedUrl(path: string, token: string, blob: Blob): Promise<void> {
+  const { error } = await getSupabaseBrowserClient()
+    .storage.from(CHAT_IMAGES_BUCKET)
+    .uploadToSignedUrl(path, token, blob, { contentType: blob.type, cacheControl: String(CHAT_IMAGE_URL_TTL_SECONDS) });
   if (error) throw error;
 }

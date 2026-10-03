@@ -13,7 +13,11 @@ vi.mock("@/lib/chat/http", async () => {
   return { ...response, ...chatResponse, requireUserForApi };
 });
 vi.mock("@/lib/chat/service", () => ({ getChatRoomForUser }));
-vi.mock("@/lib/images/supabaseAdmin", () => ({ createSignedUploadUrl }));
+// Chat images go to the private chat-images bucket (images/chatStorage.ts),
+// never the public post-images one.
+const postImagesUpload = vi.fn();
+vi.mock("@/lib/images/chatStorage", () => ({ createChatImageUploadUrl: createSignedUploadUrl }));
+vi.mock("@/lib/images/supabaseAdmin", () => ({ createSignedUploadUrl: postImagesUpload }));
 
 const { POST } = await import("./route");
 
@@ -110,5 +114,6 @@ describe("POST /api/chat/[id]/upload", () => {
     expect(res.status).toBe(200);
     expect(json.data).toEqual({ path: "chat/1/uuid.jpg", token: "tok" });
     expect(createSignedUploadUrl).toHaveBeenCalledWith(expect.stringMatching(/^chat\/1\//));
+    expect(postImagesUpload).not.toHaveBeenCalled();
   });
 });

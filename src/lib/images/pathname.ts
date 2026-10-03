@@ -33,11 +33,11 @@ export function isValidImagePathname(pathname: string): boolean {
   return PATHNAME_PATTERN.test(pathname);
 }
 
-// Phase 28-3: chat/{chatRoomId}/{uuid}.{ext} -- same bucket (post-images)
-// and signed-upload-URL mechanism as post images (see
-// src/app/api/chat/[id]/upload/route.ts), just a different path prefix so
-// the two never collide and parseChatImagePathname() below can't be
-// tricked by a post's own pathname. The chat room must already exist and
+// Phase 28-3: chat/{chatRoomId}/{uuid}.{ext} -- stored in the private
+// chat-images bucket (not post-images) with the same signed-upload-URL
+// mechanism as post images (see src/app/api/chat/[id]/upload/route.ts).
+// The room id in the path is what lets sendMessage() and the image
+// endpoint check that a path really belongs to the room it's used in. The chat room must already exist and
 // the uploader must already be verified as a participant (checked by that
 // route via getChatRoomForUser(), the same membership check every other
 // chat read/write path uses) before this is ever called.

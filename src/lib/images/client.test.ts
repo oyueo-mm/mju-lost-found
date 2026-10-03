@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const uploadToSignedUrl = vi.fn();
-vi.mock("./supabaseBrowser", () => ({ uploadToSignedUrl }));
+const uploadChatImageToSignedUrl = vi.fn();
+vi.mock("./supabaseBrowser", () => ({ uploadToSignedUrl, uploadChatImageToSignedUrl }));
 
 const { ImageProcessingError, uploadChatImage, uploadPostImage } = await import("./client");
 
@@ -69,6 +70,20 @@ describe("image upload never sends the original file", () => {
 
     await expect(uploadChatImage(3, original)).rejects.toBeInstanceOf(ImageProcessingError);
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(uploadChatImageToSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("uploads a chat image (re-encoded) to the private chat bucket, never the post bucket", async () => {
+    const reencoded = new Blob([new Uint8Array(8)], { type: "image/webp" });
+    stubCanvas(reencoded);
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: { path: "chat/3/x.webp", token: "tok" } }), { status: 200 }),
+    );
+
+    await uploadChatImage(3, original);
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/chat/3/upload");
+    expect(uploadChatImageToSignedUrl).toHaveBeenCalledWith("chat/3/x.webp", "tok", reencoded);
     expect(uploadToSignedUrl).not.toHaveBeenCalled();
   });
 
@@ -76,6 +91,6 @@ describe("image upload never sends the original file", () => {
     vi.stubGlobal("createImageBitmap", undefined);
 
     await expect(uploadChatImage(3, original)).rejects.toBeInstanceOf(ImageProcessingError);
-    expect(uploadToSignedUrl).not.toHaveBeenCalled();
+    expect(uploadChatImageToSignedUrl).not.toHaveBeenCalled();
   });
 });
