@@ -1,3 +1,5 @@
+import { after } from "next/server";
+
 import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { NotificationType, OrganizationRole, OrganizationStatus, Prisma, type User } from "@/generated/prisma/client";
@@ -914,10 +916,15 @@ export async function markChatRoomRead(
   // realtimeAdmin.ts's own comment on why this payload is safe to send on
   // an otherwise-unauthenticated channel (just two numeric ids, never
   // message content).
-  void broadcastChatEvent(chatRoomId, {
-    event: "read",
-    payload: { userId: requesterId, lastReadMessageId: read.lastReadMessageId! },
-  });
+  //
+  // after(), not a bare fire-and-forget: on Vercel the invocation can be
+  // frozen as soon as the response is sent, which left an un-awaited
+  // broadcast suspended until the next request and then aborted by its
+  // own timeout -- the other participant never got the event. after()
+  // keeps the invocation alive (waitUntil) until the broadcast settles,
+  // without delaying the response. Same for every broadcast in this file.
+  const lastReadMessageId = read.lastReadMessageId!;
+  after(() => broadcastChatEvent(chatRoomId, { event: "read", payload: { userId: requesterId, lastReadMessageId } }));
 
   return { kind: "ok", data: { lastReadMessageId: read.lastReadMessageId } };
 }
@@ -1087,7 +1094,8 @@ export async function sendMessage(
   // subscribed client re-fetches the real content through the existing
   // authorized GET endpoint; this push only ever carries the new
   // message's bare id.
-  void broadcastChatEvent(chatRoomId, { event: "message", payload: { messageId: message.id } });
+  // after(): see markChatRoomRead's own comment.
+  after(() => broadcastChatEvent(chatRoomId, { event: "message", payload: { messageId: message.id } }));
 
   return {
     kind: "ok",
@@ -1168,7 +1176,7 @@ export async function toggleMessageReaction(
   // *this* requester couldn't be reused as-is by the other participant's
   // client anyway -- it re-fetches through the existing GET endpoint,
   // same as a "message" event's client-side handling.
-  void broadcastChatEvent(chatRoomId, { event: "reaction", payload: { messageId } });
+  after(() => broadcastChatEvent(chatRoomId, { event: "reaction", payload: { messageId } }));
 
   return { kind: "ok", data: { messageId, reactions: summarizeReactions(rows, requester.id) } };
 }
@@ -1211,7 +1219,7 @@ export async function editMessage(
   // already re-fetches-and-upserts-by-id on that event, which is exactly
   // "replace this id's row with its fresh copy" -- the correct behavior
   // for an edit too, with zero changes needed to useChatRoomRealtime.ts.
-  void broadcastChatEvent(chatRoomId, { event: "message", payload: { messageId } });
+  after(() => broadcastChatEvent(chatRoomId, { event: "message", payload: { messageId } }));
 
   const reactionRows = await prisma.messageReaction.findMany({
     where: { messageId },
@@ -1306,7 +1314,7 @@ export async function deleteMessage(
       },
     });
     if (imageToDelete) await deleteObjectSafely(imageToDelete);
-    void broadcastChatEvent(chatRoomId, { event: "message", payload: { messageId } });
+    after(() => broadcastChatEvent(chatRoomId, { event: "message", payload: { messageId } }));
   }
 
   return { kind: "ok", data: { messageId } };

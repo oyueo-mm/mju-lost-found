@@ -107,6 +107,21 @@ vi.mock("@/lib/images/supabaseAdmin", () => ({ publicUrlFor, deleteObjectSafely 
 // tests below assert it was actually invoked with the right payload.
 const broadcastChatEvent = vi.fn();
 vi.mock("@/lib/chat/realtimeAdmin", () => ({ broadcastChatEvent }));
+// Every broadcast is deferred with next/server's after() so Vercel keeps the
+// invocation alive until it settles (a bare fire-and-forget was frozen with
+// the function after the response and later aborted by its own timeout).
+// after() needs a request scope this test file has none of, so it's mocked
+// to *capture* the callback; tests run it explicitly with flushAfterCallbacks()
+// -- which also lets them assert nothing was broadcast inline.
+let afterCallbacks: Array<() => unknown> = [];
+const after = vi.fn((callback: () => unknown) => {
+  afterCallbacks.push(callback);
+});
+async function flushAfterCallbacks() {
+  const callbacks = afterCallbacks.splice(0);
+  return Promise.allSettled(callbacks.map((cb) => cb()));
+}
+vi.mock("next/server", () => ({ after }));
 
 const {
   countUnreadMessagesForUser,
@@ -190,6 +205,7 @@ const sender = { id: lostOwner, nickname: "닉네임", isSuspended: false, suspe
 
 beforeEach(() => {
   vi.clearAllMocks();
+  afterCallbacks = [];
   userTable.findUnique.mockResolvedValue({ id: foundOwner, nickname: "상대닉네임" });
   publicUrlFor.mockImplementation((path: string) => `https://storage.example/post-images/${path}`);
   // Phase D-4: listMessages() always batches a reaction query for the
@@ -1239,6 +1255,7 @@ describe("markChatRoomRead", () => {
     expect(result).toEqual({ kind: "ok", data: { lastReadMessageId: null } });
     expect(chatRead.upsert).not.toHaveBeenCalled();
     expect(broadcastChatEvent).not.toHaveBeenCalled();
+    expect(after).not.toHaveBeenCalled();
   });
 
   it("advances the requester's own cursor to the room's latest message id", async () => {
@@ -1263,6 +1280,9 @@ describe("markChatRoomRead", () => {
 
     await markChatRoomRead(100, lostOwner);
 
+    expect(broadcastChatEvent).not.toHaveBeenCalled();
+    expect(after).toHaveBeenCalledTimes(1);
+    await flushAfterCallbacks();
     expect(broadcastChatEvent).toHaveBeenCalledWith(100, {
       event: "read",
       payload: { userId: lostOwner, lastReadMessageId: 42 },
@@ -1460,7 +1480,34 @@ describe("sendMessage", () => {
 
     await sendMessage(100, sender, "안녕하세요");
 
+    expect(broadcastChatEvent).not.toHaveBeenCalled();
+    expect(after).toHaveBeenCalledTimes(1);
+    await flushAfterCallbacks();
     expect(broadcastChatEvent).toHaveBeenCalledWith(100, { event: "message", payload: { messageId: 7 } });
+  });
+
+  it("returns the saved message even when the deferred broadcast later fails", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    txMessageCreate.mockResolvedValueOnce({
+      id: 8,
+      senderUserId: lostOwner,
+      content: "실패해도 저장",
+      createdAt: new Date(),
+      readAt: null,
+      sender: { nickname: "닉네임" },
+    });
+    broadcastChatEvent.mockRejectedValueOnce(new Error("realtime down"));
+
+    const result = await sendMessage(100, sender, "실패해도 저장");
+
+    // The message is saved and returned before any broadcast runs...
+    expect(txMessageCreate).toHaveBeenCalledTimes(1);
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") expect(result.data.id).toBe(8);
+    // ...and the broadcast failure stays inside the deferred callback.
+    const [settled] = await flushAfterCallbacks();
+    expect(settled.status).toBe("rejected");
+    expect(broadcastChatEvent).toHaveBeenCalledWith(100, { event: "message", payload: { messageId: 8 } });
   });
 
   // Defensive: getOrCreateDirectChatRoom() rejects self-chat at creation
@@ -1831,6 +1878,9 @@ describe("toggleMessageReaction", () => {
 
     await toggleMessageReaction(100, 1, "👍", sender);
 
+    expect(broadcastChatEvent).not.toHaveBeenCalled();
+    expect(after).toHaveBeenCalledTimes(1);
+    await flushAfterCallbacks();
     expect(broadcastChatEvent).toHaveBeenCalledWith(100, { event: "reaction", payload: { messageId: 1 } });
   });
 
@@ -2008,6 +2058,9 @@ describe("editMessage", () => {
     // Reuses the exact same "message" event sendMessage's own broadcast
     // uses -- ChatThread.tsx's syncLatest() already re-fetches-and-
     // upserts-by-id on it, so an edit needs no new realtime event type.
+    expect(broadcastChatEvent).not.toHaveBeenCalled();
+    expect(after).toHaveBeenCalledTimes(1);
+    await flushAfterCallbacks();
     expect(broadcastChatEvent).toHaveBeenCalledWith(100, { event: "message", payload: { messageId: 1 } });
   });
 });
@@ -2066,6 +2119,9 @@ describe("deleteMessage", () => {
       where: { id: 1 },
       data: { hiddenAt: expect.any(Date), hiddenByUserId: lostOwner, hiddenReason: null },
     });
+    expect(broadcastChatEvent).not.toHaveBeenCalled();
+    expect(after).toHaveBeenCalledTimes(1);
+    await flushAfterCallbacks();
     expect(broadcastChatEvent).toHaveBeenCalledWith(100, { event: "message", payload: { messageId: 1 } });
   });
 
@@ -2096,6 +2152,7 @@ describe("deleteMessage", () => {
     expect(result).toEqual({ kind: "ok", data: { messageId: 1 } });
     expect(message.update).not.toHaveBeenCalled();
     expect(broadcastChatEvent).not.toHaveBeenCalled();
+    expect(after).not.toHaveBeenCalled();
   });
 
   // Phase 10B: self-delete purges the actual Storage object, not just the
