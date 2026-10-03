@@ -1,6 +1,7 @@
 import { after } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
+import { notifyUser } from "@/lib/notification/recipients";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { NotificationType, OrganizationRole, OrganizationStatus, Prisma, type User } from "@/generated/prisma/client";
 import type { PostType } from "@/lib/posts/schema";
@@ -44,6 +45,8 @@ type ChatRoomRow = {
   createdAt: Date;
   directLostPost: PostRef | null;
   directFoundPost: PostRef | null;
+  postType: string;
+  postTitle: string;
 };
 
 export type ChatMutationResult<T> =
@@ -109,7 +112,18 @@ export type ChatRoomDetailDTO = {
   // this to render "홍길동 → 총학생회 문의" instead of just "총학생회". Always
   // null for a personal room.
   inquirer: { id: number; nickname: string | null; publicId: string | null } | null;
-  post: { id: number; title: string; type: PostType; imageUrl: string | null };
+  // `deleted`: the post this room started from no longer exists -- `id`
+  // and `imageUrl` are then null and `title` comes from the room's own
+  // snapshot (see roomPostOf). The chat itself is unaffected.
+  post: ChatRoomPost;
+};
+
+export type ChatRoomPost = {
+  id: number | null;
+  title: string;
+  type: PostType;
+  imageUrl: string | null;
+  deleted: boolean;
 };
 
 export type ChatRoomListItemDTO = ChatRoomDetailDTO & {
@@ -238,8 +252,33 @@ async function findChatRoomRow(chatRoomId: number): Promise<ChatRoomRow | null> 
       createdAt: true,
       directLostPost: { select: POST_REF_SELECT },
       directFoundPost: { select: POST_REF_SELECT },
+      postType: true,
+      postTitle: true,
     },
   });
+}
+
+// The post a room is about: the live post while it exists, otherwise the
+// room's own type/title snapshot (the post was deleted and its FK set to
+// NULL). A deleted post has no id or image, so nothing links to it.
+function roomPostOf(room: Pick<ChatRoomRow, "directLostPost" | "directFoundPost" | "postType" | "postTitle">): ChatRoomPost {
+  const live = room.directLostPost ?? room.directFoundPost;
+  if (live) {
+    return {
+      id: live.id,
+      title: live.title,
+      type: room.directLostPost ? "lost" : "found",
+      imageUrl: live.imageUrl,
+      deleted: false,
+    };
+  }
+  return {
+    id: null,
+    title: room.postTitle,
+    type: room.postType === "found" ? "found" : "lost",
+    imageUrl: null,
+    deleted: true,
+  };
 }
 
 // The single funnel point every permission check goes through (same role
@@ -309,15 +348,9 @@ async function resolveDetailDTO(
   room: ChatRoomRow,
   requesterId: number,
 ): Promise<ChatRoomDetailDTO | null> {
-  const directPost = room.directLostPost ?? room.directFoundPost;
-  if (!directPost || room.initiatorUserId === null) return null;
+  if (room.initiatorUserId === null) return null;
 
-  const post = {
-    id: directPost.id,
-    title: directPost.title,
-    type: (room.directLostPost ? "lost" : "found") as PostType,
-    imageUrl: directPost.imageUrl,
-  };
+  const post = roomPostOf(room);
 
   // Phase 12-11 §6/§13: an inquiry room's "other side" is the organization
   // itself -- never one particular User standing in for it. `inquirer` is
@@ -403,18 +436,18 @@ export async function getOrCreateDirectChatRoom(
     postType === "lost"
       ? await prisma.lostPost.findUnique({
           where: { id: postId },
-          select: { id: true, userId: true, organizationId: true },
+          select: { id: true, userId: true, organizationId: true, title: true },
         })
       : await prisma.foundPost.findUnique({
           where: { id: postId },
-          select: { id: true, userId: true, organizationId: true },
+          select: { id: true, userId: true, organizationId: true, title: true },
         });
   // A missing post covers both "never existed" and "deleted" -- the row
   // simply isn't found either way, no separate check needed.
   if (!post) return { kind: "not_found" };
 
   if (commentId === undefined && post.organizationId) {
-    return getOrCreateOrganizationChatRoom(postType, postId, requester, post.organizationId);
+    return getOrCreateOrganizationChatRoom(postType, postId, requester, post.organizationId, post.title);
   }
 
   let counterpartUserId = post.userId;
@@ -467,7 +500,7 @@ export async function getOrCreateDirectChatRoom(
   let createdId: number;
   try {
     const created = await prisma.chatRoom.create({
-      data: { ...directColumn, initiatorUserId: requester.id, counterpartUserId },
+      data: { ...directColumn, postType, postTitle: post.title, initiatorUserId: requester.id, counterpartUserId },
       select: { id: true },
     });
     createdId = created.id;
@@ -505,6 +538,7 @@ export async function getOrCreateOrganizationChatRoom(
   postId: number,
   requester: User,
   organizationId: number,
+  postTitle: string,
 ): Promise<ChatMutationResult<ChatRoomDetailDTO>> {
   if (isCurrentlySuspended(requester)) {
     return { kind: "forbidden", reason: "suspended" };
@@ -568,7 +602,7 @@ export async function getOrCreateOrganizationChatRoom(
     // possible there either.
     createdId = await prisma.$transaction(async (tx) => {
       const created = await tx.chatRoom.create({
-        data: { ...directColumn, initiatorUserId: requester.id, organizationId },
+        data: { ...directColumn, postType, postTitle, initiatorUserId: requester.id, organizationId },
         select: { id: true },
       });
       await fanOutToOrganizationManagers(tx, {
@@ -629,7 +663,7 @@ export type AdminChatMessageDTO = {
 
 export type AdminChatRoomDTO = {
   id: number;
-  post: { id: number; type: PostType; title: string };
+  post: { id: number | null; type: PostType; title: string; deleted: boolean };
   participants: { id: number; nickname: string | null; publicId: string | null }[];
   messages: AdminChatMessageDTO[];
 };
@@ -656,8 +690,8 @@ export async function getChatRoomForAdmin(chatRoomId: number): Promise<AdminChat
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return null;
   const participantIds = await participantIdsOf(room);
-  const directPost = room.directLostPost ?? room.directFoundPost;
-  if (!participantIds || !directPost) return null;
+  if (!participantIds) return null;
+  const post = roomPostOf(room);
 
   const [participants, rows] = await Promise.all([
     Promise.all([...participantIds].map((id) => resolveCounterpart(id))),
@@ -670,7 +704,7 @@ export async function getChatRoomForAdmin(chatRoomId: number): Promise<AdminChat
 
   return {
     id: room.id,
-    post: { id: directPost.id, type: room.directLostPost ? "lost" : "found", title: directPost.title },
+    post: { id: post.id, type: post.type, title: post.title, deleted: post.deleted },
     participants,
     messages: rows.map((m) => ({
       id: m.id,
@@ -741,6 +775,8 @@ export async function listChatRoomsForUser(requesterId: number): Promise<ChatRoo
       createdAt: true,
       directLostPost: { select: POST_REF_SELECT },
       directFoundPost: { select: POST_REF_SELECT },
+      postType: true,
+      postTitle: true,
       messages: {
         orderBy: [{ createdAt: "desc" as const }, { id: "desc" as const }],
         take: 1,
@@ -1073,7 +1109,7 @@ export async function sendMessage(
     });
 
     if (notifyUserId !== null) {
-      await tx.notification.create({
+      await notifyUser(tx, {
         data: {
           userId: notifyUserId,
           type: NotificationType.MESSAGE,

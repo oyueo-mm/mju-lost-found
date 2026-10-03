@@ -23,7 +23,7 @@ describe("fanOutToAdmins (Phase 12-9 §2)", () => {
       relatedId: 77,
     });
 
-    expect(tx.user.findMany).toHaveBeenCalledWith({ where: { isAdmin: true }, select: { id: true } });
+    expect(tx.user.findMany).toHaveBeenCalledWith({ where: { isAdmin: true, deletedAt: null }, select: { id: true } });
     expect(tx.notification.createMany).toHaveBeenCalledWith({
       data: [
         { userId: 1, type: "REPORT_RECEIVED", title: "새 신고가 접수되었습니다", content: "게시글 신고: 기타", relatedType: "report", relatedId: 77 },
@@ -84,7 +84,7 @@ describe("fanOutToOrganizationManagers (Phase 12-11 §9/§10)", () => {
     });
 
     expect(tx.organizationMember.findMany).toHaveBeenCalledWith({
-      where: { organizationId: 10, role: { in: ["LEADER", "ADMIN"] }, userId: { not: 99 } },
+      where: { organizationId: 10, role: { in: ["LEADER", "ADMIN"] }, userId: { not: 99 }, user: { deletedAt: null } },
       select: { userId: true },
     });
     expect(tx.notification.createMany).toHaveBeenCalledWith({

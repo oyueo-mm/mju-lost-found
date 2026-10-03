@@ -50,7 +50,7 @@ export async function resolveUserTarget(targetId: number): Promise<ResolvedUserT
   return prisma.user.findUnique({ where: { id: targetId }, select: { id: true } });
 }
 
-export type ResolvedCommentTarget = { id: number; authorUserId: number };
+export type ResolvedCommentTarget = { id: number; authorUserId: number; parentId: number | null };
 
 // Phase C-3: Comment.id alone is enough -- no sign-encoding needed (see
 // this file's own comment above resolvePostTarget for why LostPost/
@@ -59,6 +59,14 @@ export type ResolvedCommentTarget = { id: number; authorUserId: number };
 // FKs with onDelete: Cascade (see schema.prisma), so a Comment row can
 // only exist here at all if its post still does -- finding this row is
 // already proof of that.
+//
+// A deleted comment's tombstone (deletedAt set) counts as gone: there is
+// nothing left to report or act on.
 export async function resolveCommentTarget(targetId: number): Promise<ResolvedCommentTarget | null> {
-  return prisma.comment.findUnique({ where: { id: targetId }, select: { id: true, authorUserId: true } });
+  const comment = await prisma.comment.findUnique({
+    where: { id: targetId },
+    select: { id: true, authorUserId: true, parentId: true, deletedAt: true },
+  });
+  if (!comment || comment.deletedAt) return null;
+  return { id: comment.id, authorUserId: comment.authorUserId, parentId: comment.parentId };
 }

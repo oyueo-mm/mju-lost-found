@@ -86,7 +86,9 @@ export default async function ChatListPage() {
                     </span>
                   )}
                 </div>
-                <span className="truncate text-xs text-muted-foreground">{room.post.title}</span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {room.post.deleted ? `${t("chat.deletedPost")} · ${room.post.title}` : room.post.title}
+                </span>
                 <p className="truncate text-muted-foreground">
                   {room.lastMessage ? room.lastMessage.content : t("chat.noMessages")}
                 </p>

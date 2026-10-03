@@ -51,8 +51,19 @@ const queryRaw = vi.fn();
 // comment/service.test.ts, ...) -- so an assertion against e.g.
 // `organizationMember.create` passes whether the real call happened inside
 // or outside a transaction.
+// notification/recipients.ts::notifyUser's active-recipient check (1 =
+// the recipient is an active user).
+const txUser = { count: vi.fn(async () => 1) };
 const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
-  fn({ organization, organizationMember, organizationCreationRequest, organizationJoinRequest, notification, $queryRaw: queryRaw }),
+  fn({
+    organization,
+    organizationMember,
+    organizationCreationRequest,
+    organizationJoinRequest,
+    notification,
+    user: txUser,
+    $queryRaw: queryRaw,
+  }),
 );
 
 vi.mock("@/lib/db/prisma", () => ({

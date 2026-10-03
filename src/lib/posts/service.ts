@@ -3,8 +3,9 @@ import { deleteObjectSafely } from "@/lib/images/supabaseAdmin";
 import {
   FoundPostStatus as PrismaFoundPostStatus,
   LostPostStatus as PrismaLostPostStatus,
+  type Prisma,
 } from "@/generated/prisma/client";
-import type { PostListType, SortOption } from "./schema";
+import type { PostListType, PostType, SortOption } from "./schema";
 import { DEFAULT_SORT } from "./schema";
 
 // Phase 21: this module is the AI-dependency-free half of the old
@@ -459,27 +460,9 @@ export async function deleteLostPost(
   if (!existing) return { kind: "not_found" };
   if (existing.userId !== userId && !options?.asAdmin) return { kind: "forbidden", reason: "not_owner" };
 
-  // Phase 11-4C: read every PostImage row's URL *before* deleting the
-  // post -- their DB rows themselves already disappear via the ON DELETE
-  // CASCADE declared on PostImage.lostPost (see schema.prisma), but that
-  // cascade never touches Storage, so their own objects would otherwise
-  // become permanent orphans.
-  const images = await prisma.postImage.findMany({ where: { lostPostId: id }, select: { imageUrl: true } });
-
-  // A plain delete -- the ON DELETE CASCADE already declared on
-  // ChatRoom/Message's relations (see schema.prisma) is what keeps
-  // them consistent, the same way delete_lost_post() in the legacy app
-  // never manually cleans up related rows either.
-  await prisma.lostPost.delete({ where: { id } });
-
-  // Best-effort: the post is already gone from the DB either way, a
-  // Storage cleanup failure here is only logged, never surfaced as a
-  // failed delete. Deduped (Set) since existing.imageUrl is normally the
-  // same object as the post's own primary PostImage row.
-  const urlsToDelete = new Set<string>();
-  if (existing.imageUrl) urlsToDelete.add(existing.imageUrl);
-  for (const image of images) urlsToDelete.add(image.imageUrl);
-  await Promise.all([...urlsToDelete].map((url) => deleteObjectSafely(url)));
+  const urls = await prisma.$transaction((tx) => deletePostRowInTx(tx, "lost", id));
+  if (urls === null) return { kind: "not_found" }; // deleted concurrently
+  await deletePostStorageObjects(urls);
 
   return { kind: "ok", data: { id } };
 }
@@ -542,17 +525,62 @@ export async function deleteFoundPost(
   if (!existing) return { kind: "not_found" };
   if (existing.userId !== userId && !options?.asAdmin) return { kind: "forbidden", reason: "not_owner" };
 
-  // See deleteLostPost's own comment -- identical shape/reasoning.
-  const images = await prisma.postImage.findMany({ where: { foundPostId: id }, select: { imageUrl: true } });
-
-  await prisma.foundPost.delete({ where: { id } });
-
-  const urlsToDelete = new Set<string>();
-  if (existing.imageUrl) urlsToDelete.add(existing.imageUrl);
-  for (const image of images) urlsToDelete.add(image.imageUrl);
-  await Promise.all([...urlsToDelete].map((url) => deleteObjectSafely(url)));
+  const urls = await prisma.$transaction((tx) => deletePostRowInTx(tx, "found", id));
+  if (urls === null) return { kind: "not_found" }; // deleted concurrently
+  await deletePostStorageObjects(urls);
 
   return { kind: "ok", data: { id } };
+}
+
+type PostDeleteTx = Pick<Prisma.TransactionClient, "lostPost" | "foundPost" | "postImage" | "chatRoom">;
+
+// Deletes one post row inside the caller's transaction -- the single
+// delete path shared by the owner/admin delete above and the report-
+// action delete (moderation/service.ts::applyReportAction). Returns the
+// Storage URLs that belonged only to this post (its cover plus every
+// PostImage row, deduped) for the caller to remove *after* the
+// transaction commits, or null if the post no longer exists.
+//
+// What goes with the post and what stays:
+// - PostImage rows and comments: ON DELETE CASCADE (they only exist on
+//   this post).
+// - Chats that started from it: kept. ChatRoom's post FK is ON DELETE SET
+//   NULL; the room's title snapshot is refreshed here first so it shows
+//   the post's final title. Their messages and chat images are untouched.
+export async function deletePostRowInTx(tx: PostDeleteTx, type: PostType, id: number): Promise<string[] | null> {
+  const post =
+    type === "lost"
+      ? await tx.lostPost.findUnique({ where: { id }, select: { title: true, imageUrl: true } })
+      : await tx.foundPost.findUnique({ where: { id }, select: { title: true, imageUrl: true } });
+  if (!post) return null;
+
+  const images = await tx.postImage.findMany({
+    where: type === "lost" ? { lostPostId: id } : { foundPostId: id },
+    select: { imageUrl: true },
+  });
+
+  await tx.chatRoom.updateMany({
+    where: type === "lost" ? { directLostPostId: id } : { directFoundPostId: id },
+    data: { postTitle: post.title },
+  });
+  if (type === "lost") {
+    await tx.lostPost.delete({ where: { id } });
+  } else {
+    await tx.foundPost.delete({ where: { id } });
+  }
+
+  const urls = new Set<string>();
+  if (post.imageUrl) urls.add(post.imageUrl);
+  for (const image of images) urls.add(image.imageUrl);
+  return [...urls];
+}
+
+// Best-effort: the post is already gone from the DB, so a Storage failure
+// is only logged (deleteObjectSafely never rejects), never surfaced as a
+// failed delete. Only URLs deletePostRowInTx returned -- i.e. files that
+// belonged to that one post -- ever reach here.
+export async function deletePostStorageObjects(urls: string[]): Promise<void> {
+  await Promise.all(urls.map((url) => deleteObjectSafely(url)));
 }
 
 // Phase 12-5 §30: /organizations/[id]'s own "최근 게시글" preview section --

@@ -1,4 +1,5 @@
 import { OrganizationRole, type NotificationType, type Prisma } from "@/generated/prisma/client";
+import { ACTIVE_RECIPIENT_WHERE } from "./recipients";
 
 // Phase 12-9 §2: the one shared helper report/service.ts, feedback/
 // service.ts, and moderation/appeals.ts each call, inside their own
@@ -21,7 +22,7 @@ export async function fanOutToAdmins(
   tx: Prisma.TransactionClient,
   input: { type: NotificationType; title: string; content: string; relatedType: string; relatedId: number },
 ): Promise<void> {
-  const admins = await tx.user.findMany({ where: { isAdmin: true }, select: { id: true } });
+  const admins = await tx.user.findMany({ where: { isAdmin: true, ...ACTIVE_RECIPIENT_WHERE }, select: { id: true } });
   if (admins.length === 0) return;
 
   await tx.notification.createMany({
@@ -59,6 +60,7 @@ export async function fanOutToOrganizationManagers(
       organizationId,
       role: { in: [OrganizationRole.LEADER, OrganizationRole.ADMIN] },
       userId: { not: excludeUserId },
+      user: ACTIVE_RECIPIENT_WHERE,
     },
     select: { userId: true },
   });

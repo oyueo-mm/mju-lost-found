@@ -10,6 +10,7 @@ import { ChatBubbleIcon } from "@/components/icons";
 import { AttributionLink } from "@/components/user/AttributionLink";
 import { CommentActionMenu } from "@/components/comment/CommentActionMenu";
 import { CommentChatButton } from "@/components/comment/CommentChatButton";
+import { applyCommentRemoval } from "@/components/comment/commentRemoval";
 import { PostAsSelector } from "@/components/organization/PostAsSelector";
 import { useI18n } from "@/lib/i18n/client";
 import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
@@ -33,6 +34,9 @@ type CommentDTO = {
   // attribution split this mirrors.
   organizationId: number | null;
   organizationName: string | null;
+  // A deleted comment kept only because it has replies -- rendered as
+  // "삭제된 댓글입니다." with no author, actions or reply button.
+  isDeleted: boolean;
 };
 
 type CommentSectionProps = {
@@ -100,15 +104,6 @@ function buildCommentTree(comments: CommentDTO[]): CommentNode[] {
     else roots.push(node);
   }
   return roots;
-}
-
-// Every id in this comment's own subtree (itself included) -- used to
-// purge a deleted comment's replies from local state in one pass, mirroring
-// the server's onDelete: Cascade on Comment.parentId (see schema.prisma)
-// so the client never shows a reply whose parent it just removed locally.
-function collectSubtreeIds(node: CommentNode, into: Set<number>): void {
-  into.add(node.id);
-  for (const child of node.children) collectSubtreeIds(child, into);
 }
 
 export function CommentSection({
@@ -248,31 +243,17 @@ export function CommentSection({
     if (!res.ok) {
       throw new Error(json.error ?? t("comment.deleteFailed"));
     }
-    // Phase H-3: the server cascades the deleted comment's entire reply
-    // subtree (Comment.parentId's onDelete: Cascade) -- mirrored here so
-    // local state doesn't keep showing replies whose parent just
-    // disappeared. Computed from the tree built from *current* comments,
-    // not a stale snapshot.
-    const deletedSubtree = new Set<number>();
-    const tree = buildCommentTree(comments);
-    const deletedNode = findNodeInTree(tree, commentId);
-    if (deletedNode) collectSubtreeIds(deletedNode, deletedSubtree);
-    else deletedSubtree.add(commentId);
-    setComments((prev) => prev.filter((c) => !deletedSubtree.has(c.id)));
-  }
-
-  function findNodeInTree(nodes: CommentNode[], id: number): CommentNode | null {
-    for (const node of nodes) {
-      if (node.id === id) return node;
-      const found = findNodeInTree(node.children, id);
-      if (found) return found;
-    }
-    return null;
+    // Same rule as the server (comment/remove.ts): a comment with replies
+    // becomes a tombstone and its replies stay; one without is removed.
+    setComments((prev) => applyCommentRemoval(prev, commentId));
   }
 
   const commentsById = new Map(comments.map((c) => [c.id, c]));
 
   function renderCommentBody(comment: CommentDTO) {
+    if (comment.isDeleted) {
+      return <p className="text-sm text-muted-foreground italic">{t("comment.deleted")}</p>;
+    }
     const isOwner = currentUser?.id === comment.author.id;
     const canDelete = isOwner || isAdmin;
     const isEditing = editingId === comment.id;
@@ -288,7 +269,8 @@ export function CommentSection({
     // reply AND its parent is still resolvable from current state (a
     // dangling parentId, e.g. after a local-state edge case, just omits
     // the tag rather than showing something wrong).
-    const replyTargetNickname = comment.parentId !== null ? (commentsById.get(comment.parentId)?.author.nickname ?? null) : null;
+    const replyParent = comment.parentId !== null ? commentsById.get(comment.parentId) : undefined;
+    const replyTargetNickname = replyParent && !replyParent.isDeleted ? replyParent.author.nickname : null;
 
     if (isEditing) {
       return (
@@ -475,7 +457,7 @@ export function CommentSection({
     <div className="flex flex-col gap-4 border-t border-border pt-6">
       <h2 className="flex items-center gap-1.5 font-semibold text-foreground">
         <ChatBubbleIcon className="size-4.5" />
-        {t("comment.count", { count: comments.length })}
+        {t("comment.count", { count: comments.filter((c) => !c.isDeleted).length })}
       </h2>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

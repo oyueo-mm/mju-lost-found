@@ -12,7 +12,7 @@ import {
 } from "@/lib/posts/schema";
 import type { PostType } from "@/lib/posts/schema";
 import { getLocalizedLocationSuggestions } from "@/lib/posts/campusLocations";
-import { uploadPostImage } from "@/lib/images/client";
+import { ImageProcessingError, uploadPostImage } from "@/lib/images/client";
 import { MAX_IMAGES_PER_POST } from "@/lib/images/config";
 import {
   formatPartialUploadFailureMessage,
@@ -318,6 +318,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
     const newItems = items.filter((item): item is Extract<GalleryItem, { kind: "new" }> => item.kind === "new");
     const attachedByLocalId = new Map<string, { id: number; imageUrl: string }>();
     let uploadFailedCount = 0;
+    let processingFailed = false;
 
     if (newItems.length > 0) {
       const uploadResults = await Promise.allSettled(
@@ -327,7 +328,10 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
       const succeeded: { localId: string; path: string }[] = [];
       for (const result of uploadResults) {
         if (result.status === "fulfilled") succeeded.push(result.value);
-        else uploadFailedCount++;
+        else {
+          uploadFailedCount++;
+          if (result.reason instanceof ImageProcessingError) processingFailed = true;
+        }
       }
 
       if (succeeded.length > 0) {
@@ -384,7 +388,8 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
       setReordered(false);
     }
 
-    return formatPartialUploadFailureMessage(newItems.length, uploadFailedCount);
+    const partialFailure = formatPartialUploadFailureMessage(newItems.length, uploadFailedCount);
+    return partialFailure && processingFailed ? `${partialFailure} ${t("image.processFailed")}` : partialFailure;
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { notifyUser } from "@/lib/notification/recipients";
 import {
   LostPostStatus as PrismaLostPostStatus,
   FoundPostStatus as PrismaFoundPostStatus,
@@ -12,6 +13,8 @@ import {
 import { TARGET_TYPE_FROM_DB, TARGET_TYPE_TO_DB, toReportDTO, type ReportDTO } from "@/lib/report/service";
 import type { ReportStatusValue, ReportTargetType } from "@/lib/report/schema";
 import { resolveCommentTarget, resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "@/lib/report/targets";
+import { deletePostRowInTx, deletePostStorageObjects } from "@/lib/posts/service";
+import { removeCommentInTx } from "@/lib/comment/remove";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { createAdminActionProposal, type AdminActionProposalDTO } from "@/lib/admin/proposals";
 import { TARGET_TYPE_TO_ACTION_TYPE, type ModerationActionTypeValue } from "./schema";
@@ -358,7 +361,7 @@ export async function dismissReport(
     });
     if (result.count === 0) return null;
 
-    await tx.notification.create({
+    await notifyUser(tx, {
       data: {
         userId: report.reporterUserId,
         type: NotificationType.REPORT_PROCESSED,
@@ -449,6 +452,10 @@ export async function applyReportAction(
     }
   }
 
+  // Storage files of a post deleted below -- removed only after the
+  // transaction commits (a rolled-back delete must keep its images).
+  let deletedPostStorageUrls: string[] = [];
+
   try {
     const result = await prisma.$transaction(async (tx) => {
       let expiresAt: Date | null = null;
@@ -456,12 +463,13 @@ export async function applyReportAction(
       if (targetType === "post") {
         const resolved = await resolvePostTarget(report.targetId);
         if (!resolved) return { outcome: "target_gone" as const };
-        if (resolved.postKind === "lost") {
-          await tx.lostPost.delete({ where: { id: resolved.id } });
-        } else {
-          await tx.foundPost.delete({ where: { id: resolved.id } });
-        }
-        await tx.notification.create({
+        // Same delete path as an owner/admin delete: chats started from
+        // the post are kept, and only this post's own images come back
+        // for cleanup.
+        const urls = await deletePostRowInTx(tx, resolved.postKind, resolved.id);
+        if (urls === null) return { outcome: "target_gone" as const };
+        deletedPostStorageUrls = urls;
+        await notifyUser(tx, {
           data: {
             userId: resolved.userId,
             type: NotificationType.POST_DELETED,
@@ -478,7 +486,7 @@ export async function applyReportAction(
           where: { id: resolved.id },
           data: { hiddenAt: new Date(), hiddenByUserId: admin.id, hiddenReason: trimmedReason },
         });
-        await tx.notification.create({
+        await notifyUser(tx, {
           data: {
             userId: resolved.senderUserId,
             type: NotificationType.MESSAGE_HIDDEN,
@@ -493,13 +501,12 @@ export async function applyReportAction(
         // this phase's own report for why (notification behavior is kept
         // untouched this phase; the reporter still gets the usual
         // REPORT_PROCESSED notification below, unconditionally, same as
-        // every other target type). Deleting a top-level comment cascades
-        // to its own replies via Comment.parentId's onDelete: Cascade
-        // (schema.prisma), same as a self/admin delete through
-        // comment/service.ts's deleteComment().
+        // every other target type). Removed the same way as a self/admin
+        // delete (comment/remove.ts): a comment with replies becomes a
+        // tombstone, so other users' replies are never cascade-deleted.
         const resolved = await resolveCommentTarget(report.targetId);
         if (!resolved) return { outcome: "target_gone" as const };
-        await tx.comment.delete({ where: { id: resolved.id } });
+        await removeCommentInTx(tx, resolved);
       } else {
         const resolved = await resolveUserTarget(report.targetId);
         if (!resolved) return { outcome: "target_gone" as const };
@@ -518,7 +525,7 @@ export async function applyReportAction(
           // audit trail below (adminUserId/processedByUserId) is unchanged.
           data: { isSuspended: true, suspendedUntil: expiresAt, suspendedByUserId: admin.id },
         });
-        await tx.notification.create({
+        await notifyUser(tx, {
           data: {
             userId: resolved.id,
             type: NotificationType.USER_SUSPENDED,
@@ -549,7 +556,7 @@ export async function applyReportAction(
       });
       if (updateResult.count === 0) return { outcome: "already_processed" as const };
 
-      await tx.notification.create({
+      await notifyUser(tx, {
         data: {
           userId: report.reporterUserId,
           type: NotificationType.REPORT_PROCESSED,
@@ -564,6 +571,9 @@ export async function applyReportAction(
       return { outcome: "ok" as const, report: finalReport };
     });
 
+    // The transaction committed (every outcome here is a normal return), so
+    // a post deleted inside it is really gone -- clean up its files.
+    await deletePostStorageObjects(deletedPostStorageUrls);
     if (result.outcome === "target_gone") return { kind: "target_gone" };
     if (result.outcome === "already_processed") return { kind: "already_processed" };
     return { kind: "ok", data: toReportDTO(result.report) };

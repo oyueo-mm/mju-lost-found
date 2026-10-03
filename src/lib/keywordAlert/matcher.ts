@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { ACTIVE_RECIPIENT_WHERE } from "@/lib/notification/recipients";
 import { NotificationType, Prisma, type KeywordAlertPostType } from "@/generated/prisma/client";
 import type { PostType } from "@/lib/posts/schema";
 
@@ -75,9 +76,14 @@ async function createMatchNotification(
 export async function notifyKeywordAlertSubscribers(postType: PostType, post: MatchablePost): Promise<void> {
   try {
     // 자기 자신이 올린 글에는 알리지 않는다 -- DB 쿼리 자체에서 제외해,
-    // 아래 필터 로직이 실수로 빠뜨릴 가능성 자체를 없앤다.
+    // 아래 필터 로직이 실수로 빠뜨릴 가능성 자체를 없앤다. 비활성화된
+    // 계정의 알림 설정도 같은 쿼리에서 제외한다(notification/recipients.ts).
     const alerts = await prisma.keywordAlert.findMany({
-      where: { userId: { not: post.userId }, postType: { in: POST_TYPE_FILTER[postType] } },
+      where: {
+        userId: { not: post.userId },
+        postType: { in: POST_TYPE_FILTER[postType] },
+        user: ACTIVE_RECIPIENT_WHERE,
+      },
     });
     if (alerts.length === 0) return;
 

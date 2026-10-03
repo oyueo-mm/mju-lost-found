@@ -43,6 +43,7 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
   const postRefs = [
     { key: "post", id: room.post.id, type: room.post.type, title: room.post.title, imageUrl: room.post.imageUrl },
   ];
+  const postDeleted = room.post.deleted;
 
   return (
     // h-[70dvh], not h-[70vh]: `dvh` (dynamic viewport height) tracks the
@@ -115,7 +116,19 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
           "게시글 보기"를 한 칩으로 묶어 클릭 시 정확히 해당 게시글 상세로
           이동한다. */}
       <div className="flex flex-wrap gap-2 border-b border-border pb-3">
-        {postRefs.map((ref) => (
+        {/* The post this chat started from was deleted: the chat stays, but
+            there is nothing to link to -- just "삭제된 게시글 · 제목". */}
+        {postDeleted && (
+          <span className="flex items-center gap-2 rounded-full border border-border bg-muted/50 py-1 pr-3 pl-1 text-xs text-muted-foreground">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted">
+              <ImageOffIcon className="size-3.5 text-muted-foreground" />
+            </span>
+            <span className="max-w-48 truncate">
+              {t("chat.deletedPost")} · {room.post.title}
+            </span>
+          </span>
+        )}
+        {!postDeleted && postRefs.map((ref) => (
           <Link
             key={ref.key}
             href={`/post/${ref.id}?type=${ref.type}`}

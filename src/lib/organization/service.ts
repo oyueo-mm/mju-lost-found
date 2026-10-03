@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { notifyUser } from "@/lib/notification/recipients";
 import {
   OrganizationRole as PrismaOrganizationRole,
   OrganizationStatus as PrismaOrganizationStatus,
@@ -495,7 +496,7 @@ export async function approveOrganizationCreationRequest(
     // 없도록 한다. notification/service.ts 자체는 알림을 생성하지 않는다는
     // 그 모듈 자신의 설계 원칙("creation stays inside the transaction of
     // whichever domain caused it")을 그대로 따른다.
-    await tx.notification.create({
+    await notifyUser(tx, {
       data: {
         userId: existing.requestedByUserId,
         type: PrismaNotificationType.ORGANIZATION_REQUEST_PROCESSED,
@@ -536,7 +537,7 @@ export async function rejectOrganizationCreationRequest(
     });
     if (claimed.count === 0) return claimed;
 
-    await tx.notification.create({
+    await notifyUser(tx, {
       data: {
         userId: existing.requestedByUserId,
         type: PrismaNotificationType.ORGANIZATION_REQUEST_PROCESSED,
@@ -794,7 +795,7 @@ export async function approveJoinRequest(
     // "organization"(단체 자체를 가리킴 -- 승인 후에는 /organizations/[id]
     // 로 안내하는 것이 join 신청 자체보다 더 유용하므로, creation request
     // 알림이 쓰는 "organization_creation_request"와는 다른 값을 쓴다).
-    await tx.notification.create({
+    await notifyUser(tx, {
       data: {
         userId: existing.userId,
         type: PrismaNotificationType.ORGANIZATION_REQUEST_PROCESSED,
@@ -836,7 +837,7 @@ export async function rejectJoinRequest(
     });
     if (claimed.count === 0) return claimed;
 
-    await tx.notification.create({
+    await notifyUser(tx, {
       data: {
         userId: existing.userId,
         type: PrismaNotificationType.ORGANIZATION_REQUEST_PROCESSED,

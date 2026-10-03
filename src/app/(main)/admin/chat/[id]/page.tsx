@@ -58,12 +58,16 @@ export default async function AdminChatRoomPage({
 
       <section className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 text-sm">
         <span className="text-xs font-medium text-muted-foreground">관련 게시글</span>
-        <Link
-          href={`/post/${room.post.id}?type=${room.post.type}`}
-          className="font-medium text-primary hover:opacity-80"
-        >
-          {room.post.title}
-        </Link>
+        {room.post.deleted ? (
+          <span className="text-foreground">삭제된 게시글 · {room.post.title}</span>
+        ) : (
+          <Link
+            href={`/post/${room.post.id}?type=${room.post.type}`}
+            className="font-medium text-primary hover:opacity-80"
+          >
+            {room.post.title}
+          </Link>
+        )}
         <span className="mt-2 text-xs font-medium text-muted-foreground">참여자</span>
         <span className="text-foreground">
           {room.participants.map((p) => p.nickname ?? "알 수 없음").join(", ")}

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { notifyUser } from "@/lib/notification/recipients";
 import {
   ModerationActionType,
   NotificationType,
@@ -356,7 +357,7 @@ export async function updateUserByAdmin(
         data,
         include: { suspendedBy: { select: { nickname: true } } },
       });
-      await tx.notification.create({
+      await notifyUser(tx, {
         data: {
           userId: targetUserId,
           type: NotificationType.USER_SUSPENDED,

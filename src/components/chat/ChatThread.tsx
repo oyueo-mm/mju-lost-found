@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
-import { uploadChatImage, validateImageFile } from "@/lib/images/client";
+import { ImageProcessingError, uploadChatImage, validateImageFile } from "@/lib/images/client";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/time/relativeTime";
 import { useI18n } from "@/lib/i18n/client";
 import { MessageActionMenu } from "@/components/chat/MessageActionMenu";
@@ -340,8 +340,8 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
         try {
           const uploaded = await uploadChatImage(chatRoomId, selectedFile);
           imagePath = uploaded.path;
-        } catch {
-          setError(t("chatThread.uploadFailed"));
+        } catch (uploadError) {
+          setError(t(uploadError instanceof ImageProcessingError ? "image.processFailed" : "chatThread.uploadFailed"));
           return;
         }
       }

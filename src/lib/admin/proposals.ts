@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { notifyUser } from "@/lib/notification/recipients";
 import {
   AdminActionProposalType as PrismaProposalType,
   AdminActionAuditEvent as PrismaAuditEvent,
@@ -468,7 +469,7 @@ async function executeProposalAction(tx: Prisma.TransactionClient, proposal: Adm
         where: { id: proposal.targetUserId },
         data: { isSuspended: true, suspendedUntil, suspendedByUserId: proposal.proposedByUserId },
       });
-      await tx.notification.create({
+      await notifyUser(tx, {
         data: {
           userId: proposal.targetUserId,
           type: NotificationType.USER_SUSPENDED,

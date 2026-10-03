@@ -344,7 +344,7 @@ export const ko = {
   "time.yearsAgo": "{count}년 전",
 
   // ---------- 댓글 ----------
-  "comment.count": "댓글 {count}",
+  "comment.count": "댓글 {count}", "comment.deleted": "삭제된 댓글입니다.",
   "comment.empty": "아직 댓글이 없어요. 첫 댓글을 남겨보세요.",
   "comment.placeholder": "댓글을 입력하세요...",
   "comment.submit": "댓글 작성",
@@ -373,7 +373,7 @@ export const ko = {
   "chatThread.send": "전송",
   "chatThread.sending": "전송 중...",
   "chatThread.sendFailed": "메시지를 보내지 못했습니다.",
-  "chatThread.uploadFailed": "이미지 업로드에 실패했습니다.",
+  "chatThread.uploadFailed": "이미지 업로드에 실패했습니다.", "image.processFailed": "이미지를 처리하지 못해 업로드하지 않았습니다. 다른 이미지를 선택해주세요.",
   "chatThread.reactionFailed": "반응을 남기지 못했습니다.",
   "chatThread.editFailed": "메시지를 수정하지 못했습니다.",
   "chatThread.deleteFailed": "메시지를 삭제하지 못했습니다.",
@@ -604,7 +604,7 @@ export const ko = {
   "chat.counterpart": "상대방",
   "chat.reportUser": "{name}님 신고하기",
   "chat.backToList": "채팅 목록",
-  "chat.viewPost": "게시글 보기",
+  "chat.viewPost": "게시글 보기", "chat.deletedPost": "삭제된 게시글",
   "report.reason.fraud": "사기/허위 정보",
   "report.reason.inappropriate": "부적절한 내용",
   "report.reason.abuse": "욕설/비방",

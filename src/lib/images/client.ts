@@ -43,8 +43,9 @@ export function validateImageFile(file: File): ImageValidationError | null {
 // 메타데이터가 함께 제거된다.
 //
 // 이 파이프라인 중 어디서든 실패하면(구형 브라우저, 디코드 실패 등)
-// 원본 File을 그대로 업로드한다 -- 최적화가 실패했다고 업로드 자체가
-// 실패하지 않는다, 이 phase 이전과 동일한 동작으로 안전하게 되돌아간다.
+// 업로드를 중단하고 ImageProcessingError를 던진다. 예전에는 원본 File을
+// 그대로 올렸는데, 그러면 원본의 EXIF(촬영 위치 등)가 그대로 공개될 수
+// 있었다 -- canvas로 다시 그린 결과만 업로드한다.
 const MAX_IMAGE_DIMENSION = 1920;
 const WEBP_QUALITY = 0.82;
 
@@ -78,24 +79,31 @@ async function optimizeImageForUpload(
       bitmap.close();
     }
   } catch (error) {
-    console.error("Failed to optimize image before upload, falling back to original file:", error);
-    return {
-      blob: file,
-      contentType: isAllowedImageContentType(file.type) ? file.type : "image/jpeg",
-    };
+    console.error("Failed to process image before upload; not uploading it:", error);
+    throw new ImageProcessingError();
+  }
+}
+
+// The selected image couldn't be re-encoded in the browser, so it was not
+// uploaded at all (see optimizeImageForUpload). Callers show the user a
+// "pick another image" message for this case.
+export class ImageProcessingError extends Error {
+  constructor() {
+    super("Image could not be processed for upload");
+    this.name = "ImageProcessingError";
   }
 }
 
 // 0) 이미지 업로드 최적화 Phase: 원본 File을 리사이즈(긴 변 최대 1920px)
-//    + WebP 재인코딩(품질 0.82)한 Blob으로 먼저 변환한다 -- 실패 시
-//    원본 File로 안전하게 폴백(optimizeImageForUpload's own comment).
+//    + WebP 재인코딩(품질 0.82)한 Blob으로 먼저 변환한다 -- 실패하면
+//    ImageProcessingError로 중단하고 원본은 올리지 않는다.
 // 1) Ask our own server (POST /api/upload) to mint a signed upload
 //    credential -- this is where login/suspension/ownership/pathname are
 //    actually checked, not here. contentType은 이제 원본 file.type이
 //    아니라 실제로 업로드할 blob의 최종 contentType(최적화됐다면
 //    "image/webp"인 경우가 대부분)을 그대로 알려준다 -- pathname의
 //    확장자가 실제 업로드되는 바이트와 항상 일치해야 하기 때문이다.
-// 2) Upload the (optimized, or original as fallback) blob directly from
+// 2) Upload the re-encoded blob directly from
 //    the browser to Supabase Storage using that credential (the bytes
 //    never pass through our server).
 // 3) Return the storage path for the caller to attach to the post via

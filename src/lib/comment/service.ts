@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/db/prisma";
+import { notifyUser } from "@/lib/notification/recipients";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { isAdmin } from "@/lib/moderation/service";
 import { validateOrganizationPosting } from "@/lib/organization/service";
 import type { PostType } from "@/lib/posts/schema";
 import { NotificationType, type User } from "@/generated/prisma/client";
+import { removeCommentInTx } from "./remove";
 import type { CreateCommentInput, UpdateCommentInput } from "./schema";
 
 // Phase 23. Comment rows point at exactly one of LostPost/FoundPost via
@@ -32,6 +34,10 @@ export type CommentDTO = {
   // actor/attribution split, identical reasoning here.
   organizationId: number | null;
   organizationName: string | null;
+  // A comment deleted while it still had replies stays as a tombstone so
+  // the replies survive (see removeCommentInTx). Its content is always ""
+  // and the UI shows "삭제된 댓글입니다." instead of an author or actions.
+  isDeleted: boolean;
 };
 
 export type CommentMutationResult<T> =
@@ -70,11 +76,28 @@ function toCommentDTO(row: {
   createdAt: Date;
   updatedAt: Date;
   parentId: number | null;
+  deletedAt: Date | null;
   author: { id: number; nickname: string | null; publicId: string };
   organization: { id: number; name: string } | null;
 }): CommentDTO {
-  const { organization, ...rest } = row;
-  return { ...rest, organizationId: organization?.id ?? null, organizationName: organization?.name ?? null };
+  const { organization, deletedAt, ...rest } = row;
+  if (deletedAt) {
+    // Nothing about the deleted comment or who wrote it is sent.
+    return {
+      ...rest,
+      content: "",
+      author: { id: 0, nickname: null, publicId: "" },
+      organizationId: null,
+      organizationName: null,
+      isDeleted: true,
+    };
+  }
+  return {
+    ...rest,
+    organizationId: organization?.id ?? null,
+    organizationName: organization?.name ?? null,
+    isDeleted: false,
+  };
 }
 
 async function postExists(type: PostType, postId: number): Promise<boolean> {
@@ -143,13 +166,14 @@ export async function createComment(
   if (input.parentId !== undefined) {
     const parentRow = await prisma.comment.findUnique({
       where: { id: input.parentId },
-      select: { id: true, parentId: true, authorUserId: true, lostPostId: true, foundPostId: true },
+      select: { id: true, parentId: true, authorUserId: true, lostPostId: true, foundPostId: true, deletedAt: true },
     });
-    // Missing, or attached to a different post than this reply targets --
-    // both are "no valid parent here" from the caller's point of view.
+    // Missing, attached to a different post than this reply targets, or a
+    // deleted comment's tombstone -- all "no valid parent here" from the
+    // caller's point of view.
     const belongsToThisPost =
       parentRow !== null && (type === "lost" ? parentRow.lostPostId === postId : parentRow.foundPostId === postId);
-    if (!parentRow || !belongsToThisPost) return { kind: "parent_not_found" };
+    if (!parentRow || !belongsToThisPost || parentRow.deletedAt) return { kind: "parent_not_found" };
     parent = parentRow;
   }
 
@@ -169,7 +193,7 @@ export async function createComment(
     // "no self-notification" rule as chat/service.ts's own message
     // notification (see that file's comment on the self-match case).
     if (parent && parent.authorUserId !== author.id) {
-      await tx.notification.create({
+      await notifyUser(tx, {
         data: {
           userId: parent.authorUserId,
           type: NotificationType.COMMENT_REPLY,
@@ -210,7 +234,7 @@ const MY_COMMENTS_CAP = 200;
 
 export async function listCommentsByUser(userId: number): Promise<MyCommentDTO[]> {
   const rows = await prisma.comment.findMany({
-    where: { authorUserId: userId },
+    where: { authorUserId: userId, deletedAt: null },
     orderBy: { createdAt: "desc" },
     take: MY_COMMENTS_CAP,
     include: {
@@ -262,7 +286,7 @@ export async function updateComment(
   input: UpdateCommentInput,
 ): Promise<CommentMutationResult<CommentDTO>> {
   const existing = await findOwnedComment(id);
-  if (!existing) return { kind: "not_found" };
+  if (!existing || existing.deletedAt) return { kind: "not_found" };
   if (existing.authorUserId !== requesterId) {
     return { kind: "forbidden", reason: "not_owner" };
   }
@@ -287,20 +311,21 @@ export async function deleteComment(
   id: number,
 ): Promise<CommentMutationResult<{ id: number }>> {
   const existing = await findOwnedComment(id);
-  if (!existing) return { kind: "not_found" };
+  if (!existing || existing.deletedAt) return { kind: "not_found" };
 
   const isOwner = existing.authorUserId === requester.id;
   if (!isOwner && !isAdmin(requester)) {
     return { kind: "forbidden", reason: "not_owner" };
   }
 
-  await prisma.comment.delete({ where: { id } });
+  await prisma.$transaction((tx) => removeCommentInTx(tx, existing));
   return { kind: "ok", data: { id } };
 }
 
+// Tombstones aren't counted -- they're placeholders, not comments.
 export async function countCommentsForPost(type: PostType, postId: number): Promise<number> {
   return prisma.comment.count({
-    where: type === "lost" ? { lostPostId: postId } : { foundPostId: postId },
+    where: { ...(type === "lost" ? { lostPostId: postId } : { foundPostId: postId }), deletedAt: null },
   });
 }
 

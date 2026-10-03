@@ -692,13 +692,22 @@ model MatchCandidateCache {
 // exactly one of the two per row, enforced by application code
 // (chat/service.ts's getOrCreateDirectChatRoom), not a DB constraint --
 // same convention the legacy schema uses everywhere else (e.g.
-// LostPost.category isn't constrained either).
+// LostPost.category isn't constrained either). Once the post is deleted
+// both are NULL (ON DELETE SET NULL) and the room falls back to its
+// postType/postTitle snapshot -- the chat itself is kept.
 model ChatRoom {
   id                Int        @id @default(autoincrement())
   directLostPostId  Int?       @map("direct_lost_post_id")
-  directLostPost    LostPost?  @relation("ChatRoomDirectLostPost", fields: [directLostPostId], references: [id], onDelete: Cascade)
+  directLostPost    LostPost?  @relation("ChatRoomDirectLostPost", fields: [directLostPostId], references: [id], onDelete: SetNull)
   directFoundPostId Int?       @map("direct_found_post_id")
-  directFoundPost   FoundPost? @relation("ChatRoomDirectFoundPost", fields: [directFoundPostId], references: [id], onDelete: Cascade)
+  directFoundPost   FoundPost? @relation("ChatRoomDirectFoundPost", fields: [directFoundPostId], references: [id], onDelete: SetNull)
+  // Minimal snapshot of the post this room started from, kept so the room
+  // survives the post being deleted (both post FKs above are SET NULL on
+  // delete). Only the type and title -- never the body, place, date or
+  // images. Filled at room creation and refreshed just before the post is
+  // deleted (posts/service.ts), so it holds the final title.
+  postType          String     @map("post_type")
+  postTitle         String     @map("post_title") @db.Text
   initiatorUserId   Int?       @map("initiator_user_id")
   initiator         User?      @relation("ChatRoomInitiator", fields: [initiatorUserId], references: [id], onDelete: Restrict)
   // Phase 12-9 §3/§4: the room's other party -- previously never stored,
@@ -1241,6 +1250,11 @@ model Comment {
   // "exactly one of lostPostId/foundPostId" rule above. onDelete: Cascade
   // means deleting a top-level comment also deletes its own replies,
   // never anything deeper (depth is capped at 1 by construction).
+  // Set when a comment that already has replies is deleted: the row stays
+  // as a tombstone (content cleared) so the replies -- often other users'
+  // content -- are not removed by parent_id's ON DELETE CASCADE. A comment
+  // without replies is still hard-deleted. See comment/service.ts.
+  deletedAt      DateTime?     @map("deleted_at")
   parentId       Int?          @map("parent_id")
   parent         Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies        Comment[]     @relation("CommentReplies")

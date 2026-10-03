@@ -7,6 +7,7 @@ const comment = {
   findUnique: vi.fn(),
   update: vi.fn(),
   delete: vi.fn(),
+  deleteMany: vi.fn(),
   count: vi.fn(),
 };
 const lostPost = { findUnique: vi.fn() };
@@ -18,7 +19,11 @@ const foundPost = { findUnique: vi.fn() };
 // ever assert against comment.create/notification.create directly, same
 // as before the transaction wrap).
 const notification = { create: vi.fn() };
-const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn({ comment, notification }));
+// notification/recipients.ts::notifyUser's active-recipient check -- 1 =
+// the recipient is an active user (overridden per test for a deactivated
+// one).
+const user = { count: vi.fn() };
+const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn({ comment, notification, user }));
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: { comment, lostPost, foundPost, notification, $transaction } }));
 // Mocked wholesale (not via importActual): moderation/service.ts's own
@@ -44,8 +49,15 @@ vi.mock("@/generated/prisma/client", () => ({
   NotificationType: { COMMENT_REPLY: "COMMENT_REPLY" },
 }));
 
-const { createComment, deleteComment, getCommentPostRef, listCommentsByUser, listCommentsForPost, updateComment } =
-  await import("./service");
+const {
+  countCommentsForPost,
+  createComment,
+  deleteComment,
+  getCommentPostRef,
+  listCommentsByUser,
+  listCommentsForPost,
+  updateComment,
+} = await import("./service");
 
 const author = { id: 1, isSuspended: false, suspendedUntil: null, isAdmin: false } as unknown as User;
 const suspendedAuthor = { ...author, isSuspended: true } as unknown as User;
@@ -53,6 +65,7 @@ const admin = { id: 2, isSuspended: false, suspendedUntil: null, isAdmin: true }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  user.count.mockResolvedValue(1);
 });
 
 describe("listCommentsForPost", () => {
@@ -101,7 +114,8 @@ describe("listCommentsByUser", () => {
     const result = await listCommentsByUser(1);
 
     expect(comment.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { authorUserId: 1 }, orderBy: { createdAt: "desc" } }),
+      // Tombstones (deleted comments kept for their replies) are not "my comments".
+      expect.objectContaining({ where: { authorUserId: 1, deletedAt: null }, orderBy: { createdAt: "desc" } }),
     );
     expect(result).toEqual([
       {
@@ -249,6 +263,27 @@ describe("createComment", () => {
         data: expect.objectContaining({ authorUserId: 1, lostPostId: 1, parentId: 51 }),
       }),
     );
+  });
+
+  it("does not notify a parent author whose account is deactivated, but still creates the reply", async () => {
+    user.count.mockResolvedValueOnce(0); // the parent's author is deactivated
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1 });
+    comment.findUnique.mockResolvedValueOnce({ id: 50, parentId: null, authorUserId: 2, lostPostId: 1, foundPostId: null });
+    comment.create.mockResolvedValueOnce({
+      id: 51,
+      content: "네 맞아요!",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      parentId: 50,
+      deletedAt: null,
+      author: { id: 1, nickname: "답변자" },
+    });
+
+    const result = await createComment(author, "lost", 1, { content: "네 맞아요!", parentId: 50 });
+
+    expect(result.kind).toBe("ok");
+    expect(user.count).toHaveBeenCalledWith({ where: { id: 2, deletedAt: null } });
+    expect(notification.create).not.toHaveBeenCalled();
   });
 
   it("notifies the parent comment's author when a reply is created", async () => {
@@ -484,38 +519,140 @@ describe("updateComment", () => {
 });
 
 describe("deleteComment", () => {
-  it("allows the author to delete their own comment", async () => {
-    comment.findUnique.mockResolvedValueOnce({ id: 10, authorUserId: 1, author: { id: 1, nickname: "닉네임" } });
-    comment.delete.mockResolvedValueOnce({});
+  const row = { id: 10, authorUserId: 1, parentId: null, deletedAt: null, author: { id: 1, nickname: "닉네임" } };
+
+  it("allows the author to delete their own comment (no replies -> the row is deleted)", async () => {
+    comment.findUnique.mockResolvedValueOnce(row);
+    comment.deleteMany.mockResolvedValueOnce({ count: 1 });
 
     const result = await deleteComment(author, 10);
 
     expect(result).toEqual({ kind: "ok", data: { id: 10 } });
-    expect(comment.delete).toHaveBeenCalledWith({ where: { id: 10 } });
+    // The "no replies" condition is part of the delete itself, so an
+    // existing reply can never be cascade-deleted.
+    expect(comment.deleteMany).toHaveBeenCalledWith({ where: { id: 10, replies: { none: {} } } });
+    expect(comment.update).not.toHaveBeenCalled();
   });
 
   it("allows an admin to delete someone else's comment", async () => {
-    comment.findUnique.mockResolvedValueOnce({ id: 10, authorUserId: 1, author: { id: 1, nickname: "닉네임" } });
-    comment.delete.mockResolvedValueOnce({});
+    comment.findUnique.mockResolvedValueOnce(row);
+    comment.deleteMany.mockResolvedValueOnce({ count: 1 });
 
     const result = await deleteComment(admin, 10);
 
     expect(result).toEqual({ kind: "ok", data: { id: 10 } });
   });
 
+  it("keeps a comment that has replies as a tombstone, so other users' replies are not deleted", async () => {
+    comment.findUnique.mockResolvedValueOnce(row);
+    comment.deleteMany.mockResolvedValueOnce({ count: 0 }); // has replies
+
+    const result = await deleteComment(author, 10);
+
+    expect(result).toEqual({ kind: "ok", data: { id: 10 } });
+    expect(comment.update).toHaveBeenCalledWith({
+      where: { id: 10 },
+      data: { content: "", deletedAt: expect.any(Date) },
+    });
+    expect(comment.delete).not.toHaveBeenCalled();
+  });
+
+  it("removes a tombstoned parent once its last reply is deleted", async () => {
+    comment.findUnique
+      .mockResolvedValueOnce({ ...row, id: 11, parentId: 10 }) // the reply being deleted
+      .mockResolvedValueOnce({ parentId: null, deletedAt: new Date() }); // its tombstoned parent
+    comment.deleteMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 1 });
+
+    await deleteComment(author, 11);
+
+    expect(comment.deleteMany).toHaveBeenNthCalledWith(1, { where: { id: 11, replies: { none: {} } } });
+    expect(comment.deleteMany).toHaveBeenNthCalledWith(2, { where: { id: 10, replies: { none: {} } } });
+  });
+
+  it("leaves a live (not deleted) parent alone when a reply is deleted", async () => {
+    comment.findUnique
+      .mockResolvedValueOnce({ ...row, id: 11, parentId: 10 })
+      .mockResolvedValueOnce({ parentId: null, deletedAt: null });
+    comment.deleteMany.mockResolvedValueOnce({ count: 1 });
+
+    await deleteComment(author, 11);
+
+    expect(comment.deleteMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats an already-deleted (tombstoned) comment as not found", async () => {
+    comment.findUnique.mockResolvedValueOnce({ ...row, deletedAt: new Date() });
+
+    expect(await deleteComment(author, 10)).toEqual({ kind: "not_found" });
+    expect(comment.deleteMany).not.toHaveBeenCalled();
+  });
+
   it("rejects a non-owner, non-admin user", async () => {
-    comment.findUnique.mockResolvedValueOnce({ id: 10, authorUserId: 1, author: { id: 1, nickname: "닉네임" } });
+    comment.findUnique.mockResolvedValueOnce(row);
     const otherUser = { id: 3, isSuspended: false, suspendedUntil: null, isAdmin: false } as unknown as User;
 
     const result = await deleteComment(otherUser, 10);
 
     expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
-    expect(comment.delete).not.toHaveBeenCalled();
+    expect(comment.deleteMany).not.toHaveBeenCalled();
   });
 
   it("reports not_found for a nonexistent comment", async () => {
     comment.findUnique.mockResolvedValueOnce(null);
     expect(await deleteComment(author, 999)).toEqual({ kind: "not_found" });
+  });
+});
+
+describe("tombstones in comment lists", () => {
+  it("sends a deleted comment as a content-free, author-free placeholder", async () => {
+    comment.findMany.mockResolvedValueOnce([
+      {
+        id: 10,
+        content: "",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        parentId: null,
+        deletedAt: new Date(),
+        author: { id: 1, nickname: "닉네임", publicId: "p1" },
+        organization: { id: 3, name: "단체" },
+      },
+    ]);
+
+    const [item] = await listCommentsForPost("lost", 5);
+
+    expect(item).toMatchObject({
+      id: 10,
+      content: "",
+      isDeleted: true,
+      author: { id: 0, nickname: null, publicId: "" },
+      organizationId: null,
+      organizationName: null,
+    });
+  });
+
+  it("does not count tombstones", async () => {
+    comment.count.mockResolvedValueOnce(2);
+
+    await countCommentsForPost("lost", 5);
+
+    expect(comment.count).toHaveBeenCalledWith({ where: { lostPostId: 5, deletedAt: null } });
+  });
+
+  it("refuses a reply to a tombstoned comment", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 5 });
+    comment.findUnique.mockResolvedValueOnce({
+      id: 10,
+      parentId: null,
+      authorUserId: 9,
+      lostPostId: 5,
+      foundPostId: null,
+      deletedAt: new Date(),
+    });
+
+    const result = await createComment(author, "lost", 5, { content: "답글", parentId: 10 });
+
+    expect(result).toEqual({ kind: "parent_not_found" });
+    expect(comment.create).not.toHaveBeenCalled();
   });
 });
 

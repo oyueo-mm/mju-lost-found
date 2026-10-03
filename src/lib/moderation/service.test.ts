@@ -26,7 +26,7 @@ const txMessage = { update: vi.fn() };
 // 관리자 승인 인원 정책 Phase: createAdminActionProposal() also reads the
 // active admins (findMany) and takes an advisory lock ($executeRaw) inside
 // its transaction.
-const txUser = { update: vi.fn(), findMany: vi.fn() };
+const txUser = { update: vi.fn(), findMany: vi.fn(), count: vi.fn() };
 const txExecuteRaw = vi.fn();
 const txComment = { delete: vi.fn() };
 const txModerationAction = { create: vi.fn() };
@@ -58,6 +58,15 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
 vi.mock("@/lib/db/prisma", () => ({
   prisma: { report, lostPost, foundPost, message, user: userTable, comment, $transaction },
 }));
+// The post/comment removal itself is shared with the owner/admin delete
+// paths and tested there (posts/service.test.ts, comment/service.test.ts);
+// here only that applyReportAction uses them -- inside its transaction,
+// with Storage cleanup after it -- is checked.
+const deletePostRowInTx = vi.fn();
+const deletePostStorageObjects = vi.fn();
+vi.mock("@/lib/posts/service", () => ({ deletePostRowInTx, deletePostStorageObjects }));
+const removeCommentInTx = vi.fn();
+vi.mock("@/lib/comment/remove", () => ({ removeCommentInTx }));
 vi.mock("@/generated/prisma/client", () => ({
   ReportTargetType: { POST: "POST", MESSAGE: "MESSAGE", USER: "USER", COMMENT: "COMMENT" },
   ReportStatus: { PENDING: "PENDING", DISMISSED: "DISMISSED", ACTIONED: "ACTIONED" },
@@ -121,6 +130,7 @@ function reportRow(overrides: Partial<Record<string, unknown>> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  txUser.count.mockResolvedValue(1); // notifyUser: the recipient is active
   txReport.findUniqueOrThrow.mockImplementation(async () => reportRow({ status: "DISMISSED" }));
 });
 
@@ -325,13 +335,19 @@ describe("applyReportAction", () => {
   it("deletes the target post, notifies its owner, records the ModerationAction, and marks the report actioned", async () => {
     report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "POST", targetId: 5 }));
     lostPost.findUnique.mockResolvedValueOnce({ id: 5, userId: 42 });
+    deletePostRowInTx.mockResolvedValueOnce(["https://x/post.webp"]);
     txReport.updateMany.mockResolvedValueOnce({ count: 1 });
     txReport.findUniqueOrThrow.mockResolvedValueOnce(reportRow({ status: "ACTIONED" }));
 
     const result = await applyReportAction(admin, 10, "delete_post", { actionReason: "부적절", adminNote: "확인" });
 
     expect(result.kind).toBe("ok");
-    expect(txLostPost.delete).toHaveBeenCalledWith({ where: { id: 5 } });
+    expect(deletePostRowInTx).toHaveBeenCalledWith(expect.objectContaining({ lostPost: txLostPost }), "lost", 5);
+    // The post's own images are removed only after the transaction commits.
+    expect(deletePostStorageObjects).toHaveBeenCalledWith(["https://x/post.webp"]);
+    expect(deletePostStorageObjects.mock.invocationCallOrder[0]).toBeGreaterThan(
+      txReport.updateMany.mock.invocationCallOrder[0],
+    );
     expect(txNotification.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ userId: 42, type: "POST_DELETED" }),
     });
@@ -372,14 +388,20 @@ describe("applyReportAction", () => {
 
   it("deletes the target comment, records the ModerationAction, marks the report actioned, and sends no target-owner notification (Phase C-3)", async () => {
     report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "COMMENT", targetId: 42 }));
-    comment.findUnique.mockResolvedValueOnce({ id: 42, authorUserId: 77 });
+    comment.findUnique.mockResolvedValueOnce({ id: 42, authorUserId: 77, parentId: null, deletedAt: null });
     txReport.updateMany.mockResolvedValueOnce({ count: 1 });
     txReport.findUniqueOrThrow.mockResolvedValueOnce(reportRow({ targetType: "COMMENT", status: "ACTIONED" }));
 
     const result = await applyReportAction(admin, 10, "delete_comment", { actionReason: "부적절" });
 
     expect(result.kind).toBe("ok");
-    expect(txComment.delete).toHaveBeenCalledWith({ where: { id: 42 } });
+    // Same removal as a self/admin delete: a comment with replies becomes a
+    // tombstone instead of cascade-deleting other users' replies.
+    expect(removeCommentInTx).toHaveBeenCalledWith(expect.objectContaining({ comment: txComment }), {
+      id: 42,
+      authorUserId: 77,
+      parentId: null,
+    });
     // No notification naming the comment's own author (77) -- only the
     // reporter's REPORT_PROCESSED one further below.
     expect(txNotification.create).not.toHaveBeenCalledWith({

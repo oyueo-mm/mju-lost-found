@@ -57,6 +57,8 @@ describe("createAnnouncement", () => {
     expect(result.kind).toBe("ok");
     if (result.kind === "ok") expect(result.data.id).toBe(10);
 
+    // Deactivated accounts are excluded from the recipient query itself.
+    expect(txUserFindMany).toHaveBeenCalledWith({ where: { deletedAt: null }, select: { id: true } });
     expect(txAnnouncementCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         data: { title: "정기 점검 안내", content: "9월 20일 새벽 서비스 점검이 있습니다.", createdByUserId: 1 },

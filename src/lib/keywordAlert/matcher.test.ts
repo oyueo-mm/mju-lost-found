@@ -79,7 +79,7 @@ describe("notifyKeywordAlertSubscribers", () => {
     await notifyKeywordAlertSubscribers("lost", post({ userId: 42 }));
 
     expect(keywordAlert.findMany).toHaveBeenCalledWith({
-      where: { userId: { not: 42 }, postType: { in: ["ALL", "LOST"] } },
+      where: { userId: { not: 42 }, postType: { in: ["ALL", "LOST"] }, user: { deletedAt: null } },
     });
   });
 
@@ -89,7 +89,7 @@ describe("notifyKeywordAlertSubscribers", () => {
     await notifyKeywordAlertSubscribers("found", post());
 
     expect(keywordAlert.findMany).toHaveBeenCalledWith({
-      where: { userId: { not: 99 }, postType: { in: ["ALL", "FOUND"] } },
+      where: { userId: { not: 99 }, postType: { in: ["ALL", "FOUND"] }, user: { deletedAt: null } },
     });
   });
 

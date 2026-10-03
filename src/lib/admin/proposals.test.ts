@@ -17,7 +17,8 @@ const txExecuteRaw = vi.fn();
 const txAdminActionProposal = { create: vi.fn(), findUniqueOrThrow: vi.fn(), update: vi.fn() };
 const txAdminActionApproval = { create: vi.fn(), findMany: vi.fn() };
 const txAdminActionAuditLog = { create: vi.fn() };
-const txUser = { update: vi.fn(), findMany: vi.fn() };
+// count: notification/recipients.ts::notifyUser's active-recipient check.
+const txUser = { update: vi.fn(), findMany: vi.fn(), count: vi.fn(async () => 1) };
 const txNotification = { create: vi.fn() };
 const txModerationAction = { create: vi.fn() };
 

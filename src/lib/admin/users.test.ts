@@ -644,7 +644,9 @@ describe("updateUserByAdmin", () => {
         expect.objectContaining({ id: 42, content: "댓글 내용", post: { id: 7, type: "lost", title: "지갑 찾아요" } }),
       ]);
       // listCommentsByUser queries by the *target* user's id, not the admin's.
-      expect(comment.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { authorUserId: 5 } }));
+      expect(comment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { authorUserId: 5, deletedAt: null } }),
+      );
     });
   });
 });

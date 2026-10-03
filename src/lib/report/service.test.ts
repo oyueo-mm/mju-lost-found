@@ -240,7 +240,7 @@ describe("createReport", () => {
     expect(result.kind).toBe("ok");
     expect(comment.findUnique).toHaveBeenCalledWith({
       where: { id: 42 },
-      select: { id: true, authorUserId: true },
+      select: { id: true, authorUserId: true, parentId: true, deletedAt: true },
     });
     expect(report.create).toHaveBeenCalledWith({
       data: { reporterUserId: reporter.id, targetType: "COMMENT", targetId: 42, reason: "욕설/비방", detail: null },

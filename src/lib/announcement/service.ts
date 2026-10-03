@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { ACTIVE_RECIPIENT_WHERE } from "@/lib/notification/recipients";
 import { NotificationType, type User } from "@/generated/prisma/client";
 import { isAdmin } from "@/lib/moderation/service";
 import type { CreateAnnouncementInput, UpdateAnnouncementInput } from "./schema";
@@ -121,7 +122,9 @@ export async function createAnnouncement(
       include: WITH_AUTHOR,
     });
 
-    const userIds = await tx.user.findMany({ select: { id: true } });
+    // Every active user -- a deactivated account gets no new notifications
+    // (notification/recipients.ts).
+    const userIds = await tx.user.findMany({ where: ACTIVE_RECIPIENT_WHERE, select: { id: true } });
     if (userIds.length > 0) {
       await tx.notification.createMany({
         data: userIds.map(({ id: userId }) => ({

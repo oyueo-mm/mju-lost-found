@@ -22,10 +22,16 @@ const foundPost = {
 // of the CASCADE-deleted DB rows -- see this describe block's own new
 // tests below.
 const postImage = { findMany: vi.fn() };
+// Chats started from a deleted post are kept (FK SET NULL) -- the delete
+// only refreshes their title snapshot, it never deletes a ChatRoom.
+const chatRoom = { updateMany: vi.fn(), deleteMany: vi.fn(), delete: vi.fn() };
+// The delete runs inside an interactive transaction; the tx is the same
+// mocked tables so assertions read the same way.
+const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn({ lostPost, foundPost, postImage, chatRoom }));
 
 const deleteObjectSafely = vi.fn();
 
-vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost, postImage } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost, postImage, chatRoom, $transaction } }));
 vi.mock("@/generated/prisma/client", () => ({
   LostPostStatus: { SEARCHING: "SEARCHING", FOUND: "FOUND" },
   FoundPostStatus: { KEEPING: "KEEPING", COMPLETED: "COMPLETED" },
@@ -189,9 +195,15 @@ describe("getLostPost", () => {
 });
 
 describe("deleteLostPost / deleteFoundPost", () => {
+  // deleteLostPost reads the post once to check ownership, then
+  // deletePostRowInTx reads its title/cover again inside the transaction.
+  function mockPost(table: typeof lostPost, row: Record<string, unknown>) {
+    table.findUnique.mockResolvedValue(row);
+    table.delete.mockResolvedValue({});
+  }
+
   it("allows the owner to delete their own post", async () => {
-    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
-    lostPost.delete.mockResolvedValueOnce({});
+    mockPost(lostPost, { id: 1, userId: 1, title: "지갑", imageUrl: null });
 
     const result = await deleteLostPost(1, 1);
 
@@ -200,9 +212,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
   });
 
   it("cleans up the post's image in Storage on delete", async () => {
-    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x/y.jpg" });
-    lostPost.delete.mockResolvedValueOnce({});
-    deleteObjectSafely.mockResolvedValueOnce(undefined);
+    mockPost(lostPost, { id: 1, userId: 1, title: "지갑", imageUrl: "https://x/y.jpg" });
 
     await deleteLostPost(1, 1);
 
@@ -222,14 +232,14 @@ describe("deleteLostPost / deleteFoundPost", () => {
 
     expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
     expect(foundPost.delete).not.toHaveBeenCalled();
+    expect($transaction).not.toHaveBeenCalled();
   });
 
   // Phase 28-2: admin/posts.ts::deletePostForAdmin passes { asAdmin: true }
   // to delete a post the caller doesn't own -- every other existing caller
   // never passes this option, so their behavior (tested above) is unchanged.
   it("allows deleting someone else's post when asAdmin is true", async () => {
-    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 99, imageUrl: "https://x/y.jpg" });
-    lostPost.delete.mockResolvedValueOnce({});
+    mockPost(lostPost, { id: 1, userId: 99, title: "지갑", imageUrl: "https://x/y.jpg" });
 
     const result = await deleteLostPost(1, 1, { asAdmin: true });
 
@@ -251,8 +261,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
   // FK (see schema.prisma) -- this only covers the Storage side, which the
   // cascade never touches.
   it("cleans up every PostImage row's Storage object on delete, not just the imageUrl cache", async () => {
-    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x/cover.jpg" });
-    lostPost.delete.mockResolvedValueOnce({});
+    mockPost(lostPost, { id: 1, userId: 1, title: "지갑", imageUrl: "https://x/cover.jpg" });
     postImage.findMany.mockResolvedValueOnce([
       { imageUrl: "https://x/cover.jpg" },
       { imageUrl: "https://x/second.jpg" },
@@ -271,12 +280,56 @@ describe("deleteLostPost / deleteFoundPost", () => {
   });
 
   it("is a no-op Storage-wise when the post never had any images", async () => {
-    foundPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
-    foundPost.delete.mockResolvedValueOnce({});
+    mockPost(foundPost, { id: 1, userId: 1, title: "지갑", imageUrl: null });
     postImage.findMany.mockResolvedValueOnce([]);
 
     await deleteFoundPost(1, 1);
 
+    expect(deleteObjectSafely).not.toHaveBeenCalled();
+  });
+
+  it("keeps the chats started from the post, refreshing their title snapshot before the delete", async () => {
+    mockPost(lostPost, { id: 1, userId: 1, title: "검은 지갑 (최종)", imageUrl: null });
+
+    await deleteLostPost(1, 1);
+
+    expect(chatRoom.updateMany).toHaveBeenCalledWith({
+      where: { directLostPostId: 1 },
+      data: { postTitle: "검은 지갑 (최종)" },
+    });
+    expect(chatRoom.updateMany.mock.invocationCallOrder[0]).toBeLessThan(lostPost.delete.mock.invocationCallOrder[0]);
+    expect(chatRoom.deleteMany).not.toHaveBeenCalled();
+    expect(chatRoom.delete).not.toHaveBeenCalled();
+  });
+
+  it("refreshes a found post's chats by the found-post column", async () => {
+    mockPost(foundPost, { id: 7, userId: 1, title: "우산", imageUrl: null });
+
+    await deleteFoundPost(7, 1);
+
+    expect(chatRoom.updateMany).toHaveBeenCalledWith({ where: { directFoundPostId: 7 }, data: { postTitle: "우산" } });
+  });
+
+  it("deletes only the post's own Storage files -- never chat images or anything else", async () => {
+    mockPost(lostPost, { id: 1, userId: 1, title: "지갑", imageUrl: "https://x/posts/lost/1/a.webp" });
+    postImage.findMany.mockResolvedValueOnce([{ imageUrl: "https://x/posts/lost/1/b.webp" }]);
+
+    await deleteLostPost(1, 1);
+
+    const deleted = deleteObjectSafely.mock.calls.map(([url]) => url);
+    expect(deleted.sort()).toEqual(["https://x/posts/lost/1/a.webp", "https://x/posts/lost/1/b.webp"]);
+    // Only this post's PostImage rows were looked up -- nothing chat-related.
+    expect(postImage.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns not_found (and deletes no files) when the post vanished before the transaction", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, title: "지갑", imageUrl: "https://x/y.jpg" });
+    lostPost.findUnique.mockResolvedValueOnce(null);
+
+    const result = await deleteLostPost(1, 1);
+
+    expect(result).toEqual({ kind: "not_found" });
+    expect(lostPost.delete).not.toHaveBeenCalled();
     expect(deleteObjectSafely).not.toHaveBeenCalled();
   });
 });
