@@ -1,0 +1,10 @@
+# Files the Vercel CLI must never upload with a deployment. The CLI does not
+# honor .gitignore here: before this file existed it uploaded the local `.env`
+# (Production secrets) as part of the deployment source. Production and
+# Preview read every value from Vercel Environment Variables instead.
+.env
+.env.*
+!.env.example
+
+# Local Claude Code settings -- not part of the app.
+.claude
