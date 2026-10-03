@@ -92,7 +92,7 @@ export type ChatMutationResult<T> =
 // phase's own explicit warning against treating the two as the same
 // thing).
 export type ChatCounterpart =
-  | { kind: "user"; id: number; nickname: string | null; publicId: string | null }
+  | { kind: "user"; id: number; nickname: string | null; publicId: string | null; userType: string | null }
   | { kind: "organization"; id: number; name: string };
 
 // Phase J-2: `roomType` is kept on the DTO so every existing consumer
@@ -348,14 +348,15 @@ export async function getChatRoomParticipantIds(chatRoomId: number): Promise<Set
 // ever becomes possible) -- there is no real profile to link to in that
 // case, so callers treat a null publicId as "not linkable" rather than
 // crashing.
+// userType: only for the "인증된 외부 관계자" badge in the room header.
 async function resolveCounterpart(
   userId: number,
-): Promise<{ id: number; nickname: string | null; publicId: string | null }> {
+): Promise<{ id: number; nickname: string | null; publicId: string | null; userType: string | null }> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, nickname: true, publicId: true },
+    select: { id: true, nickname: true, publicId: true, userType: true },
   });
-  return user ?? { id: userId, nickname: null, publicId: null };
+  return user ?? { id: userId, nickname: null, publicId: null, userType: null };
 }
 
 async function resolveDetailDTO(

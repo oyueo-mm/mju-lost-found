@@ -16,7 +16,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
 import type { Translator } from "@/lib/i18n/translate";
 
-type CommentAuthor = { id: number; nickname: string | null; publicId: string };
+type CommentAuthor = { id: number; nickname: string | null; publicId: string; userType?: string | null };
 type CommentDTO = {
   id: number;
   content: string;

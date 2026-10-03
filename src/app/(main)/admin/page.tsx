@@ -35,6 +35,7 @@ export default async function AdminDashboardPage() {
     organizationCount,
     appSettings,
     proposalsResult,
+    externalAccessCount,
   ] = await Promise.all([
     listReportsForAdmin(admin, { status: "pending", page: 1, limit: 5 }),
     prisma.user.count({ where: { isSuspended: true } }),
@@ -66,6 +67,9 @@ export default async function AdminDashboardPage() {
     // below -- counts only PENDING proposals, matching "신고 대기"/"서비스
     // 의견 (접수)" tiles' own "지금 봐야 할 것" framing.
     listAdminActionProposalsForAdmin(admin),
+    // External access Phase: currently approved external accounts, for the
+    // "외부 관계자 승인" tile below.
+    prisma.externalAccessGrant.count({ where: { status: "ACTIVE" } }),
   ]);
 
   const pending = pendingResult.kind === "ok" ? pendingResult.data : { items: [], total: 0 };
@@ -173,6 +177,13 @@ export default async function AdminDashboardPage() {
           <span className={`text-2xl font-bold ${pendingProposalCount > 0 ? "text-warning" : "text-foreground"}`}>
             {pendingProposalCount}
           </span>
+        </Link>
+        <Link
+          href="/admin/external-access"
+          className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"
+        >
+          <span className="text-xs text-muted-foreground">외부 관계자 승인</span>
+          <span className="text-2xl font-bold text-foreground">{externalAccessCount}</span>
         </Link>
       </div>
 

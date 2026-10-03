@@ -88,6 +88,7 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
           <AuthorLink
             nickname={room.counterpart.nickname}
             publicId={room.counterpart.publicId}
+            userType={room.counterpart.userType}
             className="font-semibold text-foreground hover:underline"
           />
         )}

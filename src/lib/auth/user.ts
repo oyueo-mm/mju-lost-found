@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { userTypeForEmail } from "@/lib/auth/access";
 
 // Get-or-create by email (already @unique on User), matching the legacy
 // ui/auth.py::resolve_user_id() pattern -- this, not googleId, is what
@@ -30,6 +31,9 @@ export async function resolveOrCreateUser(params: {
   name: string | null;
   googleId: string;
 }) {
+  // External access Phase: recomputed on every sign-in from the server-side
+  // approval state (never from anything the client sends).
+  const userType = await userTypeForEmail(params.email);
   const existing = await prisma.user.findUnique({ where: { email: params.email } });
   if (existing) {
     return prisma.user.update({
@@ -38,6 +42,7 @@ export async function resolveOrCreateUser(params: {
         googleId: params.googleId,
         name: params.name ?? undefined,
         lastLoginAt: new Date(),
+        userType,
         ...(existing.deletedAt !== null ? { deletedAt: null } : {}),
       },
     });
@@ -48,6 +53,7 @@ export async function resolveOrCreateUser(params: {
       name: params.name ?? params.email.split("@")[0],
       googleId: params.googleId,
       lastLoginAt: new Date(),
+      userType,
     },
   });
 }

@@ -4,6 +4,7 @@ import {
   FoundPostStatus as PrismaFoundPostStatus,
   LostPostStatus as PrismaLostPostStatus,
   type Prisma,
+  type UserType,
 } from "@/generated/prisma/client";
 import type { PostListType, PostType, SortOption } from "./schema";
 import { DEFAULT_SORT } from "./schema";
@@ -53,7 +54,9 @@ const FOUND_STATUS_FROM_DB: Record<PrismaFoundPostStatus, string> = {
 // can link to /profile/[publicId] without a second query -- `id` itself
 // stays for internal use (e.g. "is this the current user's own post"), it
 // is never rendered as a link target.
-export const AUTHOR_SELECT = { id: true, nickname: true, publicId: true } as const;
+// External access Phase: userType too, only so the UI can show the
+// "인증된 외부 관계자" badge (it says nothing more than the account kind).
+export const AUTHOR_SELECT = { id: true, nickname: true, publicId: true, userType: true } as const;
 
 // Phase 12-5: paired with AUTHOR_SELECT above at every query site that
 // produces a LostPostDTO/FoundPostDTO -- a plain relation `select` (not a
@@ -64,7 +67,7 @@ export const AUTHOR_SELECT = { id: true, nickname: true, publicId: true } as con
 // and the organization's own profile page is one click away for anyone who
 // wants more.
 export const POST_ORGANIZATION_SELECT = { id: true, name: true } as const;
-export type Author = { id: number; nickname: string | null; publicId: string };
+export type Author = { id: number; nickname: string | null; publicId: string; userType: UserType };
 
 // Phase 11-4D: only ever set by getLostPost/getFoundPost (a single-post
 // detail-page fetch) -- listLostPosts/listFoundPosts/searchAllPosts/etc.

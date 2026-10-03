@@ -70,7 +70,8 @@ describe("getPublicProfile", () => {
 
     expect(findUnique).toHaveBeenCalledWith({
       where: { publicId: VALID_UUID },
-      select: { id: true, publicId: true, nickname: true, createdAt: true },
+      // userType is only the account kind, for the "인증된 외부 관계자" badge.
+      select: { id: true, publicId: true, nickname: true, createdAt: true, userType: true },
     });
   });
 });

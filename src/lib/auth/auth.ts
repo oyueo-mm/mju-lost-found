@@ -1,9 +1,8 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 
-import { isAllowedEmail } from "@/lib/auth/domain";
+import { decideSignIn } from "@/lib/auth/access";
 import { resolveOrCreateUser } from "@/lib/auth/user";
-import { isGoogleTestModeEnabled } from "@/lib/settings/service";
 
 // No next-auth Adapter/database session store here -- see the User.googleId
 // comment in schema.prisma. Sessions are JWT-based (a signed cookie), and
@@ -60,20 +59,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // never bypasses the domain check itself, only what happens when that
     // check fails; every other rule below (email_verified) still applies
     // to a test-mode account exactly as it does to a normal one.
+    // External access Phase: the whole accept/reject rule lives in
+    // auth/access.ts::decideSignIn -- @mju.ac.kr, an admin-approved
+    // external email, or (only while the admin test-mode setting is on)
+    // any other Google account; a revoked approval is always refused.
+    // Google always verifies email for its own accounts, but the claim is
+    // still checked explicitly rather than assumed.
     async signIn({ user, profile }) {
-      if (!isAllowedEmail(user.email)) {
-        let testModeEnabled = false;
-        try {
-          testModeEnabled = await isGoogleTestModeEnabled();
-        } catch (error) {
-          console.error("Failed to read googleTestModeEnabled -- failing closed (mju.ac.kr only):", error);
-        }
-        if (!testModeEnabled) return false;
-      }
-      // Google always verifies email for its own accounts, but check the
-      // claim explicitly rather than assume it.
-      if (profile && profile.email_verified === false) return false;
-      return true;
+      const emailVerified = profile ? profile.email_verified !== false : undefined;
+      const decision = await decideSignIn(user.email, emailVerified);
+      return decision.allowed;
     },
 
     // Runs on every request, but the DB upsert only happens on the initial

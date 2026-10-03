@@ -11,7 +11,7 @@ type AttributionLinkProps = {
   // the old plain AuthorLink). Both null/undefined means "personal".
   organizationId?: number | null;
   organizationName?: string | null;
-  author: { nickname: string | null; publicId: string | null };
+  author: { nickname: string | null; publicId: string | null; userType?: string | null };
   className?: string;
   iconClassName?: string;
 };
@@ -34,5 +34,5 @@ export function AttributionLink({ organizationId, organizationName, author, clas
       </Link>
     );
   }
-  return <AuthorLink nickname={author.nickname} publicId={author.publicId} className={className} />;
+  return <AuthorLink nickname={author.nickname} publicId={author.publicId} userType={author.userType} className={className} />;
 }

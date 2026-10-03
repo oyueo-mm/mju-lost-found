@@ -34,6 +34,26 @@ datasource db {
 // itself stays a plain identifier (Prisma enum members can't contain
 // spaces).
 
+// External access Phase: what kind of account this is. Set by the server
+// on every sign-in (auth/user.ts::resolveOrCreateUser, from
+// auth/access.ts::userTypeForEmail) -- never from client input.
+//   STUDENT           an @mju.ac.kr account (students and staff alike)
+//   EXTERNAL_VERIFIED a non-university Google account an admin approved
+//                     (ExternalAccessGrant ACTIVE) -- shown with the
+//                     "인증된 외부 관계자" badge
+//   EXTERNAL_TEST     a non-university account let in only by the admin
+//                     "Google 테스트 모드" setting
+enum UserType {
+  STUDENT           @map("student")
+  EXTERNAL_VERIFIED @map("external_verified")
+  EXTERNAL_TEST     @map("external_test")
+}
+
+enum ExternalAccessStatus {
+  ACTIVE  @map("active")
+  REVOKED @map("revoked")
+}
+
 enum LostPostStatus {
   SEARCHING @map("찾는 중")
   FOUND     @map("찾음")
@@ -362,6 +382,7 @@ model User {
   // the exact same row with its nickname/posts/comments/chat history
   // intact -- never a new row, never a data copy.
   deletedAt                 DateTime? @map("deleted_at")
+  userType                  UserType  @default(STUDENT) @map("user_type")
   createdAt                 DateTime  @default(now()) @map("created_at")
   updatedAt                 DateTime  @updatedAt @map("updated_at")
 
@@ -441,6 +462,8 @@ model User {
   keywordAlerts                KeywordAlert[]
   postCategoryReviews          PostCategoryReview[]
   adminAccessLogs              AdminAccessLog[]
+  externalAccessGrantsCreated  ExternalAccessGrant[]         @relation("ExternalAccessGrantCreatedBy")
+  externalAccessGrantsRevoked  ExternalAccessGrant[]         @relation("ExternalAccessGrantRevokedBy")
 
   @@map("User")
 }
@@ -1633,4 +1656,32 @@ model RateLimitCounter {
   @@id([key, windowStart])
   @@index([windowStart], map: "idx_ratelimitcounter_window_start")
   @@map("RateLimitCounter")
+}
+
+// ---------- ExternalAccessGrant ----------
+
+// An admin-approved non-university Google account (security staff,
+// facility managers, partner companies, ...). One row per email -- one
+// person, one account; shared/team logins are not what this is for (an
+// organization is how several people act for one 경비실). While ACTIVE that
+// email may sign in (auth/access.ts::decideSignIn) and its User is
+// EXTERNAL_VERIFIED; REVOKED blocks sign-in (even in Google test mode) and
+// any existing session on its next request (auth/session.ts). Never
+// grants admin rights. Managed at /admin/external-access.
+model ExternalAccessGrant {
+  id              Int                  @id @default(autoincrement())
+  email           String               @unique @db.Text
+  name            String               @db.Text
+  affiliation     String               @db.Text
+  campus          String               @db.Text
+  status          ExternalAccessStatus @default(ACTIVE)
+  createdByUserId Int                  @map("created_by_user_id")
+  createdBy       User                 @relation("ExternalAccessGrantCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  revokedAt       DateTime?            @map("revoked_at")
+  revokedByUserId Int?                 @map("revoked_by_user_id")
+  revokedBy       User?                @relation("ExternalAccessGrantRevokedBy", fields: [revokedByUserId], references: [id], onDelete: Restrict)
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  @@map("ExternalAccessGrant")
 }

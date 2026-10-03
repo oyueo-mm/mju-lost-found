@@ -2,6 +2,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth/auth";
+import { hasOngoingExternalAccess } from "@/lib/auth/access";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 import { prisma } from "@/lib/db/prisma";
@@ -45,6 +46,12 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
   // as active, same as a real row's actual `null` -- only an *actual*
   // Date value blocks.
   if (user?.deletedAt) return null;
+  // External access Phase: a non-university account is re-checked against
+  // its approval on every request, so a revoked approval cuts off an
+  // existing session right away (see auth/access.ts).
+  if (user && (user.userType === "EXTERNAL_VERIFIED" || user.userType === "EXTERNAL_TEST")) {
+    if (!(await hasOngoingExternalAccess(user))) return null;
+  }
   return user;
 });
 

@@ -10,6 +10,7 @@ import { Pagination } from "@/components/search/Pagination";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ReportButton } from "@/components/report/ReportButton";
 import { UserIcon, BoxIcon, ClockIcon } from "@/components/icons";
+import { ExternalVerifiedBadge } from "@/components/user/ExternalVerifiedBadge";
 import { getTranslator } from "@/lib/i18n/server";
 import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
 
@@ -72,7 +73,10 @@ export default async function ProfilePage({
             <UserIcon className="size-8" />
           </span>
           <div className="flex min-w-0 flex-col gap-1">
-            <h1 className="truncate text-xl font-semibold text-foreground">{profile.nickname ?? t("common.unknown")}</h1>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <h1 className="truncate text-xl font-semibold text-foreground">{profile.nickname ?? t("common.unknown")}</h1>
+              {profile.userType === "EXTERNAL_VERIFIED" && <ExternalVerifiedBadge />}
+            </div>
             {/* Phase H-7: "공개 사용자 ID" -- the opaque publicId itself, shown
                 as-is (not the internal numeric id, never exposed). */}
             <span className="truncate text-xs text-muted-foreground">ID: {profile.publicId}</span>

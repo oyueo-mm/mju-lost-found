@@ -18,6 +18,8 @@ export type PublicProfileDTO = {
   publicId: string;
   nickname: string | null;
   createdAt: Date;
+  // External access Phase: for the "인증된 외부 관계자" badge only.
+  userType: string;
   // Phase H-7: LostPost + FoundPost authored by this user, combined --
   // posts are hard-deleted in this app (no soft-delete/hidden flag on
   // either model, see schema.prisma), so a plain count of existing rows
@@ -51,7 +53,7 @@ export async function getPublicProfile(publicId: string): Promise<PublicProfileD
 
   const user = await prisma.user.findUnique({
     where: { publicId },
-    select: { id: true, publicId: true, nickname: true, createdAt: true },
+    select: { id: true, publicId: true, nickname: true, createdAt: true, userType: true },
   });
   if (!user) return null;
 
@@ -64,6 +66,7 @@ export async function getPublicProfile(publicId: string): Promise<PublicProfileD
     publicId: user.publicId,
     nickname: user.nickname,
     createdAt: user.createdAt,
+    userType: user.userType,
     postCount: lostCount + foundCount,
     userId: user.id,
   };

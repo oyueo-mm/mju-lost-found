@@ -83,9 +83,17 @@ Preview에서 실패하면 Production에 배포하지 않는다. 문제가 생�
 
 ## 7. 로그인 정책
 
-- Google OAuth. `@mju.ac.kr` 계정은 항상 로그인 가능하다.
-- 그 외 Google 계정은 `AppSettings.googleTestModeEnabled`(관리자 설정)가 켜져 있을 때만 일반 사용자로 가입된다.
-  현재 테스트·관리 목적으로 **켜져 있다**. 가입해도 동의·닉네임 등록 전에는 서비스를 이용할 수 없고 관리자 권한은 없다.
+- Google OAuth. 로그인 허용 여부는 서버(`src/lib/auth/access.ts`)가 아래 순서로 판정한다.
+  1. `@mju.ac.kr` 계정 → 항상 허용 (`userType` STUDENT)
+  2. 관리자가 승인한 외부 관계자 이메일(`/admin/external-access`, 승인 상태) → 허용 (`userType` EXTERNAL_VERIFIED,
+     "인증된 외부 관계자" 배지)
+  3. 승인이 취소된 이메일 → 항상 거부(테스트 모드가 켜져 있어도). 이미 로그인한 세션도 다음 요청부터 차단된다.
+  4. 그 외 Google 계정 → `AppSettings.googleTestModeEnabled`(관리자 대시보드의 Google 테스트 모드)가 켜져 있을 때만 허용
+     (`userType` EXTERNAL_TEST). 현재 상태는 관리자 대시보드에서 확인한다.
+- `userType`은 로그인할 때마다 서버가 다시 계산한다. 어떤 경우에도 관리자 권한은 자동으로 주어지지 않는다.
+- 외부 관계자는 한 사람당 한 계정으로 등록한다(공용 계정 금지). 경비실처럼 여러 사람이 한 이름으로 활동해야 하면
+  단체를 만들고 각자의 계정을 운영진으로 지정해 단체 명의 기능을 쓴다.
+- 가입해도 동의·닉네임 등록 전에는 서비스를 이용할 수 없다.
 - Google Cloud Console의 OAuth redirect URI에는 `https://mju-lost-found-vercel.vercel.app/api/auth/callback/google`이
   등록되어 있어야 한다(주소를 바꾸면 이 값도 함께 바꾼다).
 

@@ -19,7 +19,7 @@ const basePost: PostDTO = {
   foundAt: new Date("2026-09-01T00:00:00Z"),
   createdAt: new Date("2026-09-01T00:00:00Z"),
   updatedAt: new Date("2026-09-01T00:00:00Z"),
-  author: { id: 1, nickname: "테스터", publicId: "tester" },
+  author: { id: 1, nickname: "테스터", publicId: "tester", userType: "STUDENT" },
   organizationId: null,
   organizationName: null,
   viewCount: 3,
@@ -90,5 +90,28 @@ describe("PostCard desktop layout", () => {
     expect(markup).toContain("line-clamp-4 [overflow-wrap:anywhere]");
     expect(markup).toContain(longToken);
     expect(markup).toContain("min-w-0 self-start");
+  });
+});
+
+describe("PostCard author badge (external access)", () => {
+  it("shows '인증된 외부 관계자' next to an approved external author", () => {
+    const markup = renderCard({ ...basePost, author: { ...basePost.author, userType: "EXTERNAL_VERIFIED" } });
+    expect(markup).toContain("인증된 외부 관계자");
+  });
+
+  it("shows no badge for a student or a test-mode account", () => {
+    expect(renderCard(basePost)).not.toContain("인증된 외부 관계자");
+    expect(renderCard({ ...basePost, author: { ...basePost.author, userType: "EXTERNAL_TEST" } })).not.toContain("인증된 외부 관계자");
+  });
+
+  it("shows only the organization (no personal badge) on an organization-attributed post", () => {
+    const markup = renderCard({
+      ...basePost,
+      organizationId: 3,
+      organizationName: "종합관 경비실",
+      author: { ...basePost.author, userType: "EXTERNAL_VERIFIED" },
+    });
+    expect(markup).toContain("종합관 경비실");
+    expect(markup).not.toContain("인증된 외부 관계자");
   });
 });

@@ -64,7 +64,8 @@ export type CommentMutationResult<T> =
         | "organization_not_member";
     };
 
-const AUTHOR_SELECT = { id: true, nickname: true, publicId: true } as const;
+// userType: for the "인증된 외부 관계자" badge (see posts/service.ts).
+const AUTHOR_SELECT = { id: true, nickname: true, publicId: true, userType: true } as const;
 // See posts/service.ts's own POST_ORGANIZATION_SELECT -- identical shape/
 // reasoning, kept as a separate local constant since this module has no
 // dependency on posts/service.ts otherwise.

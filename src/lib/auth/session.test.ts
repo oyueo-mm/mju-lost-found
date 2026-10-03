@@ -10,6 +10,10 @@ const redirect = vi.fn((url: string) => {
 vi.mock("@/lib/auth/auth", () => ({ auth }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: { user: { findUnique } } }));
 vi.mock("next/navigation", () => ({ redirect }));
+// External access Phase: the per-request approval re-check (auth/access.ts,
+// tested on its own in access.test.ts).
+const hasOngoingExternalAccess = vi.fn();
+vi.mock("@/lib/auth/access", () => ({ hasOngoingExternalAccess }));
 
 const {
   getCurrentUser,
@@ -35,6 +39,27 @@ beforeEach(() => {
 });
 
 describe("getCurrentUser", () => {
+  it("cuts off an approved external account as soon as its approval is revoked", async () => {
+    auth.mockResolvedValue({ user: { id: "77" } });
+    findUnique.mockResolvedValue({ id: 77, email: "guard@gmail.com", userType: "EXTERNAL_VERIFIED", deletedAt: null });
+
+    hasOngoingExternalAccess.mockResolvedValueOnce(true);
+    expect(await getCurrentUser()).toMatchObject({ id: 77 });
+
+    hasOngoingExternalAccess.mockResolvedValueOnce(false);
+    expect(await getCurrentUser()).toBeNull();
+    auth.mockReset();
+    findUnique.mockReset();
+  });
+
+  it("never runs the external-access check for a student account", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "5" } });
+    findUnique.mockResolvedValueOnce({ id: 5, email: "s@mju.ac.kr", userType: "STUDENT", deletedAt: null });
+
+    expect(await getCurrentUser()).toMatchObject({ id: 5 });
+    expect(hasOngoingExternalAccess).not.toHaveBeenCalled();
+  });
+
   it("returns null without touching the DB when there is no session", async () => {
     auth.mockResolvedValueOnce(null);
 
