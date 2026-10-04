@@ -1,11 +1,12 @@
 import { createHmac } from "node:crypto";
 
 import { prisma } from "@/lib/db/prisma";
+import { releaseResolvedWithdrawnIdentities } from "@/lib/auth/identityRelease";
 import { RejoinRequestStatus, WithdrawnIdentityStatus, type Prisma } from "@/generated/prisma/client";
 
 // 회원탈퇴: a withdrawn account keeps no e-mail or Google ID. When the
 // withdrawal happened with a sanction matter still open (see
-// auth/withdrawal.ts::holdReasonsFor), only an HMAC of the Google account
+// auth/holdState.ts), only an HMAC of the Google account
 // id is kept, so the same person signing in again is sent to a rejoin
 // request instead of silently getting a fresh, unsanctioned account.
 //
@@ -66,21 +67,23 @@ export async function findHeldIdentity(account: { googleId: string; email: strin
     },
   });
   if (!identity) return null;
+  // The hold's purpose may have ended since the last check (e.g. a timed
+  // suspension ran out) -- then it is deleted now and this is a normal
+  // sign-up.
+  if ((await releaseResolvedWithdrawnIdentities([identity.id])).length > 0) return null;
   return { id: identity.id, latestRequest: identity.rejoinRequests[0] ?? null };
 }
 
-// An approved request is used exactly once: the hold is resolved and its
-// hash dropped (nothing left to recognise), and the caller then creates a
-// brand-new User. The new User's id is not written anywhere here.
+// An approved request is used exactly once: the hold is deleted (nothing
+// left to recognise; the request keeps its decision record with identityId
+// NULL), and the caller then creates a brand-new User. The new User's id is
+// not written anywhere here.
 export async function consumeApprovedRejoin(tx: Prisma.TransactionClient, identityId: number, requestId: number): Promise<boolean> {
   const { count } = await tx.rejoinRequest.updateMany({
     where: { id: requestId, identityId, status: RejoinRequestStatus.APPROVED, consumedAt: null },
     data: { consumedAt: new Date() },
   });
   if (count === 0) return false;
-  await tx.withdrawnIdentity.update({
-    where: { id: identityId },
-    data: { status: WithdrawnIdentityStatus.RESOLVED, resolvedAt: new Date(), identityHmac: null },
-  });
+  await tx.withdrawnIdentity.delete({ where: { id: identityId } });
   return true;
 }

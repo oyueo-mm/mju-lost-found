@@ -29,7 +29,8 @@ export default async function AdminRejoinRequestsPage() {
         <p className="text-sm text-muted-foreground">
           이용 정지 중이거나 처리 중인 신고·제재·이의신청이 있는 상태에서 탈퇴한 Google 계정의 재가입 요청입니다.
           승인하면 다음 로그인 때 새 계정이 만들어지며, 이전 계정과 콘텐츠는 연결되지 않습니다. 거절하면 해당 Google
-          계정으로는 가입할 수 없습니다.
+          계정으로는 가입할 수 없습니다. 정지·미처리 신고·이의신청 등 보류 사유가 모두 끝나면 보류 식별값은 즉시
+          삭제되고, 처리된 요청 기록은 처리 후 1년이 지나면 삭제됩니다.
         </p>
       </div>
 
@@ -56,17 +57,28 @@ export default async function AdminRejoinRequestsPage() {
                   </span>
                 </div>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-muted-foreground">
-                  <dt>탈퇴한 계정</dt>
-                  <dd>
-                    <Link href={`/admin/users/${r.withdrawnUserId}`} className="text-primary hover:opacity-80">
-                      사용자 #{r.withdrawnUserId}
-                    </Link>
-                    {r.withdrawnAt && ` · 탈퇴 ${formatDate(r.withdrawnAt)}`}
-                  </dd>
-                  <dt>보류 사유</dt>
-                  <dd>{r.holdReasons.map((h) => HOLD_REASON_LABELS[h] ?? h).join(", ")}</dd>
-                  <dt>정지 상태</dt>
-                  <dd>{r.wasSuspended ? (r.suspendedUntil ? `기간 정지 (~${formatDate(r.suspendedUntil)})` : "영구 정지") : "정지 아님"}</dd>
+                  {r.hold ? (
+                    <>
+                      <dt>탈퇴한 계정</dt>
+                      <dd>
+                        <Link href={`/admin/users/${r.hold.withdrawnUserId}`} className="text-primary hover:opacity-80">
+                          사용자 #{r.hold.withdrawnUserId}
+                        </Link>
+                        {r.hold.withdrawnAt && ` · 탈퇴 ${formatDate(r.hold.withdrawnAt)}`}
+                      </dd>
+                      <dt>보류 사유</dt>
+                      <dd>{r.hold.reasons.map((h) => HOLD_REASON_LABELS[h] ?? h).join(", ")}</dd>
+                      <dt>정지 상태</dt>
+                      <dd>
+                        {r.hold.wasSuspended ? (r.hold.suspendedUntil ? `기간 정지 (~${formatDate(r.hold.suspendedUntil)})` : "영구 정지") : "정지 아님"}
+                      </dd>
+                    </>
+                  ) : (
+                    <>
+                      <dt>보류</dt>
+                      <dd>해제됨 (식별값 삭제)</dd>
+                    </>
+                  )}
                   <dt>요청일</dt>
                   <dd>{formatDate(r.createdAt)}</dd>
                 </dl>

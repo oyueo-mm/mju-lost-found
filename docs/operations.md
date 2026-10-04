@@ -17,6 +17,9 @@
   `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
   `WITHDRAWN_IDENTITY_SECRET`(회원탈퇴 보류 식별값 HMAC 키, 32자 이상, 환경별로 다른 값, Sensitive).
   이 키를 바꾸거나 잃으면 기존 보류 식별값을 더 이상 대조할 수 없다. 키가 없으면 회원탈퇴 요청은 503으로 거부된다.
+  `CRON_SECRET`(보유기간 정리 cron 인증, 환경별로 다른 값, Sensitive). Vercel Cron이 매일 03:00(KST) 무렵
+  `GET /api/cron/retention`을 호출해 탈퇴 계정의 보유기간이 지난 데이터를 정리한다(Production에서만 자동 실행).
+  키가 없으면 정리는 실행되지 않는다(503). 실행 결과는 Vercel 로그의 `retention run` 줄에서 확인한다.
 - 로컬에서 각 DB에 붙을 때는 로컬 전용 파일을 쓴다: Production은 `.env`, Preview는 `.env.preview.local`.
   스크립트는 대상 파일을 명시해서 실행한다(예: `npx tsx --env-file=.env.preview.local ...`).
   **어느 DB를 가리키는지 확인하지 않고 쓰기 작업을 하지 않는다.** 운영 스크립트는 대상 프로젝트를 검사하고

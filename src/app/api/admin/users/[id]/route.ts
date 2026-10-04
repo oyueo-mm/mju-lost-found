@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { jsonError, requireAdminForApi, withErrorHandling } from "@/lib/moderation/http";
 import { adminUserMutationResultToResponse } from "@/lib/admin/response";
 import { updateUserByAdminSchema } from "@/lib/admin/schema";
+import { releaseResolvedWithdrawnIdentitiesSafely } from "@/lib/auth/identityRelease";
 import { updateUserByAdmin } from "@/lib/admin/users";
 
 // PATCH /api/admin/users/[id] { action: "promote"|"demote"|"suspend"|"unsuspend", suspendDurationDays? }
@@ -40,6 +41,8 @@ export const PATCH = withErrorHandling(
       parsed.data.reasonCategory,
       parsed.data.reason,
     );
+    // 회원탈퇴: lifting a suspension may end a withdrawn hold.
+    if (result.kind === "ok") await releaseResolvedWithdrawnIdentitiesSafely();
     return adminUserMutationResultToResponse(result);
   },
 );

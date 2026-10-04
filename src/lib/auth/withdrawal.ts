@@ -2,21 +2,15 @@ import { randomUUID } from "node:crypto";
 
 import { prisma } from "@/lib/db/prisma";
 import { normalizeEmail } from "@/lib/auth/access";
-import { isCurrentlySuspended } from "@/lib/auth/suspension";
+import { openHoldReasons, pendingReportsAbout } from "@/lib/auth/holdState";
 import { soleLeaderOrganizationNames } from "@/lib/auth/user";
 import { CURRENT_IDENTITY_KEY_VERSION, identityHmac, identitySubject } from "@/lib/auth/withdrawnIdentity";
 import { removeCommentInTx } from "@/lib/comment/remove";
 import { deleteChatImageSafely } from "@/lib/images/chatStorage";
 import { deletePostRowInTx, deletePostStorageObjects } from "@/lib/posts/service";
 import { encodePostTargetId } from "@/lib/report/targets";
-import {
-  AdminActionProposalStatus,
-  NotificationType,
-  OrganizationRequestStatus,
-  ReportStatus,
-  ReportTargetType,
-  type Prisma,
-} from "@/generated/prisma/client";
+import { evidenceReleased, type ReportFacts } from "@/lib/retention/policy";
+import { NotificationType, OrganizationRequestStatus, ReportTargetType, type Prisma } from "@/generated/prisma/client";
 
 // 회원탈퇴 -- irreversible, unlike deactivation (auth/user.ts::withdrawUser,
 // which stays as it was). The User row itself is kept, because ~30
@@ -36,45 +30,32 @@ import {
 // - Other users' notifications that spelled out this user's nickname: the
 //   text is rewritten (matched exactly by the related message/comment/room/
 //   appeal id, never by searching for the nickname).
+// - Report evidence: anything with a pending report, or a report processed
+//   less than 1 year ago, keeps its content (comment text, post content,
+//   chat image) but is no longer shown; lib/retention removes it later.
 // - Comments: removed through the usual tombstone rule (replies by others
-//   are never cascaded). A comment with a pending report keeps its text as
-//   that report's evidence but is no longer shown.
-// - Posts: a post with a pending report keeps its content (evidence) but is
-//   no longer public. Otherwise, a post other people commented on keeps an
+//   are never cascaded).
+// - Posts: evidence posts stay non-public with their content. Otherwise, a post other people commented on keeps an
 //   empty, non-public row (so their comments aren't cascaded away) with
 //   text, images and AI vectors removed; a post nobody else touched is
 //   deleted. Chat rooms keep working off their own title snapshot, which is
 //   replaced with a placeholder.
 // - Chat: rooms and message text stay (the other participant's record of
-//   the conversation -- retention policy still to be decided), shown as
-//   from "탈퇴한 사용자"; images this user sent are deleted unless the
-//   message has a pending report. No new messages can be sent to them.
-// - Reports, sanctions, appeals, feedback, AdminAccessLog: kept as they are
-//   (pseudonymised through the identifier-free User row).
+//   the conversation), shown as from "탈퇴한 사용자"; images this user sent
+//   are deleted unless the message has a pending report. No new messages
+//   can be sent to them.
+// - Feedback: deleted.
+// - Reports, sanctions, appeals, AdminAccessLog: kept (pseudonymised
+//   through the identifier-free User row).
 // - A WithdrawnIdentity (HMAC only) is kept only if a sanction matter is
-//   still open -- see holdReasonsFor().
+//   still open -- see auth/holdState.ts.
+// What is kept here is later removed on schedule by lib/retention
+// (chat text 90 days after withdrawal; report/sanction/appeal records and
+// their evidence 1 year after they were processed).
 
 export const WITHDRAWN_USER_LABEL = "탈퇴한 사용자";
 export const WITHDRAWN_POST_TITLE = "탈퇴한 사용자의 게시글";
 export const WITHDRAWN_IMAGE_TEXT = "(탈퇴로 삭제된 사진)";
-
-export type HoldReason = "active_suspension" | "pending_report" | "pending_sanction_proposal" | "pending_appeal";
-
-// The only cases where the withdrawn person is still recognisable on a
-// later sign-in (and must ask an admin before joining again).
-export function holdReasonsFor(state: {
-  activeSuspension: boolean;
-  pendingReports: number;
-  pendingProposals: number;
-  pendingAppeals: number;
-}): HoldReason[] {
-  const reasons: HoldReason[] = [];
-  if (state.activeSuspension) reasons.push("active_suspension");
-  if (state.pendingReports > 0) reasons.push("pending_report");
-  if (state.pendingProposals > 0) reasons.push("pending_sanction_proposal");
-  if (state.pendingAppeals > 0) reasons.push("pending_appeal");
-  return reasons;
-}
 
 export type WithdrawAccountResult =
   | { kind: "ok"; held: boolean }
@@ -86,7 +67,7 @@ type PostKind = "lost" | "found";
 
 const reportKey = (type: ReportTargetType, id: number) => `${type}:${id}`;
 
-async function clearPostInTx(tx: Tx, kind: PostKind, id: number, removedAt: Date): Promise<string[]> {
+export async function clearPostInTx(tx: Tx, kind: PostKind, id: number, removedAt: Date): Promise<string[]> {
   const where = kind === "lost" ? { lostPostId: id } : { foundPostId: id };
   const images = await tx.postImage.findMany({ where, select: { imageUrl: true } });
   const post =
@@ -128,31 +109,36 @@ export async function withdrawAccount(userId: number): Promise<WithdrawAccountRe
       ).map((r) => r.id);
       const commentIds = comments.map((c) => c.id);
       const messageIds = messages.map((m) => m.id);
+
       const postTargetIds = [...lostPosts.map((p) => encodePostTargetId("lost", p.id)), ...foundPosts.map((p) => encodePostTargetId("found", p.id))];
 
-      const pendingReports = await tx.report.findMany({
+      const pendingReports = await pendingReportsAbout(tx, userId);
+      // Every report (any status) on this user's content, for the evidence rule.
+      const allReports = await tx.report.findMany({
         where: {
-          status: ReportStatus.PENDING,
           OR: [
-            { targetType: ReportTargetType.USER, targetId: userId },
             { targetType: ReportTargetType.POST, targetId: { in: postTargetIds } },
             { targetType: ReportTargetType.COMMENT, targetId: { in: commentIds } },
             { targetType: ReportTargetType.MESSAGE, targetId: { in: messageIds } },
           ],
         },
-        select: { targetType: true, targetId: true },
+        select: { targetType: true, targetId: true, status: true, processedAt: true, createdAt: true },
       });
-      const reported = new Set(pendingReports.map((r) => reportKey(r.targetType, r.targetId)));
+      const reportsOn = new Map<string, ReportFacts[]>();
+      for (const r of allReports) {
+        const k = reportKey(r.targetType, r.targetId);
+        reportsOn.set(k, [...(reportsOn.get(k) ?? []), r]);
+      }
+      const evidenceNow = new Date();
+      const isEvidence = (type: ReportTargetType, id: number) => {
+        const reports = reportsOn.get(reportKey(type, id));
+        return reports !== undefined && !evidenceReleased(reports, evidenceNow);
+      };
 
       // ---- hold (only while a sanction matter is open) -- computed first,
       // so a missing secret aborts the whole withdrawal instead of letting
       // an open matter disappear.
-      const reasons = holdReasonsFor({
-        activeSuspension: isCurrentlySuspended(user),
-        pendingReports: pendingReports.length,
-        pendingProposals: await tx.adminActionProposal.count({ where: { targetUserId: userId, status: AdminActionProposalStatus.PENDING } }),
-        pendingAppeals: await tx.suspensionAppeal.count({ where: { userId, reviewedAt: null } }),
-      });
+      const reasons = await openHoldReasons(tx, user, pendingReports);
       if (reasons.length > 0) {
         await tx.withdrawnIdentity.create({
           data: {
@@ -179,7 +165,7 @@ export async function withdrawAccount(userId: number): Promise<WithdrawAccountRe
       for (const { id } of comments) {
         const comment = await tx.comment.findUnique({ where: { id }, select: { id: true, parentId: true, deletedAt: true } });
         if (!comment) continue; // already removed while walking up from a reply
-        if (reported.has(reportKey(ReportTargetType.COMMENT, id))) {
+        if (isEvidence(ReportTargetType.COMMENT, id)) {
           if (!comment.deletedAt) await tx.comment.update({ where: { id }, data: { deletedAt: now } });
           continue;
         }
@@ -198,14 +184,14 @@ export async function withdrawAccount(userId: number): Promise<WithdrawAccountRe
         ...foundPosts.map((p) => ({ kind: "found" as const, id: p.id })),
       ];
       for (const { kind, id } of posts) {
-        if (reported.has(reportKey(ReportTargetType.POST, encodePostTargetId(kind, id)))) {
+        if (isEvidence(ReportTargetType.POST, encodePostTargetId(kind, id))) {
           if (kind === "lost") await tx.lostPost.update({ where: { id }, data: { removedAt: now } });
           else await tx.foundPost.update({ where: { id }, data: { removedAt: now } });
           continue;
         }
         const roomWhere = kind === "lost" ? { directLostPostId: id } : { directFoundPostId: id };
         placeholderRoomIds.push(...(await tx.chatRoom.findMany({ where: roomWhere, select: { id: true } })).map((r) => r.id));
-        // Only other people's comments (or a reported comment of this
+        // Only other people's comments (or an evidence comment of this
         // user's, kept above) can be left at this point.
         const remainingComments = await tx.comment.count({ where: kind === "lost" ? { lostPostId: id } : { foundPostId: id } });
         if (remainingComments === 0) {
@@ -232,7 +218,7 @@ export async function withdrawAccount(userId: number): Promise<WithdrawAccountRe
       await tx.chatRead.deleteMany({ where: { userId } });
       const chatPaths: string[] = [];
       for (const m of messages) {
-        if (!m.imagePath || reported.has(reportKey(ReportTargetType.MESSAGE, m.id))) continue;
+        if (!m.imagePath || isEvidence(ReportTargetType.MESSAGE, m.id)) continue;
         chatPaths.push(m.imagePath);
         await tx.message.update({
           where: { id: m.id },
@@ -242,6 +228,7 @@ export async function withdrawAccount(userId: number): Promise<WithdrawAccountRe
 
       // ---- everything else that only belongs to this user
       await tx.keywordAlert.deleteMany({ where: { userId } });
+      await tx.feedback.deleteMany({ where: { userId } });
       await tx.organizationMember.deleteMany({ where: { userId } });
       await tx.organizationJoinRequest.deleteMany({ where: { userId, status: OrganizationRequestStatus.PENDING } });
       await tx.organizationJoinRequest.updateMany({ where: { userId }, data: { message: null } });

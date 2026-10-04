@@ -5,7 +5,7 @@ vi.mock("@/lib/posts/service", () => ({ deletePostRowInTx: vi.fn(), deletePostSt
 vi.mock("@/lib/images/chatStorage", () => ({ deleteChatImageSafely: vi.fn() }));
 vi.mock("@/lib/auth/user", () => ({ soleLeaderOrganizationNames: vi.fn() }));
 
-const { holdReasonsFor } = await import("./withdrawal");
+const { holdReasonsFor } = await import("./holdState");
 
 const none = { activeSuspension: false, pendingReports: 0, pendingProposals: 0, pendingAppeals: 0 };
 

@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const count = vi.fn();
 const findFirst = vi.fn();
 vi.mock("@/lib/db/prisma", () => ({ prisma: { withdrawnIdentity: { count, findFirst } } }));
+const releaseResolvedWithdrawnIdentities = vi.fn<(ids?: number[]) => Promise<number[]>>(async () => []);
+vi.mock("@/lib/auth/identityRelease", () => ({ releaseResolvedWithdrawnIdentities }));
 
 const { identityHmac, identitySubject, findHeldIdentity, MissingIdentitySecretError } = await import("./withdrawnIdentity");
 
@@ -66,5 +68,13 @@ describe("findHeldIdentity", () => {
     expect(where.identityHmac.in).toEqual([identityHmac("google:1"), identityHmac("email:a@x.com")]);
     expect(JSON.stringify(where)).not.toContain("a@x.com");
     expect(where.status).toBe("ACTIVE");
+  });
+
+  it("a hold whose purpose has ended is released at sign-in -> normal sign-up", async () => {
+    count.mockResolvedValueOnce(1);
+    findFirst.mockResolvedValueOnce({ id: 9, rejoinRequests: [] });
+    releaseResolvedWithdrawnIdentities.mockResolvedValueOnce([9]);
+    expect(await findHeldIdentity({ googleId: "1", email: "a@x.com" })).toBeNull();
+    expect(releaseResolvedWithdrawnIdentities).toHaveBeenCalledWith([9]);
   });
 });

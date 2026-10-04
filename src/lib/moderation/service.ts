@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { releaseResolvedWithdrawnIdentitiesSafely } from "@/lib/auth/identityRelease";
 import { notifyUser } from "@/lib/notification/recipients";
 import {
   LostPostStatus as PrismaLostPostStatus,
@@ -408,6 +409,8 @@ export async function dismissReport(
   });
 
   if (!updated) return { kind: "already_processed" };
+  // 회원탈퇴: processing may end the open matter behind a withdrawn hold.
+  await releaseResolvedWithdrawnIdentitiesSafely();
   return { kind: "ok", data: toReportDTO(updated) };
 }
 
@@ -625,6 +628,8 @@ export async function applyReportAction(
     await deletePostStorageObjects(deletedPostStorageUrls);
     if (result.outcome === "target_gone") return { kind: "target_gone" };
     if (result.outcome === "already_processed") return { kind: "already_processed" };
+    // 회원탈퇴: processing may end the open matter behind a withdrawn hold.
+    await releaseResolvedWithdrawnIdentitiesSafely();
     return { kind: "ok", data: toReportDTO(result.report) };
   } catch (error) {
     // Two admins racing the same report: whichever's ModerationAction

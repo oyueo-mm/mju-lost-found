@@ -35,7 +35,10 @@ export default async function RejoinPage() {
         <div className="flex flex-col gap-3 rounded-card border border-border bg-card p-5 text-sm">
           {state === null || state.kind === "approved" ? (
             state === null ? (
-              <p className="text-muted-foreground">요청 상태를 확인할 수 없습니다. 다시 로그인해주세요.</p>
+              <p className="text-muted-foreground">
+                보류가 해제되었거나 요청 상태를 확인할 수 없습니다. 로그아웃한 뒤 다시 로그인하면 새 계정으로 가입할 수
+                있습니다.
+              </p>
             ) : (
               <>
                 <p className="rounded-card border border-primary/30 bg-primary-muted px-4 py-3 text-primary">

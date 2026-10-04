@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { releaseResolvedWithdrawnIdentitiesSafely } from "@/lib/auth/identityRelease";
 import { NotificationType as PrismaNotificationType, type User } from "@/generated/prisma/client";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { fanOutToAdmins } from "@/lib/notification/adminFanout";
@@ -139,5 +140,7 @@ export async function markSuspensionAppealReviewed(admin: User, appealId: number
     where: { id: appealId },
     data: { reviewedAt: new Date(), reviewedByUserId: admin.id },
   });
+  // 회원탈퇴: processing may end the open matter behind a withdrawn hold.
+  await releaseResolvedWithdrawnIdentitiesSafely();
   return { kind: "ok", data: toAppealDTO(updated) };
 }

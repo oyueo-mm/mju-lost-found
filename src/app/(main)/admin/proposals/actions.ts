@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireAdmin } from "@/lib/auth/session";
+import { releaseResolvedWithdrawnIdentitiesSafely } from "@/lib/auth/identityRelease";
 import { approveAdminActionProposal, cancelAdminActionProposal } from "@/lib/admin/proposals";
 
 export type ProposalActionState = { error: string } | { ok: true };
@@ -27,6 +28,7 @@ const LOCKED_KIND_MESSAGES: Record<string, string> = {
 export async function approveProposalAction(proposalId: number): Promise<ProposalActionState> {
   const admin = await requireAdmin();
   const result = await approveAdminActionProposal(admin, proposalId);
+  if (result.kind === "ok") await releaseResolvedWithdrawnIdentitiesSafely();
   if (result.kind === "ok" || result.kind === "pending_more") {
     revalidatePath("/admin/proposals");
     return { ok: true };
@@ -37,6 +39,7 @@ export async function approveProposalAction(proposalId: number): Promise<Proposa
 export async function cancelProposalAction(proposalId: number): Promise<ProposalActionState> {
   const admin = await requireAdmin();
   const result = await cancelAdminActionProposal(admin, proposalId);
+  if (result.kind === "ok") await releaseResolvedWithdrawnIdentitiesSafely();
   if (result.kind === "ok") {
     revalidatePath("/admin/proposals");
     return { ok: true };

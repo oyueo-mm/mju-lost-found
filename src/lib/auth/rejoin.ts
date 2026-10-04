@@ -78,11 +78,15 @@ export type RejoinRequestAdminDTO = {
   reviewedByNickname: string | null;
   reviewNote: string | null;
   consumedAt: Date | null;
-  holdReasons: string[];
-  withdrawnUserId: number;
-  withdrawnAt: Date | null;
-  suspendedUntil: Date | null;
-  wasSuspended: boolean;
+  // null once the hold was released (its purpose ended or the approval
+  // was used) -- the request then stays only as the decision record.
+  hold: {
+    reasons: string[];
+    withdrawnUserId: number;
+    withdrawnAt: Date | null;
+    suspendedUntil: Date | null;
+    wasSuspended: boolean;
+  } | null;
 };
 
 export async function listRejoinRequestsForAdmin(admin: User): Promise<RejoinRequestAdminDTO[] | null> {
@@ -110,11 +114,15 @@ export async function listRejoinRequestsForAdmin(admin: User): Promise<RejoinReq
     reviewedByNickname: r.reviewedBy?.nickname ?? null,
     reviewNote: r.reviewNote,
     consumedAt: r.consumedAt,
-    holdReasons: r.identity.reasons,
-    withdrawnUserId: r.identity.withdrawnUserId,
-    withdrawnAt: r.identity.withdrawnUser.withdrawnAt,
-    suspendedUntil: r.identity.withdrawnUser.suspendedUntil,
-    wasSuspended: r.identity.withdrawnUser.isSuspended,
+    hold: r.identity
+      ? {
+          reasons: r.identity.reasons,
+          withdrawnUserId: r.identity.withdrawnUserId,
+          withdrawnAt: r.identity.withdrawnUser.withdrawnAt,
+          suspendedUntil: r.identity.withdrawnUser.suspendedUntil,
+          wasSuspended: r.identity.withdrawnUser.isSuspended,
+        }
+      : null,
   }));
 }
 

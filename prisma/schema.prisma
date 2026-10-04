@@ -1748,9 +1748,10 @@ model ExternalAccessGrant {
 // HMAC-SHA256 under a server secret (WITHDRAWN_IDENTITY_SECRET, never
 // stored in the DB) of the Google account id, so a later sign-in can be
 // recognised without keeping the identifier itself. The hash is cleared
-// once the hold is resolved (an approved rejoin is used). expiresAt stays
-// unset until a retention period is decided -- the column exists so one
-// can be applied without a schema change.
+// The row is deleted as soon as no open matter remains (auth/
+// identityRelease.ts: after a report/appeal/proposal is processed or a
+// suspension lifted, at sign-in, and daily by lib/retention) or when an
+// approved rejoin is used. expiresAt is not used by the current policy.
 model WithdrawnIdentity {
   id              Int                     @id @default(autoincrement())
   identityHmac    String?                 @unique @map("identity_hmac") @db.Text
@@ -1773,11 +1774,14 @@ model WithdrawnIdentity {
 // A held identity asking to join again. Approval never restores the old
 // account: the next sign-in creates a new User (consumedAt) and the old
 // content stays with the withdrawn row. The new User's id is deliberately
-// not recorded here, so the two accounts are not linked.
+// not recorded here, so the two accounts are not linked. identityId becomes
+// NULL when the hold is deleted, so a processed request (the admin decision
+// record) outlives it and is removed 1 year after reviewedAt
+// (lib/retention); a still-pending request is deleted with the hold.
 model RejoinRequest {
   id               Int                 @id @default(autoincrement())
-  identityId       Int                 @map("identity_id")
-  identity         WithdrawnIdentity   @relation(fields: [identityId], references: [id], onDelete: Restrict)
+  identityId       Int?                @map("identity_id")
+  identity         WithdrawnIdentity?  @relation(fields: [identityId], references: [id], onDelete: SetNull)
   reason           String              @db.Text
   status           RejoinRequestStatus @default(PENDING)
   createdAt        DateTime            @default(now()) @map("created_at")
