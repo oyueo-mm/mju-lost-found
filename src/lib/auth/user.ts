@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { userTypeForEmail } from "@/lib/auth/access";
+import { consumeApprovedRejoin, findHeldIdentity } from "@/lib/auth/withdrawnIdentity";
+import { RejoinRequestStatus, type Prisma } from "@/generated/prisma/client";
 
 // Get-or-create by email (already @unique on User), matching the legacy
 // ui/auth.py::resolve_user_id() pattern -- this, not googleId, is what
@@ -47,15 +49,51 @@ export async function resolveOrCreateUser(params: {
       },
     });
   }
-  return prisma.user.create({
-    data: {
-      email: params.email,
-      name: params.name ?? params.email.split("@")[0],
-      googleId: params.googleId,
-      lastLoginAt: new Date(),
-      userType,
-    },
-  });
+  return prisma.user.create({ data: newUserData(params, userType) });
+}
+
+type SignInAccount = { email: string; name: string | null; googleId: string };
+
+function newUserData(params: SignInAccount, userType: Awaited<ReturnType<typeof userTypeForEmail>>) {
+  return {
+    email: params.email,
+    name: params.name ?? params.email.split("@")[0],
+    googleId: params.googleId,
+    lastLoginAt: new Date(),
+    userType,
+  };
+}
+
+// 회원탈퇴: what a Google sign-in resolves to.
+// - An existing account with this e-mail (active or deactivated) -> that
+//   account, exactly as resolveOrCreateUser() always did. A withdrawn
+//   account never matches: its e-mail and Google id were removed.
+// - A held withdrawn identity (auth/withdrawnIdentity.ts) -> no User is
+//   created; the caller sends the person to the rejoin request screen. An
+//   approved, not yet used request is used here instead and a brand-new
+//   User is created -- never the old account, and nothing links the two.
+// - Anyone else -> a new User (normal re-signup after a withdrawal too).
+export type SignInResolution =
+  | { kind: "user"; user: Awaited<ReturnType<typeof resolveOrCreateUser>> }
+  | { kind: "held"; identityId: number };
+
+export async function resolveSignIn(params: SignInAccount): Promise<SignInResolution> {
+  const existing = await prisma.user.findUnique({ where: { email: params.email }, select: { id: true } });
+  if (existing) return { kind: "user", user: await resolveOrCreateUser(params) };
+
+  const held = await findHeldIdentity(params);
+  if (!held) return { kind: "user", user: await resolveOrCreateUser(params) };
+
+  const request = held.latestRequest;
+  if (request?.status === RejoinRequestStatus.APPROVED && request.consumedAt === null) {
+    const userType = await userTypeForEmail(params.email);
+    const created = await prisma.$transaction(async (tx) => {
+      if (!(await consumeApprovedRejoin(tx, held.id, request.id))) return null;
+      return tx.user.create({ data: newUserData(params, userType) });
+    });
+    if (created) return { kind: "user", user: created };
+  }
+  return { kind: "held", identityId: held.id };
 }
 
 // 이용약관 동의 Phase: replaces the old standalone recordPrivacyConsent()
@@ -147,31 +185,38 @@ export type WithdrawUserResult =
   | { kind: "ok"; data: Awaited<ReturnType<typeof prisma.user.findUniqueOrThrow>> }
   | { kind: "sole_leader_block"; organizationNames: string[] };
 
+type SoleLeaderTx = Pick<Prisma.TransactionClient, "$queryRaw" | "organization" | "organizationMember">;
+
+// Names of the still-ACTIVE organizations this user is the only LEADER of
+// (locks the user's LEADER rows first -- see the comment above). Shared by
+// deactivation and 회원탈퇴 (auth/withdrawal.ts).
+export async function soleLeaderOrganizationNames(tx: SoleLeaderTx, userId: number): Promise<string[]> {
+  const leaderMemberships = await tx.$queryRaw<{ organizationId: number }[]>`
+    SELECT organization_id AS "organizationId"
+    FROM "OrganizationMember"
+    WHERE user_id = ${userId} AND role = 'leader'
+    FOR UPDATE
+  `;
+  const soleLeaderOrgNames: string[] = [];
+  for (const { organizationId } of leaderMemberships) {
+    const organization = await tx.organization.findUnique({
+      where: { id: organizationId },
+      select: { name: true, status: true },
+    });
+    if (!organization || organization.status !== "ACTIVE") continue; // 이미 비활성화된 단체는 계정 비활성화를 막지 않는다
+    const leaderCount = await tx.organizationMember.count({
+      where: { organizationId, role: "LEADER" },
+    });
+    if (leaderCount <= 1) soleLeaderOrgNames.push(organization.name);
+  }
+  return soleLeaderOrgNames;
+}
+
 export async function withdrawUser(userId: number): Promise<WithdrawUserResult> {
   return prisma.$transaction(async (tx) => {
-    const leaderMemberships = await tx.$queryRaw<{ organizationId: number }[]>`
-      SELECT organization_id AS "organizationId"
-      FROM "OrganizationMember"
-      WHERE user_id = ${userId} AND role = 'leader'
-      FOR UPDATE
-    `;
-
-    if (leaderMemberships.length > 0) {
-      const soleLeaderOrgNames: string[] = [];
-      for (const { organizationId } of leaderMemberships) {
-        const organization = await tx.organization.findUnique({
-          where: { id: organizationId },
-          select: { name: true, status: true },
-        });
-        if (!organization || organization.status !== "ACTIVE") continue; // 이미 비활성화된 단체는 계정 비활성화를 막지 않는다
-        const leaderCount = await tx.organizationMember.count({
-          where: { organizationId, role: "LEADER" },
-        });
-        if (leaderCount <= 1) soleLeaderOrgNames.push(organization.name);
-      }
-      if (soleLeaderOrgNames.length > 0) {
-        return { kind: "sole_leader_block", organizationNames: soleLeaderOrgNames };
-      }
+    const soleLeaderOrgNames = await soleLeaderOrganizationNames(tx, userId);
+    if (soleLeaderOrgNames.length > 0) {
+      return { kind: "sole_leader_block", organizationNames: soleLeaderOrgNames };
     }
 
     const { count } = await tx.user.updateMany({

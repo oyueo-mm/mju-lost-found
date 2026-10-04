@@ -59,7 +59,8 @@ const FOUND_STATUS_FROM_DB: Record<PrismaFoundPostStatus, string> = {
 // Legal pre-beta Phase: what every public post list/search/count adds --
 // a temporarily hidden post (임시 숨김, moderation/service.ts) is shown only
 // to its author (their own "내 게시글") and admins.
-export const PUBLIC_POST_WHERE = { tempHiddenAt: null } as const;
+// 회원탈퇴: a withdrawn author's leftover post (removedAt) is never public.
+export const PUBLIC_POST_WHERE = { tempHiddenAt: null, removedAt: null } as const;
 
 export const AUTHOR_SELECT = { id: true, nickname: true, publicId: true, userType: true } as const;
 
@@ -91,6 +92,7 @@ export type LostPostDTO = {
   // Legal pre-beta Phase: set while temporarily hidden (임시 숨김) -- only
   // ever returned to its author or an admin (see post/[id]/page.tsx).
   tempHiddenAt?: Date | null;
+  removedAt?: Date | null;
   title: string;
   description: string;
   // Legacy free-text category -- still what search filters, keyword alerts
@@ -143,6 +145,7 @@ export type FoundPostDTO = {
   // Legal pre-beta Phase: set while temporarily hidden (임시 숨김) -- only
   // ever returned to its author or an admin (see post/[id]/page.tsx).
   tempHiddenAt?: Date | null;
+  removedAt?: Date | null;
   title: string;
   description: string;
   category: string;
@@ -282,10 +285,11 @@ function buildSearchWhere<S extends PrismaLostPostStatus | PrismaFoundPostStatus
   user?: { nickname: { contains: string; mode: "insensitive" } };
   status?: S;
   tempHiddenAt: null;
+  removedAt: null;
 } {
   // Legal pre-beta Phase: a temporarily hidden post (임시 숨김) is never part
   // of a public list/search.
-  const where: ReturnType<typeof buildSearchWhere<S>> = { tempHiddenAt: null };
+  const where: ReturnType<typeof buildSearchWhere<S>> = { tempHiddenAt: null, removedAt: null };
   if (filters.q) {
     where.OR = [
       { title: { contains: filters.q, mode: "insensitive" } },
@@ -349,6 +353,7 @@ export function toLostPostDTO(row: {
   updatedAt: Date;
   viewCount: number;
   tempHiddenAt?: Date | null;
+  removedAt?: Date | null;
   user: Author;
   // Phase 12-5: required (not optional) -- every call site below now
   // selects this relation, same "no include site left behind" guarantee
@@ -390,6 +395,7 @@ export function toFoundPostDTO(row: {
   updatedAt: Date;
   viewCount: number;
   tempHiddenAt?: Date | null;
+  removedAt?: Date | null;
   user: Author;
   // See toLostPostDTO's own comment -- identical shape/reasoning.
   organization: { id: number; name: string } | null;

@@ -60,7 +60,7 @@ export type ChatMutationResult<T> =
   // getOrCreateOrganizationChatRoom's own comment). Distinct from "self"
   // (personal chat's own self-chat guard) since the two guards check
   // completely different things.
-  | { kind: "forbidden"; reason?: "suspended" | "self" | "organization_manager" }
+  | { kind: "forbidden"; reason?: "suspended" | "self" | "organization_manager" | "withdrawn" }
   | { kind: "invalid_content" }
   // Phase 28-3: imagePath was given but doesn't parse as a real chat
   // image pathname, or names a different chat room than the one the
@@ -453,15 +453,16 @@ export async function getOrCreateDirectChatRoom(
     postType === "lost"
       ? await prisma.lostPost.findUnique({
           where: { id: postId },
-          select: { id: true, userId: true, organizationId: true, title: true },
+          select: { id: true, userId: true, organizationId: true, title: true, removedAt: true },
         })
       : await prisma.foundPost.findUnique({
           where: { id: postId },
-          select: { id: true, userId: true, organizationId: true, title: true },
+          select: { id: true, userId: true, organizationId: true, title: true, removedAt: true },
         });
   // A missing post covers both "never existed" and "deleted" -- the row
-  // simply isn't found either way, no separate check needed.
-  if (!post) return { kind: "not_found" };
+  // simply isn't found either way, no separate check needed. A withdrawn
+  // author's leftover post (removedAt) counts as gone too.
+  if (!post || post.removedAt) return { kind: "not_found" };
 
   if (commentId === undefined && post.organizationId) {
     return getOrCreateOrganizationChatRoom(postType, postId, requester, post.organizationId, post.title);
@@ -1088,6 +1089,12 @@ export async function sendMessage(
   if (!participantIds) return { kind: "not_found" };
   if (!participantIds.has(sender.id)) return { kind: "forbidden" };
   if (isCurrentlySuspended(sender)) return { kind: "forbidden" };
+  // 회원탈퇴: the conversation stays readable, but nobody can keep writing
+  // to someone who has left the service.
+  const directParticipants = [room.initiatorUserId, room.counterpartUserId].filter((id): id is number => id !== null && id !== sender.id);
+  if (directParticipants.length > 0 && (await prisma.user.count({ where: { id: { in: directParticipants }, withdrawnAt: { not: null } } })) > 0) {
+    return { kind: "forbidden", reason: "withdrawn" };
+  }
 
   const trimmed = content.trim();
 

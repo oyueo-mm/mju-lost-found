@@ -5,6 +5,7 @@ import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { getLatestSuspensionRecord } from "@/lib/moderation/service";
 import { getLatestAppealForUser } from "@/lib/moderation/appeals";
 import { AppealForm } from "@/components/moderation/AppealForm";
+import { AccountExitOptions } from "@/components/account/AccountExitOptions";
 import { AlertIcon, ClockIcon } from "@/components/icons";
 import { getLocale } from "@/lib/i18n/server";
 import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
@@ -130,6 +131,16 @@ export default async function SuspendedPage() {
             <AppealForm />
           )}
         </div>
+
+        {/* 회원탈퇴: a suspended account can't reach /me, but may still leave. */}
+        <details className="group flex flex-col gap-3">
+          <summary className="cursor-pointer text-center text-sm text-muted-foreground underline hover:text-foreground">
+            계정 비활성화 · 회원탈퇴
+          </summary>
+          <div className="mt-3">
+            <AccountExitOptions />
+          </div>
+        </details>
       </div>
     </div>
   );

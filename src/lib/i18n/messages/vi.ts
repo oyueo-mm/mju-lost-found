@@ -426,7 +426,7 @@ export const vi: Dictionary = {
   "me.keywordAlerts": "Thông báo từ khoá",
   "me.adminCenter": "Trung tâm quản trị",
   "me.logout": "Đăng xuất",
-  "me.deactivate": "Vô hiệu hoá tài khoản",
+  "me.deactivate": "Vô hiệu hoá hoặc xoá tài khoản",
   "profile.publicPosts": "Bài đăng công khai",
   "profile.joinedAt": "Ngày tham gia",
   "profile.posts": "Bài đã đăng",

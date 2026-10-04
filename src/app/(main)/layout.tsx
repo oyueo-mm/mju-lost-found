@@ -3,13 +3,19 @@ import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { BottomNav } from "@/components/layout/BottomNav";
-import { getCurrentUser, hasRequiredConsents } from "@/lib/auth/session";
+import { getCurrentUser, getRejoinIdentityId, hasRequiredConsents } from "@/lib/auth/session";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { countUnreadMessagesForUser } from "@/lib/chat/service";
 import { isAdmin } from "@/lib/moderation/service";
 
 export default async function MainLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
+
+  // 회원탈퇴: a held withdrawn identity just signed in -- they have no
+  // account, only the rejoin request screen.
+  if (!user && (await getRejoinIdentityId())) {
+    redirect("/rejoin");
+  }
 
   // 필수 동의 게이트 우회 점검 Phase: this blanket check was missing here
   // entirely -- every *write* path already enforced it via

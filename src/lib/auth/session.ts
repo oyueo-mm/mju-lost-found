@@ -62,6 +62,13 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
 // requireUserForApi()). Kept as a closed set rather than a free-form
 // string so a typo'd reason at a call site is a compile error, not a
 // silently-blank message on /login.
+// 회원탈퇴: the held withdrawn identity behind this session, if the last
+// Google sign-in was refused a new account pending a rejoin request.
+export async function getRejoinIdentityId(): Promise<number | null> {
+  const session = await auth();
+  return session?.rejoinIdentityId ?? null;
+}
+
 export type LoginReason = "write" | "chat" | "match" | "mypost" | "notification";
 
 // Only ever built from this module's own string literals (the `reason`

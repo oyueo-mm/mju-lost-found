@@ -54,8 +54,8 @@ describe("getPublicProfile", () => {
     // server-side (see PublicProfileDTO's own comment) -- it's never
     // rendered, but it IS part of the returned data shape now.
     expect(result).toEqual({ publicId: VALID_UUID, nickname: "닉네임", createdAt, postCount: 5, userId: 7 });
-    expect(lostPostCount).toHaveBeenCalledWith({ where: { userId: 7, tempHiddenAt: null } });
-    expect(foundPostCount).toHaveBeenCalledWith({ where: { userId: 7, tempHiddenAt: null } });
+    expect(lostPostCount).toHaveBeenCalledWith({ where: { userId: 7, tempHiddenAt: null, removedAt: null } });
+    expect(foundPostCount).toHaveBeenCalledWith({ where: { userId: 7, tempHiddenAt: null, removedAt: null } });
   });
 
   // Never selects/returns email, googleId, isAdmin, isSuspended, etc --
@@ -71,7 +71,7 @@ describe("getPublicProfile", () => {
     expect(findUnique).toHaveBeenCalledWith({
       where: { publicId: VALID_UUID },
       // userType is only the account kind, for the "인증된 외부 관계자" badge.
-      select: { id: true, publicId: true, nickname: true, createdAt: true, userType: true },
+      select: { id: true, publicId: true, nickname: true, createdAt: true, userType: true, withdrawnAt: true },
     });
   });
 });

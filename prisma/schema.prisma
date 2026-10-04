@@ -49,6 +49,18 @@ enum UserType {
   EXTERNAL_TEST     @map("external_test")
 }
 
+// 회원탈퇴: whether a held withdrawn identity still blocks a new sign-up.
+enum WithdrawnIdentityStatus {
+  ACTIVE   @map("active")
+  RESOLVED @map("resolved")
+}
+
+enum RejoinRequestStatus {
+  PENDING  @map("pending")
+  APPROVED @map("approved")
+  REJECTED @map("rejected")
+}
+
 enum ExternalAccessStatus {
   ACTIVE  @map("active")
   REVOKED @map("revoked")
@@ -394,6 +406,12 @@ model User {
   // the exact same row with its nickname/posts/comments/chat history
   // intact -- never a new row, never a data copy.
   deletedAt                 DateTime? @map("deleted_at")
+  // 회원탈퇴 (irreversible, unlike deletedAt's reversible deactivation):
+  // set together with deletedAt when the account is withdrawn and its
+  // direct identifiers are removed (auth/withdrawal.ts). A withdrawn row is
+  // never matched or reactivated again -- the same Google account signing
+  // in later gets a brand-new User.
+  withdrawnAt               DateTime? @map("withdrawn_at")
   userType                  UserType  @default(STUDENT) @map("user_type")
   createdAt                 DateTime  @default(now()) @map("created_at")
   updatedAt                 DateTime  @updatedAt @map("updated_at")
@@ -476,6 +494,8 @@ model User {
   adminAccessLogs              AdminAccessLog[]
   externalAccessGrantsCreated  ExternalAccessGrant[]         @relation("ExternalAccessGrantCreatedBy")
   externalAccessGrantsRevoked  ExternalAccessGrant[]         @relation("ExternalAccessGrantRevokedBy")
+  withdrawnIdentities          WithdrawnIdentity[]
+  rejoinRequestsReviewed       RejoinRequest[]               @relation("RejoinRequestReviewer")
 
   @@map("User")
 }
@@ -557,6 +577,10 @@ model LostPost {
   // TEMP_HIDE_POST). Hidden posts are left out of every public list/search
   // and shown only to their author and admins.
   tempHiddenAt   DateTime?                   @map("temp_hidden_at")
+  // 회원탈퇴: the author withdrew. Never public again (PUBLIC_POST_WHERE);
+  // the row stays only so other users' comments under it aren't cascaded
+  // away (or, with a pending report, as that report's evidence).
+  removedAt      DateTime?                   @map("removed_at")
   // Phase 12-5: optional org attribution -- the actual author/owner is
   // always `user` above (unchanged); this only marks which Organization,
   // if any, the post is posted *as*. Set once at creation and never
@@ -623,6 +647,10 @@ model FoundPost {
   // TEMP_HIDE_POST). Hidden posts are left out of every public list/search
   // and shown only to their author and admins.
   tempHiddenAt   DateTime?                   @map("temp_hidden_at")
+  // 회원탈퇴: the author withdrew. Never public again (PUBLIC_POST_WHERE);
+  // the row stays only so other users' comments under it aren't cascaded
+  // away (or, with a pending report, as that report's evidence).
+  removedAt      DateTime?                   @map("removed_at")
   // See LostPost.organizationId's own comment -- identical shape/reasoning.
   organizationId Int?                        @map("organization_id")
   organization   Organization?               @relation(fields: [organizationId], references: [id], onDelete: SetNull)
@@ -1709,4 +1737,57 @@ model ExternalAccessGrant {
   updatedAt       DateTime             @updatedAt @map("updated_at")
 
   @@map("ExternalAccessGrant")
+}
+
+// ---------- 회원탈퇴: WithdrawnIdentity / RejoinRequest ----------
+
+// Created only when an account is withdrawn while a sanction matter is
+// still open (active suspension, a pending report against the user or
+// their content, a pending admin action proposal, an unreviewed appeal --
+// see auth/withdrawal.ts). Holds no e-mail or Google ID: identityHmac is
+// HMAC-SHA256 under a server secret (WITHDRAWN_IDENTITY_SECRET, never
+// stored in the DB) of the Google account id, so a later sign-in can be
+// recognised without keeping the identifier itself. The hash is cleared
+// once the hold is resolved (an approved rejoin is used). expiresAt stays
+// unset until a retention period is decided -- the column exists so one
+// can be applied without a schema change.
+model WithdrawnIdentity {
+  id              Int                     @id @default(autoincrement())
+  identityHmac    String?                 @unique @map("identity_hmac") @db.Text
+  keyVersion      Int                     @default(1) @map("key_version")
+  // The withdrawn (identifier-free) account, so admins can see the
+  // sanction history the hold is about.
+  withdrawnUserId Int                     @map("withdrawn_user_id")
+  withdrawnUser   User                    @relation(fields: [withdrawnUserId], references: [id], onDelete: Restrict)
+  // active_suspension / pending_report / pending_sanction_proposal / pending_appeal
+  reasons         String[]
+  status          WithdrawnIdentityStatus @default(ACTIVE)
+  createdAt       DateTime                @default(now()) @map("created_at")
+  expiresAt       DateTime?               @map("expires_at")
+  resolvedAt      DateTime?               @map("resolved_at")
+  rejoinRequests  RejoinRequest[]
+
+  @@map("WithdrawnIdentity")
+}
+
+// A held identity asking to join again. Approval never restores the old
+// account: the next sign-in creates a new User (consumedAt) and the old
+// content stays with the withdrawn row. The new User's id is deliberately
+// not recorded here, so the two accounts are not linked.
+model RejoinRequest {
+  id               Int                 @id @default(autoincrement())
+  identityId       Int                 @map("identity_id")
+  identity         WithdrawnIdentity   @relation(fields: [identityId], references: [id], onDelete: Restrict)
+  reason           String              @db.Text
+  status           RejoinRequestStatus @default(PENDING)
+  createdAt        DateTime            @default(now()) @map("created_at")
+  reviewedAt       DateTime?           @map("reviewed_at")
+  reviewedByUserId Int?                @map("reviewed_by_user_id")
+  reviewedBy       User?               @relation("RejoinRequestReviewer", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  reviewNote       String?             @map("review_note") @db.Text
+  consumedAt       DateTime?           @map("consumed_at")
+
+  @@index([identityId], map: "idx_rejoin_request_identity")
+  @@index([status, createdAt], map: "idx_rejoin_request_status_created")
+  @@map("RejoinRequest")
 }

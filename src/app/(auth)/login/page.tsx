@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { signIn } from "@/lib/auth/auth";
-import { getCurrentUser, hasRequiredConsents, sanitizeCallbackUrl, type LoginReason } from "@/lib/auth/session";
+import { getCurrentUser, getRejoinIdentityId, hasRequiredConsents, sanitizeCallbackUrl, type LoginReason } from "@/lib/auth/session";
 import { isGoogleTestModeEnabled } from "@/lib/settings/service";
 import { LogoMark } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/Button";
@@ -63,6 +63,7 @@ export default async function LoginPage({
     }
     redirect(user.nickname ? (callbackUrl ?? "/") : "/onboarding");
   }
+  if (await getRejoinIdentityId()) redirect("/rejoin");
 
   const errorMessage = error ? t(ERROR_MESSAGE_KEYS[error] ?? ERROR_MESSAGE_KEYS.Default) : null;
   const reasonMessage = reason && isLoginReason(reason) ? t(REASON_MESSAGE_KEYS[reason]) : null;

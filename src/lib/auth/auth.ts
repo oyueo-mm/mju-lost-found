@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 
 import { decideSignIn } from "@/lib/auth/access";
-import { resolveOrCreateUser } from "@/lib/auth/user";
+import { resolveSignIn } from "@/lib/auth/user";
 
 // No next-auth Adapter/database session store here -- see the User.googleId
 // comment in schema.prisma. Sessions are JWT-based (a signed cookie), and
@@ -78,13 +78,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // as the more stable identifier for future lookups.
     async jwt({ token, account, user }) {
       if (account && user?.email) {
-        const dbUser = await resolveOrCreateUser({
+        const resolved = await resolveSignIn({
           email: user.email,
           name: user.name ?? null,
           googleId: account.providerAccountId,
         });
-        token.userId = dbUser.id;
-        token.nickname = dbUser.nickname;
+        // 회원탈퇴: a held withdrawn identity gets no User -- only a marker
+        // that sends them to /rejoin (see auth/user.ts::resolveSignIn).
+        if (resolved.kind === "held") {
+          delete token.userId;
+          token.nickname = null;
+          token.rejoinIdentityId = resolved.identityId;
+        } else {
+          delete token.rejoinIdentityId;
+          token.userId = resolved.user.id;
+          token.nickname = resolved.user.nickname;
+        }
       }
       return token;
     },
@@ -94,6 +103,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = String(token.userId);
         session.user.nickname = token.nickname ?? null;
       }
+      if (token.rejoinIdentityId) session.rejoinIdentityId = token.rejoinIdentityId;
       return session;
     },
   },

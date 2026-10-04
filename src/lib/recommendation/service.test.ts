@@ -111,7 +111,7 @@ describe("findPostRecommendations", () => {
     const result = await findPostRecommendations("lost", 1);
 
     expect(foundPost.findMany).toHaveBeenCalledWith({
-      where: { id: { in: [5] }, tempHiddenAt: null },
+      where: { id: { in: [5] }, tempHiddenAt: null, removedAt: null },
       include: {
         user: { select: { id: true, nickname: true, publicId: true, userType: true } },
         organization: { select: { id: true, name: true } },
@@ -169,7 +169,7 @@ describe("findPostRecommendations", () => {
     const result = await findPostRecommendations("lost", 1);
 
     expect(d3(0.5, null)).toBeLessThan(RECOMMENDATION_MIN_AI_SIMILARITY);
-    expect(foundPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: { in: [5] }, tempHiddenAt: null } }));
+    expect(foundPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: { in: [5] }, tempHiddenAt: null, removedAt: null } }));
     expect(result.map((r) => r.id)).toEqual([5]);
   });
 

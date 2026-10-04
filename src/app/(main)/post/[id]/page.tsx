@@ -82,6 +82,9 @@ export default async function PostDetailPage({
 
   const isOwner = currentUser?.id === post.author.id;
   const viewerIsAdmin = currentUser ? isAdmin(currentUser) : false;
+  // 회원탈퇴: a withdrawn author's leftover post is for admins only (it is
+  // kept for other users' comments or as a pending report's evidence).
+  if (post.removedAt && !viewerIsAdmin) notFound();
 
   // Legal pre-beta Phase: a temporarily hidden post (임시 숨김 on a
   // rights-infringement report) is visible only to its author and admins.

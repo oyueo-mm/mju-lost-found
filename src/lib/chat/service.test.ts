@@ -18,7 +18,8 @@ const message = {
   findFirst: vi.fn(),
   count: vi.fn(),
 };
-const userTable = { findUnique: vi.fn() };
+// count: 회원탈퇴 send block (sendMessage) -- 0 = nobody in the room withdrew.
+const userTable = { findUnique: vi.fn(), count: vi.fn(async () => 0) };
 const notification = { updateMany: vi.fn() };
 const lostPostTable = { findUnique: vi.fn() };
 const foundPostTable = { findUnique: vi.fn() };
@@ -1854,6 +1855,17 @@ describe("sendMessage", () => {
       expect(txNotificationCreate).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ userId: lostOwner, relatedId: 1 }) }),
       );
+    });
+
+    it("refuses to send to a participant who withdrew (회원탈퇴), writing nothing", async () => {
+      chatRoom.findUnique.mockResolvedValueOnce(roomDirect());
+      userTable.count.mockResolvedValueOnce(1);
+
+      const result = await sendMessage(200, initiator, "안녕하세요");
+
+      expect(result).toEqual({ kind: "forbidden", reason: "withdrawn" });
+      expect(userTable.count).toHaveBeenCalledWith({ where: { id: { in: [lostOwner] }, withdrawnAt: { not: null } } });
+      expect(txMessageCreate).not.toHaveBeenCalled();
     });
 
     it("lets the post's author send a message and notifies the initiator", async () => {

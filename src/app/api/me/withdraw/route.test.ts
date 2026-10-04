@@ -5,7 +5,10 @@ const withdrawUser = vi.fn();
 const signOut = vi.fn();
 
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser }));
+const withdrawAccount = vi.fn();
 vi.mock("@/lib/auth/user", () => ({ withdrawUser }));
+vi.mock("@/lib/auth/withdrawal", () => ({ withdrawAccount }));
+vi.mock("@/lib/auth/withdrawnIdentity", () => ({ MissingIdentitySecretError: class extends Error {} }));
 vi.mock("@/lib/auth/auth", () => ({ signOut }));
 // Same reason as src/app/api/me/consent/route.test.ts: avoid
 // pulling in the real @/lib/posts/http.ts's next-auth import chain.
@@ -15,12 +18,15 @@ vi.mock("@/lib/posts/http", async () => {
 });
 
 const { POST } = await import("./route");
+const { MissingIdentitySecretError } = await import("@/lib/auth/withdrawnIdentity");
+const req = (body?: unknown) =>
+  new Request("http://localhost/api/me/withdraw", { method: "POST", ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 
 describe("POST /api/me/withdraw", () => {
   it("rejects an unauthenticated request", async () => {
     getCurrentUser.mockResolvedValueOnce(null);
 
-    const res = await POST();
+    const res = await POST(req());
     const json = await res.json();
 
     expect(res.status).toBe(401);
@@ -34,7 +40,7 @@ describe("POST /api/me/withdraw", () => {
     withdrawUser.mockResolvedValueOnce({ kind: "ok", data: { id: 7, deletedAt: new Date() } });
     signOut.mockResolvedValueOnce(undefined);
 
-    const res = await POST();
+    const res = await POST(req());
     const json = await res.json();
 
     expect(res.status).toBe(200);
@@ -50,7 +56,7 @@ describe("POST /api/me/withdraw", () => {
     withdrawUser.mockResolvedValueOnce({ kind: "ok", data: { id: 7, deletedAt: new Date() } });
     signOut.mockResolvedValueOnce(undefined);
 
-    await POST();
+    await POST(req());
 
     expect(signOut).toHaveBeenCalledWith({ redirect: false });
   });
@@ -59,7 +65,7 @@ describe("POST /api/me/withdraw", () => {
     getCurrentUser.mockResolvedValueOnce({ id: 7 });
     withdrawUser.mockRejectedValueOnce(new Error("db down"));
 
-    const res = await POST();
+    const res = await POST(req());
 
     expect(res.status).toBe(500);
     expect(signOut).not.toHaveBeenCalled();
@@ -73,11 +79,45 @@ describe("POST /api/me/withdraw", () => {
     getCurrentUser.mockResolvedValueOnce({ id: 7 });
     withdrawUser.mockResolvedValueOnce({ kind: "sole_leader_block", organizationNames: ["명지대학교 총학생회"] });
 
-    const res = await POST();
+    const res = await POST(req());
     const json = await res.json();
 
     expect(res.status).toBe(409);
     expect(json.error).toContain("명지대학교 총학생회");
     expect(signOut).not.toHaveBeenCalled();
+  });
+
+  // 회원탈퇴: { mode: "delete" } is the irreversible withdrawal, separate
+  // from the reversible deactivation above.
+  it("mode delete runs the irreversible withdrawal (not deactivation) and signs out", async () => {
+    getCurrentUser.mockResolvedValueOnce({ id: 7 });
+    withdrawAccount.mockResolvedValueOnce({ kind: "ok", held: false });
+    signOut.mockResolvedValueOnce(undefined);
+
+    const res = await POST(req({ mode: "delete" }));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.data.mode).toBe("delete");
+    expect(withdrawAccount).toHaveBeenCalledWith(7);
+    expect(withdrawUser).not.toHaveBeenCalledWith(7, expect.anything());
+    expect(signOut).toHaveBeenCalledWith({ redirect: false });
+  });
+
+  it("mode delete is refused (503, still signed in) when the identity secret is missing", async () => {
+    getCurrentUser.mockResolvedValueOnce({ id: 7 });
+    withdrawAccount.mockRejectedValueOnce(new MissingIdentitySecretError());
+    signOut.mockClear();
+
+    const res = await POST(req({ mode: "delete" }));
+
+    expect(res.status).toBe(503);
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unknown mode", async () => {
+    getCurrentUser.mockResolvedValueOnce({ id: 7 });
+    const res = await POST(req({ mode: "erase-everything" }));
+    expect(res.status).toBe(400);
   });
 });

@@ -24,6 +24,9 @@ declare module "@auth/core/types" {
       id: string;
       nickname: string | null;
     } & DefaultSession["user"];
+    // 회원탈퇴: set instead of a user id when the sign-in belongs to a held
+    // withdrawn identity (rejoin request needed).
+    rejoinIdentityId?: number;
   }
 }
 
@@ -31,5 +34,6 @@ declare module "@auth/core/jwt" {
   interface JWT {
     userId?: number;
     nickname?: string | null;
+    rejoinIdentityId?: number;
   }
 }

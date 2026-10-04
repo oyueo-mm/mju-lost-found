@@ -29,6 +29,7 @@ export function chatMutationResultToResponse<T>(
       // Phase 12-11 §19: a LEADER/ADMIN of the organization itself tried
       // to open a new inquiry with their own organization.
       if (result.reason === "organization_manager") return jsonError(403, "본인이 관리하는 단체에는 문의를 시작할 수 없습니다.");
+      if (result.reason === "withdrawn") return jsonError(403, "탈퇴한 사용자에게는 메시지를 보낼 수 없습니다.");
       return jsonError(403, "이 채팅방에 접근할 권한이 없습니다.");
     case "invalid_content":
       return jsonError(400, "메시지를 입력해주세요.");

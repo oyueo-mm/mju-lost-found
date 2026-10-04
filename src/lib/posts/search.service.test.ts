@@ -156,6 +156,7 @@ describe("search logic -- filtering is always done in the DB query, never in JS"
           category: "지갑",
           campus: "인문캠퍼스",
           tempHiddenAt: null,
+          removedAt: null,
         },
       }),
     );
@@ -165,7 +166,7 @@ describe("search logic -- filtering is always done in the DB query, never in JS"
     await listLostPosts({ page: 1, limit: 20 });
 
     // Only the always-on "not temporarily hidden" condition.
-    expect(lostPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { tempHiddenAt: null } }));
+    expect(lostPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { tempHiddenAt: null, removedAt: null } }));
   });
 
   // Phase 9: board status filter -- converts the Korean status string to

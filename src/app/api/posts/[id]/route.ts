@@ -45,6 +45,11 @@ export const GET = withErrorHandling(
 
     // Legal pre-beta Phase: a temporarily hidden post is only for its
     // author and admins -- anyone else gets the same 404 as a missing post.
+    // 회원탈퇴: a withdrawn author's leftover post is for admins only.
+    if (post.removedAt) {
+      const viewer = await getCurrentUser();
+      if (!viewer?.isAdmin) return jsonError(404, "게시물을 찾을 수 없습니다.");
+    }
     if (post.tempHiddenAt) {
       const viewer = await getCurrentUser();
       if (!viewer || (viewer.id !== post.author.id && !viewer.isAdmin)) {

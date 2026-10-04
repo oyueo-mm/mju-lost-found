@@ -111,9 +111,10 @@ function toCommentDTO(row: {
 async function postExists(type: PostType, postId: number): Promise<boolean> {
   const row =
     type === "lost"
-      ? await prisma.lostPost.findUnique({ where: { id: postId }, select: { id: true } })
-      : await prisma.foundPost.findUnique({ where: { id: postId }, select: { id: true } });
-  return row !== null;
+      ? await prisma.lostPost.findUnique({ where: { id: postId }, select: { id: true, removedAt: true } })
+      : await prisma.foundPost.findUnique({ where: { id: postId }, select: { id: true, removedAt: true } });
+  // 회원탈퇴: a withdrawn author's leftover post takes no new comments.
+  return row !== null && !row.removedAt;
 }
 
 // Oldest-first, matching the example thread in this phase's own spec

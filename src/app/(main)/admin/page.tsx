@@ -38,6 +38,7 @@ export default async function AdminDashboardPage() {
     proposalsResult,
     externalAccessCount,
     urgentPendingCount,
+    pendingRejoinCount,
   ] = await Promise.all([
     listReportsForAdmin(admin, { status: "pending", page: 1, limit: 5 }),
     prisma.user.count({ where: { isSuspended: true } }),
@@ -75,6 +76,8 @@ export default async function AdminDashboardPage() {
     // Legal pre-beta Phase: pending illegal-sexual-content reports, shown
     // first so they're handled before anything else.
     prisma.report.count({ where: { status: "PENDING", reason: ILLEGAL_SEXUAL_CONTENT_REASON } }),
+    // 회원탈퇴: rejoin requests waiting for a decision.
+    prisma.rejoinRequest.count({ where: { status: "PENDING" } }),
   ]);
 
   const pending = pendingResult.kind === "ok" ? pendingResult.data : { items: [], total: 0 };
@@ -198,6 +201,13 @@ export default async function AdminDashboardPage() {
         >
           <span className="text-xs text-muted-foreground">외부 관계자 승인</span>
           <span className="text-2xl font-bold text-foreground">{externalAccessCount}</span>
+        </Link>
+        <Link
+          href="/admin/rejoin-requests"
+          className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"
+        >
+          <span className="text-xs text-muted-foreground">재가입 요청 (대기)</span>
+          <span className="text-2xl font-bold text-foreground">{pendingRejoinCount}</span>
         </Link>
       </div>
 

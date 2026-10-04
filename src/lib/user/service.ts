@@ -53,14 +53,15 @@ export async function getPublicProfile(publicId: string): Promise<PublicProfileD
 
   const user = await prisma.user.findUnique({
     where: { publicId },
-    select: { id: true, publicId: true, nickname: true, createdAt: true, userType: true },
+    select: { id: true, publicId: true, nickname: true, createdAt: true, userType: true, withdrawnAt: true },
   });
-  if (!user) return null;
+  // 회원탈퇴: a withdrawn account has no public profile.
+  if (!user || user.withdrawnAt) return null;
 
   const [lostCount, foundCount] = await Promise.all([
     // Public profile: temporarily hidden posts aren't counted.
-    prisma.lostPost.count({ where: { userId: user.id, tempHiddenAt: null } }),
-    prisma.foundPost.count({ where: { userId: user.id, tempHiddenAt: null } }),
+    prisma.lostPost.count({ where: { userId: user.id, tempHiddenAt: null, removedAt: null } }),
+    prisma.foundPost.count({ where: { userId: user.id, tempHiddenAt: null, removedAt: null } }),
   ]);
 
   return {

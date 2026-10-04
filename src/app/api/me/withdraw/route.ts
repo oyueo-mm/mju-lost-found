@@ -1,6 +1,8 @@
 import { getCurrentUser } from "@/lib/auth/session";
 import { signOut } from "@/lib/auth/auth";
 import { withdrawUser } from "@/lib/auth/user";
+import { withdrawAccount } from "@/lib/auth/withdrawal";
+import { MissingIdentitySecretError } from "@/lib/auth/withdrawnIdentity";
 import { jsonError, jsonOk, withErrorHandling } from "@/lib/posts/http";
 
 // Phase 10: deliberately does NOT go through requireUserForApi() (same
@@ -9,22 +11,48 @@ import { jsonError, jsonOk, withErrorHandling } from "@/lib/posts/http";
 // getCurrentUser() itself is the real authorization here: the id it
 // resolves comes from the server-verified session, never from any
 // client-supplied field, so this route has no way to withdraw any account
-// other than the caller's own.
-export const POST = withErrorHandling(async () => {
+// other than the caller's own. Suspended users can use it too.
+//
+// 회원탈퇴: body { mode: "delete" } is the irreversible withdrawal
+// (auth/withdrawal.ts); no body / { mode: "deactivate" } is the original,
+// reversible deactivation, unchanged.
+export const POST = withErrorHandling(async (request: Request) => {
   const user = await getCurrentUser();
   if (!user) return jsonError(401, "로그인이 필요합니다.");
+
+  const body = (await request.json().catch(() => null)) as { mode?: unknown } | null;
+  const mode = body?.mode === "delete" ? "delete" : body?.mode === undefined || body?.mode === "deactivate" ? "deactivate" : null;
+  if (!mode) return jsonError(400, "요청 형식이 올바르지 않습니다.");
+
+  const soleLeaderError = (names: string[]) =>
+    jsonError(
+      409,
+      `다음 단체의 유일한 대표 관리자이므로 ${mode === "delete" ? "탈퇴" : "비활성화"}할 수 없습니다. 먼저 다른 구성원에게 대표 관리자 권한을 위임해주세요: ${names.join(", ")}`,
+    );
+
+  if (mode === "delete") {
+    let result;
+    try {
+      result = await withdrawAccount(user.id);
+    } catch (error) {
+      if (error instanceof MissingIdentitySecretError) {
+        console.error("Withdrawal refused: WITHDRAWN_IDENTITY_SECRET is not configured");
+        return jsonError(503, "지금은 회원탈퇴를 처리할 수 없습니다. 잠시 후 다시 시도해주세요.");
+      }
+      throw error;
+    }
+    if (result.kind === "sole_leader_block") return soleLeaderError(result.organizationNames);
+    if (result.kind === "not_found") return jsonError(404, "계정을 찾을 수 없습니다.");
+    await signOut({ redirect: false });
+    return jsonOk({ withdrawn: true, mode });
+  }
 
   const result = await withdrawUser(user.id);
   // Phase 12-2: a user who is the sole LEADER of a still-ACTIVE
   // organization can't withdraw until they appoint a successor -- see
   // withdrawUser()'s own comment. This never touches the session/DB row
   // (no signOut below either), so the account stays exactly as it was.
-  if (result.kind === "sole_leader_block") {
-    return jsonError(
-      409,
-      `다음 단체의 유일한 대표 관리자이므로 비활성화할 수 없습니다. 먼저 다른 구성원에게 대표 관리자 권한을 위임해주세요: ${result.organizationNames.join(", ")}`,
-    );
-  }
+  if (result.kind === "sole_leader_block") return soleLeaderError(result.organizationNames);
 
   // Clears the session cookie right away instead of leaving a still-
   // "valid" JWT pointing at a now-deletedAt row for getCurrentUser() to
@@ -33,5 +61,5 @@ export const POST = withErrorHandling(async () => {
   // rather than a stale cookie that merely stops working.
   await signOut({ redirect: false });
 
-  return jsonOk({ withdrawn: true });
+  return jsonOk({ withdrawn: true, mode });
 });

@@ -14,7 +14,9 @@
 - 두 환경은 **서로 다른 Supabase 프로젝트**(DB, Storage, Realtime)를 쓴다. 한쪽 작업이 다른 쪽 데이터에 닿으면 안 된다.
 - 접속 정보는 Vercel 프로젝트의 Environment Variables에 환경별(Production / Preview)로 등록되어 있다.
   필요한 키: `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
-  `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+  `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+  `WITHDRAWN_IDENTITY_SECRET`(회원탈퇴 보류 식별값 HMAC 키, 32자 이상, 환경별로 다른 값, Sensitive).
+  이 키를 바꾸거나 잃으면 기존 보류 식별값을 더 이상 대조할 수 없다. 키가 없으면 회원탈퇴 요청은 503으로 거부된다.
 - 로컬에서 각 DB에 붙을 때는 로컬 전용 파일을 쓴다: Production은 `.env`, Preview는 `.env.preview.local`.
   스크립트는 대상 파일을 명시해서 실행한다(예: `npx tsx --env-file=.env.preview.local ...`).
   **어느 DB를 가리키는지 확인하지 않고 쓰기 작업을 하지 않는다.** 운영 스크립트는 대상 프로젝트를 검사하고

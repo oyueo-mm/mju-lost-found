@@ -428,7 +428,7 @@ export const en: Dictionary = {
   "me.keywordAlerts": "Keyword alerts",
   "me.adminCenter": "Admin center",
   "me.logout": "Sign out",
-  "me.deactivate": "Deactivate account",
+  "me.deactivate": "Deactivate or delete account",
   "profile.publicPosts": "Public posts",
   "profile.joinedAt": "Joined",
   "profile.posts": "Posts",

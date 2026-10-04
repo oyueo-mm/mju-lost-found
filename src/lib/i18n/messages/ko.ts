@@ -454,7 +454,7 @@ export const ko = {
   "me.keywordAlerts": "키워드 알림",
   "me.adminCenter": "관리자 센터",
   "me.logout": "로그아웃",
-  "me.deactivate": "회원 비활성화",
+  "me.deactivate": "계정 비활성화 · 회원탈퇴",
   "profile.publicPosts": "공개 게시글",
   "profile.joinedAt": "가입일",
   "profile.posts": "작성 게시글",
