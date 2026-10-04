@@ -1,347 +1,258 @@
-# 명지 스마트 분실물 센터
+<div align="center">
 
-**[🌐 서비스 바로가기](https://mju-lost-found-vercel.vercel.app)**
+# MJU Find
 
-명지대학교 학생들을 위한 분실물·습득물 관리 서비스입니다.
+### 명지대학교 학생을 위한 AI 기반 분실물·습득물 통합 서비스
 
-분실물과 습득물을 게시하고, 키워드 검색뿐만 아니라 **AI 의미 검색과 이미지 검색**을 통해 원하는 물건을 찾을 수 있습니다. 게시글을 찾은 뒤에는 작성자와 채팅하거나 단체 게시글의 경우 해당 단체에 직접 문의할 수 있습니다.
+흩어진 분실물 정보를 한곳에 모으고,  
+자연어와 이미지를 활용해 잃어버린 물건을 더 쉽게 찾을 수 있도록 만든 서비스입니다.
 
-> 명지대학교 학생들이 자발적으로 제작한 프로젝트이며, 명지대학교가 공식적으로 운영하는 서비스가 아닙니다.
+[서비스 이용하기](https://mju-lost-found-vercel.vercel.app)
 
-한국어를 포함해 영어·일본어·중국어·프랑스어·몽골어·베트남어 등 7개 언어를 지원합니다.
+<br>
+
+🏆 **2026학년도 명지대학교 바이브코딩 실전활용 경진대회 장려상**
+
+</div>
+
+---
+
+> MJU Find는 명지대학교 학생이 개발·운영하는 서비스이며, 명지대학교의 공식 서비스가 아닙니다.
+
+## 소개
+
+학교에서 물건을 잃어버리면 분실물 정보가 학생회, 커뮤니티, SNS, 경비실 등 여러 곳에 흩어져 있어 이미 누군가 물건을 발견했더라도 찾기 어려운 경우가 있습니다.
+
+MJU Find는 이러한 정보를 하나의 서비스에 모으고, 단순한 키워드 검색뿐 아니라 **자연어 의미 검색, 이미지 유사도 검색, AI 기반 추천 매칭**을 제공해 분실자와 습득자를 연결합니다.
+
+```text
+분실물 · 습득물 등록
+        ↓
+AI 검색 · 추천 매칭
+        ↓
+관련 게시글 발견
+        ↓
+댓글 · 1:1 채팅 · 단체 문의
+        ↓
+물건 반환
+```
 
 ## 주요 기능
 
-### 분실물·습득물 게시
+| 기능 | 설명 |
+| --- | --- |
+| 🔎 자연어 AI 검색 | 키워드가 정확히 일치하지 않아도 의미적으로 유사한 게시글 검색 |
+| 🖼️ 이미지 유사도 검색 | 사진을 기반으로 비슷한 물건이 포함된 게시글 검색 |
+| ✨ AI 추천 매칭 | 게시글 등록 후 텍스트와 이미지를 고려해 관련 분실물·습득물 자동 추천 |
+| 📝 게시글 관리 | 분실물·습득물 등록, 수정, 삭제 및 상세 정보 관리 |
+| 💬 1:1 채팅 | 게시글 작성자와 실시간으로 대화하고 이미지 전송 |
+| 💭 댓글·답글 | 게시글에서 추가 정보 공유 및 소통 |
+| 🔔 알림 | 채팅, 댓글, 신고 처리, 키워드 관련 알림 |
+| 🏢 단체 기능 | 학생회·동아리 등 단체 생성 및 단체 명의 게시글·댓글·문의 |
+| 🛡️ 신고 및 관리 | 게시글, 댓글, 메시지, 사용자 신고와 관리자 처리 |
+| 🌏 다국어 지원 | 한국어를 포함한 여러 언어의 UI 지원 |
 
-* 분실물 / 습득물 게시글 작성 및 수정
-* 게시글 이미지 첨부
-* 카테고리와 상태 관리
-* 댓글
-* 조회수
-* 개인 또는 단체 이름으로 게시
+## AI 검색
 
-### 검색
+MJU Find의 검색은 단순 문자열 일치가 아니라 게시글의 **의미와 이미지 특징을 벡터로 변환한 뒤 유사도를 비교**합니다.
 
-#### 키워드 검색
+### 자연어 검색
 
-제목과 게시글 정보를 기반으로 일반적인 키워드 검색을 제공합니다.
-
-#### AI 의미 검색
-
-문장을 단순히 같은 단어가 포함되어 있는지 비교하는 대신, 게시글과 검색어를 **문장의 의미를 나타내는 벡터**로 변환하여 의미적으로 가까운 게시글을 찾습니다.
+```mermaid
+flowchart LR
+    A["자연어 검색어"] --> B["Text Encoder"]
+    B --> C["Text Embedding"]
+    C --> D["pgvector"]
+    D --> E["Vector Similarity Search"]
+    E --> F["관련 게시글"]
+```
 
 예를 들어,
 
-```text
-학교 도서관에서 검은색 무선 이어폰을 잃어버렸어요
-```
+> 공학관에서 검은색 무선 이어폰을 잃어버렸어요
 
-와 같이 자연스럽게 검색해도 관련 게시글을 찾을 수 있습니다.
+처럼 문장으로 검색해도 게시글의 표현이 정확히 같지 않더라도 의미가 비슷한 결과를 찾을 수 있습니다.
 
-텍스트 임베딩에는 `jhgan/ko-sroberta-multitask`를 사용하고, PostgreSQL의 `pgvector`와 HNSW 인덱스를 이용해 벡터 검색을 수행합니다.
-
-#### 이미지 검색
-
-찾고 싶은 물건의 사진을 업로드하여 비슷한 이미지가 등록된 게시글을 검색할 수 있습니다.
-
-이미지는 SigLIP의 이미지 인코더를 이용해 벡터로 변환하고, 벡터 간 유사도를 기반으로 관련 게시글을 찾습니다.
-
-### AI 기반 게시글 추천
-
-게시글의 텍스트와 이미지를 기반으로 관련성이 높은 다른 게시글을 추천합니다.
-
-이를 통해 사용자가 검색하지 않았더라도 비슷한 분실물이나 습득물을 발견할 수 있도록 합니다.
-
-### 채팅
-
-게시글을 통해 다른 사용자와 직접 채팅할 수 있습니다.
-
-* 분실물 / 습득물 게시글 기반 채팅
-* 이미지 전송
-* 실시간 메시지
-* 읽음 상태
-* 댓글 작성자에게 직접 채팅
-* 단체 게시글의 경우 `단체에 문의하기` 지원
-
-### 단체
-
-학생회, 동아리, 학과, 위원회 등의 단체를 서비스 안에서 관리할 수 있습니다.
-
-* 단체 생성 신청
-* 단체 가입 신청
-* 단체 구성원 관리
-* 대표 관리자 / 관리자 / 구성원 역할
-* 단체 이름으로 게시글 및 댓글 작성
-* 단체 게시글 문의
-* 단체 관리자에게 문의 알림
-
-개인 계정과 단체 활동을 분리하지 않고, **실제 작성자는 항상 사용자 계정으로 기록하면서 게시물에는 선택한 단체를 표시**하는 방식으로 구현했습니다.
-
-### 계정 및 인증
-
-Google 계정을 이용해 로그인합니다.
-
-명지대학교 구성원만 서비스를 이용할 수 있도록 원칙적으로 `@mju.ac.kr` 계정만 허용합니다.
-
-* Google OAuth
-* 명지대학교 이메일 도메인 검증
-* 개인정보 수집·이용 동의와 이용약관 동의를 각각 별도로 확인(하나로 합치지 않음), 약관 버전이 바뀌면 기존 이용자도 다시 동의
-* 닉네임 설정
-* 계정 비활성화 및 재로그인 시 기존 계정 복구(비활성화는 삭제가 아니며, 이전 동의 기록도 그대로 유지)
-
-가입/로그인 이후 서비스를 실제로 이용하려면 **필수 동의 → 닉네임 설정** 순서를 거쳐야 하며, 이 순서는 페이지 UI뿐 아니라 서버(레이아웃·API)에서도 다시 검증합니다.
-
-### 신고 및 운영
-
-* 게시물 · 댓글 · 채팅 메시지 · 사용자 신고
-* 관리자의 신고 처리(반려 / 조치 완료)와 조치(게시물 삭제 / 댓글 삭제 / 메시지 숨김 / 계정 정지)
-* 계정 정지는 기간을 정한 정지와 기간을 정하지 않은 정지를 모두 지원하며, 정지된 이용자는 서비스 내에서 이의신청을 제출할 수 있습니다
-* 서비스 이용약관 / 운영정책 / 개인정보처리방침을 별도 페이지로 제공하고, 비로그인·미동의·정지 상태에서도 항상 열람할 수 있습니다
-
-### 알림
-
-* 채팅 메시지, 신고 처리 결과, 계정 정지, 관리자 공지 등 서비스 내 알림
-* 관심 키워드를 등록해두면 조건에 맞는 새 분실물·습득물 게시글이 올라올 때 알림을 받는 키워드 알림
-
-## 기술 스택
-
-### Frontend / Backend
-
-* Next.js
-* React
-* TypeScript
-* Tailwind CSS
-
-Next.js App Router를 기반으로 프론트엔드와 서버 로직을 하나의 프로젝트에서 구성했습니다.
-
-모바일 브라우저에서 홈 화면에 추가할 수 있는 PWA(웹 앱 매니페스트 + 설치 유도 UI)도 지원합니다.
-
-### Database
-
-* PostgreSQL
-* Prisma
-* pgvector
-* HNSW
-
-데이터베이스는 Supabase PostgreSQL을 사용합니다.
-
-Prisma를 통해 일반적인 관계형 데이터를 관리하고, `pgvector`를 이용해 텍스트 및 이미지 임베딩을 저장하고 검색합니다.
-
-### Authentication
-
-* Auth.js / NextAuth
-* Google OAuth
-
-### AI
-
-* `jhgan/ko-sroberta-multitask`
-
-  * 한국어 텍스트 임베딩
-  * 768차원 벡터
-* `Xenova/siglip-base-patch16-224`
-
-  * 이미지 임베딩
-  * 이미지 검색 및 이미지 기반 유사도 계산
-
-두 모델 모두 외부 API 호출 없이 서버 안에서 직접 추론합니다(게시글마다 LLM을 호출하는 방식이 아닙니다).
-
-### Storage
-
-* Supabase Storage
-
-게시글 이미지는 Supabase Storage에 저장합니다.
-
-업로드 과정에서 서버가 사용자의 로그인 상태와 게시글 소유권 등을 확인한 뒤 짧은 시간 동안 유효한 업로드 권한을 발급하고, 실제 이미지 데이터는 브라우저에서 Storage로 직접 업로드합니다.
-
-### Realtime
-
-* Supabase Realtime
-
-채팅 메시지와 읽음 상태 등의 실시간 기능에 사용합니다.
-
-### Deployment
-
-* Vercel
-
-## 시스템 구조
-
-전체적인 구조는 다음과 같습니다.
-
-```text
-Browser
-   │
-   ▼
-Next.js
-   │
-   ├── App Router
-   ├── Server Actions
-   └── API Routes
-          │
-          ├── Auth.js
-          │
-          ├── Prisma
-          │      │
-          │      ▼
-          │   PostgreSQL
-          │      │
-          │      └── pgvector
-          │
-          ├── AI
-          │      ├── Text Embedding
-          │      └── Image Embedding
-          │
-          └── Supabase
-                 ├── Storage
-                 └── Realtime
-```
-
-## AI 검색 구조
-
-### 텍스트 의미 검색
-
-```text
-검색어
-  ↓
-Text Embedding
-  ↓
-768차원 벡터
-  ↓
-pgvector
-  ↓
-HNSW 검색
-  ↓
-유사 게시글
-```
-
-게시글 역시 등록 또는 수정 과정에서 텍스트를 임베딩하여 벡터를 저장합니다.
-
-검색할 때는 검색어를 같은 임베딩 모델로 변환한 뒤 저장된 게시글 벡터와 비교합니다.
+텍스트 임베딩에는 한국어 문장 표현에 적합한 Sentence Transformer 계열 모델을 사용합니다.
 
 ### 이미지 검색
 
-```text
-검색 이미지
-    ↓
-SigLIP Image Encoder
-    ↓
-이미지 벡터
-    ↓
-pgvector
-    ↓
-유사도 검색
-    ↓
-비슷한 이미지가 포함된 게시글
+```mermaid
+flowchart LR
+    A["검색 이미지"] --> B["Image Encoder"]
+    B --> C["Image Embedding"]
+    C --> D["pgvector"]
+    D --> E["Vector Similarity Search"]
+    E --> F["비슷한 물건"]
 ```
 
-텍스트 검색과 이미지 검색은 서로 다른 임베딩 모델을 사용하며, 각각의 검색 목적에 맞게 분리되어 있습니다.
+이미지의 색상이나 단순 픽셀을 비교하는 것이 아니라, 이미지 모델이 추출한 특징 벡터를 기반으로 유사한 물건을 검색합니다.
 
-## 이미지 저장 구조
+### 텍스트 + 이미지
 
-게시글 이미지는 Supabase Storage의 `post-images` 버킷에 저장합니다.
-
-```text
-posts/
-├── lost/
-│   └── {postId}/
-│       └── {uuid}.{ext}
-│
-└── found/
-    └── {postId}/
-        └── {uuid}.{ext}
-```
-
-허용되는 이미지 형식은 다음과 같습니다.
-
-* JPEG
-* PNG
-* WebP
-
-최대 이미지 크기는 10MB입니다.
-
-이미지 업로드 권한은 서버에서 검증하며, 이미지 파일 자체는 브라우저에서 Supabase Storage로 직접 전송합니다.
-
-## 프로젝트 구조
+검색에 자연어와 이미지를 함께 입력할 수도 있습니다.
 
 ```text
-src/
-├── app/
-│   ├── (auth)/    # 로그인, 온보딩, 필수 동의 화면 (공통 레이아웃 없음)
-│   ├── (main)/    # 로그인/동의/닉네임을 확인하는 서비스 본체 (Header/Footer/BottomNav 포함)
-│   ├── (policy)/  # 이용약관·운영정책·개인정보처리방침 — 계정 상태와 무관하게 항상 열람 가능
-│   └── api/
-│
-├── components/
-│
-└── lib/
-    ├── ai/
-    ├── auth/
-    ├── chat/
-    ├── db/
-    ├── images/
-    ├── keywordAlert/
-    ├── moderation/
-    ├── notification/
-    ├── organization/
-    ├── report/
-    └── ...
-    
-prisma/
-├── migrations/
-└── schema.prisma
-
-public/
+자연어 ──→ Text Embedding ──┐
+                            ├─→ 유사도 계산 → 검색 결과
+이미지 ──→ Image Embedding ─┘
 ```
 
-주요 서버 로직과 도메인 로직은 `src/lib` 아래에서 기능별로 분리되어 있습니다.
+검색 조건에 따라 텍스트와 이미지의 유사도를 함께 고려해 결과를 정렬합니다.
 
-## 로컬 개발
+## 서비스 화면
 
-### 1. 저장소 클론
+> 아래 이미지는 실제 서비스 화면으로 교체할 예정입니다.
+
+### 메인 화면
+
+<!--
+![메인 화면](docs/assets/home.png)
+-->
+
+### AI 검색
+
+<!--
+![AI 검색](docs/assets/ai-search.png)
+-->
+
+### 게시글 및 추천
+
+<!--
+![AI 추천](docs/assets/recommendation.png)
+-->
+
+### 1:1 채팅
+
+<!--
+![채팅](docs/assets/chat.png)
+-->
+
+## 기술 스택
+
+| 영역 | 기술 |
+| --- | --- |
+| Frontend | Next.js, React, TypeScript, Tailwind CSS |
+| Backend | Next.js App Router, Route Handlers |
+| Authentication | Auth.js v5, Google OAuth |
+| Database | PostgreSQL |
+| ORM | Prisma |
+| Vector Search | pgvector |
+| AI | Text Embedding, Image Embedding |
+| Storage | Supabase Storage |
+| Realtime | Supabase Realtime |
+| Deployment | Vercel |
+| Testing | Vitest |
+
+## 시스템 구조
+
+```mermaid
+flowchart TD
+    U["User"]
+
+    U --> N["Next.js"]
+
+    N --> AUTH["Auth.js"]
+    N --> API["Application Logic"]
+    N --> AI["AI Embedding"]
+    N --> STORAGE["Supabase Storage"]
+    N --> REALTIME["Supabase Realtime"]
+
+    API --> PRISMA["Prisma"]
+    PRISMA --> DB[("PostgreSQL")]
+
+    DB --> VECTOR["pgvector"]
+
+    AI --> TEXT["Text Embedding"]
+    AI --> IMAGE["Image Embedding"]
+
+    TEXT --> VECTOR
+    IMAGE --> VECTOR
+```
+
+## 인증과 사용자 관리
+
+서비스는 Google OAuth를 이용해 사용자를 인증합니다.
+
+기본적으로 명지대학교 `@mju.ac.kr` 계정을 사용하는 구성원을 대상으로 하며, 서비스 운영상 필요한 경우 관리자가 승인한 외부 관계자도 이용할 수 있습니다.
+
+외부 관계자는 일반 사용자 권한으로 서비스를 이용하며 별도의 관리자 권한은 부여되지 않습니다.
+
+또한 다음과 같은 계정 관리 기능을 제공합니다.
+
+- 계정 비활성화
+- 회원탈퇴
+- 탈퇴 후 개인정보 식별정보 제거
+- 재가입 처리
+- 제재 중 탈퇴한 사용자의 재가입 관리
+- 개인정보 및 이용약관 동의 버전 관리
+
+## 개인정보와 운영 안정성
+
+경진대회 제출 이후 실제 서비스 운영을 고려해 운영·보안 구조를 지속적으로 보완했습니다.
+
+- Production / Preview 환경 분리
+- Production / Preview DB 분리
+- Prisma Migration 기반 스키마 관리
+- 개인정보 동의 버전 관리
+- 회원탈퇴와 계정 비활성화 분리
+- 탈퇴 사용자의 개인정보 보유기간 관리
+- 보유기간 만료 데이터 자동 정리
+- 채팅 이미지 비공개 Storage
+- 서버 측 이미지 형식 검증
+- 이미지 metadata 제거
+- API Rate Limit
+- 관리자 개인정보 접근 기록
+- 신고 및 임시 숨김 처리
+- 신고·제재·이의신청 기록 관리
+- Production 배포 전 Preview 검증
+- 자동화된 테스트 및 회귀 검증
+
+현재 전체 테스트 기준:
+
+> **1,842 tests passed**
+
+## 프로젝트 성과
+
+### 🏆 2026학년도 명지대학교 바이브코딩 실전활용 경진대회 3위
+
+총 25개 참가 팀 중 본선 8개 팀에 진출했으며 최종 **3위**를 수상했습니다.
+
+경진대회가 끝난 뒤에도 프로젝트를 종료하지 않고 실제 사용자를 받을 수 있는 서비스로 발전시키고 있습니다.
+
+단순한 기능 구현을 넘어 다음과 같은 실제 서비스 운영 과정을 경험하는 것을 목표로 하고 있습니다.
+
+- 배포 및 데이터베이스 운영
+- 장애 및 오류 대응
+- 개인정보 관리
+- 사용자 피드백 반영
+- 서비스 정책 관리
+- 실제 사용자 및 단체와의 협업
+
+## 로컬 실행
+
+### 1. 저장소 Clone
 
 ```bash
 git clone https://github.com/oyueo-mm/mju-lost-found.git
 cd mju-lost-found
 ```
 
-`vercel` 브랜치를 사용합니다.
-
-```bash
-git checkout vercel
-```
-
-### 2. 의존성 설치
+### 2. 패키지 설치
 
 ```bash
 npm install
 ```
 
-### 3. 환경변수 설정
-
-`.env.example`을 복사합니다.
+### 3. 환경 변수 설정
 
 ```bash
 cp .env.example .env
 ```
 
-필요한 환경변수를 설정합니다.
+필요한 환경 변수는 `.env.example`을 참고하세요.
 
-주요 환경변수:
-
-```text
-DATABASE_URL
-DIRECT_URL
-
-GOOGLE_CLIENT_ID
-GOOGLE_CLIENT_SECRET
-AUTH_SECRET
-
-NEXT_PUBLIC_SUPABASE_URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY
-SUPABASE_SERVICE_ROLE_KEY
-```
-
-실제 비밀값이 포함된 `.env` 파일은 Git에 커밋하지 않습니다.
+실제 서비스의 비밀키와 인증 정보는 저장소에 포함하지 않습니다.
 
 ### 4. 개발 서버 실행
 
@@ -349,64 +260,60 @@ SUPABASE_SERVICE_ROLE_KEY
 npm run dev
 ```
 
-브라우저에서 다음 주소로 접속합니다.
-
-```text
-http://localhost:3000
-```
-
 ## 테스트
-
-전체 테스트:
 
 ```bash
 npm test
-```
-
-Lint:
-
-```bash
 npm run lint
-```
-
-TypeScript 검사:
-
-```bash
 npx tsc --noEmit
 ```
 
-Production build:
-
-```bash
-npm run build
-```
+Production 배포 전 Preview 환경에서 주요 기능과 데이터베이스 Migration을 먼저 검증합니다.
 
 ## 배포
 
-Production 서비스:
+### Production
 
 https://mju-lost-found-vercel.vercel.app
 
-Vercel을 이용해 `vercel` 브랜치의 변경사항을 배포합니다.
-
-Production과는 별도로 Preview 환경(`mju-lost-found-preview.vercel.app`)과 Preview 전용 Supabase 프로젝트를 두어, 새 기능과 DB 마이그레이션을 Production에 반영하기 전에 먼저 검증합니다.
-
-## 프로젝트의 핵심
-
-이 프로젝트의 핵심은 단순히 분실물 게시판을 만드는 것이 아니라,
+### 운영 방식
 
 ```text
-분실물 등록
-    ↓
-AI 검색
-    ↓
-관련 게시글 발견
-    ↓
-채팅 / 단체 문의
-    ↓
-물건 반환
+개발
+ ↓
+자동 테스트
+ ↓
+Preview 배포
+ ↓
+Preview DB 검증
+ ↓
+Production Migration
+ ↓
+Production 배포
+ ↓
+Production 검증
 ```
 
-이라는 실제 분실물 탐색 과정을 하나의 서비스 안에서 연결하는 것입니다.
+## 운영 정책
 
-특히 **자연어로 상황을 설명해도 관련 게시글을 찾을 수 있는 의미 검색**과 **사진을 이용해 비슷한 물건을 찾는 이미지 검색**을 통해 기존의 단순 키워드 기반 분실물 게시판에서 확장된 검색 경험을 제공하는 것을 목표로 합니다.
+MJU Find는 다음 정책을 서비스 내에서 제공합니다.
+
+- 개인정보처리방침
+- 이용약관
+- 서비스 운영정책
+
+개인정보 관련 문의:
+
+`mjusmartlostfound@gmail.com`
+
+---
+
+<div align="center">
+
+### MJU Find
+
+**AI-powered Lost & Found Platform for Myongji University**
+
+Made for better lost & found experience.
+
+</div>
