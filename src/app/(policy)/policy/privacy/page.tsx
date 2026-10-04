@@ -21,6 +21,14 @@ import Link from "next/link";
 // auth/user.ts::withdrawUser (deactivation) and auth/withdrawal.ts::
 // withdrawAccount (회원탈퇴) behave, and the retention periods applied by
 // lib/retention (policy.ts / service.ts, daily Vercel Cron).
+//
+// 처리위탁·자동수집 정정: §1/§2 list exactly what Google sign-in returns
+// for scope "openid email" (sub, email, email_verified -- no name; the
+// internal User.name is the e-mail local part, auth/user.ts), §5 names
+// each processor with its task (no transfer country is stated: not yet
+// confirmed), §8 describes the IP/User-Agent/cookie handling the code
+// actually does (rateLimit/index.ts, posts/views.ts, i18n locale cookie,
+// Auth.js session cookie), §10 the privacy contact.
 type Section = { title: string; body: React.ReactNode };
 
 const SECTIONS: Section[] = [
@@ -29,16 +37,16 @@ const SECTIONS: Section[] = [
     body: (
       <ul className="flex list-disc flex-col gap-1 pl-5">
         <li>Google 계정 식별 정보(Google 로그인 시 발급되는 고유 식별자)</li>
-        <li>이메일 주소</li>
-        <li>이름(또는 이메일 기반 대체명) 및 직접 설정한 닉네임</li>
+        <li>이메일 주소 및 이메일 인증 여부(인증 여부는 로그인 허용 여부 확인에만 쓰고 저장하지 않습니다)</li>
+        <li>
+          직접 설정한 닉네임. Google 계정 이름은 받지 않으며, 계정의 내부 이름 값은 이메일 주소의 @ 앞부분으로
+          저장됩니다.
+        </li>
         <li>작성한 게시글(제목, 내용, 장소, 날짜, 첨부 이미지)</li>
         <li>작성한 댓글 및 답글</li>
         <li>주고받은 채팅 메시지 및 채팅으로 전송한 사진</li>
         <li>로그인 일시, 게시글 조회 기록, 신고/알림 등 서비스 이용 기록</li>
-        <li>
-          비로그인 상태로 게시글을 조회한 경우, 중복 조회수 집계 방지를 위해 브라우저에 저장되는 식별
-          쿠키(1년간 보관)
-        </li>
+        <li>서비스 이용 과정에서 자동으로 생성·수집되는 정보(IP 주소, User-Agent, 쿠키): 아래 8조 참고</li>
       </ul>
     ),
   },
@@ -46,9 +54,10 @@ const SECTIONS: Section[] = [
     title: "2. 수집 방법",
     body: (
       <>
-        Google 로그인(OAuth)을 통해 이메일, 계정 식별 정보를 수집합니다. 이때 요청하는 권한 범위(scope)는
+        Google 로그인(OAuth)을 통해 Google 계정 고유 식별자, 이메일 주소, 이메일 인증 여부를 전달받습니다. 이때
+        요청하는 권한 범위(scope)는
         <span className="font-medium text-foreground"> openid, email</span>이며, 프로필 사진·성별·언어 등
-        Google의 별도 프로필 정보는 요청하지 않습니다. 그 외 항목은 이용자가 서비스를 이용하는 과정에서
+        이름을 포함한 Google의 별도 프로필 정보는 요청하지 않습니다. 그 외 항목은 이용자가 서비스를 이용하는 과정에서
         직접 입력하거나(닉네임, 게시글, 댓글, 채팅 등) 서비스 이용에 따라 자동으로 생성됩니다(로그인
         일시 등).
       </>
@@ -75,10 +84,38 @@ const SECTIONS: Section[] = [
     title: "5. 개인정보의 처리 위탁, 제3자 제공, 내부 접근",
     body: (
       <>
-        서비스 운영을 위해 데이터베이스·이미지 저장(Supabase), 호스팅(Vercel) 등 인프라 제공업체를
-        이용합니다. 이 서비스가 직접 마케팅이나 광고 등 다른 목적으로 개인정보를 제3자에게 제공하지는
-        않습니다. 다만 서비스 운영(신고 처리, 이용자 관리)을 위해 관리자 권한을 가진 운영자는 이용자의
-        이메일 주소를 조회할 수 있습니다.
+        <p>서비스 운영을 위해 다음 업체에 개인정보 처리 업무를 위탁합니다.</p>
+        <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
+          <li>
+            <span className="font-medium text-foreground">Vercel</span>: 웹 서비스 호스팅, 서버 함수 실행, 정기
+            보유기간 정리 작업 실행
+          </li>
+          <li>
+            <span className="font-medium text-foreground">Supabase</span>: PostgreSQL 데이터베이스 저장,
+            Storage 파일(게시글·채팅 이미지) 저장, Realtime 채팅 알림 전달
+          </li>
+        </ul>
+        <p className="mt-2">
+          각 업체가 공개한 하위 수탁자 목록은{" "}
+          <a href="https://vercel.com/legal/sub-processors" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:opacity-80">
+            Vercel
+          </a>
+          ,{" "}
+          <a
+            href="https://supabase.com/legal/customer-resources/subprocessor-list"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-primary hover:opacity-80"
+          >
+            Supabase
+          </a>
+          에서 확인할 수 있습니다.
+        </p>
+        <p className="mt-2">
+          이 서비스가 직접 마케팅이나 광고 등 다른 목적으로 개인정보를 제3자에게 제공하지는 않습니다. 다만 서비스
+          운영(신고 처리, 이용자 관리)을 위해 관리자 권한을 가진 운영자는 이용자의 이메일 주소를 조회할 수
+          있습니다.
+        </p>
       </>
     ),
   },
@@ -152,14 +189,54 @@ const SECTIONS: Section[] = [
     ),
   },
   {
-    title: "8. 동의",
+    title: "8. 자동으로 수집되는 정보와 쿠키",
+    body: (
+      <>
+        <ul className="flex list-disc flex-col gap-1 pl-5">
+          <li>
+            <span className="font-medium text-foreground">IP 주소</span>: 로그인하지 않은 상태의 AI 검색 이용량을
+            제한하기 위해, IP 주소를 원래 값으로 되돌릴 수 없는 해시 값으로 바꾼 뒤 이용 횟수와 함께 저장합니다(IP
+            주소 자체는 저장하지 않으며, 2일이 지난 기록은 수시로 삭제됩니다). 또한 호스팅 업체(Vercel)의 요청
+            기록에 접속 IP 주소와 User-Agent가 포함될 수 있습니다.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">User-Agent(브라우저·기기 정보)</span>: 이 서비스는 직접
+            저장하지 않으며, 위 호스팅 업체의 요청 기록에만 포함될 수 있습니다.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">로그인 세션 쿠키</span>: 로그인 상태를 유지하기 위한
+            암호화된 쿠키입니다. 30일 동안 이용하지 않으면 만료되며, 로그아웃하면 삭제됩니다. 로그인 과정에는 보안을
+            위한 보조 쿠키(요청 위조 방지 등)도 함께 쓰입니다.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">locale 쿠키</span>: 선택한 화면 언어를 기억합니다(1년).
+          </li>
+          <li>
+            <span className="font-medium text-foreground">anon_uid 쿠키</span>: 로그인하지 않은 상태로 게시글을 볼 때
+            같은 브라우저의 조회가 중복 집계되지 않도록 무작위 식별값을 저장합니다(1년).
+          </li>
+        </ul>
+        <p className="mt-2">
+          쿠키는 이용자의 브라우저에 저장되며, 브라우저 설정에서 저장을 거부하거나 삭제할 수 있습니다. 다만 로그인
+          세션 쿠키를 거부하면 로그인이 필요한 기능을 이용할 수 없고, locale 쿠키를 거부하면 언어 선택이 유지되지
+          않습니다.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: "9. 동의",
     body: "이 개인정보 수집·이용에 대한 동의는 로그인 후 표시되는 동의 화면에서 이용자가 직접 체크박스를 선택하고 버튼을 눌렀을 때만 기록됩니다. Google 로그인 자체는 이 동의를 의미하지 않습니다.",
   },
   {
-    title: "9. 문의",
+    title: "10. 개인정보 보호 문의",
     body: (
       <>
-        특정 게시물·메시지·사용자와 관련된 문제는 해당 화면의{" "}
+        개인정보 처리와 관련한 문의, 열람·정정·삭제·처리정지 요청은 개인정보 문의 담당(
+        <a href="mailto:mjusmartlostfound@gmail.com" className="font-medium text-primary hover:opacity-80">
+          mjusmartlostfound@gmail.com
+        </a>
+        )으로 연락해주세요. 특정 게시물·메시지·사용자와 관련된 문제는 해당 화면의{" "}
         <Link href="/policy/community" className="font-medium text-primary hover:opacity-80">
           신고 기능
         </Link>

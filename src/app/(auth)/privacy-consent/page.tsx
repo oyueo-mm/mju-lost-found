@@ -32,12 +32,13 @@ import { PrivacyConsentButton } from "./PrivacyConsentButton";
 // its own pages, same as this one never repeats a URL's real content).
 const COLLECTED_ITEMS: { label: string; detail: string }[] = [
   { label: "Google 계정 식별 정보", detail: "Google 계정의 고유 식별자(구글 로그인 시 발급)" },
-  { label: "이메일 주소", detail: "Google 계정의 이메일 주소" },
-  { label: "이름 및 닉네임", detail: "Google 계정 이름(또는 이메일 기반 대체명), 직접 설정한 닉네임" },
+  { label: "이메일 주소", detail: "Google 계정의 이메일 주소(이메일 인증 여부는 로그인 확인에만 쓰고 저장하지 않음)" },
+  { label: "닉네임", detail: "직접 설정한 닉네임(Google 계정 이름은 받지 않으며, 내부 이름 값은 이메일 주소의 @ 앞부분)" },
   { label: "게시글 정보", detail: "분실물/습득물 게시글의 제목, 내용, 장소, 날짜, 첨부 이미지" },
   { label: "댓글/답글", detail: "게시글에 작성한 댓글 및 답글 내용" },
   { label: "채팅 메시지", detail: "다른 이용자와 주고받은 채팅 메시지, 채팅으로 전송한 사진" },
   { label: "서비스 이용 기록", detail: "로그인 일시, 게시글 조회 기록, 신고/알림 등 서비스 이용 내역" },
+  { label: "자동 수집 정보", detail: "해시 처리된 IP(비로그인 AI 검색 이용량 제한), 로그인 세션·언어 설정·조회수 집계용 쿠키" },
 ];
 
 export default async function PrivacyConsentPage({
