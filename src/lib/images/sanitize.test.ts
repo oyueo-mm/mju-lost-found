@@ -8,7 +8,8 @@ const update = vi.fn(async (path: string, body: Buffer) => {
   stored.set(path, body);
   return { data: { path }, error: null };
 });
-const download = vi.fn(async (path: string) => {
+const download = vi.fn(async (path: string, options?: { cacheNonce?: string }) => {
+  void options;
   const buf = stored.get(path);
   return buf ? { data: new Blob([new Uint8Array(buf)]), error: null } : { data: null, error: new Error("not found") };
 });

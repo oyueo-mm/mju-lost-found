@@ -45,7 +45,9 @@ export async function sanitizeStoredImage(
   if (!expected) return { ok: false, reason: "format_mismatch" };
 
   const storage = getSupabaseAdminClient().storage.from(bucket);
-  const { data: blob, error } = await storage.download(path);
+  // cacheNonce: always read the object as stored now, never a CDN-cached
+  // copy (Storage caches downloads by URL).
+  const { data: blob, error } = await storage.download(path, { cacheNonce: `${Date.now()}` });
   if (error || !blob) return { ok: false, reason: "missing" };
   if (blob.size > MAX_IMAGE_SIZE_BYTES) return { ok: false, reason: "too_large" };
   const input = Buffer.from(await blob.arrayBuffer());
