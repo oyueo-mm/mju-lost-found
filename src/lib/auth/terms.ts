@@ -11,4 +11,12 @@
 //
 // 2026-10-03: terms art. 2 (admin-approved external members) and privacy
 // policy art. 4/7 changed before the public beta -- every user re-agrees.
-export const CURRENT_TERMS_VERSION = "2026-10-03";
+// 2026-10-04: terms art. 8 (계정 비활성화 및 회원탈퇴) changed.
+export const CURRENT_TERMS_VERSION = "2026-10-04";
+
+// 개인정보 수집·이용 동의 version -- compared with User.privacyConsentVersion
+// the same way (plain string equality). Bump it when what the consent
+// screen asks people to agree to changes (items, purposes, retention).
+// 2026-10-04: 회원탈퇴 후 보유기간 (chat text 90 days, processed
+// report/sanction records 1 year, ...) added.
+export const CURRENT_PRIVACY_VERSION = "2026-10-04";

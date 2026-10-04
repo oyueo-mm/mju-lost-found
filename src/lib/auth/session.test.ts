@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
+import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 
 const auth = vi.fn();
 const findUnique = vi.fn();
@@ -30,7 +30,12 @@ const {
 // -- these tests are about nickname/suspension/admin routing, not
 // consent itself (that's hasRequiredConsents's own describe block below),
 // so this is just what "already cleared the consent gate" looks like now.
-const readyConsent = { privacyConsentAt: new Date(), termsAcceptedAt: new Date(), termsVersion: CURRENT_TERMS_VERSION };
+const readyConsent = {
+  privacyConsentAt: new Date(),
+  privacyConsentVersion: CURRENT_PRIVACY_VERSION,
+  termsAcceptedAt: new Date(),
+  termsVersion: CURRENT_TERMS_VERSION,
+};
 
 beforeEach(() => {
   auth.mockReset();
@@ -134,19 +139,23 @@ describe("requireUser", () => {
 // sites' own tests don't have to re-cover every field combination.
 describe("hasRequiredConsents", () => {
   it("is true only when privacy consent, terms consent, and the current terms version are all present", () => {
-    expect(hasRequiredConsents({ privacyConsentAt: new Date(), termsAcceptedAt: new Date(), termsVersion: CURRENT_TERMS_VERSION })).toBe(true);
+    expect(hasRequiredConsents({ ...readyConsent })).toBe(true);
   });
 
   it("is false when privacy consent is missing", () => {
-    expect(hasRequiredConsents({ privacyConsentAt: null, termsAcceptedAt: new Date(), termsVersion: CURRENT_TERMS_VERSION })).toBe(false);
+    expect(hasRequiredConsents({ ...readyConsent, privacyConsentAt: null })).toBe(false);
   });
 
   it("is false when terms consent was never given", () => {
-    expect(hasRequiredConsents({ privacyConsentAt: new Date(), termsAcceptedAt: null, termsVersion: null })).toBe(false);
+    expect(hasRequiredConsents({ ...readyConsent, termsAcceptedAt: null, termsVersion: null })).toBe(false);
   });
 
   it("is false when the stored terms version no longer matches the current one", () => {
-    expect(hasRequiredConsents({ privacyConsentAt: new Date(), termsAcceptedAt: new Date(), termsVersion: "2025-01-01" })).toBe(false);
+    expect(hasRequiredConsents({ ...readyConsent, termsVersion: "2025-01-01" })).toBe(false);
+    // 개인정보 동의 버전: an older or missing privacy version is outstanding too
+    // (every account that consented before versioning has NULL).
+    expect(hasRequiredConsents({ ...readyConsent, privacyConsentVersion: null })).toBe(false);
+    expect(hasRequiredConsents({ ...readyConsent, privacyConsentVersion: "2025-01-01" })).toBe(false);
   });
 });
 

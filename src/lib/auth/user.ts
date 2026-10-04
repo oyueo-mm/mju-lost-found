@@ -128,11 +128,20 @@ export async function resolveSignIn(params: SignInAccount): Promise<SignInResolu
 //   stamped together.
 export type RequiredConsentUser = Awaited<ReturnType<typeof prisma.user.findUniqueOrThrow>>;
 
-export async function recordRequiredConsents(userId: number, termsVersion: string): Promise<RequiredConsentUser> {
+//
+// 개인정보 동의 버전: the privacy consent now follows the same rule as the
+// terms -- written while missing *or* on file for another version, and
+// then both privacyConsentAt (the moment of this agreement) and
+// privacyConsentVersion are stamped. An account already on the current
+// version is left untouched.
+export async function recordRequiredConsents(userId: number, termsVersion: string, privacyVersion: string): Promise<RequiredConsentUser> {
   return prisma.$transaction(async (tx) => {
     await tx.user.updateMany({
-      where: { id: userId, privacyConsentAt: null },
-      data: { privacyConsentAt: new Date() },
+      where: {
+        id: userId,
+        OR: [{ privacyConsentAt: null }, { privacyConsentVersion: null }, { privacyConsentVersion: { not: privacyVersion } }],
+      },
+      data: { privacyConsentAt: new Date(), privacyConsentVersion: privacyVersion },
     });
     await tx.user.updateMany({
       where: { id: userId, OR: [{ termsAcceptedAt: null }, { termsVersion: { not: termsVersion } }] },

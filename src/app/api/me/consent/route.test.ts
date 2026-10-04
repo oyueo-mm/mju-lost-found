@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
+import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 
 const getCurrentUser = vi.fn();
 const recordRequiredConsents = vi.fn();
@@ -44,7 +44,7 @@ describe("POST /api/me/consent", () => {
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    expect(recordRequiredConsents).toHaveBeenCalledWith(7, CURRENT_TERMS_VERSION);
+    expect(recordRequiredConsents).toHaveBeenCalledWith(7, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION);
     expect(json.data.privacyConsentAt).toBe(consentedAt.toISOString());
     expect(json.data.termsAcceptedAt).toBe(consentedAt.toISOString());
     expect(json.data.termsVersion).toBe(CURRENT_TERMS_VERSION);

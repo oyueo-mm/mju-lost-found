@@ -35,6 +35,7 @@ vi.mock("@/lib/db/prisma", () => ({
 
 const { resolveOrCreateUser, recordRequiredConsents, withdrawUser } = await import("./user");
 const CURRENT_VERSION = "2026-09-27";
+const PRIVACY_VERSION = "2026-10-04";
 
 queryRaw.mockResolvedValue([]);
 
@@ -171,12 +172,15 @@ describe("recordRequiredConsents", () => {
       termsVersion: CURRENT_VERSION,
     });
 
-    await recordRequiredConsents(5, CURRENT_VERSION);
+    await recordRequiredConsents(5, CURRENT_VERSION, PRIVACY_VERSION);
 
     expect($transaction).toHaveBeenCalledTimes(1);
     expect(updateMany).toHaveBeenNthCalledWith(1, {
-      where: { id: 5, privacyConsentAt: null },
-      data: { privacyConsentAt: expect.any(Date) },
+      where: {
+        id: 5,
+        OR: [{ privacyConsentAt: null }, { privacyConsentVersion: null }, { privacyConsentVersion: { not: PRIVACY_VERSION } }],
+      },
+      data: { privacyConsentAt: expect.any(Date), privacyConsentVersion: PRIVACY_VERSION },
     });
     expect(updateMany).toHaveBeenNthCalledWith(2, {
       where: { id: 5, OR: [{ termsAcceptedAt: null }, { termsVersion: { not: CURRENT_VERSION } }] },
@@ -194,7 +198,7 @@ describe("recordRequiredConsents", () => {
       termsVersion: CURRENT_VERSION,
     });
 
-    const user = await recordRequiredConsents(5, CURRENT_VERSION);
+    const user = await recordRequiredConsents(5, CURRENT_VERSION, PRIVACY_VERSION);
 
     expect(findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 5 } });
     expect(user).toEqual({
@@ -206,12 +210,11 @@ describe("recordRequiredConsents", () => {
   });
 
   // Idempotent: a second call (double-submit, or a user who already
-  // consented calling this again) must not overwrite the original
-  // privacy consent instant -- the where-clause's `privacyConsentAt:
-  // null` guard makes that updateMany match zero rows in that case, same
-  // "only if still unset" pattern as onboarding/actions.ts's nickname
-  // write and the original recordPrivacyConsent this replaces.
-  it("does not overwrite an already-recorded privacy consent timestamp", async () => {
+  // consented to the *current* privacy version calling this again) must
+  // not overwrite the original privacy consent instant -- the
+  // where-clause (missing consent or another version) matches zero rows
+  // in that case. A consent on file for an older version is re-stamped.
+  it("does not overwrite a privacy consent already on the current version", async () => {
     updateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
     const original = new Date("2025-06-01T00:00:00Z");
     findUniqueOrThrow.mockResolvedValueOnce({
@@ -221,7 +224,7 @@ describe("recordRequiredConsents", () => {
       termsVersion: CURRENT_VERSION,
     });
 
-    const user = await recordRequiredConsents(5, CURRENT_VERSION);
+    const user = await recordRequiredConsents(5, CURRENT_VERSION, PRIVACY_VERSION);
 
     expect(user.privacyConsentAt).toEqual(original);
   });
@@ -241,7 +244,7 @@ describe("recordRequiredConsents", () => {
       termsVersion: CURRENT_VERSION,
     });
 
-    const user = await recordRequiredConsents(5, CURRENT_VERSION);
+    const user = await recordRequiredConsents(5, CURRENT_VERSION, PRIVACY_VERSION);
 
     expect(user.termsAcceptedAt).toEqual(original);
     expect(user.termsVersion).toBe(CURRENT_VERSION);
@@ -259,7 +262,7 @@ describe("recordRequiredConsents", () => {
       termsVersion: CURRENT_VERSION,
     });
 
-    await recordRequiredConsents(5, CURRENT_VERSION);
+    await recordRequiredConsents(5, CURRENT_VERSION, PRIVACY_VERSION);
 
     expect(updateMany).toHaveBeenNthCalledWith(2, {
       where: { id: 5, OR: [{ termsAcceptedAt: null }, { termsVersion: { not: CURRENT_VERSION } }] },

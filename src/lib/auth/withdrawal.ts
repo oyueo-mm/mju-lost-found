@@ -248,6 +248,7 @@ export async function withdrawAccount(userId: number): Promise<WithdrawAccountRe
           googleId: null,
           publicId: randomUUID(),
           privacyConsentAt: null,
+          privacyConsentVersion: null,
           termsAcceptedAt: null,
           termsVersion: null,
           lastLoginAt: null,

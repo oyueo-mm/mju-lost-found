@@ -388,6 +388,12 @@ model User {
   // the same way termsAcceptedAt alone is treated for a first-time
   // agreement.
   termsVersion              String?   @map("terms_version")
+  // 개인정보 동의 버전: the CURRENT_PRIVACY_VERSION (auth/terms.ts) this user
+  // last agreed to, stamped together with privacyConsentAt. NULL for every
+  // account that consented before versioning existed -- deliberately never
+  // backfilled, so those users really see the current notice and agree
+  // again (session.ts::hasRequiredConsents).
+  privacyConsentVersion     String?   @map("privacy_consent_version")
   // Phase 10: NULL means this account is active; a timestamp means the
   // user deactivated it at that instant (auth/user.ts's withdrawUser --
   // the only place this is ever set, always by the account's own owner,

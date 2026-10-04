@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/auth";
 import { hasOngoingExternalAccess } from "@/lib/auth/access";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
-import { CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
+import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 import { prisma } from "@/lib/db/prisma";
 import type { User } from "@/generated/prisma/client";
 
@@ -158,9 +158,17 @@ export async function requireUser(reason?: LoginReason, callbackUrl?: string): P
 // account on a now-superseded terms version get re-routed here exactly
 // like any other outstanding-consent case, with no separate
 // reactivation-specific branch needed anywhere.
-export function hasRequiredConsents(user: Pick<User, "privacyConsentAt" | "termsAcceptedAt" | "termsVersion">): boolean {
+//
+// 개인정보 동의 버전: the privacy consent is versioned too -- an account
+// whose privacyConsentVersion isn't the current one (including every
+// pre-versioning account, NULL) is re-routed exactly like a stale terms
+// version.
+export function hasRequiredConsents(
+  user: Pick<User, "privacyConsentAt" | "privacyConsentVersion" | "termsAcceptedAt" | "termsVersion">,
+): boolean {
   return (
     user.privacyConsentAt !== null &&
+    user.privacyConsentVersion === CURRENT_PRIVACY_VERSION &&
     user.termsAcceptedAt !== null &&
     user.termsVersion === CURRENT_TERMS_VERSION
   );

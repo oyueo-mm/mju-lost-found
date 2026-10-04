@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 
 import { hasRequiredConsents, requireUser, sanitizeCallbackUrl } from "@/lib/auth/session";
-import { CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
+import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 import { signOut } from "@/lib/auth/auth";
 import { LogoMark } from "@/components/layout/Logo";
 import { ShieldIcon, ChevronRightIcon, BookIcon } from "@/components/icons";
@@ -57,7 +57,11 @@ export default async function PrivacyConsentPage({
   // checkbox as either interactive (still needed) or an already-done
   // state (see that component's own comment) -- never re-demanding a
   // consent this user already gave.
-  const needsPrivacy = user.privacyConsentAt === null;
+  // 개인정보 동의 버전: a consent on file for an older (or no) version is
+  // asked again, same as the terms.
+  const needsPrivacy = user.privacyConsentAt === null || user.privacyConsentVersion !== CURRENT_PRIVACY_VERSION;
+  // Someone who agreed before is told why they see this again.
+  const isReconsent = user.privacyConsentAt !== null || user.termsAcceptedAt !== null;
   const needsTerms = user.termsAcceptedAt === null || user.termsVersion !== CURRENT_TERMS_VERSION;
 
   // Already consented to everything currently required (e.g. re-visiting
@@ -86,6 +90,11 @@ export default async function PrivacyConsentPage({
             <br />
             정보를 간단히 안내해드릴게요.
           </p>
+          {isReconsent && (
+            <p className="mt-1 rounded-card border border-primary/30 bg-primary-muted px-3 py-2 text-xs text-primary">
+              개인정보 수집·이용 동의 또는 이용약관 내용이 변경되어 다시 동의가 필요해요.
+            </p>
+          )}
         </div>
 
         {/* Same base card language every other card in this app uses

@@ -1,5 +1,5 @@
 import { getCurrentUser } from "@/lib/auth/session";
-import { CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
+import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 import { recordRequiredConsents } from "@/lib/auth/user";
 import { jsonError, jsonOk, withErrorHandling } from "@/lib/posts/http";
 
@@ -20,11 +20,12 @@ export const POST = withErrorHandling(async () => {
   // recordRequiredConsents() ignores the client entirely beyond the
   // authenticated user's own id -- no body is read, no client-supplied
   // timestamp or version is ever trusted (see that function's own
-  // comment for why). The current terms version is this server's own
-  // constant, never something the client could influence.
-  const updated = await recordRequiredConsents(user.id, CURRENT_TERMS_VERSION);
+  // comment for why). The current terms/privacy versions are this
+  // server's own constants, never something the client could influence.
+  const updated = await recordRequiredConsents(user.id, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION);
   return jsonOk({
     privacyConsentAt: updated.privacyConsentAt,
+    privacyConsentVersion: updated.privacyConsentVersion,
     termsAcceptedAt: updated.termsAcceptedAt,
     termsVersion: updated.termsVersion,
   });
