@@ -56,6 +56,11 @@ const FOUND_STATUS_FROM_DB: Record<PrismaFoundPostStatus, string> = {
 // is never rendered as a link target.
 // External access Phase: userType too, only so the UI can show the
 // "인증된 외부 관계자" badge (it says nothing more than the account kind).
+// Legal pre-beta Phase: what every public post list/search/count adds --
+// a temporarily hidden post (임시 숨김, moderation/service.ts) is shown only
+// to its author (their own "내 게시글") and admins.
+export const PUBLIC_POST_WHERE = { tempHiddenAt: null } as const;
+
 export const AUTHOR_SELECT = { id: true, nickname: true, publicId: true, userType: true } as const;
 
 // Phase 12-5: paired with AUTHOR_SELECT above at every query site that
@@ -83,6 +88,9 @@ export type PostImageSummary = { id: number; imageUrl: string; displayOrder: num
 export type LostPostDTO = {
   id: number;
   type: "lost";
+  // Legal pre-beta Phase: set while temporarily hidden (임시 숨김) -- only
+  // ever returned to its author or an admin (see post/[id]/page.tsx).
+  tempHiddenAt?: Date | null;
   title: string;
   description: string;
   // Legacy free-text category -- still what search filters, keyword alerts
@@ -132,6 +140,9 @@ export type LostPostDTO = {
 export type FoundPostDTO = {
   id: number;
   type: "found";
+  // Legal pre-beta Phase: set while temporarily hidden (임시 숨김) -- only
+  // ever returned to its author or an admin (see post/[id]/page.tsx).
+  tempHiddenAt?: Date | null;
   title: string;
   description: string;
   category: string;
@@ -270,8 +281,11 @@ function buildSearchWhere<S extends PrismaLostPostStatus | PrismaFoundPostStatus
   campus?: string;
   user?: { nickname: { contains: string; mode: "insensitive" } };
   status?: S;
+  tempHiddenAt: null;
 } {
-  const where: ReturnType<typeof buildSearchWhere<S>> = {};
+  // Legal pre-beta Phase: a temporarily hidden post (임시 숨김) is never part
+  // of a public list/search.
+  const where: ReturnType<typeof buildSearchWhere<S>> = { tempHiddenAt: null };
   if (filters.q) {
     where.OR = [
       { title: { contains: filters.q, mode: "insensitive" } },
@@ -334,6 +348,7 @@ export function toLostPostDTO(row: {
   createdAt: Date;
   updatedAt: Date;
   viewCount: number;
+  tempHiddenAt?: Date | null;
   user: Author;
   // Phase 12-5: required (not optional) -- every call site below now
   // selects this relation, same "no include site left behind" guarantee
@@ -374,6 +389,7 @@ export function toFoundPostDTO(row: {
   createdAt: Date;
   updatedAt: Date;
   viewCount: number;
+  tempHiddenAt?: Date | null;
   user: Author;
   // See toLostPostDTO's own comment -- identical shape/reasoning.
   organization: { id: number; name: string } | null;
@@ -602,13 +618,13 @@ export async function listRecentPostsByOrganization(
   const orderBy = buildOrderBy();
   const [lostRows, foundRows] = await Promise.all([
     prisma.lostPost.findMany({
-      where: { organizationId },
+      where: { organizationId, ...PUBLIC_POST_WHERE },
       orderBy,
       take: limit,
       include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
     }),
     prisma.foundPost.findMany({
-      where: { organizationId },
+      where: { organizationId, ...PUBLIC_POST_WHERE },
       orderBy,
       take: limit,
       include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
@@ -690,19 +706,19 @@ export async function listPostsByUser(userId: number, { page, limit }: Page): Pr
 
   const [lostRows, foundRows, lostTotal, foundTotal] = await Promise.all([
     prisma.lostPost.findMany({
-      where: { userId },
+      where: { userId, ...PUBLIC_POST_WHERE },
       orderBy,
       take: depth,
       include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
     }),
     prisma.foundPost.findMany({
-      where: { userId },
+      where: { userId, ...PUBLIC_POST_WHERE },
       orderBy,
       take: depth,
       include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
     }),
-    prisma.lostPost.count({ where: { userId } }),
-    prisma.foundPost.count({ where: { userId } }),
+    prisma.lostPost.count({ where: { userId, ...PUBLIC_POST_WHERE } }),
+    prisma.foundPost.count({ where: { userId, ...PUBLIC_POST_WHERE } }),
   ]);
 
   const merged = [...lostRows.map(toLostPostDTO), ...foundRows.map(toFoundPostDTO)].sort(
@@ -762,10 +778,10 @@ export type PostStats = {
 export async function getPostStats(): Promise<PostStats> {
   const since = new Date(Date.now() - RECENT_STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000);
   const [lostCount, foundCount, recentLostCount, recentFoundCount] = await Promise.all([
-    prisma.lostPost.count(),
-    prisma.foundPost.count(),
-    prisma.lostPost.count({ where: { createdAt: { gte: since } } }),
-    prisma.foundPost.count({ where: { createdAt: { gte: since } } }),
+    prisma.lostPost.count({ where: PUBLIC_POST_WHERE }),
+    prisma.foundPost.count({ where: PUBLIC_POST_WHERE }),
+    prisma.lostPost.count({ where: { createdAt: { gte: since }, ...PUBLIC_POST_WHERE } }),
+    prisma.foundPost.count({ where: { createdAt: { gte: since }, ...PUBLIC_POST_WHERE } }),
   ]);
   return { lostCount, foundCount, recentCount: recentLostCount + recentFoundCount };
 }

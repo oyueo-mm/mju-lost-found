@@ -457,10 +457,11 @@ describe("listPostsByUser", () => {
 
     const result = await listPostsByUser(7, { page: 1, limit: 20 });
 
-    expect(lostPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 7 } }));
-    expect(foundPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 7 } }));
-    expect(lostPost.count).toHaveBeenCalledWith({ where: { userId: 7 } });
-    expect(foundPost.count).toHaveBeenCalledWith({ where: { userId: 7 } });
+    // Public profile list: temporarily hidden posts are left out.
+    expect(lostPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 7, tempHiddenAt: null } }));
+    expect(foundPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 7, tempHiddenAt: null } }));
+    expect(lostPost.count).toHaveBeenCalledWith({ where: { userId: 7, tempHiddenAt: null } });
+    expect(foundPost.count).toHaveBeenCalledWith({ where: { userId: 7, tempHiddenAt: null } });
     // Newest first across both tables, not grouped by type.
     expect(result.items.map((p) => p.id)).toEqual([2, 3, 1]);
     expect(result.total).toBe(3);
@@ -532,8 +533,8 @@ describe("listRecentPostsByOrganization", () => {
 
     const result = await listRecentPostsByOrganization(10);
 
-    expect(lostPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId: 10 } }));
-    expect(foundPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId: 10 } }));
+    expect(lostPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId: 10, tempHiddenAt: null } }));
+    expect(foundPost.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId: 10, tempHiddenAt: null } }));
     expect(result.map((p) => p.id)).toEqual([2, 3, 1]);
     expect(result.every((p) => p.organizationId === 10)).toBe(true);
   });
@@ -574,8 +575,8 @@ describe("getPostStats", () => {
       await getPostStats();
 
       const expectedSince = new Date(start.getTime() - 7 * 24 * 60 * 60 * 1000);
-      expect(lostPost.count).toHaveBeenNthCalledWith(2, { where: { createdAt: { gte: expectedSince } } });
-      expect(foundPost.count).toHaveBeenNthCalledWith(2, { where: { createdAt: { gte: expectedSince } } });
+      expect(lostPost.count).toHaveBeenNthCalledWith(2, { where: { createdAt: { gte: expectedSince }, tempHiddenAt: null } });
+      expect(foundPost.count).toHaveBeenNthCalledWith(2, { where: { createdAt: { gte: expectedSince }, tempHiddenAt: null } });
     } finally {
       vi.useRealTimers();
     }

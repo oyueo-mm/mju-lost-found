@@ -46,7 +46,7 @@ export const zh: Dictionary = {
   "brand.description": "为明知人打造的智能失物招领中心",
 
   "footer.tagline": "面向明知大学学生的失物登记、搜索与联系服务。",
-  "footer.disclaimer": "本项目由明知大学学生自发制作，并非明知大学官方运营的服务。",
+  "footer.disclaimer": "本服务并非明知大学的官方服务，而是由学生开发和运营的服务。",
   "footer.createdBy": "Created by MJU students",
   "footer.copyright": "© {year} MYONGJI L&F。如需反馈特定帖子、消息或用户，请使用该页面的举报功能。",
   "footer.section.service": "服务",
@@ -318,7 +318,7 @@ export const zh: Dictionary = {
   "time.monthsAgo": "{count} 个月前",
   "time.yearsAgo": "{count} 年前",
 
-  "comment.count": "评论 {count}", "comment.deleted": "该评论已删除。",
+  "comment.count": "评论 {count}", "comment.deleted": "该评论已删除。", "comment.tempHidden": "该评论因举报已被暂时隐藏。",
   "comment.empty": "还没有评论，来写第一条吧。",
   "comment.placeholder": "请输入评论…",
   "comment.submit": "发表评论",
@@ -572,7 +572,7 @@ export const zh: Dictionary = {
   "report.reason.fraud": "诈骗/虚假信息",
   "report.reason.inappropriate": "不当内容",
   "report.reason.abuse": "辱骂/诽谤",
-  "report.reason.privacy": "泄露个人信息",
+  "report.reason.privacy": "泄露个人信息", "report.reason.privacyInvasion": "侵犯隐私", "report.reason.defamation": "诽谤", "report.reason.illegalSexual": "非法性内容（偷拍、性剥削等）",
   "report.reason.spam": "刷屏/垃圾信息",
   "report.reason.other": "其他",
   "nickname.current": "当前昵称：{name}", "nickname.nextChange": "下次可修改：{date}（{remaining}）",

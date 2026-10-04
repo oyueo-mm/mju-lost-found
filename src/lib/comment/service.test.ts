@@ -635,7 +635,7 @@ describe("tombstones in comment lists", () => {
 
     await countCommentsForPost("lost", 5);
 
-    expect(comment.count).toHaveBeenCalledWith({ where: { lostPostId: 5, deletedAt: null } });
+    expect(comment.count).toHaveBeenCalledWith({ where: { lostPostId: 5, deletedAt: null, tempHiddenAt: null } });
   });
 
   it("refuses a reply to a tombstoned comment", async () => {
@@ -681,5 +681,35 @@ describe("getCommentPostRef", () => {
   it("returns null for a nonexistent comment", async () => {
     comment.findUnique.mockResolvedValueOnce(null);
     expect(await getCommentPostRef(999)).toBeNull();
+  });
+});
+
+describe("temporarily hidden comments (Legal pre-beta Phase)", () => {
+  it("are sent as a placeholder with no content or author", async () => {
+    comment.findMany.mockResolvedValueOnce([
+      {
+        id: 11,
+        content: "명예훼손 의심 내용",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        parentId: null,
+        deletedAt: null,
+        tempHiddenAt: new Date(),
+        author: { id: 1, nickname: "작성자", publicId: "p1" },
+        organization: null,
+      },
+    ]);
+
+    const [item] = await listCommentsForPost("lost", 5);
+
+    expect(item).toMatchObject({ id: 11, content: "", isHidden: true, isDeleted: false, author: { id: 0, nickname: null } });
+  });
+
+  it("can't be replied to", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 5 });
+    comment.findUnique.mockResolvedValueOnce({ id: 11, parentId: null, authorUserId: 9, lostPostId: 5, foundPostId: null, deletedAt: null, tempHiddenAt: new Date() });
+
+    expect(await createComment(author, "lost", 5, { content: "답글", parentId: 11 })).toEqual({ kind: "parent_not_found" });
+    expect(comment.create).not.toHaveBeenCalled();
   });
 });

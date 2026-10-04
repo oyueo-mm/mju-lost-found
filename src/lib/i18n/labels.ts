@@ -59,6 +59,9 @@ const REPORT_REASON_KEYS: Record<string, TranslationKey> = {
   "부적절한 내용": "report.reason.inappropriate",
   "욕설/비방": "report.reason.abuse",
   "개인정보 노출": "report.reason.privacy",
+  "사생활 침해": "report.reason.privacyInvasion",
+  "명예훼손": "report.reason.defamation",
+  "불법 성적 콘텐츠(불법촬영물·성착취물 등)": "report.reason.illegalSexual",
   "도배/스팸": "report.reason.spam",
   기타: "report.reason.other",
 };

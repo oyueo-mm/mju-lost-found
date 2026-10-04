@@ -54,8 +54,8 @@ describe("getPublicProfile", () => {
     // server-side (see PublicProfileDTO's own comment) -- it's never
     // rendered, but it IS part of the returned data shape now.
     expect(result).toEqual({ publicId: VALID_UUID, nickname: "닉네임", createdAt, postCount: 5, userId: 7 });
-    expect(lostPostCount).toHaveBeenCalledWith({ where: { userId: 7 } });
-    expect(foundPostCount).toHaveBeenCalledWith({ where: { userId: 7 } });
+    expect(lostPostCount).toHaveBeenCalledWith({ where: { userId: 7, tempHiddenAt: null } });
+    expect(foundPostCount).toHaveBeenCalledWith({ where: { userId: 7, tempHiddenAt: null } });
   });
 
   // Never selects/returns email, googleId, isAdmin, isSuspended, etc --

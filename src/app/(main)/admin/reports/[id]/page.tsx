@@ -4,8 +4,15 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/session";
 import { getReportForAdmin } from "@/lib/moderation/service";
 import { MODERATION_ACTION_TYPE_LABELS } from "@/lib/moderation/schema";
-import { REPORT_STATUS_LABELS, REPORT_TARGET_TYPE_LABELS, type ReportStatusValue } from "@/lib/report/schema";
+import {
+  REPORT_STATUS_LABELS,
+  REPORT_TARGET_TYPE_LABELS,
+  isRightsInfringementReason,
+  isUrgentReportReason,
+  type ReportStatusValue,
+} from "@/lib/report/schema";
 import { ReportProcessForm } from "@/components/admin/ReportProcessForm";
+import { RestoreTempHideButton } from "@/components/admin/RestoreTempHideButton";
 import { ShieldIcon, AlertIcon } from "@/components/icons";
 
 const STATUS_TONE_CLASSES: Record<ReportStatusValue, string> = {
@@ -56,6 +63,11 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
           <h1 className="text-lg font-semibold text-foreground">
             신고 #{report.id} · {REPORT_TARGET_TYPE_LABELS[report.targetType]}
           </h1>
+          {isUrgentReportReason(report.reason) && (
+            <span className="rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold text-destructive-foreground">
+              긴급 · 불법 성적 콘텐츠
+            </span>
+          )}
         </div>
         <Link href="/admin/reports" className="text-sm font-medium text-muted-foreground hover:text-foreground">
           목록으로
@@ -151,6 +163,9 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
             reportId={report.id}
             targetType={report.targetType}
             targetDeleted={report.targetDeleted}
+            allowTempHide={
+              (report.targetType === "post" || report.targetType === "comment") && isRightsInfringementReason(report.reason)
+            }
           />
         </Section>
       ) : (
@@ -171,6 +186,16 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
                   {formatDate(report.moderationAction.createdAt)}
                 </span>
                 {report.moderationAction.reason && <span>조치 사유: {report.moderationAction.reason}</span>}
+                {(report.moderationAction.actionType === "temp_hide_post" ||
+                  report.moderationAction.actionType === "temp_hide_comment") &&
+                  (report.targetInfo && (report.targetInfo.kind === "post" || report.targetInfo.kind === "comment") && report.targetInfo.tempHidden ? (
+                    <div className="mt-1 flex flex-col gap-1">
+                      <span className="text-foreground">현재 임시 숨김 중입니다.</span>
+                      <RestoreTempHideButton reportId={report.id} />
+                    </div>
+                  ) : (
+                    <span>임시 숨김이 해제되었거나 대상이 삭제되었습니다.</span>
+                  ))}
                 {report.moderationAction.actionType === "suspend_user" && (
                   <span>
                     기간:{" "}

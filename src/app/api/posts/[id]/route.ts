@@ -12,6 +12,7 @@ import { deleteFoundPost, deleteLostPost, getFoundPost, getLostPost } from "@/li
 import { updateFoundPost, updateLostPost } from "@/lib/posts/aiService";
 import { embedPostImageBestEffort } from "@/lib/ai/postEmbedding";
 import { findPostRecommendations, invalidateRecommendationCache } from "@/lib/recommendation/service";
+import { getCurrentUser } from "@/lib/auth/session";
 
 // PATCH conditionally triggers embedPostBestEffort() -- real ONNX Runtime
 // inference (@huggingface/transformers, a native addon) that cannot run on
@@ -41,6 +42,15 @@ export const GET = withErrorHandling(
     const post =
       parsed.type === "lost" ? await getLostPost(parsed.id) : await getFoundPost(parsed.id);
     if (!post) return jsonError(404, "게시물을 찾을 수 없습니다.");
+
+    // Legal pre-beta Phase: a temporarily hidden post is only for its
+    // author and admins -- anyone else gets the same 404 as a missing post.
+    if (post.tempHiddenAt) {
+      const viewer = await getCurrentUser();
+      if (!viewer || (viewer.id !== post.author.id && !viewer.isAdmin)) {
+        return jsonError(404, "게시물을 찾을 수 없습니다.");
+      }
+    }
 
     // Phase 11-2: piggybacks on this existing route instead of adding a
     // new one -- this file's PATCH handler already imports aiService.ts

@@ -7,6 +7,8 @@ import { NotificationType, OrganizationRole, OrganizationStatus, Prisma, type Us
 import type { PostType } from "@/lib/posts/schema";
 import { parseChatImagePathname } from "@/lib/images/pathname";
 import { chatImageExists, deleteChatImageSafely } from "@/lib/images/chatStorage";
+import { sanitizeStoredImage } from "@/lib/images/sanitize";
+import { CHAT_IMAGES_BUCKET, CHAT_IMAGE_URL_TTL_SECONDS } from "@/lib/images/config";
 import { getMembership } from "@/lib/organization/authz";
 import { fanOutToOrganizationManagers } from "@/lib/notification/adminFanout";
 import { broadcastChatEvent } from "./realtimeAdmin";
@@ -1098,6 +1100,14 @@ export async function sendMessage(
     const parsed = parseChatImagePathname(imagePath);
     if (!parsed || parsed.chatRoomId !== chatRoomId) return { kind: "invalid_image" };
     if (!(await chatImageExists(imagePath))) return { kind: "invalid_image" };
+    // Legal pre-beta Phase: must really be an image, and any EXIF/GPS is
+    // stripped before anyone can see it (lib/images/sanitize.ts). A failed
+    // upload belongs only to this sender's attempt, so it's removed.
+    const checked = await sanitizeStoredImage(CHAT_IMAGES_BUCKET, imagePath, { cacheControl: String(CHAT_IMAGE_URL_TTL_SECONDS) });
+    if (!checked.ok) {
+      await deleteChatImageSafely(imagePath);
+      return { kind: "invalid_image" };
+    }
     storedImagePath = imagePath;
   }
 
@@ -1345,11 +1355,13 @@ export async function editMessage(
 // existing hidden_at/hidden_by_user_id columns admin moderation already
 // uses (see schema.prisma's own comment) rather than a new column or a
 // hard DELETE -- no new deletion policy, just a second way to reach the
-// same existing state. Also allows an admin to delete any message
-// directly, mirroring posts/service.ts's deleteLostPost/deleteFoundPost's
-// own `asAdmin` bypass precedent (existing admin capability, not a new
-// one) -- this is separate from, and doesn't change, the existing report
-// -> HIDE_MESSAGE moderation flow.
+// same existing state. Only the sender can delete their own message here.
+//
+// Legal pre-beta Phase: the old admin bypass (an admin could hide any
+// message in any room through this endpoint, with no report) is gone. The
+// only way an admin hides someone else's message is the report flow:
+// moderation/service.ts::applyReportAction with a MESSAGE report, which
+// acts on exactly the message that report names.
 export async function deleteMessage(
   chatRoomId: number,
   messageId: number,
@@ -1359,40 +1371,25 @@ export async function deleteMessage(
   if (!room) return { kind: "not_found" };
   const participantIds = await participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
-  // An admin bypasses the membership gate too -- same as the report ->
-  // HIDE_MESSAGE flow, which never required the processing admin to be a
-  // participant of the room either. Ordinary (non-admin) callers must
-  // still be a participant, checked here same as every other per-message
-  // mutation in this file.
-  if (!participantIds.has(requester.id) && !requester.isAdmin) return { kind: "forbidden" };
+  if (!participantIds.has(requester.id)) return { kind: "forbidden" };
 
   const existing = await prisma.message.findUnique({
     where: { id: messageId },
     select: { chatRoomId: true, senderUserId: true, hiddenAt: true, imagePath: true },
   });
   if (!existing || existing.chatRoomId !== chatRoomId) return { kind: "invalid_message" };
-  if (existing.senderUserId !== requester.id && !requester.isAdmin) {
-    return { kind: "forbidden" };
-  }
+  if (existing.senderUserId !== requester.id) return { kind: "forbidden" };
 
   // Idempotent: a message that's already hidden (whether by this same
   // action, a previous one, or admin moderation) simply stays hidden --
   // never an error, matching toggleMessageReaction's own "recover, don't
   // reject" handling of a redundant action.
   if (!existing.hiddenAt) {
-    // Phase 10B: `hiddenByUserId === senderUserId` (i.e. the sender is
-    // deleting their own message, whether or not they happen to also be
-    // an admin) is the same self-delete disambiguation maskedContent()
-    // already uses to pick the "삭제된 메시지입니다." placeholder over the
-    // admin-hidden one. Only that case purges the Storage image: an admin
-    // deleting *someone else's* message (this same bypass path) or the
-    // separate moderation/service.ts HIDE_MESSAGE flow both leave
-    // `hiddenByUserId !== senderUserId`, and their images are
-    // deliberately preserved -- the reported photo may still be needed as
-    // evidence for a later review, the same reason Report/ModerationAction
-    // rows themselves are never purged (see Phase 10A's retention policy).
-    const isSelfDelete = existing.senderUserId === requester.id;
-    const imageToDelete = isSelfDelete ? existing.imagePath : null;
+    // Always a self-delete here (hiddenByUserId === senderUserId, the
+    // disambiguation maskedContent() uses for "삭제된 메시지입니다."), so the
+    // sender's own image is purged. A message hidden through the report
+    // flow (moderation/service.ts) keeps its image as evidence.
+    const imageToDelete = existing.imagePath;
 
     // DB write first, Storage cleanup after the response (after()) -- the
     // message is already hidden and its imagePath cleared in the DB either

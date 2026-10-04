@@ -120,15 +120,12 @@ describe("POST /api/admin/reports/[id]/process", () => {
     });
   });
 
-  it("derives actionType server-side from the report's own target type, never from the request body", async () => {
+  it("defaults actionType to the report target's own action when none is given", async () => {
     requireAdminForApi.mockResolvedValueOnce({ user: admin });
     getReportTargetType.mockResolvedValueOnce("user");
     applyReportAction.mockResolvedValueOnce({ kind: "ok", data: { id: 1, status: "actioned" } });
 
-    const res = await POST(
-      req({ decision: "action", actionType: "delete_post", suspendDurationDays: 30 }),
-      params("1"),
-    );
+    const res = await POST(req({ decision: "action", suspendDurationDays: 30 }), params("1"));
 
     expect(res.status).toBe(201);
     expect(applyReportAction).toHaveBeenCalledWith(admin, 1, "suspend_user", {
@@ -136,6 +133,30 @@ describe("POST /api/admin/reports/[id]/process", () => {
       adminNote: undefined,
       suspendDurationDays: 30,
     });
+  });
+
+  // Legal pre-beta Phase: a post/comment report may ask for a temporary
+  // hide. Whether the requested action is allowed for the report's target
+  // (and reason) is decided by applyReportAction() -- a mismatch like
+  // delete_post on a user report comes back as invalid_action_type (400).
+  it("forwards a requested actionType for the service to check", async () => {
+    requireAdminForApi.mockResolvedValueOnce({ user: admin });
+    getReportTargetType.mockResolvedValueOnce("user");
+    applyReportAction.mockResolvedValueOnce({ kind: "invalid_action_type" });
+
+    const res = await POST(req({ decision: "action", actionType: "delete_post" }), params("1"));
+
+    expect(res.status).toBe(400);
+    expect(applyReportAction).toHaveBeenCalledWith(admin, 1, "delete_post", expect.any(Object));
+  });
+
+  it("rejects an actionType that isn't a selectable action (restore_* is never chosen here)", async () => {
+    requireAdminForApi.mockResolvedValueOnce({ user: admin });
+
+    const res = await POST(req({ decision: "action", actionType: "restore_post" }), params("1"));
+
+    expect(res.status).toBe(400);
+    expect(applyReportAction).not.toHaveBeenCalled();
   });
 
   it("returns 400 when the resolved action_type doesn't match the target (service-level mismatch)", async () => {

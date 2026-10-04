@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { requireAdmin } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { ILLEGAL_SEXUAL_CONTENT_REASON } from "@/lib/report/schema";
 import { listReportsForAdmin } from "@/lib/moderation/service";
 import { getAppSettings } from "@/lib/settings/service";
 import { listAdminActionProposalsForAdmin } from "@/lib/admin/proposals";
@@ -36,6 +37,7 @@ export default async function AdminDashboardPage() {
     appSettings,
     proposalsResult,
     externalAccessCount,
+    urgentPendingCount,
   ] = await Promise.all([
     listReportsForAdmin(admin, { status: "pending", page: 1, limit: 5 }),
     prisma.user.count({ where: { isSuspended: true } }),
@@ -70,6 +72,9 @@ export default async function AdminDashboardPage() {
     // External access Phase: currently approved external accounts, for the
     // "외부 관계자 승인" tile below.
     prisma.externalAccessGrant.count({ where: { status: "ACTIVE" } }),
+    // Legal pre-beta Phase: pending illegal-sexual-content reports, shown
+    // first so they're handled before anything else.
+    prisma.report.count({ where: { status: "PENDING", reason: ILLEGAL_SEXUAL_CONTENT_REASON } }),
   ]);
 
   const pending = pendingResult.kind === "ok" ? pendingResult.data : { items: [], total: 0 };
@@ -176,6 +181,15 @@ export default async function AdminDashboardPage() {
           <span className="text-xs text-muted-foreground">관리자 조치 제안 (대기)</span>
           <span className={`text-2xl font-bold ${pendingProposalCount > 0 ? "text-warning" : "text-foreground"}`}>
             {pendingProposalCount}
+          </span>
+        </Link>
+        <Link
+          href="/admin/reports?status=pending&urgent=1"
+          className={`flex flex-col gap-1 rounded-card border bg-card p-4 transition-colors hover:border-foreground/30 ${urgentPendingCount > 0 ? "border-destructive" : "border-border"}`}
+        >
+          <span className="text-xs text-muted-foreground">긴급 신고 (불법 성적 콘텐츠, 대기)</span>
+          <span className={`text-2xl font-bold ${urgentPendingCount > 0 ? "text-destructive" : "text-foreground"}`}>
+            {urgentPendingCount}
           </span>
         </Link>
         <Link

@@ -387,3 +387,23 @@ describe("getReportTargetRef", () => {
     });
   });
 });
+
+describe("report reasons (Legal pre-beta Phase)", () => {
+  it("flags an illegal-sexual-content report in the admin notification", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 5, userId: 999 });
+    report.create.mockResolvedValueOnce(reportRow({ targetType: "POST", targetId: 5 }));
+
+    await createReport(reporter, { targetType: "post", targetId: 5, reason: "불법 성적 콘텐츠(불법촬영물·성착취물 등)" });
+
+    expect(fanOutToAdmins).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ title: "[긴급] 불법 성적 콘텐츠 신고가 접수되었습니다" }));
+  });
+
+  it("keeps the usual title for other reasons", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 5, userId: 999 });
+    report.create.mockResolvedValueOnce(reportRow({ targetType: "POST", targetId: 5 }));
+
+    await createReport(reporter, { targetType: "post", targetId: 5, reason: "명예훼손" });
+
+    expect(fanOutToAdmins).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ title: "새 신고가 접수되었습니다" }));
+  });
+});

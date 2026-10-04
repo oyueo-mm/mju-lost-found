@@ -12,12 +12,13 @@ import {
 } from "@/generated/prisma/client";
 import { TARGET_TYPE_FROM_DB, TARGET_TYPE_TO_DB, toReportDTO, type ReportDTO } from "@/lib/report/service";
 import type { ReportStatusValue, ReportTargetType } from "@/lib/report/schema";
+import { ILLEGAL_SEXUAL_CONTENT_REASON, isRightsInfringementReason } from "@/lib/report/schema";
 import { resolveCommentTarget, resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "@/lib/report/targets";
 import { deletePostRowInTx, deletePostStorageObjects } from "@/lib/posts/service";
 import { removeCommentInTx } from "@/lib/comment/remove";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { createAdminActionProposal, type AdminActionProposalDTO } from "@/lib/admin/proposals";
-import { TARGET_TYPE_TO_ACTION_TYPE, type ModerationActionTypeValue } from "./schema";
+import { ACTION_TYPES_FOR_TARGET, type ModerationActionTypeValue } from "./schema";
 
 // Same duplication tradeoff as notification/service.ts's
 // NOTIFICATION_TYPE_FROM_DB: posts/service.ts already has this exact
@@ -38,12 +39,20 @@ const ACTION_TYPE_TO_DB: Record<ModerationActionTypeValue, PrismaModerationActio
   hide_message: PrismaModerationActionType.HIDE_MESSAGE,
   suspend_user: PrismaModerationActionType.SUSPEND_USER,
   delete_comment: PrismaModerationActionType.DELETE_COMMENT,
+  temp_hide_post: PrismaModerationActionType.TEMP_HIDE_POST,
+  temp_hide_comment: PrismaModerationActionType.TEMP_HIDE_COMMENT,
+  restore_post: PrismaModerationActionType.RESTORE_POST,
+  restore_comment: PrismaModerationActionType.RESTORE_COMMENT,
 };
 const ACTION_TYPE_FROM_DB: Record<PrismaModerationActionType, ModerationActionTypeValue> = {
   DELETE_POST: "delete_post",
   HIDE_MESSAGE: "hide_message",
   SUSPEND_USER: "suspend_user",
   DELETE_COMMENT: "delete_comment",
+  TEMP_HIDE_POST: "temp_hide_post",
+  TEMP_HIDE_COMMENT: "temp_hide_comment",
+  RESTORE_POST: "restore_post",
+  RESTORE_COMMENT: "restore_comment",
 };
 
 // DB-sourced admin check only -- the caller must have obtained `admin` via
@@ -100,13 +109,15 @@ export type ReportTargetInfo =
       status: string;
       authorNickname: string | null;
       createdAt: Date;
+      // Legal pre-beta Phase: currently temporarily hidden (임시 숨김).
+      tempHidden: boolean;
     }
   | { kind: "message"; content: string; senderNickname: string | null; createdAt: Date; chatRoomId: number }
   | { kind: "user"; nickname: string | null }
   // Phase C-3: postType/postId let the admin UI link to the post the
   // comment belongs to (see resolveCommentTarget's own comment on why no
   // separate "does the post still exist" check is needed here).
-  | { kind: "comment"; content: string; authorNickname: string | null; createdAt: Date; postType: "lost" | "found"; postId: number; parentId: number | null };
+  | { kind: "comment"; content: string; authorNickname: string | null; createdAt: Date; postType: "lost" | "found"; postId: number; parentId: number | null; tempHidden: boolean };
 
 async function loadTargetInfo(targetType: ReportTargetType, targetId: number): Promise<ReportTargetInfo | null> {
   if (targetType === "post") {
@@ -128,6 +139,7 @@ async function loadTargetInfo(targetType: ReportTargetType, targetId: number): P
         status: LOST_STATUS_FROM_DB[post.status],
         authorNickname: post.user.nickname,
         createdAt: post.createdAt,
+        tempHidden: Boolean(post.tempHiddenAt),
       };
     }
     const post = await prisma.foundPost.findUnique({
@@ -145,6 +157,7 @@ async function loadTargetInfo(targetType: ReportTargetType, targetId: number): P
       status: FOUND_STATUS_FROM_DB[post.status],
       authorNickname: post.user.nickname,
       createdAt: post.createdAt,
+      tempHidden: Boolean(post.tempHiddenAt),
     };
   }
 
@@ -177,6 +190,7 @@ async function loadTargetInfo(targetType: ReportTargetType, targetId: number): P
       postType: comment.lostPostId !== null ? "lost" : "found",
       postId: (comment.lostPostId ?? comment.foundPostId)!,
       parentId: comment.parentId,
+      tempHidden: Boolean(comment.tempHiddenAt),
     };
   }
 
@@ -224,6 +238,12 @@ export type AdminMutationResult<T> =
   | { kind: "not_found" }
   | { kind: "already_processed" }
   | { kind: "invalid_action_type" }
+  // Legal pre-beta Phase: a temporary hide was asked for on a report whose
+  // reason isn't a rights-infringement one (report/schema.ts).
+  | { kind: "not_rights_infringement" }
+  // restoreTempHiddenContent(): the report's target isn't (or is no longer)
+  // temporarily hidden.
+  | { kind: "not_temp_hidden" }
   | { kind: "target_gone" }
   // Phase I: actionType is suspend_user but reasonCategory and/or the
   // detail reason came in blank -- see applyReportAction()'s own comment.
@@ -258,13 +278,15 @@ export async function listReportsForAdmin(
     targetType,
     page,
     limit,
-  }: { status?: ReportStatusValue; targetType?: ReportTargetType; page: number; limit: number },
+    urgentOnly,
+  }: { status?: ReportStatusValue; targetType?: ReportTargetType; page: number; limit: number; urgentOnly?: boolean },
 ): Promise<AdminMutationResult<PagedReportsForAdmin>> {
   if (!isAdmin(admin)) return { kind: "forbidden" };
 
   const where: Prisma.ReportWhereInput = {
     ...(status && { status: STATUS_TO_DB(status) }),
     ...(targetType && { targetType: TARGET_TYPE_TO_DB[targetType] }),
+    ...(urgentOnly && { reason: ILLEGAL_SEXUAL_CONTENT_REASON }),
   };
 
   // Legacy orders pending reports first as one group, then every other
@@ -279,11 +301,21 @@ export async function listReportsForAdmin(
   // The pending/other split only makes sense when the caller hasn't
   // already pinned `status` to one value -- filtering to a single status
   // has nothing left to group, so it's a plain date-ordered query.
-  const [pendingRows, otherRows, total] = await Promise.all([
+  // Legal pre-beta Phase: within the pending group, urgent reports
+  // (illegal sexual content) come first.
+  const [urgentPendingRows, pendingRows, otherRows, total] = await Promise.all([
     status
       ? Promise.resolve([])
       : prisma.report.findMany({
-          where: { ...where, status: "PENDING" },
+          where: { ...where, status: "PENDING", reason: ILLEGAL_SEXUAL_CONTENT_REASON },
+          include: REPORT_INCLUDE_FOR_ADMIN,
+          orderBy: { createdAt: "desc" },
+          take: ADMIN_SCAN_CAP,
+        }),
+    status
+      ? Promise.resolve([])
+      : prisma.report.findMany({
+          where: { AND: [where, { status: "PENDING" }, { reason: { not: ILLEGAL_SEXUAL_CONTENT_REASON } }] },
           include: REPORT_INCLUDE_FOR_ADMIN,
           orderBy: { createdAt: "desc" },
           take: ADMIN_SCAN_CAP,
@@ -298,7 +330,7 @@ export async function listReportsForAdmin(
   ]);
 
   const skip = (page - 1) * limit;
-  const rows = [...pendingRows, ...otherRows].slice(skip, skip + limit);
+  const rows = [...urgentPendingRows, ...pendingRows, ...otherRows].slice(skip, skip + limit);
   const items = await Promise.all(rows.map(toReportAdminDTO));
   return {
     kind: "ok",
@@ -406,9 +438,11 @@ export async function applyReportAction(
   if (!report) return { kind: "not_found" };
 
   const targetType = TARGET_TYPE_FROM_DB[report.targetType];
-  if (TARGET_TYPE_TO_ACTION_TYPE[targetType] !== actionType) {
+  if (!ACTION_TYPES_FOR_TARGET[targetType].includes(actionType)) {
     return { kind: "invalid_action_type" };
   }
+  const tempHide = actionType === "temp_hide_post" || actionType === "temp_hide_comment";
+  if (tempHide && !isRightsInfringementReason(report.reason)) return { kind: "not_rights_infringement" };
 
   const trimmedReasonCategory = actionReasonCategory?.trim() || null;
   const trimmedReason = actionReason?.trim() || null;
@@ -460,7 +494,22 @@ export async function applyReportAction(
     const result = await prisma.$transaction(async (tx) => {
       let expiresAt: Date | null = null;
 
-      if (targetType === "post") {
+      if (targetType === "post" && actionType === "temp_hide_post") {
+        // Legal pre-beta Phase: 임시 숨김 -- the post stays, but leaves every
+        // public list/search and is shown only to its author and admins
+        // until an admin lifts it (restoreTempHiddenContent) or deletes it.
+        const resolved = await resolvePostTarget(report.targetId);
+        if (!resolved) return { outcome: "target_gone" as const };
+        const data = { tempHiddenAt: new Date() };
+        if (resolved.postKind === "lost") await tx.lostPost.update({ where: { id: resolved.id }, data });
+        else await tx.foundPost.update({ where: { id: resolved.id }, data });
+        await notifyUser(tx, { data: tempHiddenNotice(resolved.userId, "게시물", reportId) });
+      } else if (targetType === "comment" && actionType === "temp_hide_comment") {
+        const resolved = await resolveCommentTarget(report.targetId);
+        if (!resolved) return { outcome: "target_gone" as const };
+        await tx.comment.update({ where: { id: resolved.id }, data: { tempHiddenAt: new Date() } });
+        await notifyUser(tx, { data: tempHiddenNotice(resolved.authorUserId, "댓글", reportId) });
+      } else if (targetType === "post") {
         const resolved = await resolvePostTarget(report.targetId);
         if (!resolved) return { outcome: "target_gone" as const };
         // Same delete path as an owner/admin delete: chats started from
@@ -588,6 +637,82 @@ export async function applyReportAction(
     }
     throw error;
   }
+}
+
+// ---------- Temporary hide (Legal pre-beta Phase) ----------
+
+// The author is told what happened and how to object; the report itself
+// (reporter, reason) is never revealed.
+function tempHiddenNotice(userId: number, what: "게시물" | "댓글", reportId: number) {
+  return {
+    userId,
+    type: NotificationType.CONTENT_TEMP_HIDDEN,
+    title: `${what}이 임시로 숨김 처리되었습니다`,
+    content: `권리침해 신고가 접수되어 회원님의 ${what}이 검토가 끝날 때까지 다른 이용자에게 보이지 않도록 임시 숨김 처리되었습니다. 이의가 있으면 '서비스 개선 제안'으로 알려주세요.`,
+    relatedType: "report",
+    relatedId: reportId,
+  };
+}
+
+// Lifts a temporary hide applied through report `reportId`. Recorded as
+// its own ModerationAction (RESTORE_POST/RESTORE_COMMENT, reportId NULL --
+// the report already holds its TEMP_HIDE action) with the admin and a
+// reason naming the report, and the author is notified.
+export async function restoreTempHiddenContent(admin: User, reportId: number): Promise<AdminMutationResult<{ reportId: number }>> {
+  if (!isAdmin(admin)) return { kind: "forbidden" };
+  const report = await prisma.report.findUnique({ where: { id: reportId }, include: { moderationAction: true } });
+  if (!report) return { kind: "not_found" };
+  const action = report.moderationAction?.actionType;
+  if (action !== PrismaModerationActionType.TEMP_HIDE_POST && action !== PrismaModerationActionType.TEMP_HIDE_COMMENT) {
+    return { kind: "not_temp_hidden" };
+  }
+
+  return prisma.$transaction(async (tx) => {
+    let ownerId: number;
+    if (action === PrismaModerationActionType.TEMP_HIDE_POST) {
+      const resolved = await resolvePostTarget(report.targetId);
+      if (!resolved) return { kind: "target_gone" as const };
+      const where = { id: resolved.id, tempHiddenAt: { not: null } };
+      const { count } =
+        resolved.postKind === "lost"
+          ? await tx.lostPost.updateMany({ where, data: { tempHiddenAt: null } })
+          : await tx.foundPost.updateMany({ where, data: { tempHiddenAt: null } });
+      if (count === 0) return { kind: "not_temp_hidden" as const };
+      ownerId = resolved.userId;
+    } else {
+      const comment = await tx.comment.findUnique({ where: { id: report.targetId }, select: { authorUserId: true } });
+      if (!comment) return { kind: "target_gone" as const };
+      const { count } = await tx.comment.updateMany({
+        where: { id: report.targetId, tempHiddenAt: { not: null } },
+        data: { tempHiddenAt: null },
+      });
+      if (count === 0) return { kind: "not_temp_hidden" as const };
+      ownerId = comment.authorUserId;
+    }
+    const isPost = action === PrismaModerationActionType.TEMP_HIDE_POST;
+    await tx.moderationAction.create({
+      data: {
+        reportId: null,
+        targetType: report.targetType,
+        targetId: report.targetId,
+        actionType: isPost ? PrismaModerationActionType.RESTORE_POST : PrismaModerationActionType.RESTORE_COMMENT,
+        reason: `신고 #${reportId} 임시 숨김 해제`,
+        adminUserId: admin.id,
+      },
+    });
+    const what = isPost ? "게시물" : "댓글";
+    await notifyUser(tx, {
+      data: {
+        userId: ownerId,
+        type: NotificationType.CONTENT_RESTORED,
+        title: `${what}의 임시 숨김이 해제되었습니다`,
+        content: `검토 결과 회원님의 ${what}이 다시 공개되었습니다.`,
+        relatedType: "report",
+        relatedId: reportId,
+      },
+    });
+    return { kind: "ok" as const, data: { reportId } };
+  });
 }
 
 // ---------- Suspension log (Phase I) ----------

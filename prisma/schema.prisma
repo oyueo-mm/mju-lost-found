@@ -91,6 +91,13 @@ enum ModerationActionType {
   // Phase C-3: the one action a COMMENT-targeted report can apply -- see
   // moderation/service.ts's applyReportAction().
   DELETE_COMMENT @map("delete_comment")
+  // Legal pre-beta Phase: temporary hide (임시 숨김) of a post/comment on a
+  // rights-infringement report, and its later release (recorded with
+  // reportId NULL -- the report already holds the TEMP_HIDE action).
+  TEMP_HIDE_POST    @map("temp_hide_post")
+  TEMP_HIDE_COMMENT @map("temp_hide_comment")
+  RESTORE_POST      @map("restore_post")
+  RESTORE_COMMENT   @map("restore_comment")
 }
 
 enum NotificationType {
@@ -155,6 +162,11 @@ enum NotificationType {
   // needs, and its own unique constraint is what guarantees this type is
   // never created twice for the same (user, alert, post).
   KEYWORD_ALERT_MATCH            @map("keyword_alert_match")
+  // Legal pre-beta Phase: to the author when an admin temporarily hides
+  // their post/comment on a rights-infringement report, and when that is
+  // lifted. relatedType "report", relatedId Report.id.
+  CONTENT_TEMP_HIDDEN            @map("content_temp_hidden")
+  CONTENT_RESTORED               @map("content_restored")
 }
 
 // Phase 관리자 승인제: the four direct User-row mutations that become a
@@ -540,6 +552,11 @@ model LostPost {
   // file's own comment for why. Existing rows default to 0 via the
   // migration, same as any other additive column in this schema.
   viewCount      Int                         @default(0) @map("view_count")
+  // Legal pre-beta Phase: set while an admin has temporarily hidden this
+  // post on a rights-infringement report (see ModerationAction
+  // TEMP_HIDE_POST). Hidden posts are left out of every public list/search
+  // and shown only to their author and admins.
+  tempHiddenAt   DateTime?                   @map("temp_hidden_at")
   // Phase 12-5: optional org attribution -- the actual author/owner is
   // always `user` above (unchanged); this only marks which Organization,
   // if any, the post is posted *as*. Set once at creation and never
@@ -601,6 +618,11 @@ model FoundPost {
   imageEmbedding Unsupported("vector(768)")?
   // See LostPost.viewCount's comment -- identical shape/reasoning.
   viewCount      Int                         @default(0) @map("view_count")
+  // Legal pre-beta Phase: set while an admin has temporarily hidden this
+  // post on a rights-infringement report (see ModerationAction
+  // TEMP_HIDE_POST). Hidden posts are left out of every public list/search
+  // and shown only to their author and admins.
+  tempHiddenAt   DateTime?                   @map("temp_hidden_at")
   // See LostPost.organizationId's own comment -- identical shape/reasoning.
   organizationId Int?                        @map("organization_id")
   organization   Organization?               @relation(fields: [organizationId], references: [id], onDelete: SetNull)
@@ -1284,6 +1306,9 @@ model Comment {
   // content -- are not removed by parent_id's ON DELETE CASCADE. A comment
   // without replies is still hard-deleted. See comment/service.ts.
   deletedAt      DateTime?     @map("deleted_at")
+  // Legal pre-beta Phase: temporarily hidden on a rights-infringement
+  // report (ModerationAction TEMP_HIDE_COMMENT); shown as a placeholder.
+  tempHiddenAt   DateTime?     @map("temp_hidden_at")
   parentId       Int?          @map("parent_id")
   parent         Comment?      @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies        Comment[]     @relation("CommentReplies")

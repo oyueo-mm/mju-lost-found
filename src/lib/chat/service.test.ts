@@ -110,6 +110,10 @@ const chatImageExists = vi.fn();
 const deleteChatImageSafely = vi.fn();
 vi.mock("@/lib/images/pathname", () => ({ parseChatImagePathname }));
 vi.mock("@/lib/images/chatStorage", () => ({ chatImageExists, deleteChatImageSafely }));
+// Legal pre-beta Phase: the real image check (lib/images/sanitize.ts) is
+// tested on its own; here every uploaded object is a valid image.
+const sanitizeStoredImage = vi.fn();
+vi.mock("@/lib/images/sanitize", () => ({ sanitizeStoredImage }));
 // Phase N: every write path (sendMessage/toggleMessageReaction/
 // markChatRoomRead) fires a best-effort realtime broadcast -- mocked
 // wholesale here (same convention as every other collaborator in this
@@ -233,6 +237,7 @@ async function openAsAdmin(roomId: number) {
 beforeEach(() => {
   vi.clearAllMocks();
   afterCallbacks = [];
+  sanitizeStoredImage.mockResolvedValue({ ok: true, rewritten: false });
   userTable.findUnique.mockResolvedValue({ id: foundOwner, nickname: "상대닉네임" });
   chatImageExists.mockResolvedValue(true);
   // Phase D-4: listMessages() always batches a reaction query for the
@@ -2199,19 +2204,29 @@ describe("deleteMessage", () => {
   // Phase P-6: mirrors posts/service.ts's deleteLostPost/deleteFoundPost's
   // own asAdmin bypass -- an existing admin capability pattern, not a new
   // one, and separate from (doesn't change) the report -> HIDE_MESSAGE flow.
-  it("allows an admin to delete another participant's message", async () => {
+  // Legal pre-beta Phase: no admin bypass here any more -- an admin hides
+  // someone else's message only through a MESSAGE report
+  // (moderation/service.ts::applyReportAction).
+  it("refuses an admin who isn't in the room, without reading or writing the message", async () => {
     chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
-    message.findUnique.mockResolvedValueOnce({ chatRoomId: 100, senderUserId: foundOwner, hiddenAt: null });
-    message.update.mockResolvedValueOnce({});
 
     const admin = { ...sender, id: 77, isAdmin: true } as unknown as User;
     const result = await deleteMessage(100, 1, admin);
 
-    expect(result).toEqual({ kind: "ok", data: { messageId: 1 } });
-    expect(message.update).toHaveBeenCalledWith({
-      where: { id: 1 },
-      data: { hiddenAt: expect.any(Date), hiddenByUserId: 77, hiddenReason: null },
-    });
+    expect(result).toEqual({ kind: "forbidden" });
+    expect(message.findUnique).not.toHaveBeenCalled();
+    expect(message.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses an admin participant deleting the other participant's message", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findUnique.mockResolvedValueOnce({ chatRoomId: 100, senderUserId: foundOwner, hiddenAt: null });
+
+    const adminParticipant = { ...sender, isAdmin: true } as unknown as User; // lostOwner, a participant
+    const result = await deleteMessage(100, 1, adminParticipant);
+
+    expect(result).toEqual({ kind: "forbidden" });
+    expect(message.update).not.toHaveBeenCalled();
   });
 
   it("is idempotent -- deleting an already-hidden message succeeds without writing again or re-broadcasting", async () => {
@@ -2282,7 +2297,7 @@ describe("deleteMessage", () => {
     // acting on someone else's message (hiddenByUserId !== senderUserId),
     // exactly like the separate moderation/service.ts HIDE_MESSAGE flow --
     // both preserve the image as potential evidence, per Phase 10A.
-    it("preserves the image when an admin deletes another participant's message", async () => {
+    it("never touches another sender's image (that path is refused outright)", async () => {
       chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
       message.findUnique.mockResolvedValueOnce({
         chatRoomId: 100,
@@ -2290,18 +2305,12 @@ describe("deleteMessage", () => {
         hiddenAt: null,
         imagePath: "chat/100/photo.jpg",
       });
-      message.update.mockResolvedValueOnce({});
 
-      const admin = { ...sender, id: 77, isAdmin: true } as unknown as User;
-      const result = await deleteMessage(100, 1, admin);
+      const result = await deleteMessage(100, 1, { ...sender, isAdmin: true } as unknown as User);
 
-      expect(result).toEqual({ kind: "ok", data: { messageId: 1 } });
+      expect(result).toEqual({ kind: "forbidden" });
       await flushAfterCallbacks();
       expect(deleteChatImageSafely).not.toHaveBeenCalled();
-      expect(message.update).toHaveBeenCalledWith({
-        where: { id: 1 },
-        data: { hiddenAt: expect.any(Date), hiddenByUserId: 77, hiddenReason: null },
-      });
     });
   });
 });
@@ -2552,5 +2561,18 @@ describe("sendMessage image validation (private bucket)", () => {
       expect.objectContaining({ data: expect.objectContaining({ imagePath: "chat/100/x.webp" }) }),
     );
     expect(result.kind === "ok" && result.data.imageUrl).toBe("/api/chat/100/messages/9/image");
+  });
+});
+
+describe("sendMessage server-side image check (Legal pre-beta Phase)", () => {
+  it("refuses an uploaded object that isn't a real image and removes it", async () => {
+    parseChatImagePathname.mockReturnValue({ chatRoomId: 100 });
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    sanitizeStoredImage.mockResolvedValueOnce({ ok: false, reason: "not_image" });
+
+    expect(await sendMessage(100, sender, "", "chat/100/fake.webp")).toEqual({ kind: "invalid_image" });
+    expect(sanitizeStoredImage).toHaveBeenCalledWith("chat-images", "chat/100/fake.webp", { cacheControl: "60" });
+    expect(deleteChatImageSafely).toHaveBeenCalledWith("chat/100/fake.webp");
+    expect($transaction).not.toHaveBeenCalled();
   });
 });

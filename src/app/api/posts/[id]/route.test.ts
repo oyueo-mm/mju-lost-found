@@ -37,6 +37,9 @@ vi.mock("@/lib/posts/aiService", () => ({
 vi.mock("@/lib/ai/postEmbedding", () => ({ embedPostImageBestEffort }));
 const findPostRecommendations = vi.fn();
 vi.mock("@/lib/recommendation/service", () => ({ invalidateRecommendationCache, findPostRecommendations }));
+// Legal pre-beta Phase: only consulted for a temporarily hidden post.
+const getCurrentUser = vi.fn();
+vi.mock("@/lib/auth/session", () => ({ getCurrentUser }));
 
 const { GET, PATCH, PUT, DELETE } = await import("./route");
 

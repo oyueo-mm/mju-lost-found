@@ -20,15 +20,15 @@ const comment = { findUnique: vi.fn() };
 // mocks so assertions on e.g. tx.report.updateMany don't collide with the
 // top-level report.findUnique used before the transaction opens.
 const txReport = { updateMany: vi.fn(), findUniqueOrThrow: vi.fn() };
-const txLostPost = { delete: vi.fn() };
-const txFoundPost = { delete: vi.fn() };
+const txLostPost = { delete: vi.fn(), update: vi.fn(), updateMany: vi.fn() };
+const txFoundPost = { delete: vi.fn(), update: vi.fn(), updateMany: vi.fn() };
 const txMessage = { update: vi.fn() };
 // 관리자 승인 인원 정책 Phase: createAdminActionProposal() also reads the
 // active admins (findMany) and takes an advisory lock ($executeRaw) inside
 // its transaction.
 const txUser = { update: vi.fn(), findMany: vi.fn(), count: vi.fn() };
 const txExecuteRaw = vi.fn();
-const txComment = { delete: vi.fn() };
+const txComment = { delete: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() };
 const txModerationAction = { create: vi.fn() };
 const txNotification = { create: vi.fn() };
 // Phase 관리자 승인제: applyReportAction() now calls
@@ -75,6 +75,10 @@ vi.mock("@/generated/prisma/client", () => ({
     HIDE_MESSAGE: "HIDE_MESSAGE",
     SUSPEND_USER: "SUSPEND_USER",
     DELETE_COMMENT: "DELETE_COMMENT",
+    TEMP_HIDE_POST: "TEMP_HIDE_POST",
+    TEMP_HIDE_COMMENT: "TEMP_HIDE_COMMENT",
+    RESTORE_POST: "RESTORE_POST",
+    RESTORE_COMMENT: "RESTORE_COMMENT",
   },
   LostPostStatus: { SEARCHING: "SEARCHING", FOUND: "FOUND" },
   FoundPostStatus: { KEEPING: "KEEPING", COMPLETED: "COMPLETED" },
@@ -85,6 +89,8 @@ vi.mock("@/generated/prisma/client", () => ({
     POST_DELETED: "POST_DELETED",
     MESSAGE_HIDDEN: "MESSAGE_HIDDEN",
     USER_SUSPENDED: "USER_SUSPENDED",
+    CONTENT_TEMP_HIDDEN: "CONTENT_TEMP_HIDDEN",
+    CONTENT_RESTORED: "CONTENT_RESTORED",
   },
   AdminActionProposalType: {
     SUSPEND_USER: "SUSPEND_USER",
@@ -100,6 +106,7 @@ vi.mock("@/generated/prisma/client", () => ({
 }));
 
 const {
+  restoreTempHiddenContent,
   applyReportAction,
   dismissReport,
   getReportForAdmin,
@@ -189,6 +196,7 @@ describe("listReportsForAdmin / getReportForAdmin", () => {
         postType: "lost",
         postId: 7,
         parentId: null,
+        tempHidden: false,
       });
     }
   });
@@ -665,5 +673,85 @@ describe("applyReportAction", () => {
     txModerationAction.create.mockRejectedValueOnce(new Error("db down"));
 
     await expect(applyReportAction(admin, 10, "delete_post", {})).rejects.toThrow("db down");
+  });
+});
+
+// Legal pre-beta Phase: temporary hide (임시 숨김) on a rights-infringement
+// report, and lifting it.
+describe("temporary hide", () => {
+  it("temporarily hides a reported post (kept, flagged), notifies its author and records TEMP_HIDE_POST", async () => {
+    report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "POST", targetId: 5, reason: "명예훼손" }));
+    lostPost.findUnique.mockResolvedValueOnce({ id: 5, userId: 42 });
+    txReport.updateMany.mockResolvedValueOnce({ count: 1 });
+    txReport.findUniqueOrThrow.mockResolvedValueOnce(reportRow({ status: "ACTIONED" }));
+
+    const result = await applyReportAction(admin, 10, "temp_hide_post", { actionReason: "검토 중" });
+
+    expect(result.kind).toBe("ok");
+    expect(txLostPost.update).toHaveBeenCalledWith({ where: { id: 5 }, data: { tempHiddenAt: expect.any(Date) } });
+    expect(deletePostRowInTx).not.toHaveBeenCalled();
+    expect(txNotification.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: 42, type: "CONTENT_TEMP_HIDDEN", relatedType: "report", relatedId: 10 }),
+    });
+    expect(txModerationAction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ reportId: 10, actionType: "TEMP_HIDE_POST", adminUserId: admin.id }),
+    });
+  });
+
+  it("temporarily hides a reported comment", async () => {
+    report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "COMMENT", targetId: 42, reason: "사생활 침해" }));
+    comment.findUnique.mockResolvedValueOnce({ id: 42, authorUserId: 77, parentId: null, deletedAt: null });
+    txReport.updateMany.mockResolvedValueOnce({ count: 1 });
+    txReport.findUniqueOrThrow.mockResolvedValueOnce(reportRow({ targetType: "COMMENT", status: "ACTIONED" }));
+
+    const result = await applyReportAction(admin, 10, "temp_hide_comment", {});
+
+    expect(result.kind).toBe("ok");
+    expect(txComment.update).toHaveBeenCalledWith({ where: { id: 42 }, data: { tempHiddenAt: expect.any(Date) } });
+    expect(removeCommentInTx).not.toHaveBeenCalled();
+  });
+
+  it("refuses a temporary hide for a report that isn't about a rights infringement", async () => {
+    report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "POST", reason: "도배/스팸" }));
+
+    expect(await applyReportAction(admin, 10, "temp_hide_post", {})).toEqual({ kind: "not_rights_infringement" });
+    expect($transaction).not.toHaveBeenCalled();
+  });
+
+  it("refuses an action that doesn't belong to the report's target (e.g. temp_hide_post on a message report)", async () => {
+    report.findUnique.mockResolvedValueOnce(reportRow({ targetType: "MESSAGE", reason: "명예훼손" }));
+
+    expect(await applyReportAction(admin, 10, "temp_hide_post", {})).toEqual({ kind: "invalid_action_type" });
+    expect($transaction).not.toHaveBeenCalled();
+  });
+
+  it("an admin lifts a temporary hide: flag cleared, RESTORE_POST recorded (who/why), author notified", async () => {
+    report.findUnique.mockResolvedValueOnce({ ...reportRow({ targetType: "POST", targetId: 5 }), moderationAction: { actionType: "TEMP_HIDE_POST" } });
+    lostPost.findUnique.mockResolvedValueOnce({ id: 5, userId: 42 });
+    txLostPost.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    const result = await restoreTempHiddenContent(admin, 10);
+
+    expect(result).toEqual({ kind: "ok", data: { reportId: 10 } });
+    expect(txLostPost.updateMany).toHaveBeenCalledWith({ where: { id: 5, tempHiddenAt: { not: null } }, data: { tempHiddenAt: null } });
+    expect(txModerationAction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ reportId: null, actionType: "RESTORE_POST", adminUserId: admin.id, reason: "신고 #10 임시 숨김 해제" }),
+    });
+    expect(txNotification.create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: 42, type: "CONTENT_RESTORED" }) });
+  });
+
+  it("can't lift anything for a report that wasn't a temporary hide, or isn't hidden any more", async () => {
+    report.findUnique.mockResolvedValueOnce({ ...reportRow(), moderationAction: { actionType: "DELETE_POST" } });
+    expect(await restoreTempHiddenContent(admin, 10)).toEqual({ kind: "not_temp_hidden" });
+
+    report.findUnique.mockResolvedValueOnce({ ...reportRow({ targetType: "COMMENT", targetId: 42 }), moderationAction: { actionType: "TEMP_HIDE_COMMENT" } });
+    txComment.findUnique.mockResolvedValueOnce({ authorUserId: 77 });
+    txComment.updateMany.mockResolvedValueOnce({ count: 0 });
+    expect(await restoreTempHiddenContent(admin, 10)).toEqual({ kind: "not_temp_hidden" });
+    expect(txModerationAction.create).not.toHaveBeenCalled();
+  });
+
+  it("is admin-only", async () => {
+    expect(await restoreTempHiddenContent({ ...admin, isAdmin: false } as User, 10)).toEqual({ kind: "forbidden" });
   });
 });

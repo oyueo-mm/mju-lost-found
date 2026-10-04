@@ -26,6 +26,9 @@ const saveImageEmbedding = vi.fn();
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost, postImage, $transaction } }));
 vi.mock("./supabaseAdmin", () => ({ deleteObjectSafely, publicUrlFor }));
+// Legal pre-beta Phase: the image check itself is tested in sanitize.test.ts.
+const sanitizeStoredImage = vi.fn();
+vi.mock("./sanitize", () => ({ sanitizeStoredImage }));
 // Phase 15-2: saveImageEmbedding is a pure SQL column write (no model
 // involved), so it's still called directly from here (clearPostImage) --
 // but embedPostImageBestEffort is deliberately NOT called from this
@@ -43,6 +46,7 @@ const VALID_PATH_3 = "posts/lost/1/33333333-3333-3333-3333-333333333333.jpg";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sanitizeStoredImage.mockResolvedValue({ ok: true, rewritten: false });
   publicUrlFor.mockImplementation((path: string) => `https://storage.example/post-images/${path}`);
   postImage.findFirst.mockResolvedValue(null);
   postImage.findMany.mockResolvedValue([]);
@@ -568,5 +572,30 @@ describe("reorderPostImages", () => {
         imageUrl: "https://c",
       },
     });
+  });
+});
+
+// Legal pre-beta Phase: the server checks every uploaded object before it's
+// attached (lib/images/sanitize.ts).
+describe("server-side image check before attaching", () => {
+  it("refuses to attach a non-image (or wrong-type) upload, removes this attempt's objects, attaches nothing", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
+    const second = "posts/lost/1/22222222-2222-2222-2222-222222222222.png";
+    sanitizeStoredImage.mockResolvedValueOnce({ ok: true, rewritten: false }).mockResolvedValueOnce({ ok: false, reason: "not_image" });
+
+    const result = await attachPostImages("lost", 1, 1, { paths: [VALID_PATH, second] });
+
+    expect(result).toEqual({ kind: "invalid_image" });
+    expect(sanitizeStoredImage).toHaveBeenCalledWith("post-images", VALID_PATH);
+    expect(postImage.create).not.toHaveBeenCalled();
+    expect(deleteObjectSafely).toHaveBeenCalledTimes(2);
+  });
+
+  it("checks the single-image path (setPostImage) the same way", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
+    sanitizeStoredImage.mockResolvedValueOnce({ ok: false, reason: "format_mismatch" });
+
+    expect(await setPostImage("lost", 1, 1, { path: VALID_PATH })).toEqual({ kind: "invalid_image" });
+    expect(lostPost.update).not.toHaveBeenCalled();
   });
 });

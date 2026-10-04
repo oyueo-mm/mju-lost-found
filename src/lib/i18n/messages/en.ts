@@ -48,8 +48,7 @@ export const en: Dictionary = {
   "brand.description": "A smart Lost & Found center for the Myongji University community",
 
   "footer.tagline": "A lost-and-found posting, search and contact service for Myongji University students.",
-  "footer.disclaimer":
-    "This project was built voluntarily by Myongji University students. It is not an official service operated by Myongji University.",
+  "footer.disclaimer": "This is not an official Myongji University service; it is developed and operated by students.",
   "footer.createdBy": "Created by MJU students",
   "footer.copyright":
     "© {year} MYONGJI L&F. To raise an issue about a specific post, message or user, please use the report feature on that screen.",
@@ -324,7 +323,7 @@ export const en: Dictionary = {
   "time.monthsAgo": "{count} mo ago",
   "time.yearsAgo": "{count} yr ago",
 
-  "comment.count": "Comments {count}", "comment.deleted": "This comment was deleted.",
+  "comment.count": "Comments {count}", "comment.deleted": "This comment was deleted.", "comment.tempHidden": "This comment has been temporarily hidden after a report.",
   "comment.empty": "No comments yet. Be the first to leave one.",
   "comment.placeholder": "Write a comment...",
   "comment.submit": "Post comment",
@@ -580,7 +579,7 @@ export const en: Dictionary = {
   "report.reason.fraud": "Fraud or false information",
   "report.reason.inappropriate": "Inappropriate content",
   "report.reason.abuse": "Abuse or defamation",
-  "report.reason.privacy": "Personal information exposure",
+  "report.reason.privacy": "Personal information exposure", "report.reason.privacyInvasion": "Invasion of privacy", "report.reason.defamation": "Defamation", "report.reason.illegalSexual": "Illegal sexual content (non-consensual imagery, sexual exploitation, etc.)",
   "report.reason.spam": "Spam",
   "report.reason.other": "Other",
   "nickname.current": "Current nickname: {name}", "nickname.nextChange": "Next change: {date} ({remaining})",

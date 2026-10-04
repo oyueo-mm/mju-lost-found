@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/session";
 import { listReportsForAdmin } from "@/lib/moderation/service";
 import { REPORT_STATUSES_FOR_FILTER, REPORT_TARGET_TYPES_FOR_FILTER } from "@/lib/moderation/schema";
-import { REPORT_STATUS_LABELS, REPORT_TARGET_TYPE_LABELS } from "@/lib/report/schema";
+import { REPORT_STATUS_LABELS, REPORT_TARGET_TYPE_LABELS, isUrgentReportReason } from "@/lib/report/schema";
 import { ShieldIcon } from "@/components/icons";
 
 function formatDate(date: Date): string {
@@ -15,22 +15,24 @@ const PAGE_SIZE = 20;
 export default async function AdminReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; targetType?: string; page?: string }>;
+  searchParams: Promise<{ status?: string; targetType?: string; page?: string; urgent?: string }>;
 }) {
   const admin = await requireAdmin(); // redirects unless logged in, ready, and DB-flagged admin
 
-  const { status: statusParam, targetType: targetTypeParam, page: pageParam } = await searchParams;
+  const { status: statusParam, targetType: targetTypeParam, page: pageParam, urgent: urgentParam } = await searchParams;
+  const urgentOnly = urgentParam === "1";
   const status = REPORT_STATUSES_FOR_FILTER.find((s) => s === statusParam);
   const targetType = REPORT_TARGET_TYPES_FOR_FILTER.find((t) => t === targetTypeParam);
   const page = Math.max(1, Number(pageParam) || 1);
 
-  const result = await listReportsForAdmin(admin, { status, targetType, page, limit: PAGE_SIZE });
+  const result = await listReportsForAdmin(admin, { status, targetType, page, limit: PAGE_SIZE, urgentOnly });
   const { items, total, totalPages } = result.kind === "ok" ? result.data : { items: [], total: 0, totalPages: 1 };
 
   function filterHref(next: { status?: string; targetType?: string }) {
     const params = new URLSearchParams();
     if (next.status ?? status) params.set("status", next.status ?? status!);
     if (next.targetType ?? targetType) params.set("targetType", next.targetType ?? targetType!);
+    if (urgentOnly) params.set("urgent", "1");
     return `/admin/reports${params.toString() ? `?${params}` : ""}`;
   }
 
@@ -42,6 +44,15 @@ export default async function AdminReportsPage({
       </div>
 
       <div className="flex flex-wrap gap-4 text-sm">
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">긴급 신고</span>
+          <Link
+            href={urgentOnly ? "/admin/reports" : "/admin/reports?status=pending&urgent=1"}
+            className={urgentOnly ? "font-semibold text-destructive underline" : "text-destructive"}
+          >
+            {urgentOnly ? "긴급 신고만 보는 중 (해제)" : "불법 성적 콘텐츠만 보기"}
+          </Link>
+        </div>
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">처리 상태</span>
           <div className="flex gap-2">
@@ -99,6 +110,9 @@ export default async function AdminReportsPage({
               className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 text-sm transition-colors hover:border-foreground/30"
             >
               <div className="flex items-center gap-2">
+                {isUrgentReportReason(r.reason) && (
+                  <span className="rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold text-destructive-foreground">긴급</span>
+                )}
                 <span className="font-medium text-foreground">신고 #{r.id}</span>
                 <span className="text-muted-foreground">·</span>
                 <span>{REPORT_TARGET_TYPE_LABELS[r.targetType]}</span>

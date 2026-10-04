@@ -56,8 +56,7 @@ export const ko = {
 
   // ---------- Footer ----------
   "footer.tagline": "명지대학교 학생을 위한 분실물 등록·검색·연락 서비스입니다.",
-  "footer.disclaimer":
-    "명지대학교 학생들이 자발적으로 제작한 프로젝트이며, 명지대학교가 공식적으로 운영하는 서비스가 아닙니다.",
+  "footer.disclaimer": "본 서비스는 명지대학교의 공식 서비스가 아닌, 학생이 개발·운영하는 서비스입니다.",
   "footer.createdBy": "Created by MJU students",
   "footer.copyright":
     "© {year} MYONGJI L&F. 특정 게시물·메시지·사용자에 대한 문의는 해당 화면의 신고 기능을 이용해주세요.",
@@ -344,7 +343,7 @@ export const ko = {
   "time.yearsAgo": "{count}년 전",
 
   // ---------- 댓글 ----------
-  "comment.count": "댓글 {count}", "comment.deleted": "삭제된 댓글입니다.",
+  "comment.count": "댓글 {count}", "comment.deleted": "삭제된 댓글입니다.", "comment.tempHidden": "신고로 임시 숨김 처리된 댓글입니다.",
   "comment.empty": "아직 댓글이 없어요. 첫 댓글을 남겨보세요.",
   "comment.placeholder": "댓글을 입력하세요...",
   "comment.submit": "댓글 작성",
@@ -608,7 +607,7 @@ export const ko = {
   "report.reason.fraud": "사기/허위 정보",
   "report.reason.inappropriate": "부적절한 내용",
   "report.reason.abuse": "욕설/비방",
-  "report.reason.privacy": "개인정보 노출",
+  "report.reason.privacy": "개인정보 노출", "report.reason.privacyInvasion": "사생활 침해", "report.reason.defamation": "명예훼손", "report.reason.illegalSexual": "불법 성적 콘텐츠(불법촬영물·성착취물 등)",
   "report.reason.spam": "도배/스팸",
   "report.reason.other": "기타",
   "nickname.current": "현재 닉네임: {name}", "nickname.nextChange": "다음 변경 가능: {date} ({remaining})",

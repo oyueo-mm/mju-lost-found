@@ -46,8 +46,7 @@ export const vi: Dictionary = {
   "brand.description": "Trung tâm đồ thất lạc thông minh dành cho người MJU",
 
   "footer.tagline": "Dịch vụ đăng tin, tìm kiếm và liên hệ về đồ thất lạc dành cho sinh viên Đại học Myongji.",
-  "footer.disclaimer":
-    "Đây là dự án do sinh viên Đại học Myongji tự nguyện thực hiện, không phải dịch vụ chính thức của nhà trường.",
+  "footer.disclaimer": "Đây không phải là dịch vụ chính thức của Đại học Myongji mà là dịch vụ do sinh viên phát triển và vận hành.",
   "footer.createdBy": "Created by MJU students",
   "footer.copyright":
     "© {year} MYONGJI L&F. Nếu cần phản ánh về một bài đăng, tin nhắn hay người dùng cụ thể, vui lòng dùng chức năng báo cáo trên màn hình đó.",
@@ -322,7 +321,7 @@ export const vi: Dictionary = {
   "time.monthsAgo": "{count} tháng trước",
   "time.yearsAgo": "{count} năm trước",
 
-  "comment.count": "Bình luận {count}", "comment.deleted": "Bình luận này đã bị xoá.",
+  "comment.count": "Bình luận {count}", "comment.deleted": "Bình luận này đã bị xoá.", "comment.tempHidden": "Bình luận này đã bị tạm ẩn do bị báo cáo.",
   "comment.empty": "Chưa có bình luận nào. Hãy là người đầu tiên.",
   "comment.placeholder": "Nhập bình luận...",
   "comment.submit": "Đăng bình luận",
@@ -553,7 +552,7 @@ export const vi: Dictionary = {
   "chat.counterpart": "Đối phương", "chat.reportUser": "Báo cáo {name}",
   "chat.backToList": "Danh sách trò chuyện", "chat.viewPost": "Xem bài đăng", "user.badge.externalVerified": "Nhân sự bên ngoài đã xác minh", "chat.deletedPost": "Bài đăng đã bị xoá",
   "report.reason.fraud": "Lừa đảo/thông tin sai", "report.reason.inappropriate": "Nội dung không phù hợp",
-  "report.reason.abuse": "Lăng mạ/phỉ báng", "report.reason.privacy": "Lộ thông tin cá nhân",
+  "report.reason.abuse": "Lăng mạ/phỉ báng", "report.reason.privacy": "Lộ thông tin cá nhân", "report.reason.privacyInvasion": "Xâm phạm đời tư", "report.reason.defamation": "Phỉ báng", "report.reason.illegalSexual": "Nội dung tình dục bất hợp pháp (quay lén, bóc lột tình dục, v.v.)",
   "report.reason.spam": "Spam", "report.reason.other": "Khác",
   "nickname.current": "Biệt danh hiện tại: {name}", "nickname.nextChange": "Lần đổi tiếp theo: {date} ({remaining})",
   "nickname.availableSoon": "sắp có thể", "nickname.hoursRemaining": "sau khoảng {count} giờ", "nickname.daysRemaining": "sau khoảng {count} ngày",

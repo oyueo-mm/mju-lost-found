@@ -19,6 +19,8 @@ import { encodePostTargetId } from "@/lib/report/targets";
 import { ReportButton } from "@/components/report/ReportButton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { AttributionLink } from "@/components/user/AttributionLink";
+import { StatusScreen } from "@/components/layout/StatusScreen";
+import { LinkButton } from "@/components/ui/Button";
 import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
 import { getLocale, getTranslator } from "@/lib/i18n/server";
 import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
@@ -80,6 +82,26 @@ export default async function PostDetailPage({
 
   const isOwner = currentUser?.id === post.author.id;
   const viewerIsAdmin = currentUser ? isAdmin(currentUser) : false;
+
+  // Legal pre-beta Phase: a temporarily hidden post (임시 숨김 on a
+  // rights-infringement report) is visible only to its author and admins.
+  const tempHidden = Boolean(post.tempHiddenAt);
+  if (tempHidden && !isOwner && !viewerIsAdmin) {
+    return (
+      <StatusScreen
+        title="임시 숨김 처리된 게시글이에요"
+        description="권리침해 신고가 접수되어 검토가 끝날 때까지 게시글이 숨겨져 있어요."
+        actions={
+          <>
+            <LinkButton href="/lost">분실물 게시판</LinkButton>
+            <LinkButton href="/found" variant="secondary">
+              습득물 게시판
+            </LinkButton>
+          </>
+        }
+      />
+    );
+  }
   const dateLabel = post.type === "lost" ? t("post.lostAt") : t("post.foundAt");
   const dateValue = post.type === "lost" ? post.lostAt : post.foundAt;
 
@@ -177,6 +199,12 @@ export default async function PostDetailPage({
 
   return (
     <div className="flex flex-col gap-6">
+      {tempHidden && (
+        <p className="rounded-card border border-warning/40 bg-warning-muted px-4 py-2.5 text-sm text-warning">
+          권리침해 신고로 임시 숨김 처리된 게시글입니다. 작성자와 관리자에게만 보이며, 다른 이용자에게는 보이지 않습니다.
+          이의가 있으면 &lsquo;서비스 개선 제안&rsquo;으로 알려주세요.
+        </p>
+      )}
       <ViewTracker type={type} postId={post.id} />
       {justCreated && (
         <p className="rounded-card bg-success-muted px-4 py-2.5 text-sm font-medium text-success">

@@ -23,6 +23,7 @@ import type {
 } from "./schema";
 import {
   AUTHOR_SELECT,
+  PUBLIC_POST_WHERE,
   POST_ORGANIZATION_SELECT,
   FOUND_STATUS_TO_DB,
   LOST_STATUS_TO_DB,
@@ -362,8 +363,8 @@ async function rankSemanticCandidates(
   const ids = ranked.map((r) => r.id);
   const rows =
     type === "lost"
-      ? await prisma.lostPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } })
-      : await prisma.foundPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } });
+      ? await prisma.lostPost.findMany({ where: { id: { in: ids }, ...PUBLIC_POST_WHERE }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } })
+      : await prisma.foundPost.findMany({ where: { id: { in: ids }, ...PUBLIC_POST_WHERE }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } });
   const rowById = new Map(rows.map((row) => [row.id, row]));
 
   // Re-order to match the similarity ranking -- `findMany({id:{in}})` does
@@ -530,8 +531,8 @@ export async function searchPostsByImage(
   const ids = ranked.map((r) => r.id);
   const rows =
     targetType === "lost"
-      ? await prisma.lostPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } })
-      : await prisma.foundPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } });
+      ? await prisma.lostPost.findMany({ where: { id: { in: ids }, ...PUBLIC_POST_WHERE }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } })
+      : await prisma.foundPost.findMany({ where: { id: { in: ids }, ...PUBLIC_POST_WHERE }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } });
   const rowById = new Map(rows.map((row) => [row.id, row]));
 
   // Re-order to match the similarity ranking and drop any id whose row
@@ -635,8 +636,8 @@ async function searchPostsByTextAndImage(
   const ids = combined.map((r) => r.id);
   const rows =
     targetType === "lost"
-      ? await prisma.lostPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } })
-      : await prisma.foundPost.findMany({ where: { id: { in: ids } }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } });
+      ? await prisma.lostPost.findMany({ where: { id: { in: ids }, ...PUBLIC_POST_WHERE }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } })
+      : await prisma.foundPost.findMany({ where: { id: { in: ids }, ...PUBLIC_POST_WHERE }, include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } } });
   const rowById = new Map(rows.map((row) => [row.id, row]));
 
   // Re-order to match the combined ranking and drop any id whose row

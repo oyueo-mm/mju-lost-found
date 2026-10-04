@@ -4,7 +4,19 @@ import { z } from "zod";
 // prisma/schema.prisma's ModerationActionType enum. "delete_comment"
 // (Phase C-3) is this branch's own addition, for the one action a
 // COMMENT-targeted report can apply.
-export const MODERATION_ACTION_TYPES = ["delete_post", "hide_message", "suspend_user", "delete_comment"] as const;
+// Legal pre-beta Phase: temp_hide_post/temp_hide_comment (임시 숨김 on a
+// rights-infringement report) and restore_post/restore_comment (lifting
+// it; recorded on their own, never chosen in the report form).
+export const MODERATION_ACTION_TYPES = [
+  "delete_post",
+  "hide_message",
+  "suspend_user",
+  "delete_comment",
+  "temp_hide_post",
+  "temp_hide_comment",
+  "restore_post",
+  "restore_comment",
+] as const;
 export type ModerationActionTypeValue = (typeof MODERATION_ACTION_TYPES)[number];
 
 export const MODERATION_ACTION_TYPE_LABELS: Record<ModerationActionTypeValue, string> = {
@@ -12,6 +24,21 @@ export const MODERATION_ACTION_TYPE_LABELS: Record<ModerationActionTypeValue, st
   hide_message: "메시지 숨김",
   suspend_user: "사용자 정지",
   delete_comment: "댓글 삭제",
+  temp_hide_post: "게시물 임시 숨김",
+  temp_hide_comment: "댓글 임시 숨김",
+  restore_post: "게시물 임시 숨김 해제",
+  restore_comment: "댓글 임시 숨김 해제",
+};
+
+// The actions an admin may pick for a report of each target type. The
+// first is the default. A temporary hide is offered only for posts and
+// comments, and applyReportAction() additionally requires the report's
+// reason to be a rights-infringement one (report/schema.ts).
+export const ACTION_TYPES_FOR_TARGET: Record<"post" | "message" | "user" | "comment", readonly ModerationActionTypeValue[]> = {
+  post: ["delete_post", "temp_hide_post"],
+  message: ["hide_message"],
+  user: ["suspend_user"],
+  comment: ["delete_comment", "temp_hide_comment"],
 };
 
 // The one action_type valid for each Report.targetType -- enforced in
@@ -80,6 +107,10 @@ export const processReportSchema = z.discriminatedUnion("decision", [
     // admin/users.ts's updateUserByAdmin()) with an arbitrary huge timestamp
     // instead. 1일~365일 covers every duration the admin UI actually offers.
     suspendDurationDays: z.coerce.number().int().positive().max(365).optional(),
+    // Legal pre-beta Phase: lets the admin pick a temporary hide instead of
+    // the default action for a post/comment report. Checked against
+    // ACTION_TYPES_FOR_TARGET server-side; omitted = the default action.
+    actionType: z.enum(["delete_post", "temp_hide_post", "delete_comment", "temp_hide_comment", "hide_message", "suspend_user"]).optional(),
   }),
 ]);
 export type ProcessReportInput = z.infer<typeof processReportSchema>;

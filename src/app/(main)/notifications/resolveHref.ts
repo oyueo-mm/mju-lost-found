@@ -119,6 +119,23 @@ export async function resolveHref(
     // skip the DB round-trip entirely rather than proving the obvious.
     if (type === "post_deleted") return null;
 
+    // Legal pre-beta Phase: the author's own temporarily hidden (or
+    // released) post/comment -- the author can always open it. Same
+    // narrow getReportTargetRef (no reporter/reason).
+    if (type === "content_temp_hidden" || type === "content_restored") {
+      const target = await getReportTargetRef(relatedId);
+      if (!target) return null;
+      if (target.targetType === "post") {
+        const post = await resolvePostTarget(target.targetId);
+        return post ? `/post/${post.id}?type=${post.postKind}` : null;
+      }
+      if (target.targetType === "comment") {
+        const ref = await getCommentPostRef(target.targetId);
+        return ref ? `/post/${ref.postId}?type=${ref.postType}#comment-${target.targetId}` : null;
+      }
+      return null;
+    }
+
     if (type === "message_hidden") {
       // Phase E-4 security note: getReportTargetRef selects only
       // targetType/targetId -- never reporterUserId/reason/detail/

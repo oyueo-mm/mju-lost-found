@@ -38,6 +38,8 @@ const NOTIFICATION_TYPE_FROM_DB: Record<PrismaNotificationType, string> = {
   ORGANIZATION_CHAT_RECEIVED: "organization_chat_received",
   // 키워드 알림 Phase: see schema.prisma's own comment on this enum value.
   KEYWORD_ALERT_MATCH: "keyword_alert_match",
+  CONTENT_TEMP_HIDDEN: "content_temp_hidden",
+  CONTENT_RESTORED: "content_restored",
 };
 
 // Same Korean labels as the legacy pages/8_알림.py's TYPE_LABELS.
@@ -56,6 +58,8 @@ export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   suspension_appeal_received: "새 이의제기 접수",
   organization_chat_received: "새 단체 문의",
   keyword_alert_match: "키워드 알림",
+  content_temp_hidden: "게시물·댓글 임시 숨김",
+  content_restored: "임시 숨김 해제",
 };
 
 export type NotificationDTO = {

@@ -37,6 +37,8 @@ type CommentDTO = {
   // A deleted comment kept only because it has replies -- rendered as
   // "삭제된 댓글입니다." with no author, actions or reply button.
   isDeleted: boolean;
+  // Temporarily hidden on a rights-infringement report: placeholder only.
+  isHidden?: boolean;
 };
 
 type CommentSectionProps = {
@@ -254,6 +256,9 @@ export function CommentSection({
     if (comment.isDeleted) {
       return <p className="text-sm text-muted-foreground italic">{t("comment.deleted")}</p>;
     }
+    if (comment.isHidden) {
+      return <p className="text-sm text-muted-foreground italic">{t("comment.tempHidden")}</p>;
+    }
     const isOwner = currentUser?.id === comment.author.id;
     const canDelete = isOwner || isAdmin;
     const isEditing = editingId === comment.id;
@@ -270,7 +275,7 @@ export function CommentSection({
     // dangling parentId, e.g. after a local-state edge case, just omits
     // the tag rather than showing something wrong).
     const replyParent = comment.parentId !== null ? commentsById.get(comment.parentId) : undefined;
-    const replyTargetNickname = replyParent && !replyParent.isDeleted ? replyParent.author.nickname : null;
+    const replyTargetNickname = replyParent && !replyParent.isDeleted && !replyParent.isHidden ? replyParent.author.nickname : null;
 
     if (isEditing) {
       return (
@@ -457,7 +462,7 @@ export function CommentSection({
     <div className="flex flex-col gap-4 border-t border-border pt-6">
       <h2 className="flex items-center gap-1.5 font-semibold text-foreground">
         <ChatBubbleIcon className="size-4.5" />
-        {t("comment.count", { count: comments.filter((c) => !c.isDeleted).length })}
+        {t("comment.count", { count: comments.filter((c) => !c.isDeleted && !c.isHidden).length })}
       </h2>
 
       {error && <p className="text-sm text-destructive">{error}</p>}

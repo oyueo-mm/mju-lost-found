@@ -13,9 +13,13 @@ import { applyReportAction, dismissReport, getReportTargetType } from "@/lib/mod
 // -- dispatches to legacy's two distinct admin decisions: db.process_report
 // ("dismiss") and db.apply_report_action ("action"). requestingAdminUserId
 // is always the authenticated session admin (never a body field), and the
-// action's actionType is always derived server-side from the report's own
-// targetType (see getReportTargetType) -- never accepted from the client,
-// so a caller can't request e.g. suspend_user against a post report.
+// action's actionType defaults to the one implied by the report's own
+// targetType (see getReportTargetType). Legal pre-beta Phase: a post or
+// comment report may instead ask for a temporary hide (body.actionType);
+// applyReportAction() only accepts an action listed for that target type
+// (ACTION_TYPES_FOR_TARGET) and a temporary hide only for a
+// rights-infringement reason -- so a caller still can't request e.g.
+// suspend_user against a post report.
 export const POST = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const auth = await requireAdminForApi();
@@ -39,8 +43,8 @@ export const POST = withErrorHandling(
     const targetType = await getReportTargetType(id);
     if (!targetType) return jsonError(404, "신고를 찾을 수 없습니다.");
 
-    const { actionReasonCategory, actionReason, adminNote, suspendDurationDays } = parsed.data;
-    const result = await applyReportAction(auth.user, id, TARGET_TYPE_TO_ACTION_TYPE[targetType], {
+    const { actionReasonCategory, actionReason, adminNote, suspendDurationDays, actionType } = parsed.data;
+    const result = await applyReportAction(auth.user, id, actionType ?? TARGET_TYPE_TO_ACTION_TYPE[targetType], {
       actionReasonCategory,
       actionReason,
       adminNote,

@@ -58,8 +58,9 @@ export async function getPublicProfile(publicId: string): Promise<PublicProfileD
   if (!user) return null;
 
   const [lostCount, foundCount] = await Promise.all([
-    prisma.lostPost.count({ where: { userId: user.id } }),
-    prisma.foundPost.count({ where: { userId: user.id } }),
+    // Public profile: temporarily hidden posts aren't counted.
+    prisma.lostPost.count({ where: { userId: user.id, tempHiddenAt: null } }),
+    prisma.foundPost.count({ where: { userId: user.id, tempHiddenAt: null } }),
   ]);
 
   return {

@@ -15,14 +15,42 @@ export const reportTargetTypeSchema = z.enum(REPORT_TARGET_TYPES);
 // DB-enforced enum. The API still accepts any non-blank string, matching
 // db.create_report()'s actual validation (reason must not be blank, full
 // stop).
+// Legal pre-beta Phase: 사생활 침해, 명예훼손 and illegal sexual content
+// were added. The stored value is this Korean label (Report.reason).
+export const ILLEGAL_SEXUAL_CONTENT_REASON = "불법 성적 콘텐츠(불법촬영물·성착취물 등)";
+
 export const REPORT_REASONS = [
   "사기/허위 정보",
   "부적절한 내용",
   "욕설/비방",
   "개인정보 노출",
+  "사생활 침해",
+  "명예훼손",
+  ILLEGAL_SEXUAL_CONTENT_REASON,
   "도배/스팸",
   "기타",
 ] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
+// Reports that must reach an admin first: listed ahead of every other
+// pending report, flagged "긴급" in the admin UI and in the admin
+// notification.
+export function isUrgentReportReason(reason: string): boolean {
+  return reason === ILLEGAL_SEXUAL_CONTENT_REASON;
+}
+
+// Rights-infringement reasons: a reported post or comment with one of
+// these may be temporarily hidden (임시 숨김) by an admin while it's being
+// reviewed (moderation/service.ts::applyReportAction).
+export const RIGHTS_INFRINGEMENT_REPORT_REASONS: readonly string[] = [
+  "개인정보 노출",
+  "사생활 침해",
+  "명예훼손",
+  ILLEGAL_SEXUAL_CONTENT_REASON,
+];
+export function isRightsInfringementReason(reason: string): boolean {
+  return RIGHTS_INFRINGEMENT_REPORT_REASONS.includes(reason);
+}
 
 export const REPORT_STATUSES = ["pending", "dismissed", "actioned"] as const;
 export type ReportStatusValue = (typeof REPORT_STATUSES)[number];
@@ -50,7 +78,9 @@ export const createReportSchema = z
   .object({
     targetType: reportTargetTypeSchema,
     targetId: z.coerce.number().int("targetId가 올바르지 않습니다."),
-    reason: z.string().trim().min(1, "신고 사유를 입력해주세요.").max(200),
+    // Only the listed reasons -- the urgent / rights-infringement handling
+    // above keys off the exact value, so it can't be free text.
+    reason: z.enum(REPORT_REASONS, { message: "신고 사유를 선택해주세요." }),
     detail: z.string().trim().max(2000).optional(),
   })
   .refine((v) => v.targetType === "post" || v.targetId > 0, {

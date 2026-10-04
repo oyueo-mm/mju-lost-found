@@ -13,7 +13,7 @@ import { zh } from "./zh";
 describe("locale dictionary parity", () => {
   it("exposes every Korean dictionary key in all supported locales", () => {
     const keySet = Object.keys(ko).sort();
-    expect(keySet).toHaveLength(632);
+    expect(keySet).toHaveLength(636);
 
     for (const dictionary of [en, zh, vi, mn, ja, fr]) {
       expect(Object.keys(dictionary).sort()).toEqual(keySet);

@@ -122,7 +122,9 @@ export async function Footer() {
                 이름/연락처가 없으므로(현재 프로젝트에 공개하기로 정해진
                 정보 없음) 구체적인 개인정보는 넣지 않고, "학생이 만들었다"는
                 사실만 표시한다. */}
-            <p className="hidden text-xs text-muted-foreground md:block">{t("footer.disclaimer")}</p>
+            {/* Legal pre-beta Phase: shown on every screen size (it used to
+                be desktop-only), since most users are on phones. */}
+            <p className="text-xs text-muted-foreground">{t("footer.disclaimer")}</p>
             <p className="text-[11px] text-muted-foreground/80">{t("footer.createdBy")}</p>
           </div>
 

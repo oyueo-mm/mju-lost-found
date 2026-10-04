@@ -3,6 +3,7 @@ import type { PostType } from "@/lib/posts/schema";
 import { saveImageEmbedding } from "@/lib/ai/vectorSearch";
 import { deleteObjectSafely, publicUrlFor } from "./supabaseAdmin";
 import { parseImagePathname } from "./pathname";
+import { sanitizeStoredImage } from "./sanitize";
 import { MAX_IMAGES_PER_POST } from "./config";
 
 export type ImageMutationResult<T> =
@@ -10,6 +11,9 @@ export type ImageMutationResult<T> =
   | { kind: "not_found" }
   | { kind: "forbidden" }
   | { kind: "invalid_path" }
+  // Legal pre-beta Phase: the uploaded object isn't a real image of the
+  // type its path claims (lib/images/sanitize.ts); it was removed.
+  | { kind: "invalid_image" }
   // Phase 11-4C: attachPostImages() only -- a fresh, transaction-scoped
   // recount put this attach over MAX_IMAGES_PER_POST.
   | { kind: "too_many_images" }
@@ -58,6 +62,18 @@ async function findOwnedPost(type: PostType, id: number) {
 // (non-primary) PostImage row a future multi-image UI created is left
 // untouched -- this call only ever meant "the image", never "the whole
 // gallery".
+// Legal pre-beta Phase: every freshly uploaded object must be a real image
+// (and loses any EXIF/GPS) before it's attached -- see lib/images/
+// sanitize.ts. If any one fails, all of this batch's uploads are removed
+// (they belong only to this attempt and were never attached) and nothing
+// is attached.
+async function verifyUploadedPostImages(paths: string[]): Promise<boolean> {
+  const results = await Promise.all(paths.map((path) => sanitizeStoredImage("post-images", path)));
+  if (results.every((r) => r.ok)) return true;
+  await Promise.all(paths.map((path) => deleteObjectSafely(publicUrlFor(path))));
+  return false;
+}
+
 export async function setPostImage(
   type: PostType,
   id: number,
@@ -80,6 +96,7 @@ export async function setPostImage(
   if (!parsed || parsed.postType !== type || parsed.postId !== id) {
     return { kind: "invalid_path" };
   }
+  if (!(await verifyUploadedPostImages([upload.path]))) return { kind: "invalid_image" };
 
   const newUrl = publicUrlFor(upload.path);
   const previousUrl = existing.imageUrl;
@@ -165,6 +182,7 @@ export async function attachPostImages(
     }
     parsedPaths.push(path);
   }
+  if (!(await verifyUploadedPostImages(parsedPaths))) return { kind: "invalid_image" };
 
   let newPrimaryUrl: string | null = null;
   try {

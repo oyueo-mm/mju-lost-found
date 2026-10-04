@@ -16,6 +16,10 @@ export function adminMutationResultToResponse<T>(result: AdminMutationResult<T>,
       return jsonError(409, "이미 처리된 신고입니다.");
     case "invalid_action_type":
       return jsonError(400, "이 신고 대상에는 사용할 수 없는 조치입니다.");
+    case "not_rights_infringement":
+      return jsonError(400, "임시 숨김은 개인정보 노출·사생활 침해·명예훼손·불법 성적 콘텐츠 신고에만 적용할 수 있습니다.");
+    case "not_temp_hidden":
+      return jsonError(409, "임시 숨김 상태가 아닙니다.");
     case "target_gone":
       return jsonError(409, "대상이 이미 삭제되어 조치를 적용할 수 없습니다.");
     case "reason_required":

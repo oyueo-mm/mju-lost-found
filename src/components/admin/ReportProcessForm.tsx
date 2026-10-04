@@ -8,6 +8,8 @@ import {
   SUSPEND_DURATION_DAY_OPTIONS,
   SUSPEND_REASON_CATEGORIES,
   TARGET_TYPE_TO_ACTION_TYPE,
+  ACTION_TYPES_FOR_TARGET,
+  type ModerationActionTypeValue,
 } from "@/lib/moderation/schema";
 import type { ReportTargetType } from "@/lib/report/schema";
 import { Button } from "@/components/ui/Button";
@@ -20,6 +22,9 @@ type ReportProcessFormProps = {
   reportId: number;
   targetType: ReportTargetType;
   targetDeleted: boolean;
+  // Legal pre-beta Phase: a post/comment report with a rights-infringement
+  // reason may be handled with a temporary hide instead of deletion.
+  allowTempHide?: boolean;
 };
 
 // Phase F-2: same duration shape as UserActionButtons' own picker (see that
@@ -35,10 +40,11 @@ const MAX_CUSTOM_DAYS = 365;
 // validation (pending only, one ModerationAction per report, action_type
 // vs target_type match) happens server-side in dismissReport()/
 // applyReportAction() -- this is presentation only.
-export function ReportProcessForm({ reportId, targetType, targetDeleted }: ReportProcessFormProps) {
+export function ReportProcessForm({ reportId, targetType, targetDeleted, allowTempHide = false }: ReportProcessFormProps) {
   const { t } = useI18n();
   const router = useRouter();
-  const actionType = TARGET_TYPE_TO_ACTION_TYPE[targetType];
+  const actionChoices = allowTempHide ? ACTION_TYPES_FOR_TARGET[targetType] : [TARGET_TYPE_TO_ACTION_TYPE[targetType]];
+  const [actionType, setActionType] = useState<ModerationActionTypeValue>(actionChoices[0]);
 
   const [decision, setDecision] = useState<"dismiss" | "action">("dismiss");
   const [adminNote, setAdminNote] = useState("");
@@ -94,6 +100,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
           ? { decision: "dismiss" as const, adminNote: adminNote || undefined }
           : {
               decision: "action" as const,
+              actionType: actionType as "delete_post" | "temp_hide_post" | "delete_comment" | "temp_hide_comment" | "hide_message" | "suspend_user",
               actionReasonCategory: actionType === "suspend_user" ? actionReasonCategory : undefined,
               actionReason: actionReason || undefined,
               adminNote: adminNote || undefined,
@@ -195,9 +202,29 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted }: Repor
 
       {decision === "action" && (
         <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive-muted p-3">
-          <p className="text-xs font-medium text-destructive">
-            조치: {MODERATION_ACTION_TYPE_LABELS[actionType]}
-          </p>
+          {actionChoices.length > 1 ? (
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-destructive">조치 선택</span>
+              <select
+                value={actionType}
+                onChange={(e) => setActionType(e.target.value as ModerationActionTypeValue)}
+                className={FIELD_CLASS}
+              >
+                {actionChoices.map((a) => (
+                  <option key={a} value={a}>
+                    {MODERATION_ACTION_TYPE_LABELS[a]}
+                  </option>
+                ))}
+              </select>
+              {(actionType === "temp_hide_post" || actionType === "temp_hide_comment") && (
+                <span className="text-xs text-muted-foreground">
+                  임시 숨김: 삭제하지 않고 작성자와 관리자에게만 보이게 합니다. 작성자에게 알림이 가며, 검토 후 처리 결과에서 해제할 수 있습니다.
+                </span>
+              )}
+            </label>
+          ) : (
+            <p className="text-xs font-medium text-destructive">조치: {MODERATION_ACTION_TYPE_LABELS[actionType]}</p>
+          )}
           {actionType === "suspend_user" && (
             <label className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-muted-foreground">정지 기간</span>

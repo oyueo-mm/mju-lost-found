@@ -38,6 +38,10 @@ export type CommentDTO = {
   // the replies survive (see removeCommentInTx). Its content is always ""
   // and the UI shows "삭제된 댓글입니다." instead of an author or actions.
   isDeleted: boolean;
+  // Legal pre-beta Phase: temporarily hidden on a rights-infringement
+  // report -- sent like a tombstone (no content, no author) and shown as
+  // "임시 숨김 처리된 댓글입니다." until an admin lifts it.
+  isHidden: boolean;
 };
 
 export type CommentMutationResult<T> =
@@ -78,11 +82,12 @@ function toCommentDTO(row: {
   updatedAt: Date;
   parentId: number | null;
   deletedAt: Date | null;
+  tempHiddenAt?: Date | null;
   author: { id: number; nickname: string | null; publicId: string };
   organization: { id: number; name: string } | null;
 }): CommentDTO {
-  const { organization, deletedAt, ...rest } = row;
-  if (deletedAt) {
+  const { organization, deletedAt, tempHiddenAt, ...rest } = row;
+  if (deletedAt || tempHiddenAt) {
     // Nothing about the deleted comment or who wrote it is sent.
     return {
       ...rest,
@@ -90,7 +95,8 @@ function toCommentDTO(row: {
       author: { id: 0, nickname: null, publicId: "" },
       organizationId: null,
       organizationName: null,
-      isDeleted: true,
+      isDeleted: Boolean(deletedAt),
+      isHidden: !deletedAt && Boolean(tempHiddenAt),
     };
   }
   return {
@@ -98,6 +104,7 @@ function toCommentDTO(row: {
     organizationId: organization?.id ?? null,
     organizationName: organization?.name ?? null,
     isDeleted: false,
+    isHidden: false,
   };
 }
 
@@ -167,14 +174,14 @@ export async function createComment(
   if (input.parentId !== undefined) {
     const parentRow = await prisma.comment.findUnique({
       where: { id: input.parentId },
-      select: { id: true, parentId: true, authorUserId: true, lostPostId: true, foundPostId: true, deletedAt: true },
+      select: { id: true, parentId: true, authorUserId: true, lostPostId: true, foundPostId: true, deletedAt: true, tempHiddenAt: true },
     });
     // Missing, attached to a different post than this reply targets, or a
     // deleted comment's tombstone -- all "no valid parent here" from the
     // caller's point of view.
     const belongsToThisPost =
       parentRow !== null && (type === "lost" ? parentRow.lostPostId === postId : parentRow.foundPostId === postId);
-    if (!parentRow || !belongsToThisPost || parentRow.deletedAt) return { kind: "parent_not_found" };
+    if (!parentRow || !belongsToThisPost || parentRow.deletedAt || parentRow.tempHiddenAt) return { kind: "parent_not_found" };
     parent = parentRow;
   }
 
@@ -326,7 +333,7 @@ export async function deleteComment(
 // Tombstones aren't counted -- they're placeholders, not comments.
 export async function countCommentsForPost(type: PostType, postId: number): Promise<number> {
   return prisma.comment.count({
-    where: { ...(type === "lost" ? { lostPostId: postId } : { foundPostId: postId }), deletedAt: null },
+    where: { ...(type === "lost" ? { lostPostId: postId } : { foundPostId: postId }), deletedAt: null, tempHiddenAt: null },
   });
 }
 

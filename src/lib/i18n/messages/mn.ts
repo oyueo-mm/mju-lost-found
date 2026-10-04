@@ -47,8 +47,7 @@ export const mn: Dictionary = {
 
   "footer.tagline":
     "Мёнжи их сургуулийн оюутнуудад зориулсан гээгдсэн эд зүйл бүртгэх, хайх, холбоо барих үйлчилгээ.",
-  "footer.disclaimer":
-    "Энэ бол Мёнжи их сургуулийн оюутнууд сайн дураараа хийсэн төсөл бөгөөд сургуулийн албан ёсны үйлчилгээ биш юм.",
+  "footer.disclaimer": "Энэ нь Мёнжи их сургуулийн албан ёсны үйлчилгээ биш бөгөөд оюутнууд хөгжүүлж, ажиллуулдаг үйлчилгээ юм.",
   "footer.createdBy": "Created by MJU students",
   "footer.copyright":
     "© {year} MYONGJI L&F. Тодорхой нийтлэл, мессеж, хэрэглэгчийн талаар санал гомдол байвал тухайн дэлгэц дэх мэдээлэх товчийг ашиглана уу.",
@@ -324,7 +323,7 @@ export const mn: Dictionary = {
   "time.monthsAgo": "{count} сарын өмнө",
   "time.yearsAgo": "{count} жилийн өмнө",
 
-  "comment.count": "Сэтгэгдэл {count}", "comment.deleted": "Энэ сэтгэгдэл устгагдсан.",
+  "comment.count": "Сэтгэгдэл {count}", "comment.deleted": "Энэ сэтгэгдэл устгагдсан.", "comment.tempHidden": "Энэ сэтгэгдлийг гомдлын дагуу түр нуусан.",
   "comment.empty": "Одоогоор сэтгэгдэл алга. Хамгийн түрүүнд үлдээгээрэй.",
   "comment.placeholder": "Сэтгэгдлээ бичнэ үү...",
   "comment.submit": "Сэтгэгдэл бичих",
@@ -554,7 +553,7 @@ export const mn: Dictionary = {
   "chat.counterpart": "Харилцагч", "chat.reportUser": "{name}-г мэдээлэх",
   "chat.backToList": "Чатын жагсаалт", "chat.viewPost": "Нийтлэл үзэх", "user.badge.externalVerified": "Баталгаажсан гадны ажилтан", "chat.deletedPost": "Устгагдсан нийтлэл",
   "report.reason.fraud": "Залилан/худал мэдээлэл", "report.reason.inappropriate": "Зохисгүй агуулга",
-  "report.reason.abuse": "Доромжлол/гүтгэлэг", "report.reason.privacy": "Хувийн мэдээлэл задруулах",
+  "report.reason.abuse": "Доромжлол/гүтгэлэг", "report.reason.privacy": "Хувийн мэдээлэл задруулах", "report.reason.privacyInvasion": "Хувийн нууцад халдсан", "report.reason.defamation": "Гүтгэлэг", "report.reason.illegalSexual": "Хууль бус бэлгийн агуулга (нууцаар авсан бичлэг, бэлгийн мөлжлөг гэх мэт)",
   "report.reason.spam": "Спам", "report.reason.other": "Бусад",
   "nickname.current": "Одоогийн нэр: {name}", "nickname.nextChange": "Дараагийн өөрчлөлт: {date} ({remaining})",
   "nickname.availableSoon": "удахгүй боломжтой", "nickname.hoursRemaining": "ойролцоогоор {count} цагийн дараа", "nickname.daysRemaining": "ойролцоогоор {count} өдрийн дараа",

@@ -45,6 +45,8 @@ function imageResultToResponse<T>(result: ImageMutationResult<T>) {
       return jsonError(403, "본인 게시물만 수정할 수 있습니다.");
     case "invalid_path":
       return jsonError(400, "업로드 결과를 확인할 수 없습니다.");
+    case "invalid_image":
+      return jsonError(400, "이미지 파일을 확인할 수 없습니다. JPEG, PNG, WebP 이미지를 다시 선택해주세요.");
     case "too_many_images":
       return jsonError(400, `게시글에는 최대 ${MAX_IMAGES_PER_POST}장의 이미지만 등록할 수 있습니다.`);
     case "invalid_order":

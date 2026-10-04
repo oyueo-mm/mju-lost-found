@@ -135,9 +135,14 @@ export default async function PrivacyConsentPage({
               <section className="flex flex-col gap-1">
                 <h3 className="font-medium text-foreground">보유 및 이용 기간</h3>
                 <p>
-                  위 정보는 게시글/댓글/채팅을 이용자가 직접 삭제하는 등으로 해당 데이터가 삭제될
-                  때까지 보유하며, 별도의 법적 보존 의무가 있는 경우는 이 서비스의 코드로 확인되지
-                  않아 안내하지 않습니다.
+                  계정 정보는 회원 계정이 유지되는 동안 보유합니다. 게시글, 댓글·답글, 채팅 메시지 및
+                  첨부 정보는 이용자가 직접 삭제하거나 서비스 운영상 삭제 사유가 발생할 때까지 보유될
+                  수 있습니다. 관계 법령에 따라 일정 기간 보존이 필요한 정보가 있는 경우에는 해당
+                  법령에서 정한 기간 동안 보관합니다. 자세한 내용은{" "}
+                  <Link href="/policy/privacy" target="_blank" className="font-medium text-primary hover:opacity-80">
+                    개인정보처리방침
+                  </Link>
+                  을 확인해주세요.
                 </p>
               </section>
             </div>

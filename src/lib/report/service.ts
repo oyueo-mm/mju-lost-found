@@ -8,7 +8,7 @@ import {
   type User,
 } from "@/generated/prisma/client";
 import type { CreateReportInput, ReportStatusValue, ReportTargetType } from "./schema";
-import { REPORT_TARGET_TYPE_LABELS } from "./schema";
+import { REPORT_TARGET_TYPE_LABELS, isUrgentReportReason } from "./schema";
 import { resolveCommentTarget, resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "./targets";
 import { getChatRoomParticipantIds } from "@/lib/chat/service";
 import { fanOutToAdmins } from "@/lib/notification/adminFanout";
@@ -124,9 +124,11 @@ export async function createReport(reporter: User, input: CreateReportInput): Pr
           detail: input.detail ?? null,
         },
       });
+      // Illegal sexual content is flagged in the admin notification itself
+      // so it stands out from routine reports.
       await fanOutToAdmins(tx, {
         type: PrismaNotificationType.REPORT_RECEIVED,
-        title: "새 신고가 접수되었습니다",
+        title: isUrgentReportReason(input.reason) ? "[긴급] 불법 성적 콘텐츠 신고가 접수되었습니다" : "새 신고가 접수되었습니다",
         content: `${REPORT_TARGET_TYPE_LABELS[input.targetType]} 신고: ${input.reason}`,
         relatedType: "report",
         relatedId: report.id,
