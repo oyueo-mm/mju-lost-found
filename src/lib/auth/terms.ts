@@ -19,4 +19,6 @@ export const CURRENT_TERMS_VERSION = "2026-10-04";
 // screen asks people to agree to changes (items, purposes, retention).
 // 2026-10-04: 회원탈퇴 후 보유기간 (chat text 90 days, processed
 // report/sanction records 1 year, ...) added.
-export const CURRENT_PRIVACY_VERSION = "2026-10-04";
+// 2026-10-05: collected items corrected (Google sign-in returns id, e-mail
+// and e-mail-verified only; IP/User-Agent/cookies listed). Terms unchanged.
+export const CURRENT_PRIVACY_VERSION = "2026-10-05";
