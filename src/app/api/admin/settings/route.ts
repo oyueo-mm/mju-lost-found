@@ -40,11 +40,10 @@ export const PATCH = withErrorHandling(async (request: NextRequest) => {
 // GET /api/admin/settings -- the daily clean-up of 회원탈퇴 보유정책
 // (lib/retention/service.ts), called by Vercel Cron (vercel.json). It lives
 // in this existing route file because the Hobby plan caps a deployment at 12
-// serverless functions and a new route would be a 13th. Not an admin
+// serverless functions and a new route (or a route-specific config such as
+// maxDuration, which splits it into its own function) would be a 13th. Not an admin
 // endpoint: Vercel sends `Authorization: Bearer <CRON_SECRET>`; anything
 // else is refused, and without a configured secret nothing runs at all.
-export const maxDuration = 60;
-
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const secret = process.env.CRON_SECRET;
   if (!secret) return jsonError(503, "CRON_SECRET is not configured.");
