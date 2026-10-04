@@ -1,4 +1,4 @@
 {
   "regions": ["icn1"],
-  "crons": [{ "path": "/api/cron/retention", "schedule": "0 18 * * *" }]
+  "crons": [{ "path": "/api/admin/settings", "schedule": "0 18 * * *" }]
 }

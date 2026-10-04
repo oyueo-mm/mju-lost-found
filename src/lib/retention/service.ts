@@ -16,7 +16,7 @@ import {
 import { AdminActionProposalStatus, ReportStatus, ReportTargetType, RejoinRequestStatus } from "@/generated/prisma/client";
 
 // 회원탈퇴 보유정책 -- removes what withdrawAccount() kept once its period is
-// over. Runs daily (GET /api/cron/retention, Vercel Cron). Only data tied
+// over. Runs daily (GET /api/admin/settings, Vercel Cron). Only data tied
 // to withdrawn accounts is touched; an active account's data follows the
 // account. Nothing goes through a cascade: a message keeps its row with its
 // text replaced, a post or comment others replied under keeps an empty row

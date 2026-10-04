@@ -1,21 +1,23 @@
+import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const runRetention = vi.fn(async () => ({ messagesExpired: 0 }));
 vi.mock("@/lib/retention/service", () => ({ runRetention }));
-vi.mock("@/lib/posts/http", async () => {
+vi.mock("@/lib/settings/service", () => ({ setGoogleTestMode: vi.fn() }));
+vi.mock("@/lib/moderation/http", async () => {
   const response = await import("@/lib/posts/response");
-  return { ...response };
+  return { ...response, requireAdminForApi: vi.fn() };
 });
 
 const { GET } = await import("./route");
-const call = (auth?: string) => GET(new Request("http://localhost/api/cron/retention", auth ? { headers: { authorization: auth } } : {}));
+const call = (auth?: string) => GET(new NextRequest("http://localhost/api/admin/settings", auth ? { headers: { authorization: auth } } : {}));
 
 afterEach(() => {
   vi.unstubAllEnvs();
   runRetention.mockClear();
 });
 
-describe("GET /api/cron/retention", () => {
+describe("GET /api/admin/settings (retention cron)", () => {
   it("does nothing without a configured CRON_SECRET", async () => {
     vi.stubEnv("CRON_SECRET", "");
     expect((await call("Bearer anything")).status).toBe(503);
