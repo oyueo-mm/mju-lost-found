@@ -7,7 +7,7 @@
 흩어진 분실물 정보를 한곳에 모으고,  
 자연어와 이미지를 활용해 잃어버린 물건을 더 쉽게 찾을 수 있도록 만든 서비스입니다.
 
-[서비스 이용하기](https://mju-lost-found-vercel.vercel.app)
+[서비스 이용하기](https://mju-find.vercel.app)
 
 <br>
 
@@ -274,7 +274,7 @@ Production 배포 전 Preview 환경에서 주요 기능과 데이터베이스 M
 
 ### Production
 
-https://mju-lost-found-vercel.vercel.app
+https://mju-find.vercel.app
 
 ### 운영 방식
 

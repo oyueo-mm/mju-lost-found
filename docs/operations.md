@@ -8,7 +8,7 @@
 
 | 구분 | 주소 | DB / Storage | 용도 |
 |---|---|---|---|
-| Production | https://mju-lost-found-vercel.vercel.app | Production Supabase 프로젝트 | 실제 서비스 |
+| Production | https://mju-find.vercel.app | Production Supabase 프로젝트 | 실제 서비스 |
 | Preview | https://mju-lost-found-preview.vercel.app | Preview Supabase 프로젝트 | 개발·검증 |
 
 - 두 환경은 **서로 다른 Supabase 프로젝트**(DB, Storage, Realtime)를 쓴다. 한쪽 작업이 다른 쪽 데이터에 닿으면 안 된다.
@@ -43,7 +43,7 @@
 3. Preview 주소 연결: `vercel alias set <preview deployment URL> mju-lost-found-preview.vercel.app`
 4. Preview에서 기능 확인(변경한 기능 + 주요 페이지). DB schema가 바뀌었다면 Preview DB에 migration을 먼저 적용한다.
 5. 같은 commit을 Production에 배포: `vercel deploy --prod --yes`
-   (Production 주소 `mju-lost-found-vercel.vercel.app`는 자동으로 새 배포를 가리킨다)
+   (Production 주소 `mju-find.vercel.app`는 자동으로 새 배포를 가리킨다. 이전 주소 `mju-lost-found-vercel.vercel.app` 등은 308로 이 주소로 이동한다)
 6. Production 확인: 주요 페이지 응답, 변경 기능, Vercel 로그에 5xx·오류 없음, 배포 파일에 `.env` 없음.
 
 Preview에서 실패하면 Production에 배포하지 않는다. 문제가 생긴 Production 배포는 Vercel 대시보드에서
@@ -99,8 +99,9 @@ Preview에서 실패하면 Production에 배포하지 않는다. 문제가 생�
 - 외부 관계자는 한 사람당 한 계정으로 등록한다(공용 계정 금지). 경비실처럼 여러 사람이 한 이름으로 활동해야 하면
   단체를 만들고 각자의 계정을 운영진으로 지정해 단체 명의 기능을 쓴다.
 - 가입해도 동의·닉네임 등록 전에는 서비스를 이용할 수 없다.
-- Google Cloud Console의 OAuth redirect URI에는 `https://mju-lost-found-vercel.vercel.app/api/auth/callback/google`이
-  등록되어 있어야 한다(주소를 바꾸면 이 값도 함께 바꾼다).
+- Google Cloud Console의 Production OAuth 클라이언트에는 JavaScript origin `https://mju-find.vercel.app`과
+  redirect URI `https://mju-find.vercel.app/api/auth/callback/google`이 등록되어 있어야 한다
+  (주소를 바꾸면 이 값도 함께 바꾼다). `AUTH_URL`은 설정하지 않는다. Auth.js가 요청 주소로 콜백 URL을 만든다.
 
 ## 8. 장애 대응 기본 순서
 

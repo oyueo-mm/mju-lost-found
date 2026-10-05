@@ -30,12 +30,12 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     // Phase 31: resolves opengraph-image.png's relative path to an absolute
-    // URL for link previews -- VERCEL_PROJECT_PRODUCTION_URL is a Vercel-
-    // provided system env var (no manual configuration needed), falling
-    // back to localhost for local dev.
-    metadataBase: new URL(
-      process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000",
-    ),
+    // URL for link previews. Pinned to the official production URL rather
+    // than VERCEL_PROJECT_PRODUCTION_URL: the project has several vercel.app
+    // production domains (the old ones 308-redirect here), and Vercel kept
+    // picking the old one. Any Vercel deployment (Preview included, as
+    // before) points link previews at production; local dev uses localhost.
+    metadataBase: new URL(process.env.VERCEL ? "https://mju-find.vercel.app" : "http://localhost:3000"),
     title,
     description,
     openGraph: {
