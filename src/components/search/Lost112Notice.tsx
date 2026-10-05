@@ -1,10 +1,12 @@
 "use client";
 
-// LOST112 연계 Phase: 검색 결과가 없을 때 경찰청 유실물 통합포털(LOST112)로
-// 안내하는 정적 카드. 실제 API 연동/데이터 공유는 전혀 없다 -- 그냥 공식
-// 외부 서비스로의 링크 하나뿐이다(§6: 역할을 과장하지 않는다). URL은
-// 여러 독립된 출처(정부 시스템 자체 도메인, 구글 플레이 앱 설명, 언론/블로그
-// 소개 글)로 교차 확인한 공식 도메인(www.lost112.go.kr)이다.
+// LOST112 연계 Phase: 검색 결과가 없을 때 경찰청 유실물 서비스로 안내하는
+// 정적 카드. 실제 API 연동/데이터 공유는 전혀 없다 -- 그냥 공식 외부
+// 서비스로의 링크 하나뿐이다(§6: 역할을 과장하지 않는다). 처음에는 독립
+// 사이트(www.lost112.go.kr)를 가리켰으나 유실물 서비스가 경찰민원24로
+// 옮겨져, 경찰민원24 메인의 "유실물 민원 > 습득물 검색" 링크와 같은 주소
+// (로그인 없이 열리는 공개 검색 페이지)를 쓴다. 컴포넌트/메시지 키
+// 이름(lost112.*)은 그대로 둔다.
 //
 // EmptyState(components/ui/EmptyState.tsx)를 대체하지 않고 그 아래에 별도
 // 카드로 추가한다 -- EmptyState는 채팅/알림 등 이 안내가 전혀 의미 없는
@@ -26,7 +28,7 @@ export function Lost112Notice() {
         <br className="hidden sm:inline" /> {t("lost112.description2")}
       </p>
       <a
-        href="https://www.lost112.go.kr"
+        href="https://minwon24.police.go.kr/cvlcpt/cvlcptAply.do?cvlcptId=MW-201"
         target="_blank"
         rel="noopener noreferrer"
         className={`${EXTERNAL_LINK_ANCHOR_CLASS} mx-auto`}

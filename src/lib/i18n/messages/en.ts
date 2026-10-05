@@ -258,9 +258,9 @@ export const en: Dictionary = {
   "aiSearch.empty.description": "Try a different search term or photo.",
 
   "lost112.title": "Try another way",
-  "lost112.description1": "You can also check LOST112, the Korean National Police Agency's",
-  "lost112.description2": "national lost-and-found portal.",
-  "lost112.cta": "Check on LOST112",
+  "lost112.description1": "You can also check the Korean National Police Agency's lost-and-found service",
+  "lost112.description2": "on Police Minwon24 for items turned in to the police.",
+  "lost112.cta": "Search on Police Minwon24",
 
   "board.lost.title": "Lost items",
   "board.found.title": "Found items",

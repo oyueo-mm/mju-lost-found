@@ -255,9 +255,9 @@ export const zh: Dictionary = {
   "aiSearch.empty.description": "请换个搜索词或照片再试试。",
 
   "lost112.title": "试试其他方式",
-  "lost112.description1": "您也可以在韩国警察厅遗失物综合门户",
-  "lost112.description2": "LOST112 上查询失物与招领信息。",
-  "lost112.cta": "前往 LOST112 查询",
+  "lost112.description1": "您也可以在韩国警察厅遗失物服务（警察民愿24）",
+  "lost112.description2": "上查询交到警方的拾得物。",
+  "lost112.cta": "前往警察民愿24查询",
 
   "board.lost.title": "失物版块",
   "board.found.title": "招领版块",

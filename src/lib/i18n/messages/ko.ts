@@ -271,11 +271,11 @@ export const ko = {
   "aiSearch.empty.title": "비슷한 게시글을 찾지 못했어요.",
   "aiSearch.empty.description": "다른 검색어나 사진으로 다시 시도해보세요.",
 
-  // ---------- LOST112 안내 ----------
+  // ---------- 경찰청 유실물 서비스(경찰민원24) 안내 ----------
   "lost112.title": "다른 방법으로 찾아보세요",
-  "lost112.description1": "경찰청 유실물 통합포털 LOST112에서도",
-  "lost112.description2": "분실물과 습득물을 확인해 보세요.",
-  "lost112.cta": "LOST112에서 확인하기",
+  "lost112.description1": "경찰청 유실물 서비스(경찰민원24)에서도",
+  "lost112.description2": "경찰에 신고된 습득물을 확인해 보세요.",
+  "lost112.cta": "경찰민원24에서 찾아보기",
 
   // ---------- 게시판(분실물/습득물) ----------
   "board.lost.title": "분실물 게시판",

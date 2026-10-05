@@ -256,9 +256,9 @@ export const vi: Dictionary = {
   "aiSearch.empty.description": "Hãy thử từ khoá hoặc ảnh khác.",
 
   "lost112.title": "Thử cách khác",
-  "lost112.description1": "Bạn cũng có thể tra cứu tại LOST112,",
-  "lost112.description2": "cổng thông tin đồ thất lạc của Cảnh sát Hàn Quốc.",
-  "lost112.cta": "Tra cứu trên LOST112",
+  "lost112.description1": "Bạn cũng có thể tra cứu dịch vụ đồ thất lạc của Cảnh sát Hàn Quốc",
+  "lost112.description2": "trên Police Minwon24 (경찰민원24) để xem đồ vật đã được nộp cho cảnh sát.",
+  "lost112.cta": "Tra cứu trên Police Minwon24",
 
   "board.lost.title": "Bảng tin đồ thất lạc",
   "board.found.title": "Bảng tin đồ nhặt được",
