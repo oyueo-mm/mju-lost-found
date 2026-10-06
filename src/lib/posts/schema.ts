@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import { DATE_ONLY, EVENT_PERIODS, kstStartOfDay, resolveEventRange } from "./eventPeriod";
+import { DATE_ONLY, EVENT_PERIODS, kstDateOnly, kstStartOfDay, resolveEventRange } from "./eventPeriod";
+import { dateOnlyToDb, isValidDateOnly, isValidTimeOnly, kstInstantFromParts } from "./eventDate";
 import { interpretDateTimeLocalAsKst } from "./kstDateTime";
 import { resolveCategoryWrite, type ResolvedCategoryWrite } from "./categoryWrite";
 import { isCategoryCode, isSubcategoryCode, parentCategoryOf } from "./categoryTaxonomy";
@@ -83,10 +84,12 @@ export const DEFAULT_LIMIT = 20;
 export const MAX_LIMIT = 50;
 export const DEFAULT_SORT: SortOption = "latest";
 
-// 기간 검색 필터 (분실/습득 시점 기준 -- lostAt / foundAt, never createdAt).
-// URL shape: period=today|3d|1w|1m|custom, from/to=YYYY-MM-DD (KST dates,
-// custom only), unknownTime=include (also include posts whose time is
-// 시간 모름/null). Resolved into eventFrom/eventTo instants by
+// 기간 검색 필터 (분실/습득 날짜 기준 -- lostDate / foundDate, never
+// createdAt; a post whose date is known but time isn't still matches its
+// day). URL shape: period=today|3d|1w|1m|custom, from/to=YYYY-MM-DD (KST
+// dates, custom only), unknownTime=include ("날짜 모름 포함": also include
+// posts whose date itself is unknown/null -- the param keeps its old name
+// so existing links still work). Resolved into eventFrom/eventTo instants by
 // withEventRange() below; shared by listQuerySchema and the AI search route.
 const dateOnlyParam = (label: string) =>
   z
@@ -288,6 +291,71 @@ function eventDateTime(message: string) {
   return z.preprocess(interpretDateTimeLocalAsKst, z.coerce.date(message).nullable());
 }
 
+// 분실/습득 날짜/시각 분리 (see eventDate.ts): the form sends the date and
+// the time separately -- lostDate/foundDate ("YYYY-MM-DD" KST date, or
+// null = 날짜 모름) and lostTime/foundTime ("HH:mm" KST, or null = 시간
+// 모름). A client that still sends only the single lostAt/foundAt instant
+// keeps working: its KST date becomes the date. Either way the service
+// receives exactly the two columns, { date, at }, with `at` set only when
+// a real time was given -- a date alone never gets a made-up time.
+const eventDateOnly = z
+  .string()
+  .regex(DATE_ONLY, "날짜는 YYYY-MM-DD 형식이어야 합니다.")
+  .refine(isValidDateOnly, "올바른 날짜가 아닙니다.")
+  .nullable();
+const eventTimeOnly = z.string().refine(isValidTimeOnly, "시간은 HH:mm 형식이어야 합니다.").nullable();
+
+type EventBoard = "lost" | "found";
+const EVENT_KEYS = {
+  lost: { date: "lostDate", time: "lostTime", at: "lostAt", label: "분실" },
+  found: { date: "foundDate", time: "foundTime", at: "foundAt", label: "습득" },
+} as const;
+type LostEventKey = "lostDate" | "lostTime" | "lostAt";
+type FoundEventKey = "foundDate" | "foundTime" | "foundAt";
+type ResolvedEvent<D extends string, A extends string> = { [K in D | A]: Date | null };
+
+type EventWrite = { ok: true; value?: { date: Date | null; at: Date | null } } | { ok: false; message: string };
+
+export function resolveEventWrite(
+  raw: { date?: string | null; time?: string | null; at?: Date | null },
+  mode: "create" | "update",
+  label: string,
+): EventWrite {
+  if (raw.date !== undefined) {
+    if (raw.date === null) {
+      if (raw.time) return { ok: false, message: `${label} 날짜 없이 시간만 입력할 수 없습니다.` };
+      return { ok: true, value: { date: null, at: null } };
+    }
+    return {
+      ok: true,
+      value: { date: dateOnlyToDb(raw.date), at: raw.time ? kstInstantFromParts(raw.date, raw.time) : null },
+    };
+  }
+  if (raw.time !== undefined) return { ok: false, message: `${label} 날짜 없이 시간만 입력할 수 없습니다.` };
+  if (raw.at !== undefined) {
+    return { ok: true, value: raw.at ? { date: dateOnlyToDb(kstDateOnly(raw.at)), at: raw.at } : { date: null, at: null } };
+  }
+  if (mode === "create") return { ok: false, message: `${label} 일시가 올바르지 않습니다.` };
+  return { ok: true };
+}
+
+function applyEventWrite(data: Record<string, unknown>, ctx: z.RefinementCtx, board: EventBoard, mode: "create" | "update") {
+  // The category step already failed (and reported its own issue).
+  if ((data as unknown) === z.NEVER) return z.NEVER;
+  const keys = EVENT_KEYS[board];
+  const { [keys.date]: date, [keys.time]: time, [keys.at]: at, ...rest } = data;
+  const result = resolveEventWrite(
+    { date: date as string | null | undefined, time: time as string | null | undefined, at: at as Date | null | undefined },
+    mode,
+    keys.label,
+  );
+  if (!result.ok) {
+    ctx.addIssue({ code: "custom", message: result.message, path: [keys.date] });
+    return z.NEVER;
+  }
+  return result.value ? { ...rest, [keys.date]: result.value.date, [keys.at]: result.value.at } : rest;
+}
+
 // 카테고리 대분류-소분류: a request carries either the new
 // categoryCode/subcategory (current PostForm) or only the legacy
 // `category` (clients from before the taxonomy). Both are optional at the
@@ -336,15 +404,20 @@ const lostPostFields = z.object({
   ...categoryFields,
   location,
   campus,
-  // Phase P-5: same nullable-not-optional shape as `location` above --
-  // always present, either a real coerced Date or an explicit null for
-  // "시간 미상" (see PostForm.tsx's dateUnknown toggle).
-  lostAt: eventDateTime("분실 일시가 올바르지 않습니다."),
+  // 분실 날짜/시각 분리: see resolveEventWrite above. lostAt is the legacy
+  // single-instant input (older clients); the form sends lostDate+lostTime.
+  lostDate: eventDateOnly.optional(),
+  lostTime: eventTimeOnly.optional(),
+  lostAt: eventDateTime("분실 일시가 올바르지 않습니다.").optional(),
   status: z.enum(LOST_STATUSES).optional(),
   organizationId,
 });
 
-export const createLostPostSchema = lostPostFields.transform(createWithCategory);
+export const createLostPostSchema = lostPostFields.transform((data, ctx) => {
+  const withCategory = createWithCategory(data, ctx);
+  return applyEventWrite(withCategory, ctx, "lost", "create") as Omit<typeof withCategory, LostEventKey> &
+    ResolvedEvent<"lostDate", "lostAt">;
+});
 export type CreateLostPostInput = z.infer<typeof createLostPostSchema>;
 
 // Phase 12-7: organizationId is now editable (this phase reverses Phase
@@ -355,7 +428,11 @@ export type CreateLostPostInput = z.infer<typeof createLostPostSchema>;
 // integer is re-validated against the *current* user's membership by
 // validateOrganizationPosting() in updateLostPost/updateFoundPost, never
 // trusted from this schema alone.
-export const updateLostPostSchema = lostPostFields.partial().transform(updateWithCategory);
+export const updateLostPostSchema = lostPostFields.partial().transform((data, ctx) => {
+  const withCategory = updateWithCategory(data, ctx);
+  return applyEventWrite(withCategory, ctx, "lost", "update") as Omit<typeof withCategory, LostEventKey> &
+    Partial<ResolvedEvent<"lostDate", "lostAt">>;
+});
 export type UpdateLostPostInput = z.infer<typeof updateLostPostSchema>;
 
 const foundPostFields = z.object({
@@ -364,14 +441,24 @@ const foundPostFields = z.object({
   ...categoryFields,
   location,
   campus,
-  foundAt: eventDateTime("습득 일시가 올바르지 않습니다."),
+  foundDate: eventDateOnly.optional(),
+  foundTime: eventTimeOnly.optional(),
+  foundAt: eventDateTime("습득 일시가 올바르지 않습니다.").optional(),
   status: z.enum(FOUND_STATUSES).optional(),
   organizationId,
 });
 
-export const createFoundPostSchema = foundPostFields.transform(createWithCategory);
+export const createFoundPostSchema = foundPostFields.transform((data, ctx) => {
+  const withCategory = createWithCategory(data, ctx);
+  return applyEventWrite(withCategory, ctx, "found", "create") as Omit<typeof withCategory, FoundEventKey> &
+    ResolvedEvent<"foundDate", "foundAt">;
+});
 export type CreateFoundPostInput = z.infer<typeof createFoundPostSchema>;
 
 // See updateLostPostSchema's own comment -- identical shape/reasoning.
-export const updateFoundPostSchema = foundPostFields.partial().transform(updateWithCategory);
+export const updateFoundPostSchema = foundPostFields.partial().transform((data, ctx) => {
+  const withCategory = updateWithCategory(data, ctx);
+  return applyEventWrite(withCategory, ctx, "found", "update") as Omit<typeof withCategory, FoundEventKey> &
+    Partial<ResolvedEvent<"foundDate", "foundAt">>;
+});
 export type UpdateFoundPostInput = z.infer<typeof updateFoundPostSchema>;

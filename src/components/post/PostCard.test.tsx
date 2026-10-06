@@ -17,6 +17,7 @@ const basePost: PostDTO = {
   status: "보관 중",
   imageUrl: null,
   foundAt: new Date("2026-09-01T00:00:00Z"),
+  foundDate: "2026-09-01",
   createdAt: new Date("2026-09-01T00:00:00Z"),
   updatedAt: new Date("2026-09-01T00:00:00Z"),
   author: { id: 1, nickname: "테스터", publicId: "tester", userType: "STUDENT" },

@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth/session";
-import { getFoundPost, getLostPost } from "@/lib/posts/service";
+import { getFoundPost, getLostPost, type PostDTO } from "@/lib/posts/service";
+import { dateOnlyToDb, postEventDateTime } from "@/lib/posts/eventDate";
 import { FOUND_STATUSES, LOST_STATUSES, postTypeSchema } from "@/lib/posts/schema";
 import { isAdmin } from "@/lib/moderation/service";
 import { listCommentsForPost } from "@/lib/comment/service";
@@ -38,6 +39,14 @@ function formatDate(date: Date, locale: Locale): string {
   }).format(date);
 }
 
+// A date-only 분실/습득 날짜 ("YYYY-MM-DD"): formatted from its UTC-midnight
+// Date *in UTC*, so the calendar day shown is exactly the stored one.
+function formatDateOnly(dateOnly: string, locale: Locale): string {
+  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], { dateStyle: "medium", timeZone: "UTC" }).format(
+    dateOnlyToDb(dateOnly),
+  );
+}
+
 export default async function PostDetailPage({
   params,
   searchParams,
@@ -46,8 +55,14 @@ export default async function PostDetailPage({
   searchParams: Promise<{ type?: string; created?: string }>;
 }) {
   const [t, locale] = await Promise.all([getTranslator(), getLocale()]);
-  const formatDateOrUnknown = (date: Date | null): string =>
-    date ? formatDate(date, locale) : t("post.timeUnknown");
+  // 분실/습득 날짜/시각 분리: 날짜+시간 -> the full date and time; 날짜만 ->
+  // "2026. 10. 6. · 시간 미상"; 날짜도 모름 -> "분실/습득 시점 미상" alone.
+  const formatEventDateTime = (post: PostDTO): string | null => {
+    const event = postEventDateTime(post);
+    if (event.at) return formatDate(event.at, locale);
+    if (event.date) return `${formatDateOnly(event.date, locale)} · ${t("post.timeUnknown")}`;
+    return null;
+  };
 
   const { id: idParam } = await params;
   const { type: typeParam, created } = await searchParams;
@@ -106,7 +121,7 @@ export default async function PostDetailPage({
     );
   }
   const dateLabel = post.type === "lost" ? t("post.lostAt") : t("post.foundAt");
-  const dateValue = post.type === "lost" ? post.lostAt : post.foundAt;
+  const dateText = formatEventDateTime(post);
 
   // Phase 23: plain Prisma reads (comments, view count already on `post`)
   // -- neither is AI work, so both stay in this page's normal server
@@ -337,7 +352,9 @@ export default async function PostDetailPage({
           </span>
           <span className="flex items-center gap-1">
             <ClockIcon className="size-3.5" />
-            {dateLabel}: {formatDateOrUnknown(dateValue)}
+            {dateText !== null
+              ? `${dateLabel}: ${dateText}`
+              : t(post.type === "lost" ? "post.lostDateUnknown" : "post.foundDateUnknown")}
           </span>
           <span className="flex items-center gap-1">
             <EyeIcon className="size-3.5" />

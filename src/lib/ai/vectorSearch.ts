@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { normalizeScore } from "./matching";
 import type { PostType } from "@/lib/posts/schema";
+import { kstDateOnly } from "@/lib/posts/eventPeriod";
 
 // Real pgvector search -- replaces the brute-force "fetch up to 50 most
 // recent candidates, re-embed every one of them in Node on every request,
@@ -105,9 +106,11 @@ export type SemanticSearchFilters = {
   // reaches here (see posts/schema.ts), same contract as
   // posts/service.ts's buildSearchWhere() uses for the keyword-search path.
   status?: string;
-  // 기간 검색 필터 -- same meaning as posts/service.ts's PostFilters: a range
-  // on the board's own 분실/습득 시점 column (lost_at / found_at, never
-  // created_at); null times only match when includeUnknownEventTime is on.
+  // 기간 검색 필터 -- same meaning as posts/service.ts's PostFilters: the
+  // KST days the range covers, matched against the board's own 분실/습득
+  // date column (lost_date / found_date, never created_at) so a date-only
+  // post still matches its day; null dates only match when
+  // includeUnknownEventTime is on.
   eventFrom?: Date;
   eventTo?: Date;
   includeUnknownEventTime?: boolean;
@@ -128,10 +131,11 @@ export function eventTimeCondition(
   filters: Pick<SemanticSearchFilters, "eventFrom" | "eventTo" | "includeUnknownEventTime">,
 ): InstanceType<typeof Prisma.Sql> | null {
   if (!filters.eventFrom && !filters.eventTo) return null;
-  const column = targetType === "lost" ? Prisma.raw(`lost_at`) : Prisma.raw(`found_at`);
+  const column = targetType === "lost" ? Prisma.raw(`lost_date`) : Prisma.raw(`found_date`);
   const bounds: InstanceType<typeof Prisma.Sql>[] = [];
-  if (filters.eventFrom) bounds.push(Prisma.sql`${column} >= ${filters.eventFrom}`);
-  if (filters.eventTo) bounds.push(Prisma.sql`${column} <= ${filters.eventTo}`);
+  // Bound as "YYYY-MM-DD" text cast to DATE -- no time zone is involved.
+  if (filters.eventFrom) bounds.push(Prisma.sql`${column} >= ${kstDateOnly(filters.eventFrom)}::date`);
+  if (filters.eventTo) bounds.push(Prisma.sql`${column} <= ${kstDateOnly(filters.eventTo)}::date`);
   const inRange = Prisma.join(bounds, " AND ");
   return filters.includeUnknownEventTime
     ? Prisma.sql`((${inRange}) OR ${column} IS NULL)`

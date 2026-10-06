@@ -56,7 +56,11 @@ type PostFormValues = {
   // empty string or a "미상" placeholder.
   location: string | null;
   campus: string;
-  dateValue: string | null; // <input type="datetime-local"> value, or null if unknown
+  // 분실/습득 날짜/시각 분리 (posts/eventDate.ts): the KST date
+  // ("YYYY-MM-DD", null = 날짜 모름) and time ("HH:mm", null = 시간 모름 --
+  // always null when the date is unknown).
+  dateValue: string | null;
+  timeValue: string | null;
   // Phase 11-4D: replaces the old single `imageUrl` -- an existing post's
   // current PostImage rows, already ordered by displayOrder (index 0 is
   // primary) by getLostPost/getFoundPost. Empty array for a post with no
@@ -86,9 +90,10 @@ type PostFormProps = {
   myOrganizations?: { organizationId: number; organizationName: string }[];
 };
 
-const DATE_FIELD = { lost: "lostAt", found: "foundAt" } as const;
-// 다국어(i18n) Phase: 폼이 서버로 보내는 필드 이름(DATE_FIELD)은 그대로
-// 두고, 사람이 읽는 라벨/placeholder만 번역 키로 바꿨다.
+const DATE_FIELD = { lost: "lostDate", found: "foundDate" } as const;
+const TIME_FIELD = { lost: "lostTime", found: "foundTime" } as const;
+// 다국어(i18n) Phase: 폼이 서버로 보내는 필드 이름(DATE_FIELD/TIME_FIELD)은
+// 그대로 두고, 사람이 읽는 라벨/placeholder만 번역 키로 바꿨다.
 const DATE_LABEL_KEY: Record<PostType, TranslationKey> = { lost: "post.lostAt", found: "post.foundAt" };
 const TITLE_PLACEHOLDER_KEY: Record<PostType, TranslationKey> = {
   lost: "form.lost.titlePlaceholder",
@@ -201,6 +206,13 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
   const [descriptionText, setDescriptionText] = useState(initialValues?.description ?? "");
   const [locationUnknown, setLocationUnknown] = useState(initialValues?.location === null);
   const [dateUnknown, setDateUnknown] = useState(initialValues?.dateValue === null);
+  // Create-form default for the date/time inputs (KST "now"), fixed at mount.
+  const [defaultNow] = useState(nowAsKstDateTimeLocalValue);
+  // Only meaningful while the date is known -- unchecking 날짜 모름 keeps
+  // this choice, and the date input's value is kept either way.
+  const [timeUnknown, setTimeUnknown] = useState(
+    initialValues !== undefined && initialValues.dateValue !== null && initialValues.timeValue === null,
+  );
 
   // Same outside-click-to-close mechanism PostManageMenu already
   // established (Phase H-6) -- plain useState + a document listener, no
@@ -406,9 +418,13 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
     // form field, so this is correct regardless of that native behavior.
     const location = locationUnknown ? null : String(formData.get("location") ?? "");
     const dateValue = dateUnknown ? null : String(formData.get("date") ?? "");
+    const timeValue = dateUnknown || timeUnknown ? null : String(formData.get("time") ?? "");
 
     const isEdit = postId !== undefined;
-    const dateField = DATE_FIELD[type];
+    // The date and time are one fact on the server (lostDate + lostAt), so
+    // they're always sent together -- on edit, only when either changed.
+    const dateTimeChanged =
+      !isEdit || dateValue !== initialValues?.dateValue || timeValue !== initialValues?.timeValue;
 
     const body = {
       type,
@@ -423,7 +439,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
       // `type` itself is added directly rather than read from FormData) --
       // tracked in this component's own `campus` state instead.
       ...fieldIfChanged(isEdit, "campus", campus, initialValues?.campus),
-      ...fieldIfChanged(isEdit, dateField, dateValue, initialValues?.dateValue),
+      ...(dateTimeChanged && { [DATE_FIELD[type]]: dateValue, [TIME_FIELD[type]]: timeValue }),
       // Phase 12-7 §4: now genuinely editable -- same fieldIfChanged
       // pattern as every other field above, so an edit that didn't touch
       // 게시 주체 omits organizationId entirely (server-side: "leave
@@ -756,13 +772,14 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
           </div>
         </label>
 
-        <label className="flex flex-col gap-1.5 text-sm">
+        <div className="flex flex-col gap-1.5 text-sm">
           <span className="flex items-center justify-between gap-2">
             <span className="font-medium text-foreground">
               {t(DATE_LABEL_KEY[type])}
               {!dateUnknown && <RequiredMark />}
             </span>
-            {/* Phase P-5: same single-toggle pattern as 위치 above. */}
+            {/* Phase P-5: same single-toggle pattern as 위치 above -- now
+                날짜 모름 (which also leaves the time unknown). */}
             <button
               type="button"
               onClick={() => setDateUnknown((unknown) => !unknown)}
@@ -770,18 +787,41 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
               disabled={pending}
               className="shrink-0 text-xs font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline disabled:opacity-60"
             >
-              {dateUnknown ? t("form.timeKnown") : t("form.timeUnknown")}
+              {dateUnknown ? t("form.dateKnown") : t("form.dateUnknown")}
             </button>
           </span>
-          <input
-            name="date"
-            type="datetime-local"
-            required={!dateUnknown}
-            defaultValue={initialValues?.dateValue ?? nowAsKstDateTimeLocalValue()}
-            disabled={pending || dateUnknown}
-            className={FIELD_CLASS}
-          />
-        </label>
+          <span className="flex gap-2">
+            <input
+              name="date"
+              type="date"
+              aria-label={t(DATE_LABEL_KEY[type])}
+              required={!dateUnknown}
+              defaultValue={initialValues?.dateValue ?? defaultNow.slice(0, 10)}
+              disabled={pending || dateUnknown}
+              className={`${FIELD_CLASS} min-w-0 flex-1`}
+            />
+            <input
+              name="time"
+              type="time"
+              aria-label={t(DATE_LABEL_KEY[type])}
+              required={!dateUnknown && !timeUnknown}
+              defaultValue={initialValues ? (initialValues.timeValue ?? "") : defaultNow.slice(11, 16)}
+              disabled={pending || dateUnknown || timeUnknown}
+              className={`${FIELD_CLASS} min-w-0 flex-1`}
+            />
+          </span>
+          {!dateUnknown && (
+            <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={timeUnknown}
+                onChange={(event) => setTimeUnknown(event.target.checked)}
+                disabled={pending}
+              />
+              {t("form.timeUnknown")}
+            </label>
+          )}
+        </div>
       </section>
 
       <section className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireReadyUser } from "@/lib/auth/session";
 import { getFoundPost, getLostPost } from "@/lib/posts/service";
 import { postTypeSchema } from "@/lib/posts/schema";
-import { toKstDateTimeLocalValue } from "@/lib/posts/kstDateTime";
+import { postEventDateTime } from "@/lib/posts/eventDate";
 import { getMyOrganizationMemberships } from "@/lib/organization/service";
 import { PostForm } from "@/components/post/PostForm";
 
@@ -41,7 +41,7 @@ export default async function EditPostPage({
     );
   }
 
-  const dateValue = post.type === "lost" ? post.lostAt : post.foundAt;
+  const event = postEventDateTime(post);
 
   // Phase 12-7 §4: same server-fetched-membership convention as
   // lost/new, found/new page.tsx -- now also needed in edit mode, since
@@ -65,11 +65,10 @@ export default async function EditPostPage({
           subcategory: post.subcategory ?? null,
           location: post.location,
           campus: post.campus,
-          // Phase P-5: null (time marked unknown) stays null here -- only
-          // a real Date is converted to the datetime-local string format.
-          // PostForm's own dateUnknown toggle is what decides, from this,
-          // whether to seed the date input as unknown or pre-filled.
-          dateValue: dateValue ? toKstDateTimeLocalValue(dateValue) : null,
+          // Phase P-5: null (날짜/시간 모름) stays null here -- PostForm's
+          // own dateUnknown/timeUnknown state is seeded from these.
+          dateValue: event.date,
+          timeValue: event.time,
           // getLostPost/getFoundPost always include this (ordered by
           // displayOrder) -- defaulting to [] only satisfies the type for
           // PostDTO's other, list-producing callers, which never reach here.

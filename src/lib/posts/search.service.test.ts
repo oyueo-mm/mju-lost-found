@@ -81,34 +81,40 @@ describe("search logic -- filtering is always done in the DB query, never in JS"
   describe("event-time period filter", () => {
     const eventFrom = new Date("2026-08-31T15:00:00.000Z");
     const eventTo = new Date("2026-09-15T14:59:59.999Z");
+    // 분실/습득 날짜 기준: the range's instants are compared as the KST dates
+    // they fall on -- eventFrom is 2026-08-31 in UTC but 2026-09-01 in KST,
+    // and the date column must get 09-01 (no day shift). Prisma DATE values
+    // are UTC-midnight Dates.
+    const fromDay = new Date("2026-09-01T00:00:00.000Z");
+    const toDay = new Date("2026-09-15T00:00:00.000Z");
 
-    it("filters LostPost by lostAt and excludes unknown (null) times by default", async () => {
+    it("filters LostPost by lostDate (KST days) and excludes unknown (null) dates by default", async () => {
       await listLostPosts({ page: 1, limit: 20, eventFrom, eventTo });
 
       const where = lostPost.findMany.mock.calls[0][0].where;
-      expect(where.AND).toEqual([{ lostAt: { gte: eventFrom, lte: eventTo } }]);
+      expect(where.AND).toEqual([{ lostDate: { gte: fromDay, lte: toDay } }]);
       expect(where).not.toHaveProperty("createdAt");
-      expect(JSON.stringify(where)).not.toContain("foundAt");
+      expect(JSON.stringify(where)).not.toContain("foundDate");
     });
 
-    it("filters FoundPost by foundAt", async () => {
+    it("filters FoundPost by foundDate", async () => {
       await listFoundPosts({ page: 1, limit: 20, eventFrom, eventTo });
 
-      expect(foundPost.findMany.mock.calls[0][0].where.AND).toEqual([{ foundAt: { gte: eventFrom, lte: eventTo } }]);
+      expect(foundPost.findMany.mock.calls[0][0].where.AND).toEqual([{ foundDate: { gte: fromDay, lte: toDay } }]);
     });
 
-    it("adds unknown (null) times only when includeUnknownEventTime is on -- never via createdAt", async () => {
+    it("adds unknown (null) dates only when includeUnknownEventTime is on -- never via createdAt", async () => {
       await listLostPosts({ page: 1, limit: 20, eventFrom, eventTo, includeUnknownEventTime: true });
 
       const where = lostPost.findMany.mock.calls[0][0].where;
-      expect(where.AND).toEqual([{ OR: [{ lostAt: { gte: eventFrom, lte: eventTo } }, { lostAt: null }] }]);
+      expect(where.AND).toEqual([{ OR: [{ lostDate: { gte: fromDay, lte: toDay } }, { lostDate: null }] }]);
       expect(JSON.stringify(where)).not.toContain("createdAt");
     });
 
     it("supports an open-ended range", async () => {
       await listLostPosts({ page: 1, limit: 20, eventFrom });
 
-      expect(lostPost.findMany.mock.calls[0][0].where.AND).toEqual([{ lostAt: { gte: eventFrom } }]);
+      expect(lostPost.findMany.mock.calls[0][0].where.AND).toEqual([{ lostDate: { gte: fromDay } }]);
     });
 
     it("keeps the text search OR intact alongside the period (AND)", async () => {
@@ -130,10 +136,10 @@ describe("search logic -- filtering is always done in the DB query, never in JS"
 
       await searchPosts({ type: "all", page: 1, limit: 20, eventFrom, eventTo });
 
-      expect(lostPost.findMany.mock.calls[0][0].where.AND).toEqual([{ lostAt: { gte: eventFrom, lte: eventTo } }]);
-      expect(foundPost.findMany.mock.calls[0][0].where.AND).toEqual([{ foundAt: { gte: eventFrom, lte: eventTo } }]);
-      expect(lostPost.count.mock.calls[0][0].where.AND).toEqual([{ lostAt: { gte: eventFrom, lte: eventTo } }]);
-      expect(foundPost.count.mock.calls[0][0].where.AND).toEqual([{ foundAt: { gte: eventFrom, lte: eventTo } }]);
+      expect(lostPost.findMany.mock.calls[0][0].where.AND).toEqual([{ lostDate: { gte: fromDay, lte: toDay } }]);
+      expect(foundPost.findMany.mock.calls[0][0].where.AND).toEqual([{ foundDate: { gte: fromDay, lte: toDay } }]);
+      expect(lostPost.count.mock.calls[0][0].where.AND).toEqual([{ lostDate: { gte: fromDay, lte: toDay } }]);
+      expect(foundPost.count.mock.calls[0][0].where.AND).toEqual([{ foundDate: { gte: fromDay, lte: toDay } }]);
     });
 
     it("adds no time condition without a range", async () => {

@@ -44,8 +44,8 @@ describe("EventPeriodFilter", () => {
     expect(markup).toMatch(/<span aria-hidden="true" class="hidden [^"]*sm:inline">~<\/span>/);
   });
 
-  it("shows 시간 모름 포함 only while a period is selected", () => {
-    expect(render({ period: "", from: "", to: "", includeUnknown: false })).not.toContain("시간 모름 포함");
-    expect(render({ period: "1w", from: "", to: "", includeUnknown: false })).toContain("시간 모름 포함");
+  it("shows 날짜 모름 포함 only while a period is selected", () => {
+    expect(render({ period: "", from: "", to: "", includeUnknown: false })).not.toContain("날짜 모름 포함");
+    expect(render({ period: "1w", from: "", to: "", includeUnknown: false })).toContain("날짜 모름 포함");
   });
 });

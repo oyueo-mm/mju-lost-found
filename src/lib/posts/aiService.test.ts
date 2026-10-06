@@ -155,6 +155,7 @@ describe("createLostPost / createFoundPost", () => {
       status: "SEARCHING",
       imageUrl: null,
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -167,6 +168,7 @@ describe("createLostPost / createFoundPost", () => {
       location: "l",
       campus: "인문캠퍼스",
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
     });
 
     expect(lostPost.create).toHaveBeenCalledWith(
@@ -184,6 +186,7 @@ describe("createLostPost / createFoundPost", () => {
       status: "SEARCHING",
       imageUrl: null,
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -197,6 +200,7 @@ describe("createLostPost / createFoundPost", () => {
       location: "l",
       campus: "인문캠퍼스",
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
     });
     await flushAfterCallbacks();
 
@@ -216,6 +220,7 @@ describe("createLostPost / createFoundPost", () => {
       status: "SEARCHING",
       imageUrl: null,
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -228,6 +233,7 @@ describe("createLostPost / createFoundPost", () => {
       location: "l",
       campus: "인문캠퍼스",
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
     });
 
     expect(result.kind).toBe("ok"); // the response is ready immediately...
@@ -252,6 +258,7 @@ describe("createLostPost / createFoundPost", () => {
       status: "SEARCHING",
       imageUrl: null,
       lostAt: null,
+      lostDate: null,
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -264,6 +271,7 @@ describe("createLostPost / createFoundPost", () => {
       location: null,
       campus: "인문캠퍼스",
       lostAt: null,
+      lostDate: null,
     });
     await flushAfterCallbacks();
 
@@ -288,6 +296,7 @@ describe("createLostPost / createFoundPost", () => {
       location: "l",
       campus: "인문캠퍼스",
       foundAt: new Date(),
+      foundDate: new Date("2026-01-01T00:00:00Z"),
     });
 
     expect(result).toEqual({ kind: "forbidden", reason: "suspended" });
@@ -310,6 +319,7 @@ describe("createLostPost / createFoundPost -- organization attribution (Phase 12
     location: "l",
     campus: "인문캠퍼스" as const,
     lostAt: new Date(),
+    lostDate: new Date("2026-01-01T00:00:00Z"),
   };
 
   it("organizationId omitted -- personal post, validateOrganizationPosting never called", async () => {
@@ -452,6 +462,7 @@ describe("createLostPost / createFoundPost -- organization attribution (Phase 12
       location: "l",
       campus: "인문캠퍼스",
       foundAt: new Date(),
+      foundDate: new Date("2026-01-01T00:00:00Z"),
       organizationId: 10,
     });
 
@@ -472,6 +483,7 @@ describe("updateLostPost", () => {
       status: "SEARCHING",
       imageUrl: null,
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -497,6 +509,7 @@ describe("updateLostPost", () => {
       status: "SEARCHING",
       imageUrl: null,
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -521,6 +534,7 @@ describe("updateLostPost", () => {
       status: "SEARCHING",
       imageUrl: null,
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -546,6 +560,7 @@ describe("updateLostPost", () => {
       status: "SEARCHING",
       imageUrl: null,
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -573,6 +588,7 @@ describe("updateLostPost", () => {
       status: "SEARCHING",
       imageUrl: null,
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -601,6 +617,7 @@ describe("updateLostPost", () => {
       status: "SEARCHING",
       imageUrl: null,
       lostAt: null,
+      lostDate: null,
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -634,6 +651,7 @@ describe("updateLostPost", () => {
       status: "SEARCHING",
       imageUrl: null,
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -658,6 +676,7 @@ describe("updateLostPost", () => {
       status: "FOUND",
       imageUrl: null,
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -685,6 +704,7 @@ describe("updateLostPost", () => {
       status: "SEARCHING",
       imageUrl: null,
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -712,6 +732,7 @@ describe("updateLostPost", () => {
       status: "SEARCHING",
       imageUrl: null,
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -749,6 +770,7 @@ describe("updateLostPost", () => {
       status: "FOUND",
       imageUrl: null,
       lostAt: new Date(),
+      lostDate: new Date("2026-01-01T00:00:00Z"),
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -809,6 +831,7 @@ describe("updateLostPost", () => {
       status: "KEEPING",
       imageUrl: null,
       foundAt: null,
+      foundDate: null,
       createdAt: new Date(),
       updatedAt: new Date(),
       user: { id: 1, nickname: "닉네임" },
@@ -843,6 +866,7 @@ describe("updateLostPost", () => {
         status: "SEARCHING",
         imageUrl: null,
         lostAt: new Date(),
+        lostDate: new Date("2026-01-01T00:00:00Z"),
         createdAt: new Date(),
         updatedAt: new Date(),
         user: { id: 1, nickname: "닉네임" },
@@ -871,6 +895,7 @@ describe("updateLostPost", () => {
         status: "SEARCHING",
         imageUrl: null,
         lostAt: new Date(),
+        lostDate: new Date("2026-01-01T00:00:00Z"),
         createdAt: new Date(),
         updatedAt: new Date(),
         user: { id: 1, nickname: "닉네임" },
@@ -895,6 +920,7 @@ describe("updateLostPost", () => {
         status: "SEARCHING",
         imageUrl: null,
         lostAt: new Date(),
+        lostDate: new Date("2026-01-01T00:00:00Z"),
         createdAt: new Date(),
         updatedAt: new Date(),
         user: { id: 1, nickname: "닉네임" },

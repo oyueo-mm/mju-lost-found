@@ -231,7 +231,7 @@ describe("findPostsBySemanticQuery", () => {
     });
 
     // 기간 검색 필터 (분실/습득 시점 기준).
-    it("filters LostPost by lost_at (bound), never created_at, and excludes null times by default", async () => {
+    it("filters LostPost by lost_date (KST days, bound), never created_at, and excludes null dates by default", async () => {
       $queryRaw.mockResolvedValueOnce([]);
       const eventFrom = new Date("2026-08-31T15:00:00.000Z");
       const eventTo = new Date("2026-09-15T14:59:59.999Z");
@@ -239,24 +239,25 @@ describe("findPostsBySemanticQuery", () => {
       await findPostsBySemanticQuery("lost", [0.1], 10, { eventFrom, eventTo });
 
       const [sqlArg] = $queryRaw.mock.calls[0];
-      expect(sqlArg.sql).toContain("lost_at >=");
-      expect(sqlArg.sql).toContain("lost_at <=");
-      expect(sqlArg.sql).not.toContain("found_at");
+      expect(sqlArg.sql).toContain("lost_date >=");
+      expect(sqlArg.sql).toContain("lost_date <=");
+      expect(sqlArg.sql).not.toContain("found_date");
       expect(sqlArg.sql).not.toContain("created_at");
       expect(sqlArg.sql).not.toContain("IS NULL");
-      expect(sqlArg.values).toEqual(expect.arrayContaining([eventFrom, eventTo]));
+      // The KST dates of the range's instants (eventFrom is 08-31 in UTC).
+      expect(sqlArg.values).toEqual(expect.arrayContaining(["2026-09-01", "2026-09-15"]));
     });
 
-    it("filters FoundPost by found_at and includes null times only when asked", async () => {
+    it("filters FoundPost by found_date and includes null dates only when asked", async () => {
       $queryRaw.mockResolvedValueOnce([]);
       const eventFrom = new Date("2026-08-31T15:00:00.000Z");
 
       await findPostsBySemanticQuery("found", [0.1], 10, { eventFrom, includeUnknownEventTime: true });
 
       const [sqlArg] = $queryRaw.mock.calls[0];
-      expect(sqlArg.sql).toContain("found_at >=");
-      expect(sqlArg.sql).toContain("found_at IS NULL");
-      expect(sqlArg.sql).not.toContain("lost_at");
+      expect(sqlArg.sql).toContain("found_date >=");
+      expect(sqlArg.sql).toContain("found_date IS NULL");
+      expect(sqlArg.sql).not.toContain("lost_date");
       expect(sqlArg.sql).not.toContain("created_at");
     });
 
@@ -266,7 +267,7 @@ describe("findPostsBySemanticQuery", () => {
       await findPostsBySemanticQuery("lost", [0.1], 10, { includeUnknownEventTime: true });
 
       const [sqlArg] = $queryRaw.mock.calls[0];
-      expect(sqlArg.sql).not.toContain("lost_at");
+      expect(sqlArg.sql).not.toContain("lost_date");
     });
 
     it("combines multiple filters in the same query (AND), all still bound", async () => {
@@ -361,9 +362,9 @@ describe("findPostsByImageQuery", () => {
 
     const [sqlArg] = $queryRaw.mock.calls[0];
     expect(sqlArg.sql).toContain(" AND ");
-    expect(sqlArg.sql).toContain("found_at IS NULL");
+    expect(sqlArg.sql).toContain("found_date IS NULL");
     expect(sqlArg.sql).not.toContain("created_at");
-    expect(sqlArg.values).toEqual(expect.arrayContaining(["지갑", "인문캠퍼스", "보관 중", eventFrom, eventTo]));
+    expect(sqlArg.values).toEqual(expect.arrayContaining(["지갑", "인문캠퍼스", "보관 중", "2026-09-01", "2026-09-15"]));
   });
 });
 

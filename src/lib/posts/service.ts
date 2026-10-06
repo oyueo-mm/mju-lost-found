@@ -8,6 +8,8 @@ import {
 } from "@/generated/prisma/client";
 import type { PostListType, PostType, SortOption } from "./schema";
 import { DEFAULT_SORT } from "./schema";
+import { dateOnlyToDb, dbDateToDateOnly } from "./eventDate";
+import { kstDateOnly } from "./eventPeriod";
 
 // Phase 21: this module is the AI-dependency-free half of the old
 // posts/service.ts split (see docs/AI_MATCHING_ARCHITECTURE.md's Phase 21
@@ -111,7 +113,11 @@ export type LostPostDTO = {
   campus: string;
   status: string;
   imageUrl: string | null;
+  // 분실 날짜/시각 분리 (posts/eventDate.ts): lostDate is the KST date as
+  // "YYYY-MM-DD" (null = 날짜 모름); lostAt is set only when the exact time
+  // is known too.
   lostAt: Date | null;
+  lostDate: string | null;
   createdAt: Date;
   updatedAt: Date;
   author: Author;
@@ -156,7 +162,9 @@ export type FoundPostDTO = {
   campus: string;
   status: string;
   imageUrl: string | null;
+  // See LostPostDTO.lostAt/lostDate.
   foundAt: Date | null;
+  foundDate: string | null;
   createdAt: Date;
   updatedAt: Date;
   author: Author;
@@ -215,11 +223,14 @@ export type PostFilters = {
   // -- no public search UI exposes this. Optional/undefined for every
   // other existing caller, so this is purely additive to buildSearchWhere.
   authorQuery?: string;
-  // 기간 검색 필터: an instant range on the post's actual 분실/습득 시점 --
-  // LostPost.lostAt / FoundPost.foundAt, never createdAt (resolved from the
-  // URL's period/from/to in KST by posts/schema.ts). Posts whose time is
-  // unknown (null) are excluded while a range applies, unless
-  // includeUnknownEventTime is set -- createdAt is never used as a stand-in.
+  // 기간 검색 필터: the KST day range (resolved from the URL's
+  // period/from/to by posts/schema.ts, as the instants bounding those days)
+  // matched against the post's 분실/습득 *date* -- LostPost.lostDate /
+  // FoundPost.foundDate, never createdAt -- so a post whose date is known
+  // but time isn't still matches its day. Posts whose date is unknown
+  // (null) are excluded while a range applies, unless
+  // includeUnknownEventTime (URL: unknownTime=include, "날짜 모름 포함") is
+  // set -- createdAt is never used as a stand-in.
   eventFrom?: Date;
   eventTo?: Date;
   includeUnknownEventTime?: boolean;
@@ -254,7 +265,7 @@ const MY_POSTS_CAP = 200;
 // search_found_posts()'s `category = ?`); `location` is a partial match,
 // since it's free text with no legacy precedent to match against.
 // The 분실/습득 시점 period filter is not built here -- it targets a
-// different column per board (lostAt / foundAt), see eventTimeWhere().
+// different column per board (lostDate / foundDate), see eventTimeWhere().
 // statusMap converts filters.status (a Korean string) to the board-specific
 // Prisma enum value -- LOST_STATUS_TO_DB for LostPost queries,
 // FOUND_STATUS_TO_DB for FoundPost queries. Omitted entirely by
@@ -309,22 +320,23 @@ function buildSearchWhere<S extends PrismaLostPostStatus | PrismaFoundPostStatus
   return where;
 }
 
-type EventField = "lostAt" | "foundAt";
+type EventField = "lostDate" | "foundDate";
 type EventTimeRange = { gte?: Date; lte?: Date };
 type EventTimeCondition<K extends EventField> =
   | { [P in K]: EventTimeRange }
   | { OR: ({ [P in K]: EventTimeRange } | { [P in K]: null })[] };
 
-// 기간 검색 필터 for one board: `field` is that board's own 분실/습득 시점
-// column. Returned as an AND entry so it composes with buildSearchWhere()'s
+// 기간 검색 필터 for one board: `field` is that board's own 분실/습득 날짜
+// (DATE) column, compared against the KST dates the range's instants fall
+// on. Returned as an AND entry so it composes with buildSearchWhere()'s
 // own OR (the title/description text match) instead of overwriting it.
-// Unknown times (null) only match when includeUnknownEventTime is on --
+// Unknown dates (null) only match when includeUnknownEventTime is on --
 // never via createdAt.
 export function eventTimeWhere<K extends EventField>(field: K, filters: PostFilters): { AND?: EventTimeCondition<K>[] } {
   if (!filters.eventFrom && !filters.eventTo) return {};
   const range: EventTimeRange = {
-    ...(filters.eventFrom && { gte: filters.eventFrom }),
-    ...(filters.eventTo && { lte: filters.eventTo }),
+    ...(filters.eventFrom && { gte: dateOnlyToDb(kstDateOnly(filters.eventFrom)) }),
+    ...(filters.eventTo && { lte: dateOnlyToDb(kstDateOnly(filters.eventTo)) }),
   };
   const inRange = { [field]: range } as { [P in K]: EventTimeRange };
   if (!filters.includeUnknownEventTime) return { AND: [inRange] };
@@ -349,6 +361,7 @@ export function toLostPostDTO(row: {
   status: PrismaLostPostStatus;
   imageUrl: string | null;
   lostAt: Date | null;
+  lostDate?: Date | null;
   createdAt: Date;
   updatedAt: Date;
   viewCount: number;
@@ -368,10 +381,11 @@ export function toLostPostDTO(row: {
   // LostPostDTO.images's own optional-ness.
   images?: PostImageSummary[];
 }): LostPostDTO {
-  const { user, status, organization, ...rest } = row;
+  const { user, status, organization, lostDate, ...rest } = row;
   return {
     type: "lost",
     ...rest,
+    lostDate: lostDate ? dbDateToDateOnly(lostDate) : null,
     status: LOST_STATUS_FROM_DB[status],
     author: user,
     organizationId: organization?.id ?? null,
@@ -391,6 +405,7 @@ export function toFoundPostDTO(row: {
   status: PrismaFoundPostStatus;
   imageUrl: string | null;
   foundAt: Date | null;
+  foundDate?: Date | null;
   createdAt: Date;
   updatedAt: Date;
   viewCount: number;
@@ -401,10 +416,11 @@ export function toFoundPostDTO(row: {
   organization: { id: number; name: string } | null;
   images?: PostImageSummary[];
 }): FoundPostDTO {
-  const { user, status, organization, ...rest } = row;
+  const { user, status, organization, foundDate, ...rest } = row;
   return {
     type: "found",
     ...rest,
+    foundDate: foundDate ? dbDateToDateOnly(foundDate) : null,
     status: FOUND_STATUS_FROM_DB[status],
     author: user,
     organizationId: organization?.id ?? null,
@@ -420,7 +436,7 @@ export async function listLostPosts({
   ...filters
 }: ListParams): Promise<PagedResult<LostPostDTO>> {
   const skip = (page - 1) * limit;
-  const where = { ...buildSearchWhere(filters, LOST_STATUS_TO_DB), ...eventTimeWhere("lostAt", filters) };
+  const where = { ...buildSearchWhere(filters, LOST_STATUS_TO_DB), ...eventTimeWhere("lostDate", filters) };
   const [rows, total] = await Promise.all([
     prisma.lostPost.findMany({
       where,
@@ -500,7 +516,7 @@ export async function listFoundPosts({
   ...filters
 }: ListParams): Promise<PagedResult<FoundPostDTO>> {
   const skip = (page - 1) * limit;
-  const where = { ...buildSearchWhere(filters, FOUND_STATUS_TO_DB), ...eventTimeWhere("foundAt", filters) };
+  const where = { ...buildSearchWhere(filters, FOUND_STATUS_TO_DB), ...eventTimeWhere("foundDate", filters) };
   const [rows, total] = await Promise.all([
     prisma.foundPost.findMany({
       where,
@@ -666,8 +682,8 @@ async function searchAllPosts({
   // their (different) status enum types.
   const where = buildSearchWhere<never>(filters);
   // 기간 검색 필터: each board filters by its own 분실/습득 시점 column.
-  const lostWhere = { ...where, ...eventTimeWhere("lostAt", filters) };
-  const foundWhere = { ...where, ...eventTimeWhere("foundAt", filters) };
+  const lostWhere = { ...where, ...eventTimeWhere("lostDate", filters) };
+  const foundWhere = { ...where, ...eventTimeWhere("foundDate", filters) };
   const orderBy = buildOrderBy(filters.sort);
   const depth = Math.min(page * limit, 1000);
 

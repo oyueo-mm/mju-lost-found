@@ -551,7 +551,15 @@ model LostPost {
   // filtering or sorting (buildSearchWhere/buildOrderBy use `createdAt`
   // instead, see posts/service.ts), so making this nullable has no
   // search-ordering impact.
+  //
+  // 분실 날짜/시각 분리: lostAt is now set only when the exact time is
+  // known. lostDate is the KST calendar date (DATE, no time zone), set
+  // whenever the date is known -- with or without a time. Both null means
+  // the date itself is unknown. Period search filters lostDate, so a
+  // date-only post still matches its day. Prisma reads/writes a DATE as a
+  // Date at UTC midnight of that day -- see posts/eventDate.ts.
   lostAt         DateTime?                   @map("lost_at")
+  lostDate       DateTime?                   @map("lost_date") @db.Date
   status         LostPostStatus              @default(SEARCHING)
   imageUrl       String?                     @map("image_url") @db.Text
   createdAt      DateTime                    @default(now()) @map("created_at")
@@ -636,8 +644,9 @@ model FoundPost {
   location       String?                     @db.Text
   // See LostPost.campus's comment -- identical shape/reasoning.
   campus         String                      @default("인문캠퍼스") @db.Text
-  // See LostPost.lostAt's comment -- identical shape/reasoning.
+  // See LostPost.lostAt/lostDate's comment -- identical shape/reasoning.
   foundAt        DateTime?                   @map("found_at")
+  foundDate      DateTime?                   @map("found_date") @db.Date
   status         FoundPostStatus             @default(KEEPING)
   imageUrl       String?                     @map("image_url") @db.Text
   createdAt      DateTime                    @default(now()) @map("created_at")

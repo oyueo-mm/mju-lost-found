@@ -77,10 +77,10 @@ export async function clearPostInTx(tx: Tx, kind: PostKind, id: number, removedA
   await tx.postImage.deleteMany({ where });
   const cleared = { title: WITHDRAWN_POST_TITLE, description: "", location: null, imageUrl: null, removedAt };
   if (kind === "lost") {
-    await tx.lostPost.update({ where: { id }, data: { ...cleared, lostAt: null } });
+    await tx.lostPost.update({ where: { id }, data: { ...cleared, lostAt: null, lostDate: null } });
     await tx.$executeRaw`UPDATE "LostPost" SET embedding = NULL, "imageEmbedding" = NULL WHERE id = ${id}`;
   } else {
-    await tx.foundPost.update({ where: { id }, data: { ...cleared, foundAt: null } });
+    await tx.foundPost.update({ where: { id }, data: { ...cleared, foundAt: null, foundDate: null } });
     await tx.$executeRaw`UPDATE "FoundPost" SET embedding = NULL, "imageEmbedding" = NULL WHERE id = ${id}`;
   }
   await tx.matchCandidateCache.deleteMany({ where: { sourceType: kind, sourcePostId: id } });

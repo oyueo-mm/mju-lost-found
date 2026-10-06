@@ -12,6 +12,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { prisma } from "@/lib/db/prisma";
+import { dateOnlyToDb } from "@/lib/posts/eventDate";
+import { kstDateOnly } from "@/lib/posts/eventPeriod";
 import { embedPostBestEffort, embedPostImageBestEffort } from "@/lib/ai/postEmbedding";
 import { createSignedUploadUrl } from "@/lib/images/supabaseAdmin";
 import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
@@ -79,8 +81,8 @@ async function createPost(board: Board, key: string, spec: PostSpec, userId: num
   const base = { userId, title: spec.title, description: spec.description, category: spec.category, campus: spec.campus, location: spec.location, createdAt, viewCount };
   const row =
     board === "lost"
-      ? await prisma.lostPost.create({ data: { ...base, lostAt: eventAt } })
-      : await prisma.foundPost.create({ data: { ...base, foundAt: eventAt } });
+      ? await prisma.lostPost.create({ data: { ...base, lostAt: eventAt, lostDate: eventAt && dateOnlyToDb(kstDateOnly(eventAt)) } })
+      : await prisma.foundPost.create({ data: { ...base, foundAt: eventAt, foundDate: eventAt && dateOnlyToDb(kstDateOnly(eventAt)) } });
   await embedPostBestEffort(board, row.id, row);
 
   const file = path.join(imageDir, `${key}.jpg`);
