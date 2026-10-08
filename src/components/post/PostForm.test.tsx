@@ -68,3 +68,38 @@ describe("PostForm 분실 일시", () => {
     expect(markup).toContain("날짜를 알고 있어요");
   });
 });
+
+// 유실물법 안내: text-only notices -- posting is not the official hand-in,
+// a voluntary reward is not the legal reward, and personal details on ID
+// cards must be covered before uploading.
+function renderNew(type: "lost" | "found") {
+  return renderToStaticMarkup(
+    <I18nProvider locale="ko" messages={ko}>
+      <PostForm type={type} />
+    </I18nProvider>,
+  );
+}
+
+describe("PostForm 유실물법 안내", () => {
+  it("found: says posting is not a police hand-in and names the official routes and the 7-day limit", () => {
+    const markup = renderNew("found");
+    expect(markup).toContain("경찰 신고나 습득물 제출이 아니에요");
+    expect(markup).toContain("경찰서·지구대·파출소에 제출");
+    expect(markup).toContain("건물 관리자에게 인계");
+    expect(markup).toContain("7일 안에");
+    expect(markup).not.toContain(ko["form.lostRewardNotice"]);
+  });
+
+  it("lost: separates a voluntary reward from the legal 5~20% reward", () => {
+    const markup = renderNew("lost");
+    expect(markup).toContain("자율적으로 정하는 선택사항");
+    expect(markup).toContain("5~20%");
+    expect(markup).not.toContain(ko["form.foundLegalNotice"]);
+  });
+
+  it("both: warns to cover personal details on ID cards before uploading photos", () => {
+    for (const type of ["lost", "found"] as const) {
+      expect(renderNew(type)).toContain("신분증·학생증·카드");
+    }
+  });
+});

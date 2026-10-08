@@ -467,8 +467,10 @@ export const en: Dictionary = {
     "Details like color, brand and distinctive features make it easier to find the owner.",
   "form.foundNotice":
     "💡 Before returning it — it is better not to reveal every decisive detail (a unique mark, what is inside) in the description. When someone contacts you, you can ask about the detail you kept private to confirm they are the real owner.",
-  "form.lostRewardNotice": "Offering a reward is optional. It may encourage a return, but neither a return nor payment is guaranteed.",
+  "form.lostRewardNotice": "A reward you mention in your post is voluntary and optional, and it does not guarantee a return or payment. Separately, under the Lost Articles Act, the person who gets an item back may have to pay the finder a legal reward of 5–20% of the item's value (claimable within 1 month of the return). The legal reward is different from a voluntary reward; the service does not set the amount or broker payment.",
   "form.lostRewardPrivacyNotice": "Do not post personal information such as bank account or phone numbers. Use in-service chat for contact and any reward discussion; the service does not broker, hold, or transfer rewards.",
+  "form.foundLegalNotice": "📌 Official handover -- Posting on MJU Find is not a police report or an official hand-in. Return a found item directly to its owner or hand it in to a nearby police station or police box. If you found it somewhere with a manager, such as a campus building, hand it over to the building manager (e.g., the security office). If you neither return it to the owner nor hand it in to the police within 7 days of finding it, you may lose the right to the legal reward and to acquire ownership (Lost Articles Act, Articles 1, 9 and 10).",
+  "form.photoPrivacyNotice": "🔒 For items containing personal information, such as ID cards, student IDs or bank cards, cover names, student numbers, resident registration numbers, card numbers and face photos before uploading a photo, and don't include them in the description. Verify the owner in chat using details you haven't made public.",
   "form.unknownOrganization": "Unknown organization",
   "form.imageLimit": "You can attach up to {max} photos. {rejected} were not added.",
   "form.imageDeleteFailed": "Could not delete the image.",

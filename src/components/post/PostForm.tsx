@@ -591,10 +591,19 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             문구만 덧붙인다. 새로운 "비공개 사진"/"소유권 인증" 기능은
             없다 -- 습득자가 스스로 어떤 특징을 설명에서 빼둘지 판단하도록
             돕는 텍스트일 뿐이다. */}
+        {/* 유실물법 안내: posting here is not the official hand-in -- the
+            finder must still return the item, hand it in to the police
+            (법 제1조), or hand it to the building manager (제10조), within
+            the 7 days of 제9조. Text only; no new procedure is implemented. */}
         {type === "found" && (
-          <p className="rounded-lg bg-primary-muted px-3.5 py-3 text-xs text-primary">
-            {t("form.foundNotice")}
-          </p>
+          <div className="flex flex-col gap-2">
+            <p className="rounded-lg border border-border px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
+              {t("form.foundLegalNotice")}
+            </p>
+            <p className="rounded-lg bg-primary-muted px-3.5 py-3 text-xs text-primary">
+              {t("form.foundNotice")}
+            </p>
+          </div>
         )}
         {type === "lost" && (
           <div className="flex flex-col gap-2">
@@ -828,6 +837,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
         <h2 className="text-sm font-semibold text-foreground">
           {t("form.photos")} <span className="font-normal text-muted-foreground">{t("form.photosOptional")}</span>
         </h2>
+        <p className="text-xs leading-relaxed text-muted-foreground">{t("form.photoPrivacyNotice")}</p>
         <PostImageManager
           items={items}
           disabled={pending}
