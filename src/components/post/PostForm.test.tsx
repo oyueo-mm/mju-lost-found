@@ -87,10 +87,13 @@ describe("PostForm 유실물법 안내", () => {
     expect(markup).toContain("경찰서·지구대·파출소에 제출");
     expect(markup).toContain("건물 관리자에게 인계");
     expect(markup).toContain("7일 안에");
-    // 제9조's 7-day hand-in is not presented as required on top of a proper
-    // handover to the building manager (제10조).
-    expect(markup).toContain("관리자에게 인계하는 경우가 아니라면 습득일부터 7일 안에");
-    expect(markup).toContain("이후 처리는 관리자 측 절차를 따라요");
+    // 제9조's 7-day rule is stated as the law words it, separately from the
+    // 제10조 manager handover, with no exception asserted either way and the
+    // rights after a handover left to the manager or police.
+    expect(markup).toContain("건물 관리자에게 인계해야 해요(제10조)");
+    expect(markup).toContain("7일 안에 소유자 반환이나 경찰 제출 절차를 밟지 않은 습득자는");
+    expect(markup).toContain("제10조가 따로 정하고 있으니");
+    expect(markup).not.toContain("경우가 아니라면");
     expect(markup).not.toContain(ko["form.lostRewardNotice"]);
   });
 
