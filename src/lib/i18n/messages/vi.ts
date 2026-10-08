@@ -47,6 +47,7 @@ export const vi: Dictionary = {
 
   "footer.tagline": "Dịch vụ đăng tin, tìm kiếm và liên hệ về đồ thất lạc dành cho sinh viên Đại học Myongji.",
   "footer.disclaimer": "Đây không phải là dịch vụ chính thức của Đại học Myongji mà là dịch vụ do sinh viên phát triển và vận hành.",
+  "footer.contact": "Liên hệ đội ngũ vận hành",
   "footer.createdBy": "Created by MJU students",
   "footer.copyright":
     "© {year} MYONGJI L&F. Nếu cần phản ánh về một bài đăng, tin nhắn hay người dùng cụ thể, vui lòng dùng chức năng báo cáo trên màn hình đó.",
@@ -402,6 +403,8 @@ export const vi: Dictionary = {
   "auth.login.domainNotice": "Chỉ tài khoản của trường (@mju.ac.kr) hoặc tài khoản bên ngoài được quản trị viên phê duyệt mới có thể đăng nhập.",
   "auth.login.noAccount": "Bạn chưa có tài khoản Myongji?",
   "auth.login.accountGuide": "Xem cách tạo tài khoản",
+  "auth.login.troublePrompt": "Bạn gặp vấn đề khi đăng nhập?",
+  "auth.login.contactSupport": "Liên hệ đội ngũ vận hành",
   "auth.login.error.accessDenied": "Chỉ tài khoản Đại học Myongji (@mju.ac.kr) hoặc tài khoản bên ngoài được quản trị viên phê duyệt mới sử dụng được.",
   "auth.login.error.default": "Đã xảy ra sự cố khi đăng nhập. Vui lòng thử lại.",
   "auth.login.reason.write": "Vui lòng đăng nhập để viết hoặc sửa bài.",

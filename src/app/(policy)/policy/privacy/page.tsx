@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
+
 // Phase 9: mirrors the exact items/purposes shown at consent time
 // (src/app/(auth)/privacy-consent/page.tsx's own COLLECTED_ITEMS) so the
 // two never drift apart in what they claim is collected -- both are drawn
@@ -233,8 +235,8 @@ const SECTIONS: Section[] = [
     body: (
       <>
         개인정보 처리와 관련한 문의, 열람·정정·삭제·처리정지 요청은 개인정보 문의 담당(
-        <a href="mailto:mjusmartlostfound@gmail.com" className="font-medium text-primary hover:opacity-80">
-          mjusmartlostfound@gmail.com
+        <a href={SUPPORT_MAILTO} className="font-medium text-primary hover:opacity-80">
+          {SUPPORT_EMAIL}
         </a>
         )으로 연락해주세요. 특정 게시물·메시지·사용자와 관련된 문제는 해당 화면의{" "}
         <Link href="/policy/community" className="font-medium text-primary hover:opacity-80">

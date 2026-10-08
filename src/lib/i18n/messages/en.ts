@@ -49,6 +49,7 @@ export const en: Dictionary = {
 
   "footer.tagline": "A lost-and-found posting, search and contact service for Myongji University students.",
   "footer.disclaimer": "This is not an official Myongji University service; it is developed and operated by students.",
+  "footer.contact": "Contact the team",
   "footer.createdBy": "Created by MJU students",
   "footer.copyright":
     "© {year} MYONGJI L&F. To raise an issue about a specific post, message or user, please use the report feature on that screen.",
@@ -404,6 +405,8 @@ export const en: Dictionary = {
   "auth.login.domainNotice": "Only Myongji University accounts (@mju.ac.kr) or external accounts approved by an administrator can sign in.",
   "auth.login.noAccount": "Don't have an MJU account?",
   "auth.login.accountGuide": "See how to create one",
+  "auth.login.troublePrompt": "Having trouble signing in?",
+  "auth.login.contactSupport": "Contact the team",
   "auth.login.error.accessDenied": "Only Myongji University accounts (@mju.ac.kr) or external accounts approved by an administrator can use this service.",
   "auth.login.error.default": "Something went wrong while signing in. Please try again.",
   "auth.login.reason.write": "Please sign in to write or edit a post.",

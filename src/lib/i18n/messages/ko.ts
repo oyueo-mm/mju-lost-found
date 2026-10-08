@@ -57,6 +57,7 @@ export const ko = {
   // ---------- Footer ----------
   "footer.tagline": "명지대학교 학생을 위한 분실물 등록·검색·연락 서비스입니다.",
   "footer.disclaimer": "본 서비스는 명지대학교의 공식 서비스가 아닌, 학생이 개발·운영하는 서비스입니다.",
+  "footer.contact": "운영팀 문의",
   "footer.createdBy": "Created by MJU students",
   "footer.copyright":
     "© {year} MYONGJI L&F. 특정 게시물·메시지·사용자에 대한 문의는 해당 화면의 신고 기능을 이용해주세요.",
@@ -429,6 +430,8 @@ export const ko = {
   "auth.login.domainNotice": "학교 계정(@mju.ac.kr) 또는 관리자가 승인한 외부 관계자 계정만 로그인할 수 있습니다.",
   "auth.login.noAccount": "명지대 계정이 없으신가요?",
   "auth.login.accountGuide": "명지대 계정 생성 방법 보기",
+  "auth.login.troublePrompt": "로그인에 문제가 있으신가요?",
+  "auth.login.contactSupport": "운영팀에 문의하기",
   "auth.login.error.accessDenied": "명지대학교 계정(@mju.ac.kr) 또는 관리자가 승인한 외부 관계자 계정만 이용할 수 있습니다.",
   "auth.login.error.default": "로그인 중 문제가 발생했습니다. 다시 시도해주세요.",
   "auth.login.reason.write": "게시글을 작성하거나 수정하려면 로그인해주세요.",

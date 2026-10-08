@@ -32,7 +32,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // on a later login. email/email_verified (the signIn callback's own
       // @mju.ac.kr gate) and `sub` (googleId) both come from `openid
       // email` alone -- neither needs `profile`.
-      authorization: { params: { scope: "openid email" } },
+      //
+      // Login UX: prompt=select_account makes Google show its account
+      // chooser every time. Without it, a browser with one signed-in Google
+      // account (or one that already consented) is sent straight back as
+      // that same account -- so after a non-allowed account is rejected
+      // (signIn callback -> /login?error=AccessDenied), pressing the button
+      // again silently picks it again and the user can never switch to
+      // their @mju.ac.kr account. This only affects the chooser; who may
+      // sign in is still decided solely by the signIn callback below.
+      authorization: { params: { scope: "openid email", prompt: "select_account" } },
     }),
   ],
   session: { strategy: "jwt" },

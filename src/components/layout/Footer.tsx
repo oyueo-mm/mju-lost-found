@@ -5,6 +5,7 @@ import { LocaleSwitcher } from "@/components/layout/LocaleSwitcher";
 import { FooterSections } from "@/components/layout/FooterSections";
 import { getTranslator } from "@/lib/i18n/server";
 import type { TranslationKey } from "@/lib/i18n/translate";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 
 // Phase 9: this app's first Footer -- there was none before (checked
 // before writing this). Placed in (main)/layout.tsx, after <main> and
@@ -125,6 +126,15 @@ export async function Footer() {
             {/* Legal pre-beta Phase: shown on every screen size (it used to
                 be desktop-only), since most users are on phones. */}
             <p className="text-xs text-muted-foreground">{t("footer.disclaimer")}</p>
+            {/* 운영팀 문의: the privacy policy's existing contact address
+                (lib/contact.ts), shown on every screen size so a visitor who
+                isn't signed in can reach the team without an account. */}
+            <p className="text-xs text-muted-foreground">
+              {t("footer.contact")}:{" "}
+              <a href={SUPPORT_MAILTO} className="break-all text-primary transition-colors hover:opacity-80">
+                {SUPPORT_EMAIL}
+              </a>
+            </p>
             <p className="text-[11px] text-muted-foreground/80">{t("footer.createdBy")}</p>
           </div>
 
@@ -162,12 +172,12 @@ export async function Footer() {
           <LocaleSwitcher />
         </div>
 
-        {/* No fabricated business registration number/address/phone/
-            support email -- none of those exist in this app or its
-            operation, and this phase's own rule is not to invent them.
-            The only real, in-app way to raise a problem with specific
-            content is the existing 신고 기능 (Report), pointed to from
-            운영정책 instead of repeated here. */}
+        {/* No fabricated business registration number/address/phone --
+            none of those exist in this app or its operation, and this
+            phase's own rule is not to invent them. The one real contact
+            address (lib/contact.ts) is shown in the brand block above;
+            problems with specific content still go through the in-app
+            신고 기능 (Report), pointed to from 운영정책. */}
         <p className="border-t border-border pt-4 text-[11px] text-muted-foreground">
           {t("footer.copyright", { year: new Date().getFullYear() })}
         </p>

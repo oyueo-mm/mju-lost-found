@@ -47,6 +47,7 @@ export const zh: Dictionary = {
 
   "footer.tagline": "面向明知大学学生的失物登记、搜索与联系服务。",
   "footer.disclaimer": "本服务并非明知大学的官方服务，而是由学生开发和运营的服务。",
+  "footer.contact": "联系运营团队",
   "footer.createdBy": "Created by MJU students",
   "footer.copyright": "© {year} MYONGJI L&F。如需反馈特定帖子、消息或用户，请使用该页面的举报功能。",
   "footer.section.service": "服务",
@@ -399,6 +400,8 @@ export const zh: Dictionary = {
   "auth.login.domainNotice": "仅学校账号（@mju.ac.kr）或经管理员批准的外部账号可以登录。",
   "auth.login.noAccount": "还没有明知大学账号？",
   "auth.login.accountGuide": "查看账号创建方法",
+  "auth.login.troublePrompt": "登录遇到问题？",
+  "auth.login.contactSupport": "联系运营团队",
   "auth.login.error.accessDenied": "仅明知大学账号（@mju.ac.kr）或经管理员批准的外部账号可以使用。",
   "auth.login.error.default": "登录时出现问题，请重试。",
   "auth.login.reason.write": "撰写或编辑帖子需要先登录。",

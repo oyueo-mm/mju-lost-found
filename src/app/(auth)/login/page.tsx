@@ -8,6 +8,7 @@ import { LogoMark } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/Button";
 import { getTranslator } from "@/lib/i18n/server";
 import type { TranslationKey } from "@/lib/i18n/translate";
+import { SUPPORT_MAILTO } from "@/lib/contact";
 
 // 다국어(i18n) Phase: 문구 대신 번역 키를 담는다 -- 키/분기 구조는
 // 그대로이고, 실제 문장만 현재 언어로 바뀐다.
@@ -149,7 +150,10 @@ export default async function LoginPage({
             suppressed only while test mode is on -- the underlying rule
             itself (and its server-side enforcement) is unchanged, this is
             purely about not showing two contradictory sentences at once. */}
-        {!googleTestModeEnabled && (
+        {/* Login UX: the AccessDenied error box above already says exactly
+            which accounts may sign in -- repeating it here showed the same
+            restriction twice. */}
+        {!googleTestModeEnabled && error !== "AccessDenied" && (
           <p className="text-xs text-muted-foreground">
             {t("auth.login.domainNotice")}
           </p>
@@ -160,6 +164,14 @@ export default async function LoginPage({
           <Link href="/account-guide" className="text-sm font-medium text-primary hover:opacity-80">
             {t("auth.login.accountGuide")}
           </Link>
+          {/* Reachable without signing in -- the one place a user who can't
+              log in can still ask for help. */}
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t("auth.login.troublePrompt")}{" "}
+            <a href={SUPPORT_MAILTO} className="font-medium text-primary hover:opacity-80">
+              {t("auth.login.contactSupport")}
+            </a>
+          </p>
         </div>
       </div>
     </div>

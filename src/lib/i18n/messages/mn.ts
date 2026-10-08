@@ -48,6 +48,7 @@ export const mn: Dictionary = {
   "footer.tagline":
     "Мёнжи их сургуулийн оюутнуудад зориулсан гээгдсэн эд зүйл бүртгэх, хайх, холбоо барих үйлчилгээ.",
   "footer.disclaimer": "Энэ нь Мёнжи их сургуулийн албан ёсны үйлчилгээ биш бөгөөд оюутнууд хөгжүүлж, ажиллуулдаг үйлчилгээ юм.",
+  "footer.contact": "Ажиллуулах багтай холбогдох",
   "footer.createdBy": "Created by MJU students",
   "footer.copyright":
     "© {year} MYONGJI L&F. Тодорхой нийтлэл, мессеж, хэрэглэгчийн талаар санал гомдол байвал тухайн дэлгэц дэх мэдээлэх товчийг ашиглана уу.",
@@ -404,6 +405,8 @@ export const mn: Dictionary = {
   "auth.login.domainNotice": "Зөвхөн сургуулийн бүртгэл (@mju.ac.kr) эсвэл админы баталсан гадны бүртгэлээр нэвтрэх боломжтой.",
   "auth.login.noAccount": "Мёнжийн бүртгэл байхгүй юу?",
   "auth.login.accountGuide": "Бүртгэл үүсгэх аргыг харах",
+  "auth.login.troublePrompt": "Нэвтрэхэд асуудал гарсан уу?",
+  "auth.login.contactSupport": "Ажиллуулах багт хандах",
   "auth.login.error.accessDenied": "Зөвхөн Мёнжи их сургуулийн бүртгэл (@mju.ac.kr) эсвэл админы баталсан гадны бүртгэл ашиглах боломжтой.",
   "auth.login.error.default": "Нэвтрэхэд алдаа гарлаа. Дахин оролдоно уу.",
   "auth.login.reason.write": "Нийтлэл бичих, засахын тулд нэвтэрнэ үү.",
