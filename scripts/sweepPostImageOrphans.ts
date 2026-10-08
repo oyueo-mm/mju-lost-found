@@ -11,7 +11,11 @@
 // Delete:
 //   ... scripts/sweepPostImageOrphans.ts --apply
 // Production additionally needs --confirm-production. Run a dry run and
-// get the cleanup approved before any --apply.
+// get the cleanup approved before any --apply. Only posts/{lost|found}/
+// {id}/{uuid}.{ext} files can be candidates (others are listed under
+// unrecognizedPath), legacy post-images URLs in Message.image_url are
+// protected, and --apply is refused while any Message.image_url value
+// can't be classified (messageImageRefs.unclassifiable > 0).
 //
 // The DB and the Storage project must be the same environment: a mismatch
 // would make every file look unreferenced, so it's refused.
@@ -60,6 +64,8 @@ async function main() {
         orphans: { minAgeHours, count: result.orphans.length, bytes, paths: result.orphans.slice(0, 50).map((o) => o.path) },
         recentUnreferenced: result.recentUnreferenced.length,
         unknownAgeUnreferenced: result.unknownAgeUnreferenced.length,
+        unrecognizedPath: { count: result.unrecognizedPath.length, paths: result.unrecognizedPath.slice(0, 20).map((o) => o.path) },
+        messageImageRefs: result.messageRefs,
         deleted: result.deleted,
         failed: result.failed,
       },

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
 
 import { POST_IMAGES_BUCKET } from "./config";
+import { isValidImagePathname, parseChatImagePathname } from "./pathname";
 import { deletePostImagePaths, pathnameFromPublicUrl } from "./supabaseAdmin";
 
 // 개인정보 감사: post-images is a public bucket, so a file left behind by a
@@ -15,6 +16,17 @@ import { deletePostImagePaths, pathnameFromPublicUrl } from "./supabaseAdmin";
 // alone, since an upload is stored before it's attached to its post (the
 // signed upload URL alone is valid ~2 hours), and objects whose creation
 // time Storage didn't report are never treated as orphans.
+//
+// Two more safeguards:
+// - Only files named the way this app names post images
+//   (posts/{lost|found}/{id}/{uuid}.{ext}, isValidImagePathname) can be
+//   orphans. Anything else in the bucket -- .emptyFolderPlaceholder, a
+//   manual upload, an older chat/{room}/... file -- is reported and left.
+// - Chat messages once stored full post-images URLs in Message.image_url
+//   (before the private chat-images bucket). Such URLs count as
+//   references. A value that is neither a current chat-images path nor one
+//   of this bucket's URLs can't be judged, so --apply is refused while any
+//   exists.
 
 export const DEFAULT_ORPHAN_MIN_AGE_HOURS = 24;
 
@@ -24,7 +36,34 @@ export type OrphanSelection = {
   orphans: StoredObject[];
   recentUnreferenced: StoredObject[];
   unknownAgeUnreferenced: StoredObject[];
+  // Not a post-image path this app writes -- never deleted.
+  unrecognizedPath: StoredObject[];
 };
+
+export type MessageImageRefs = {
+  // post-images paths still referenced by a message (legacy full URLs).
+  postImagePaths: Set<string>;
+  // Current private chat-images paths -- not this bucket.
+  chatImagePaths: number;
+  // Anything else: can't tell whether it points into this bucket.
+  unclassifiable: number;
+};
+
+// Pure: sorts Message.image_url values into the three kinds above.
+export function classifyMessageImageRefs(values: (string | null)[]): MessageImageRefs {
+  const refs: MessageImageRefs = { postImagePaths: new Set(), chatImagePaths: 0, unclassifiable: 0 };
+  for (const value of values) {
+    if (value === null) continue;
+    if (parseChatImagePathname(value)) {
+      refs.chatImagePaths++;
+      continue;
+    }
+    const path = pathnameFromPublicUrl(value);
+    if (path) refs.postImagePaths.add(path);
+    else refs.unclassifiable++;
+  }
+  return refs;
+}
 
 // Pure: which stored objects count as orphans.
 export function selectPostImageOrphans(
@@ -34,10 +73,11 @@ export function selectPostImageOrphans(
   minAgeHours: number = DEFAULT_ORPHAN_MIN_AGE_HOURS,
 ): OrphanSelection {
   const cutoff = now.getTime() - minAgeHours * 3600 * 1000;
-  const selection: OrphanSelection = { orphans: [], recentUnreferenced: [], unknownAgeUnreferenced: [] };
+  const selection: OrphanSelection = { orphans: [], recentUnreferenced: [], unknownAgeUnreferenced: [], unrecognizedPath: [] };
   for (const object of objects) {
     if (referencedPaths.has(object.path)) continue;
-    if (object.createdAt === null) selection.unknownAgeUnreferenced.push(object);
+    if (!isValidImagePathname(object.path)) selection.unrecognizedPath.push(object);
+    else if (object.createdAt === null) selection.unknownAgeUnreferenced.push(object);
     else if (object.createdAt.getTime() < cutoff) selection.orphans.push(object);
     else selection.recentUnreferenced.push(object);
   }
@@ -84,7 +124,18 @@ export async function referencedPostImagePaths(): Promise<Set<string>> {
   return paths;
 }
 
-export type SweepResult = OrphanSelection & { objects: number; referenced: number; deleted: number; failed: number };
+export async function messageImageReferences(): Promise<MessageImageRefs> {
+  const rows = await prisma.message.findMany({ where: { imagePath: { not: null } }, select: { imagePath: true } });
+  return classifyMessageImageRefs(rows.map((row) => row.imagePath));
+}
+
+export type SweepResult = OrphanSelection & {
+  objects: number;
+  referenced: number;
+  messageRefs: { postImagePaths: number; chatImagePaths: number; unclassifiable: number };
+  deleted: number;
+  failed: number;
+};
 
 export async function sweepPostImageOrphans({
   apply,
@@ -99,7 +150,14 @@ export async function sweepPostImageOrphans({
   // bucket is being listed still protects its file.
   const objects = await listPostImageObjects();
   const referenced = await referencedPostImagePaths();
+  const messageRefs = await messageImageReferences();
+  for (const path of messageRefs.postImagePaths) referenced.add(path);
   const selection = selectPostImageOrphans(objects, referenced, now, minAgeHours);
+  if (apply && messageRefs.unclassifiable > 0) {
+    throw new Error(
+      `Refusing to delete: ${messageRefs.unclassifiable} Message.image_url value(s) are neither a chat-images path nor a post-images URL of this project.`,
+    );
+  }
   let deleted = 0;
   let failed = 0;
   if (apply) {
@@ -109,5 +167,16 @@ export async function sweepPostImageOrphans({
       else failed += batch.length;
     }
   }
-  return { ...selection, objects: objects.length, referenced: referenced.size, deleted, failed };
+  return {
+    ...selection,
+    objects: objects.length,
+    referenced: referenced.size,
+    messageRefs: {
+      postImagePaths: messageRefs.postImagePaths.size,
+      chatImagePaths: messageRefs.chatImagePaths,
+      unclassifiable: messageRefs.unclassifiable,
+    },
+    deleted,
+    failed,
+  };
 }
