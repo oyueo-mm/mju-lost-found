@@ -87,6 +87,10 @@ describe("PostForm 유실물법 안내", () => {
     expect(markup).toContain("경찰서·지구대·파출소에 제출");
     expect(markup).toContain("건물 관리자에게 인계");
     expect(markup).toContain("7일 안에");
+    // 제9조's 7-day hand-in is not presented as required on top of a proper
+    // handover to the building manager (제10조).
+    expect(markup).toContain("관리자에게 인계하는 경우가 아니라면 습득일부터 7일 안에");
+    expect(markup).toContain("이후 처리는 관리자 측 절차를 따라요");
     expect(markup).not.toContain(ko["form.lostRewardNotice"]);
   });
 
@@ -101,5 +105,15 @@ describe("PostForm 유실물법 안내", () => {
     for (const type of ["lost", "found"] as const) {
       expect(renderNew(type)).toContain("신분증·학생증·카드");
     }
+  });
+});
+
+describe("분실물 상세 안내 문구", () => {
+  it("says hand in (제출) to the police or hand over to the building manager, not just report", () => {
+    const notice = ko["post.lostPropertyNotice"];
+    expect(notice).toContain("경찰서·지구대·파출소");
+    expect(notice).toContain("에 제출해주세요");
+    expect(notice).toContain("건물 관리자에게 인계");
+    expect(notice).not.toContain("신고해주세요");
   });
 });
