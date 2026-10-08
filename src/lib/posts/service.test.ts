@@ -27,7 +27,12 @@ const postImage = { findMany: vi.fn() };
 const chatRoom = { updateMany: vi.fn(), deleteMany: vi.fn(), delete: vi.fn() };
 // The delete runs inside an interactive transaction; the tx is the same
 // mocked tables so assertions read the same way.
-const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn({ lostPost, foundPost, postImage, chatRoom }));
+const postView = { deleteMany: vi.fn() };
+const matchCandidateCache = { deleteMany: vi.fn() };
+const $executeRaw = vi.fn();
+const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
+  fn({ lostPost, foundPost, postImage, chatRoom, postView, matchCandidateCache, $executeRaw }),
+);
 
 const deleteObjectSafely = vi.fn();
 
@@ -201,6 +206,40 @@ describe("deleteLostPost / deleteFoundPost", () => {
     table.findUnique.mockResolvedValue(row);
     table.delete.mockResolvedValue({});
   }
+
+  // 개인정보 감사: rows derived from the post that no FK cascades.
+  it("deletes the post's view records and cached rankings with it", async () => {
+    mockPost(lostPost, { id: 1, userId: 1, title: "지갑", imageUrl: null });
+
+    await deleteLostPost(1, 1);
+
+    expect(postView.deleteMany).toHaveBeenCalledWith({ where: { postType: "lost", postId: 1 } });
+    expect(matchCandidateCache.deleteMany).toHaveBeenCalledWith({ where: { sourceType: "lost", sourcePostId: 1 } });
+    // The other board's cached rankings that list this post.
+    const [sql, ...values] = $executeRaw.mock.calls[0];
+    expect(sql.join("?")).toContain(`DELETE FROM "MatchCandidateCache" WHERE source_type = ? AND candidates -> 'ranking' @> ?::jsonb`);
+    expect(values).toEqual(["found", JSON.stringify([{ id: 1 }])]);
+  });
+
+  it("uses the found board's own keys for a found post", async () => {
+    mockPost(foundPost, { id: 7, userId: 1, title: "우산", imageUrl: null });
+
+    await deleteFoundPost(7, 1);
+
+    expect(postView.deleteMany).toHaveBeenCalledWith({ where: { postType: "found", postId: 7 } });
+    expect(matchCandidateCache.deleteMany).toHaveBeenCalledWith({ where: { sourceType: "found", sourcePostId: 7 } });
+    expect($executeRaw.mock.calls[0].slice(1)).toEqual(["lost", JSON.stringify([{ id: 7 }])]);
+  });
+
+  it("deletes nothing derived when the post is already gone", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, title: "지갑", imageUrl: null }).mockResolvedValueOnce(null);
+
+    await deleteLostPost(1, 1);
+
+    expect(postView.deleteMany).not.toHaveBeenCalled();
+    expect(matchCandidateCache.deleteMany).not.toHaveBeenCalled();
+    expect($executeRaw).not.toHaveBeenCalled();
+  });
 
   it("allows the owner to delete their own post", async () => {
     mockPost(lostPost, { id: 1, userId: 1, title: "지갑", imageUrl: null });

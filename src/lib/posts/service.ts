@@ -573,7 +573,25 @@ export async function deleteFoundPost(
   return { kind: "ok", data: { id } };
 }
 
-type PostDeleteTx = Pick<Prisma.TransactionClient, "lostPost" | "foundPost" | "postImage" | "chatRoom">;
+type PostDeleteTx = Pick<
+  Prisma.TransactionClient,
+  "lostPost" | "foundPost" | "postImage" | "chatRoom" | "postView" | "matchCandidateCache" | "$executeRaw"
+>;
+
+// 개인정보 감사: rows derived from a post that no FK ties to it, so they
+// would otherwise outlive it -- its view records (viewerKey = a user id
+// or an anon_uid cookie value), its own cached recommendation ranking,
+// and every cached ranking on the other board that lists it. The latter
+// are only {id, score} pairs and a deleted id is already skipped when a
+// ranking is shown (PUBLIC_POST_WHERE), but they're dropped too so the
+// next view recomputes them without it. View counts (viewCount on the
+// post rows) are not touched.
+export async function deletePostDerivedDataInTx(tx: PostDeleteTx, type: PostType, id: number): Promise<void> {
+  await tx.postView.deleteMany({ where: { postType: type, postId: id } });
+  await tx.matchCandidateCache.deleteMany({ where: { sourceType: type, sourcePostId: id } });
+  const otherType: PostType = type === "lost" ? "found" : "lost";
+  await tx.$executeRaw`DELETE FROM "MatchCandidateCache" WHERE source_type = ${otherType} AND candidates -> 'ranking' @> ${JSON.stringify([{ id }])}::jsonb`;
+}
 
 // Deletes one post row inside the caller's transaction -- the single
 // delete path shared by the owner/admin delete above and the report-
@@ -588,6 +606,8 @@ type PostDeleteTx = Pick<Prisma.TransactionClient, "lostPost" | "foundPost" | "p
 // - Chats that started from it: kept. ChatRoom's post FK is ON DELETE SET
 //   NULL; the room's title snapshot is refreshed here first so it shows
 //   the post's final title. Their messages and chat images are untouched.
+// - View records and cached recommendation rankings: deleted
+//   (deletePostDerivedDataInTx above -- no FK cascades them).
 export async function deletePostRowInTx(tx: PostDeleteTx, type: PostType, id: number): Promise<string[] | null> {
   const post =
     type === "lost"
@@ -609,6 +629,7 @@ export async function deletePostRowInTx(tx: PostDeleteTx, type: PostType, id: nu
   } else {
     await tx.foundPost.delete({ where: { id } });
   }
+  await deletePostDerivedDataInTx(tx, type, id);
 
   const urls = new Set<string>();
   if (post.imageUrl) urls.add(post.imageUrl);

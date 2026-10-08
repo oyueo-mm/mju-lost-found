@@ -7,7 +7,7 @@ import { soleLeaderOrganizationNames } from "@/lib/auth/user";
 import { CURRENT_IDENTITY_KEY_VERSION, identityHmac, identitySubject } from "@/lib/auth/withdrawnIdentity";
 import { removeCommentInTx } from "@/lib/comment/remove";
 import { deleteChatImageSafely } from "@/lib/images/chatStorage";
-import { deletePostRowInTx, deletePostStorageObjects } from "@/lib/posts/service";
+import { deletePostDerivedDataInTx, deletePostRowInTx, deletePostStorageObjects } from "@/lib/posts/service";
 import { encodePostTargetId } from "@/lib/report/targets";
 import { evidenceReleased, type ReportFacts } from "@/lib/retention/policy";
 import { NotificationType, OrganizationRequestStatus, ReportTargetType, type Prisma } from "@/generated/prisma/client";
@@ -83,7 +83,9 @@ export async function clearPostInTx(tx: Tx, kind: PostKind, id: number, removedA
     await tx.foundPost.update({ where: { id }, data: { ...cleared, foundAt: null, foundDate: null } });
     await tx.$executeRaw`UPDATE "FoundPost" SET embedding = NULL, "imageEmbedding" = NULL WHERE id = ${id}`;
   }
-  await tx.matchCandidateCache.deleteMany({ where: { sourceType: kind, sourcePostId: id } });
+  // The emptied post is no longer public: same derived-data cleanup as a
+  // full delete (views, its own and the other board's cached rankings).
+  await deletePostDerivedDataInTx(tx, kind, id);
   const urls = new Set(images.map((i) => i.imageUrl));
   if (post?.imageUrl) urls.add(post.imageUrl);
   return [...urls];

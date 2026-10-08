@@ -52,16 +52,44 @@ export function pathnameFromPublicUrl(url: string): string | null {
 // succeeded in the DB. Mirrors the legacy Vercel Blob module's
 // deleteBlobSafely() (same name kept in spirit, not literally, since this
 // takes the stored public URL and resolves it to a path itself).
-export async function deleteObjectSafely(publicUrl: string): Promise<void> {
+//
+// 개인정보 감사: post-images is a public bucket, so a file whose delete
+// failed stays reachable by URL. A transient failure is retried a few
+// times (remove() is idempotent -- an already-removed path is not an
+// error); a file that still can't be removed is left to the orphan sweep
+// (postImageOrphans.ts), which finds objects no row references any more.
+export const DELETE_ATTEMPTS = 3;
+const DELETE_RETRY_BASE_MS = 200;
+
+export async function deletePostImagePaths(
+  paths: string[],
+  { attempts = DELETE_ATTEMPTS, baseDelayMs = DELETE_RETRY_BASE_MS }: { attempts?: number; baseDelayMs?: number } = {},
+): Promise<boolean> {
+  if (paths.length === 0) return true;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const { error } = await getAdminClient().storage.from(POST_IMAGES_BUCKET).remove(paths);
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      if (attempt === attempts) {
+        console.error(`Failed to delete storage object(s) after ${attempts} attempts:`, paths, error);
+        return false;
+      }
+      await new Promise((resolve) => setTimeout(resolve, baseDelayMs * 2 ** (attempt - 1)));
+    }
+  }
+  return false;
+}
+
+export async function deleteObjectSafely(
+  publicUrl: string,
+  options?: { attempts?: number; baseDelayMs?: number },
+): Promise<void> {
   const path = pathnameFromPublicUrl(publicUrl);
   if (!path) {
     console.error("Failed to delete storage object: URL is not a recognized post-images URL", publicUrl);
     return;
   }
-  try {
-    const { error } = await getAdminClient().storage.from(POST_IMAGES_BUCKET).remove([path]);
-    if (error) throw error;
-  } catch (error) {
-    console.error("Failed to delete storage object:", path, error);
-  }
+  await deletePostImagePaths([path], options);
 }

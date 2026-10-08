@@ -8,7 +8,7 @@ const createClient = vi.fn(() => ({ storage: { from } }));
 
 vi.mock("@supabase/supabase-js", () => ({ createClient }));
 
-const { createSignedUploadUrl: mintUrl, publicUrlFor, pathnameFromPublicUrl, deleteObjectSafely } =
+const { createSignedUploadUrl: mintUrl, publicUrlFor, pathnameFromPublicUrl, deleteObjectSafely, deletePostImagePaths, DELETE_ATTEMPTS } =
   await import("./supabaseAdmin");
 
 const ORIGINAL_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -71,16 +71,50 @@ describe("deleteObjectSafely", () => {
     expect(remove).toHaveBeenCalledWith(["posts/lost/1/x.jpg"]);
   });
 
-  it("swallows a remove() failure instead of throwing", async () => {
-    remove.mockResolvedValueOnce({ data: null, error: { message: "network error" } });
+  it("swallows a remove() failure instead of throwing, after retrying", async () => {
+    remove.mockResolvedValue({ data: null, error: { message: "network error" } });
 
     await expect(
-      deleteObjectSafely("https://project.supabase.co/storage/v1/object/public/post-images/x.jpg"),
+      deleteObjectSafely("https://project.supabase.co/storage/v1/object/public/post-images/x.jpg", { baseDelayMs: 0 }),
     ).resolves.toBeUndefined();
+    expect(remove).toHaveBeenCalledTimes(DELETE_ATTEMPTS);
+  });
+
+  // 개인정보 감사: post-images is public, so a transient failure must not
+  // leave the file reachable.
+  it("retries a transient failure and stops once the remove succeeds", async () => {
+    remove
+      .mockResolvedValueOnce({ data: null, error: { message: "503" } })
+      .mockRejectedValueOnce(new Error("socket hang up"))
+      .mockResolvedValueOnce({ data: [], error: null });
+
+    await deleteObjectSafely("https://project.supabase.co/storage/v1/object/public/post-images/posts/lost/1/x.jpg", {
+      baseDelayMs: 0,
+    });
+
+    expect(remove).toHaveBeenCalledTimes(3);
+    expect(remove).toHaveBeenLastCalledWith(["posts/lost/1/x.jpg"]);
   });
 
   it("does nothing (and doesn't throw) for a URL that isn't recognized as ours", async () => {
     await expect(deleteObjectSafely("https://attacker.example/fake.jpg")).resolves.toBeUndefined();
+    expect(remove).not.toHaveBeenCalled();
+  });
+});
+
+describe("deletePostImagePaths", () => {
+  it("reports success or final failure, and skips an empty list", async () => {
+    remove.mockResolvedValueOnce({ data: [], error: null });
+    expect(await deletePostImagePaths(["a.jpg", "b.jpg"], { baseDelayMs: 0 })).toBe(true);
+    expect(remove).toHaveBeenCalledWith(["a.jpg", "b.jpg"]);
+
+    remove.mockReset();
+    remove.mockResolvedValue({ data: null, error: { message: "down" } });
+    expect(await deletePostImagePaths(["a.jpg"], { attempts: 2, baseDelayMs: 0 })).toBe(false);
+    expect(remove).toHaveBeenCalledTimes(2);
+
+    remove.mockReset();
+    expect(await deletePostImagePaths([])).toBe(true);
     expect(remove).not.toHaveBeenCalled();
   });
 });
