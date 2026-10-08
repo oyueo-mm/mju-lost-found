@@ -11,6 +11,12 @@ import { Button } from "@/components/ui/Button";
 // already establish for this app's admin/settings forms: simpler than
 // wiring a <form action={...}> + useActionState just to get a typed
 // result back.
+// 공지 본문 입력창 (등록·수정 공용): long announcements need room to write
+// and review -- about 280px on mobile, 400px from md up, still resizable
+// vertically by the admin.
+export const ANNOUNCEMENT_CONTENT_CLASS =
+  "h-70 resize-y rounded-lg border border-border bg-transparent px-3.5 py-2.5 text-sm text-foreground disabled:opacity-60 md:h-100";
+
 export function CreateAnnouncementForm() {
   const router = useRouter();
   const [title, setTitle] = useState("");
@@ -63,10 +69,9 @@ export function CreateAnnouncementForm() {
           value={content}
           onChange={(e) => setContent(e.target.value)}
           maxLength={5000}
-          rows={4}
           required
           disabled={pending}
-          className="rounded-lg border border-border bg-transparent px-3.5 py-2.5 text-sm text-foreground disabled:opacity-60"
+          className={ANNOUNCEMENT_CONTENT_CLASS}
         />
       </label>
 

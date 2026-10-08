@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { deleteAnnouncementAction, updateAnnouncementAction } from "@/app/(main)/admin/announcements/actions";
 import { Button } from "@/components/ui/Button";
+import { ANNOUNCEMENT_CONTENT_CLASS } from "./CreateAnnouncementForm";
 
 type AnnouncementRowProps = {
   id: number;
@@ -86,10 +87,9 @@ export function AnnouncementRow({
           value={editContent}
           onChange={(e) => setEditContent(e.target.value)}
           maxLength={5000}
-          rows={4}
           required
           disabled={pending}
-          className="rounded-lg border border-border bg-transparent px-3.5 py-2.5 text-sm text-foreground disabled:opacity-60"
+          className={ANNOUNCEMENT_CONTENT_CLASS}
         />
         {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="flex gap-2">
