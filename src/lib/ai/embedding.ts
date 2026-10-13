@@ -4,6 +4,7 @@ import path from "node:path";
 // real (heavy) module load the way TransformersEmbeddingProvider's dynamic
 // `import()` below does.
 import type { FeatureExtractionPipeline } from "@huggingface/transformers";
+import { ONNX_SESSION_OPTIONS } from "./onnxSessionOptions";
 
 // Server-only: TransformersEmbeddingProvider below pulls in
 // @huggingface/transformers + onnxruntime-node (a native addon) and a
@@ -110,6 +111,8 @@ export class TransformersEmbeddingProvider implements EmbeddingProvider {
           // ("model_quantized.onnx", which doesn't exist in this repo).
           model_file_name: "model_qint8_avx512_vnni",
           local_files_only: true,
+          // One ONNX Runtime thread -- see onnxSessionOptions.ts.
+          session_options: { ...ONNX_SESSION_OPTIONS },
         });
       });
     }

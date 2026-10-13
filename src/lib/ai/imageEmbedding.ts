@@ -1,4 +1,5 @@
 import path from "node:path";
+import { ONNX_SESSION_OPTIONS } from "./onnxSessionOptions";
 
 // Server-only: pulls in @huggingface/transformers + onnxruntime-node (a
 // native addon) and a ~99MB ONNX file, same boundary rule as
@@ -81,7 +82,12 @@ export class TransformersImageEmbeddingProvider implements ImageEmbeddingProvide
           const modelId = "Xenova/siglip-base-patch16-224";
           const [processor, model] = await Promise.all([
             AutoProcessor.from_pretrained(modelId, { local_files_only: true }),
-            SiglipVisionModel.from_pretrained(modelId, { dtype: "q8", local_files_only: true }),
+            // One ONNX Runtime thread -- see onnxSessionOptions.ts.
+            SiglipVisionModel.from_pretrained(modelId, {
+              dtype: "q8",
+              local_files_only: true,
+              session_options: { ...ONNX_SESSION_OPTIONS },
+            }),
           ]);
           return {
             processor: (image: unknown) => processor(image),

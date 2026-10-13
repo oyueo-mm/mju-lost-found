@@ -129,6 +129,9 @@ describe("TransformersEmbeddingProvider", () => {
       expect.objectContaining({
         model_file_name: "model_qint8_avx512_vnni",
         local_files_only: true,
+        // One ONNX Runtime thread (onnxSessionOptions.ts): no spinning
+        // pool threads burning CPU on a ~1 vCPU function.
+        session_options: { intraOpNumThreads: 1, interOpNumThreads: 1 },
       }),
     );
     expect(extractor).toHaveBeenCalledTimes(2);

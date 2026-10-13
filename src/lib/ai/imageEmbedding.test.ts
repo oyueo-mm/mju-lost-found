@@ -47,7 +47,11 @@ describe("TransformersImageEmbeddingProvider", () => {
     expect(siglipVisionModelFromPretrained).toHaveBeenCalledTimes(1);
     expect(siglipVisionModelFromPretrained).toHaveBeenCalledWith(
       "Xenova/siglip-base-patch16-224",
-      expect.objectContaining({ dtype: "q8", local_files_only: true }),
+      expect.objectContaining({
+        dtype: "q8",
+        local_files_only: true,
+        session_options: { intraOpNumThreads: 1, interOpNumThreads: 1 },
+      }),
     );
   });
 
