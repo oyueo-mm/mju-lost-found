@@ -20,8 +20,14 @@ const foundPost = {
 // Phase 23: updateLostPost/updateFoundPost invalidate this cache after a
 // re-embed -- see aiService.ts's invalidateMatchCandidateCache().
 const matchCandidateCache = { deleteMany: vi.fn() };
-// 게시판 상태 변경 이력
+// 게시판 상태 변경 이력: a status update runs in $transaction -- the
+// callback gets the same mocks as the transaction client, plus the row
+// lock ($queryRaw).
 const postStatusChange = { create: vi.fn() };
+const $queryRaw = vi.fn();
+const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
+  fn({ lostPost, foundPost, postStatusChange, $queryRaw }),
+);
 
 // Phase H-5-1: createLostPost/createFoundPost/updateLostPost/updateFoundPost
 // now defer embedPostBestEffort() (and, for updates, the match-candidate-
@@ -58,7 +64,9 @@ const findPostsByImageQuery = vi.fn();
 // cosine lookup, mocked the same way.
 const findCandidateCosinesForQuery = vi.fn();
 
-vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost, matchCandidateCache, postStatusChange } }));
+vi.mock("@/lib/db/prisma", () => ({
+  prisma: { lostPost, foundPost, matchCandidateCache, postStatusChange, $queryRaw, $transaction },
+}));
 vi.mock("@/generated/prisma/client", () => ({
   LostPostStatus: { SEARCHING: "SEARCHING", FOUND: "FOUND" },
   FoundPostStatus: { KEEPING: "KEEPING", COMPLETED: "COMPLETED" },
@@ -866,13 +874,17 @@ describe("updateLostPost", () => {
       user: { id: 1, nickname: "닉네임" },
     });
 
-    it("records 완료 -> 보관 중 (putting a post back) with who changed it, without re-embedding", async () => {
-      foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, status: "COMPLETED" });
+    it("records 완료 -> 보관 중 (putting a post back) in the same transaction, without re-embedding", async () => {
+      foundPost.findUnique
+        .mockResolvedValueOnce({ id: 2, userId: 1, status: "COMPLETED" })
+        .mockResolvedValueOnce({ status: "COMPLETED" }); // re-read under the row lock
       foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
 
       const result = await updateFoundPost(2, 1, { status: "보관 중" });
 
       expect(result.kind).toBe("ok");
+      expect($transaction).toHaveBeenCalledTimes(1);
+      expect(($queryRaw.mock.calls[0][0] as string[]).join("?")).toMatch(/FROM "FoundPost" WHERE id = \? FOR UPDATE/);
       expect(foundPost.update).toHaveBeenCalledWith(expect.objectContaining({ data: { status: "KEEPING" } }));
       expect(postStatusChange.create).toHaveBeenCalledWith({
         data: { postType: "found", postId: 2, fromStatus: "완료", toStatus: "보관 중", changedByUserId: 1 },
@@ -880,8 +892,23 @@ describe("updateLostPost", () => {
       expect(embedPostBestEffort).not.toHaveBeenCalled();
     });
 
-    it("records nothing when the status doesn't change or isn't sent", async () => {
-      foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, status: "KEEPING" });
+    it("records the status the update actually replaced, read under the lock", async () => {
+      // Another edit already put it back between the first read and the lock.
+      foundPost.findUnique
+        .mockResolvedValueOnce({ id: 2, userId: 1, status: "COMPLETED" })
+        .mockResolvedValueOnce({ status: "KEEPING" });
+      foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
+
+      const result = await updateFoundPost(2, 1, { status: "보관 중" });
+
+      expect(result.kind).toBe("ok");
+      expect(postStatusChange.create).not.toHaveBeenCalled();
+    });
+
+    it("records nothing when the status doesn't change, and skips the transaction when it isn't sent", async () => {
+      foundPost.findUnique
+        .mockResolvedValueOnce({ id: 2, userId: 1, status: "KEEPING" })
+        .mockResolvedValueOnce({ status: "KEEPING" });
       foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
       await updateFoundPost(2, 1, { status: "보관 중" });
 
@@ -890,20 +917,32 @@ describe("updateLostPost", () => {
       await updateFoundPost(2, 1, { title: "새 제목" });
 
       expect(postStatusChange.create).not.toHaveBeenCalled();
+      expect($transaction).toHaveBeenCalledTimes(1);
     });
 
-    it("records a lost post's change too, and a failed history write doesn't fail the edit", async () => {
-      vi.spyOn(console, "error").mockImplementation(() => {});
-      postStatusChange.create.mockRejectedValueOnce(new Error("db down"));
-      lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, status: "SEARCHING" });
+    it("records a lost post's change too", async () => {
+      lostPost.findUnique
+        .mockResolvedValueOnce({ id: 1, userId: 1, status: "SEARCHING" })
+        .mockResolvedValueOnce({ status: "SEARCHING" });
       lostPost.update.mockResolvedValueOnce({ ...foundRow("FOUND"), id: 1, lostAt: null, lostDate: null });
 
       const result = await updateLostPost(1, 1, { status: "찾음" });
 
       expect(result.kind).toBe("ok");
+      expect(($queryRaw.mock.calls[0][0] as string[]).join("?")).toMatch(/FROM "LostPost" WHERE id = \? FOR UPDATE/);
       expect(postStatusChange.create).toHaveBeenCalledWith({
         data: { postType: "lost", postId: 1, fromStatus: "찾는 중", toStatus: "찾음", changedByUserId: 1 },
       });
+    });
+
+    it("fails the edit when the history can't be written (the transaction rolls the status back)", async () => {
+      postStatusChange.create.mockRejectedValueOnce(new Error("db down"));
+      foundPost.findUnique
+        .mockResolvedValueOnce({ id: 2, userId: 1, status: "COMPLETED" })
+        .mockResolvedValueOnce({ status: "COMPLETED" });
+      foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
+
+      await expect(updateFoundPost(2, 1, { status: "보관 중" })).rejects.toThrow("db down");
     });
 
     it("doesn't let a non-owner change the status (or write history)", async () => {
@@ -912,6 +951,7 @@ describe("updateLostPost", () => {
       const result = await updateFoundPost(2, 1, { status: "보관 중" });
 
       expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
+      expect($transaction).not.toHaveBeenCalled();
       expect(foundPost.update).not.toHaveBeenCalled();
       expect(postStatusChange.create).not.toHaveBeenCalled();
     });

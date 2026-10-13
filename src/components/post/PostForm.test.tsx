@@ -145,3 +145,46 @@ describe("분실물 상세 안내 문구", () => {
     expect(notice).not.toContain("신고해주세요");
   });
 });
+
+// 연속 등록 ("다음 습득물 등록"): only the campus and 게시 주체 come over.
+describe("PostForm 연속 등록", () => {
+  const renderFound = (props: Partial<Parameters<typeof PostForm>[0]> = {}) =>
+    renderToStaticMarkup(
+      <I18nProvider locale="ko" messages={ko}>
+        <PostForm type="found" {...props} />
+      </I18nProvider>,
+    );
+  const campusButton = (markup: string, campus: string) =>
+    markup.match(new RegExp(`<button[^>]*aria-pressed="(true|false)"[^>]*>${campus}</button>`))?.[1];
+
+  it("starts on the previous post's campus, says what carried over, and leaves the item itself empty", () => {
+    const markup = renderFound({ defaults: { campus: "자연캠퍼스", organizationId: null } });
+    expect(campusButton(markup, "자연캠퍼스")).toBe("true");
+    expect(campusButton(markup, "인문캠퍼스")).toBe("false");
+    expect(markup).toContain(ko["form.nextPostNotice"]);
+    expect(input(markup, "title")).not.toContain("value=");
+    expect(toggle(markup, "발견한 장소")).toMatch(/aria-pressed="true"[^>]*>모름</);
+    expect(toggle(markup, "발견한 날짜")).toMatch(/aria-pressed="true"[^>]*>모름</);
+  });
+
+  it("a plain new form has no notice and the default campus", () => {
+    const markup = renderFound();
+    expect(markup).not.toContain(ko["form.nextPostNotice"]);
+    expect(campusButton(markup, "인문캠퍼스")).toBe("true");
+  });
+
+  it("edit mode ignores defaults", () => {
+    const markup = renderToStaticMarkup(
+      <I18nProvider locale="ko" messages={ko}>
+        <PostForm
+          type="lost"
+          postId={1}
+          initialValues={editValues(null, null)}
+          defaults={{ campus: "자연캠퍼스", organizationId: null }}
+        />
+      </I18nProvider>,
+    );
+    expect(markup).not.toContain(ko["form.nextPostNotice"]);
+    expect(campusButton(markup, "인문캠퍼스")).toBe("true");
+  });
+});

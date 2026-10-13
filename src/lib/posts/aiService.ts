@@ -11,7 +11,7 @@ import { cosineFromNormalizedScore } from "@/lib/ai/matching";
 import { invalidateRecommendationCache } from "@/lib/recommendation/service";
 import { validateOrganizationPosting } from "@/lib/organization/service";
 import { notifyKeywordAlertSubscribers } from "@/lib/keywordAlert/matcher";
-import type { User } from "@/generated/prisma/client";
+import type { Prisma, User } from "@/generated/prisma/client";
 import type {
   CreateFoundPostInput,
   CreateLostPostInput,
@@ -127,21 +127,12 @@ export async function createLostPost(
   return { kind: "ok", data: toLostPostDTO(row) };
 }
 
-// Best-effort: the status itself is already saved -- a failed history
-// insert is logged, never turned into a failed edit.
-async function recordStatusChange(
-  postType: "lost" | "found",
-  postId: number,
-  fromStatus: string,
-  toStatus: string,
-  changedByUserId: number,
-): Promise<void> {
-  try {
-    await prisma.postStatusChange.create({ data: { postType, postId, fromStatus, toStatus, changedByUserId } });
-  } catch (error) {
-    console.error("Failed to record the post status change:", error);
-  }
-}
+// 게시판 상태 변경 이력: an update that sends a status runs in one
+// transaction with its history row, so a status change is never saved
+// without its record (or the record without the change). The post row is
+// locked and its status re-read first, so the recorded "from" is the
+// status this update actually replaced, even when two edits race.
+type StatusTx = Pick<Prisma.TransactionClient, "lostPost" | "foundPost" | "postStatusChange" | "$queryRaw">;
 
 export async function updateLostPost(
   id: number,
@@ -168,14 +159,30 @@ export async function updateLostPost(
   }
 
   const { status, ...rest } = dropUnchangedLegacyCategory(input, existing.category);
-  const row = await prisma.lostPost.update({
-    where: { id },
-    data: {
-      ...rest,
-      ...(status !== undefined && { status: LOST_STATUS_TO_DB[status] }),
-    },
-    include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
-  });
+  const update = (client: Pick<StatusTx, "lostPost">) =>
+    client.lostPost.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(status !== undefined && { status: LOST_STATUS_TO_DB[status] }),
+      },
+      include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
+    });
+  // 게시판 상태 변경 이력 -- e.g. 찾음 set by mistake and put back.
+  const row =
+    status === undefined
+      ? await update(prisma)
+      : await prisma.$transaction(async (tx: StatusTx) => {
+          await tx.$queryRaw`SELECT id FROM "LostPost" WHERE id = ${id} FOR UPDATE`;
+          const current = await tx.lostPost.findUnique({ where: { id }, select: { status: true } });
+          const updated = await update(tx);
+          if (current && current.status !== updated.status) {
+            await tx.postStatusChange.create({
+              data: { postType: "lost", postId: id, fromStatus: LOST_STATUS_FROM_DB[current.status], toStatus: status, changedByUserId: userId },
+            });
+          }
+          return updated;
+        });
   // Only re-embed when a field that actually feeds buildEmbeddingText()
   // changed -- e.g. a status-only update (marking a post found/complete)
   // or an image-only change shouldn't burn an inference call for text
@@ -195,10 +202,6 @@ export async function updateLostPost(
       await embedPostBestEffort("lost", row.id, row);
       await invalidateRecommendationCache("lost", row.id);
     });
-  }
-  // 게시판 상태 변경 이력 -- e.g. 완료 set by mistake and put back.
-  if (status !== undefined && LOST_STATUS_TO_DB[status] !== existing.status) {
-    await recordStatusChange("lost", id, LOST_STATUS_FROM_DB[existing.status], status, userId);
   }
   return { kind: "ok", data: toLostPostDTO(row) };
 }
@@ -261,14 +264,31 @@ export async function updateFoundPost(
   }
 
   const { status, ...rest } = dropUnchangedLegacyCategory(input, existing.category);
-  const row = await prisma.foundPost.update({
-    where: { id },
-    data: {
-      ...rest,
-      ...(status !== undefined && { status: FOUND_STATUS_TO_DB[status] }),
-    },
-    include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
-  });
+  const update = (client: Pick<StatusTx, "foundPost">) =>
+    client.foundPost.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(status !== undefined && { status: FOUND_STATUS_TO_DB[status] }),
+      },
+      include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
+    });
+  // 게시판 상태 변경 이력 -- e.g. 완료 set by mistake and put back. See
+  // updateLostPost's own comment.
+  const row =
+    status === undefined
+      ? await update(prisma)
+      : await prisma.$transaction(async (tx: StatusTx) => {
+          await tx.$queryRaw`SELECT id FROM "FoundPost" WHERE id = ${id} FOR UPDATE`;
+          const current = await tx.foundPost.findUnique({ where: { id }, select: { status: true } });
+          const updated = await update(tx);
+          if (current && current.status !== updated.status) {
+            await tx.postStatusChange.create({
+              data: { postType: "found", postId: id, fromStatus: FOUND_STATUS_FROM_DB[current.status], toStatus: status, changedByUserId: userId },
+            });
+          }
+          return updated;
+        });
   // Phase H-5-1: see updateLostPost's own comment -- embed + invalidate
   // moved together into after(), same relative order, same failure
   // handling.
@@ -277,10 +297,6 @@ export async function updateFoundPost(
       await embedPostBestEffort("found", row.id, row);
       await invalidateRecommendationCache("found", row.id);
     });
-  }
-  // 게시판 상태 변경 이력 -- e.g. 완료 set by mistake and put back.
-  if (status !== undefined && FOUND_STATUS_TO_DB[status] !== existing.status) {
-    await recordStatusChange("found", id, FOUND_STATUS_FROM_DB[existing.status], status, userId);
   }
   return { kind: "ok", data: toFoundPostDTO(row) };
 }

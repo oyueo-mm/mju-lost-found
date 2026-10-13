@@ -30,6 +30,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { campusLabelKey } from "@/lib/i18n/labels";
 import type { TranslationKey } from "@/lib/i18n/translate";
 import { nowAsKstDateTimeLocalValue } from "@/lib/posts/kstDateTime";
+import type { NextPostDefaults } from "@/lib/posts/nextPostDefaults";
 
 const FIELD_CLASS =
   "rounded-lg border border-border bg-transparent px-3 py-2.5 text-sm text-foreground disabled:opacity-60";
@@ -89,6 +90,10 @@ type PostFormProps = {
   // 12-5's "fixed at creation" policy) -- edit mode also lets the poster
   // move a post between 개인/단체 A/단체 B.
   myOrganizations?: { organizationId: number; organizationName: string }[];
+  // 연속 등록 ("다음 습득물 등록"): create mode only -- the campus and 게시
+  // 주체 of the poster's previous post (see posts/nextPostDefaults.ts).
+  // Nothing about the item itself is ever carried over.
+  defaults?: NextPostDefaults | null;
 };
 
 const DATE_FIELD = { lost: "lostDate", found: "foundDate" } as const;
@@ -164,15 +169,22 @@ function KnownToggle({
   );
 }
 
-export function PostForm({ type, postId, initialValues, myOrganizations = [] }: PostFormProps) {
+export function PostForm({ type, postId, initialValues, myOrganizations = [], defaults = null }: PostFormProps) {
   const router = useRouter();
   const { t } = useI18n();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // Set synchronously on submit, before `pending` re-renders the button
+  // disabled -- a quick double tap must not create the same post twice.
+  const submittingRef = useRef(false);
+  // Edit mode never carries defaults over.
+  const nextDefaults = postId === undefined ? defaults : null;
   // Phase 12-5 §13: "개인" (null) or one of myOrganizations's ids -- only
   // ever read in create mode (see handleSubmit below, gated on !isEdit),
   // so this has no effect on an edit submission regardless of its value.
-  const [organizationId, setOrganizationId] = useState<number | null>(initialValues?.organizationId ?? null);
+  const [organizationId, setOrganizationId] = useState<number | null>(
+    initialValues?.organizationId ?? nextDefaults?.organizationId ?? null,
+  );
   // Phase 11-4D: replaces selectedFile/removeExisting -- one ordered list
   // covering both the post's surviving existing images (edit mode) and any
   // new files picked in this session, array order == displayOrder, index 0
@@ -207,6 +219,12 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
   // that point the post already exists at a real id/url regardless of
   // whether the image step succeeds.
   const [savedPostId, setSavedPostId] = useState<number | null>(null);
+  // A new post that is already saved (only its photos failed): the post
+  // fields can't be submitted again -- that would create a second copy of
+  // the same post. Only the photos stay editable, and the submit button
+  // retries them.
+  const createdAlready = postId === undefined && savedPostId !== null;
+  const fieldsLocked = pending || createdAlready;
   // Phase H-3: 위치 stays an uncontrolled native input (read via FormData
   // in handleSubmit, unchanged) -- this ref only lets a suggestion chip
   // write into it directly, the same way a user's own typing would,
@@ -221,7 +239,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
   // control -- always starts on a real value (the existing post's campus
   // in edit mode, DEFAULT_CAMPUS for a brand-new one), and the toggle
   // buttons below no longer allow deselecting back to "none".
-  const [campus, setCampus] = useState<string>(initialValues?.campus ?? DEFAULT_CAMPUS);
+  const [campus, setCampus] = useState<string>(initialValues?.campus ?? nextDefaults?.campus ?? DEFAULT_CAMPUS);
   // 다국어(i18n) Phase: 폼이 실제로 제출하는 값은 항상 위 `campus` 원문
   // (DB/zod가 아는 한국어 문자열)이고, 이 키는 화면에 보여줄 라벨을
   // 고를 때만 쓴다.
@@ -463,6 +481,12 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submittingRef.current) return;
+    if (createdAlready) {
+      await handleRetryImage();
+      return;
+    }
+    submittingRef.current = true;
     setError(null);
     setPending(true);
 
@@ -526,6 +550,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             : (json.error ?? t("form.requestFailed")),
         );
         setPending(false);
+        submittingRef.current = false;
         return;
       }
 
@@ -540,6 +565,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
         // render the "다시 시도"/게시물로 이동 actions instead of plain text.
         setError(imageError);
         setPending(false);
+        submittingRef.current = false;
         return;
       }
 
@@ -553,6 +579,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
     } catch {
       setError(t("common.networkError"));
       setPending(false);
+      submittingRef.current = false;
     }
   }
 
@@ -567,7 +594,8 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
   // failure, the same error banner + retry stays up so the user can try
   // again or leave via the link below without losing their place.
   async function handleRetryImage() {
-    if (savedPostId === null) return;
+    if (savedPostId === null || submittingRef.current) return;
+    submittingRef.current = true;
     setPending(true);
     setError(null);
 
@@ -575,6 +603,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
     if (imageError) {
       setError(imageError);
       setPending(false);
+      submittingRef.current = false;
       return;
     }
 
@@ -610,6 +639,12 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
           </div>
         ))}
 
+      {/* 연속 등록: says what came over from the previous post (and that
+          the item itself starts empty), so nothing is assumed silently. */}
+      {nextDefaults && (
+        <p className="rounded-card bg-primary-muted px-4 py-2.5 text-sm text-primary">{t("form.nextPostNotice")}</p>
+      )}
+
       <section className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
         <h2 className="text-sm font-semibold text-foreground">{t("form.basicInfo")}</h2>
 
@@ -626,7 +661,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             placeholder={t(TITLE_PLACEHOLDER_KEY[type])}
             defaultValue={initialValues?.title}
             onChange={(event) => setTitleText(event.target.value)}
-            disabled={pending}
+            disabled={fieldsLocked}
             className={FIELD_CLASS}
           />
         </label>
@@ -644,7 +679,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             placeholder={t(DESCRIPTION_PLACEHOLDER_KEY[type])}
             defaultValue={initialValues?.description}
             onChange={(event) => setDescriptionText(event.target.value)}
-            disabled={pending}
+            disabled={fieldsLocked}
             className={FIELD_CLASS}
           />
         </label>
@@ -694,7 +729,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
             organizations={myOrganizations}
             value={organizationId}
             onChange={setOrganizationId}
-            disabled={pending}
+            disabled={fieldsLocked}
             currentOrganizationIfUnlisted={
               initialValues?.organizationId != null
                 ? { organizationId: initialValues.organizationId, organizationName: initialValues.organizationName ?? t("form.unknownOrganization") }
@@ -714,7 +749,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
           legacyUnmapped={initialCategory.legacyUnmapped}
           title={titleText}
           description={descriptionText}
-          disabled={pending}
+          disabled={fieldsLocked}
         />
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -740,7 +775,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
                     variant={campus === c ? "primary" : "secondary"}
                     size="sm"
                     aria-pressed={campus === c}
-                    disabled={pending}
+                    disabled={fieldsLocked}
                     onClick={() => setCampus(c)}
                     className="h-8 px-3 text-xs"
                   >
@@ -763,7 +798,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
                 typed is kept and comes back. */}
             <KnownToggle
               unknown={locationUnknown}
-              disabled={pending}
+              disabled={fieldsLocked}
               label={t(LOCATION_LABEL_KEY[type])}
               onChange={(unknown) => {
                 setLocationUnknown(unknown);
@@ -792,12 +827,12 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
               maxLength={200}
               placeholder={t("form.locationPlaceholder")}
               defaultValue={initialValues?.location ?? undefined}
-              disabled={pending || locationUnknown}
+              disabled={fieldsLocked || locationUnknown}
               className={`${FIELD_CLASS} flex-1`}
             />
             <button
               type="button"
-              disabled={pending || locationUnknown}
+              disabled={fieldsLocked || locationUnknown}
               onClick={() => setLocationMenuOpen((open) => !open)}
               aria-haspopup="menu"
               aria-expanded={locationMenuOpen}
@@ -842,7 +877,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
               {t(DATE_LABEL_KEY[type])}
               {!dateUnknown && <RequiredMark />}
             </span>
-            <KnownToggle unknown={dateUnknown} disabled={pending} label={t(DATE_LABEL_KEY[type])} onChange={setDateUnknown} />
+            <KnownToggle unknown={dateUnknown} disabled={fieldsLocked} label={t(DATE_LABEL_KEY[type])} onChange={setDateUnknown} />
           </div>
           {/* Date first (year-month-day); the exact time is a separate,
               opt-in step and stays disabled until asked for. Inputs are
@@ -854,7 +889,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
               aria-label={t(DATE_LABEL_KEY[type])}
               required={!dateUnknown}
               defaultValue={initialValues?.dateValue ?? defaultNow.slice(0, 10)}
-              disabled={pending || dateUnknown}
+              disabled={fieldsLocked || dateUnknown}
               className={`${FIELD_CLASS} w-full`}
             />
             <label className="flex w-fit items-center gap-2 py-1 text-sm text-muted-foreground">
@@ -863,7 +898,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
                 className="size-4"
                 checked={exactTime}
                 onChange={(event) => setExactTime(event.target.checked)}
-                disabled={pending || dateUnknown}
+                disabled={fieldsLocked || dateUnknown}
               />
               {t("form.addExactTime")}
             </label>
@@ -873,7 +908,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
               aria-label={t("form.exactTime")}
               required={!dateUnknown && exactTime}
               defaultValue={initialValues?.timeValue ?? defaultNow.slice(11, 16)}
-              disabled={pending || dateUnknown || !exactTime}
+              disabled={fieldsLocked || dateUnknown || !exactTime}
               className={`${FIELD_CLASS} w-full`}
             />
           </div>
@@ -897,7 +932,13 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
       </section>
 
       <Button type="submit" disabled={pending} className="w-full sm:w-auto sm:self-start">
-        {pending ? t("form.saving") : postId ? t("form.update") : t("form.create")}
+        {pending
+          ? t("form.saving")
+          : postId
+            ? t("form.update")
+            : createdAlready
+              ? t("form.retryPhotos")
+              : t("form.create")}
       </Button>
     </form>
   );

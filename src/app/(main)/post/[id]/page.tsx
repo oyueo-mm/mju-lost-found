@@ -230,11 +230,21 @@ export default async function PostDetailPage({
         </p>
       )}
       <ViewTracker type={type} postId={post.id} />
-      {justCreated && (
-        <p className="rounded-card bg-success-muted px-4 py-2.5 text-sm font-medium text-success">
-          {t("post.created")}
-        </p>
-      )}
+      {justCreated &&
+        (isOwner ? (
+          // 연속 등록: the next item starts from a fresh form; only the
+          // campus and 게시 주체 come over (see posts/nextPostDefaults.ts).
+          <div className="flex flex-col gap-2.5 rounded-card bg-success-muted px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-medium text-success">{t("post.created")}</p>
+            <LinkButton href={`/${type}/new?after=${post.id}`} size="sm" className="w-full sm:w-auto">
+              {t(type === "found" ? "post.registerNext.found" : "post.registerNext.lost")}
+            </LinkButton>
+          </div>
+        ) : (
+          <p className="rounded-card bg-success-muted px-4 py-2.5 text-sm font-medium text-success">
+            {t("post.created")}
+          </p>
+        ))}
       {/* Phase 11-4D: post.images (ordered by displayOrder, see
           getLostPost/getFoundPost) is what decides which of the three
           states renders -- post.imageUrl (the primary-image cache) still

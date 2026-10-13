@@ -6,7 +6,7 @@ import { getChatRoomForUser } from "@/lib/chat/service";
 import { isAllowedImageContentType } from "@/lib/images/config";
 import { buildChatImagePathname } from "@/lib/images/pathname";
 import { createChatImageUploadUrl } from "@/lib/images/chatStorage";
-import { enforceRateLimit } from "@/lib/rateLimit";
+import { enforceRateLimit, rateLimitTierFor } from "@/lib/rateLimit";
 
 const requestSchema = z.object({ contentType: z.string() });
 
@@ -51,7 +51,9 @@ export const POST = withErrorHandling(
       return jsonError(403, "이 채팅방에 이미지를 업로드할 권한이 없습니다.");
     }
 
-    const limited = await enforceRateLimit("imageUpload", { userId: auth.user.id });
+    // Same counter as post photos (/api/upload), so the same tier -- staff
+    // who just uploaded a batch of post photos are not cut off in chat.
+    const limited = await enforceRateLimit("imageUpload", { userId: auth.user.id, tier: await rateLimitTierFor(auth.user) });
     if (limited) return limited;
 
     const pathname = buildChatImagePathname(chatRoomId, contentType);

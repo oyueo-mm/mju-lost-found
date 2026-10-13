@@ -579,15 +579,23 @@ type PostDeleteTx = Pick<
 >;
 
 // 게시판 상태 변경 이력: the most recent change, for the author/admin view.
+// An informational line only -- a failed lookup (e.g. the table not there
+// yet while a deploy and its migration roll out) hides it instead of
+// failing the whole post page.
 export async function getLatestStatusChange(
   type: PostType,
   postId: number,
 ): Promise<{ fromStatus: string; toStatus: string; createdAt: Date } | null> {
-  return prisma.postStatusChange.findFirst({
-    where: { postType: type, postId },
-    orderBy: { createdAt: "desc" },
-    select: { fromStatus: true, toStatus: true, createdAt: true },
-  });
+  try {
+    return await prisma.postStatusChange.findFirst({
+      where: { postType: type, postId },
+      orderBy: { createdAt: "desc" },
+      select: { fromStatus: true, toStatus: true, createdAt: true },
+    });
+  } catch (error) {
+    console.error("Failed to load the latest post status change:", error);
+    return null;
+  }
 }
 
 // 개인정보 감사: rows derived from a post that no FK ties to it, so they
