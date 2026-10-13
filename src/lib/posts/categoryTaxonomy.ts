@@ -17,16 +17,27 @@
 
 // Main category code -> its subcategory keys, both in display order. The last
 // entry of every category is "other".
+//
+// 카테고리 개선: phones, earphones and watches are their own categories
+// (with brand / kind subcategories) so they're easy to find; their former
+// spots electronics.phone, electronics.earphones and accessory.watch were
+// moved to <new>.other by migration 20261028000000_category_split_and_status_history.
+// clothing gained 과잠/학잠, living gained 자동차 키, and "etc" is the
+// catch-all category for anything hard to classify.
 export const TAXONOMY = {
-  electronics: ["phone", "earphones", "headphones", "laptop", "tablet", "charger", "cable", "power_bank", "peripheral", "storage", "other"],
+  electronics: ["headphones", "laptop", "tablet", "charger", "cable", "power_bank", "peripheral", "storage", "other"],
+  phone: ["samsung", "apple", "lg", "xiaomi", "other"],
+  earphones: ["airpods", "buds", "other"],
+  watch: ["analog", "smartwatch", "other"],
   wallet: ["card_wallet", "card_case", "bifold", "long_wallet", "other"],
   card_id: ["student_id", "id_card", "credit_card", "debit_card", "transit_card", "other"],
   bag: ["backpack", "tote", "eco_bag", "pouch", "shopping_bag", "other"],
-  clothing: ["top", "outer", "bottom", "hat", "scarf", "gloves", "shoes", "other"],
-  accessory: ["glasses", "sunglasses", "watch", "jewelry", "hair", "keyring", "charm", "other"],
+  clothing: ["top", "outer", "dept_jacket", "school_jacket", "bottom", "hat", "scarf", "gloves", "shoes", "other"],
+  accessory: ["glasses", "sunglasses", "jewelry", "hair", "keyring", "charm", "other"],
   book_document: ["major_book", "textbook", "general_book", "notebook", "planner", "document", "file", "other"],
   stationery: ["pencil_case", "pen", "mechanical_pencil", "calculator", "other"],
-  living: ["key", "umbrella", "parasol", "tumbler", "water_bottle", "hobby", "sports", "other"],
+  living: ["key", "car_key", "umbrella", "parasol", "tumbler", "water_bottle", "hobby", "sports", "other"],
+  etc: ["other"],
 } as const;
 
 type Taxonomy = typeof TAXONOMY;

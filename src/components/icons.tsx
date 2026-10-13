@@ -281,6 +281,38 @@ export function HeadphonesIcon(props: IconProps) {
   );
 }
 
+// 휴대폰
+export function PhoneIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="7" y="3" width="10" height="18" rx="2" />
+      <path d="M11 17.5h2" />
+    </svg>
+  );
+}
+
+// 이어폰 -- 무선 이어폰 한 쌍
+export function EarbudsIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 5.5a2.5 2.5 0 0 0-2.5 2.5v1a2.5 2.5 0 0 0 2.5 2.5V19" />
+      <path d="M16 5.5a2.5 2.5 0 0 1 2.5 2.5v1a2.5 2.5 0 0 1-2.5 2.5V19" />
+    </svg>
+  );
+}
+
+// 시계 -- 손목시계
+export function WatchIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="5" />
+      <path d="M12 10v2l1.5 1" />
+      <path d="M9.5 7.5 10 3h4l.5 4.5" />
+      <path d="M9.5 16.5 10 21h4l.5-4.5" />
+    </svg>
+  );
+}
+
 // 필기구 -- 연필
 export function PenIcon(props: IconProps) {
   return (

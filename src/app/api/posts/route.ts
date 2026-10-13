@@ -22,7 +22,7 @@ import {
 import { createFoundPost, createLostPost, searchPosts, searchPostsAI, searchPostsByImage } from "@/lib/posts/aiService";
 import { ALLOWED_IMAGE_CONTENT_TYPES, MAX_IMAGE_SIZE_BYTES, isAllowedImageContentType } from "@/lib/images/config";
 import { getCurrentUser } from "@/lib/auth/session";
-import { clientIpFrom, enforceRateLimit } from "@/lib/rateLimit";
+import { clientIpFrom, enforceRateLimit, rateLimitTierFor } from "@/lib/rateLimit";
 
 // AI search (semantic / image / ai modes) runs embedding models in this
 // function on every request, so it's rate-limited per signed-in user, or
@@ -257,7 +257,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     if (!parsed.success) {
       return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
     }
-    const limited = await enforceRateLimit("postCreate", { userId: auth.user.id });
+    const limited = await enforceRateLimit("postCreate", { userId: auth.user.id, tier: await rateLimitTierFor(auth.user) });
     if (limited) return limited;
     const result = await createLostPost(auth.user, parsed.data);
     return postMutationResultToResponse(result, 201);
@@ -267,7 +267,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   if (!parsed.success) {
     return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
   }
-  const limited = await enforceRateLimit("postCreate", { userId: auth.user.id });
+  // Staff (admins, approved external staff, organization managers) get
+  // higher posting limits -- see rateLimitTierFor.
+  const limited = await enforceRateLimit("postCreate", { userId: auth.user.id, tier: await rateLimitTierFor(auth.user) });
   if (limited) return limited;
   const result = await createFoundPost(auth.user, parsed.data);
   return postMutationResultToResponse(result, 201);

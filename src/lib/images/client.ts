@@ -109,6 +109,18 @@ export class ImageProcessingError extends Error {
 // 3) Return the storage path for the caller to attach to the post via
 //    POST /api/posts/[id]/image, which re-derives and re-validates
 //    everything server-side rather than trusting this return value.
+// A 429 from our own upload endpoint: carries the real remaining wait so
+// the form can say when to retry (the photos stay in the form).
+export class UploadRateLimitedError extends Error {
+  constructor(
+    message: string,
+    readonly retryAfterSeconds: number,
+  ) {
+    super(message);
+    this.name = "UploadRateLimitedError";
+  }
+}
+
 export async function uploadPostImage(
   postType: PostType,
   postId: number,
@@ -123,6 +135,10 @@ export async function uploadPostImage(
   });
   if (!res.ok) {
     const json = await res.json().catch(() => ({}));
+    if (res.status === 429) {
+      const seconds = Number(json.retryAfterSeconds ?? res.headers.get("Retry-After") ?? 0);
+      throw new UploadRateLimitedError(json.error ?? "", Number.isFinite(seconds) ? seconds : 0);
+    }
     throw new Error(json.error ?? "업로드 준비 중 오류가 발생했습니다.");
   }
   const { data } = (await res.json()) as { data: { path: string; token: string } };

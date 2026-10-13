@@ -4,7 +4,7 @@ const uploadToSignedUrl = vi.fn();
 const uploadChatImageToSignedUrl = vi.fn();
 vi.mock("./supabaseBrowser", () => ({ uploadToSignedUrl, uploadChatImageToSignedUrl }));
 
-const { ImageProcessingError, uploadChatImage, uploadPostImage } = await import("./client");
+const { ImageProcessingError, UploadRateLimitedError, uploadChatImage, uploadPostImage } = await import("./client");
 
 const original = new File([new Uint8Array(16)], "photo.jpg", { type: "image/jpeg" });
 const fetchMock = vi.fn();
@@ -92,5 +92,32 @@ describe("image upload never sends the original file", () => {
 
     await expect(uploadChatImage(3, original)).rejects.toBeInstanceOf(ImageProcessingError);
     expect(uploadChatImageToSignedUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe("upload rate limit", () => {
+  it("surfaces a 429 as UploadRateLimitedError carrying the real remaining wait", async () => {
+    stubCanvas(new Blob([new Uint8Array(8)], { type: "image/webp" }));
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "요청이 너무 많습니다. 4분 10초 후에 다시 시도해주세요.", retryAfterSeconds: 250 }), {
+        status: 429,
+        headers: { "Retry-After": "250" },
+      }),
+    );
+
+    const error = await uploadPostImage("found", 1, original).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(UploadRateLimitedError);
+    expect((error as InstanceType<typeof UploadRateLimitedError>).retryAfterSeconds).toBe(250);
+    expect(uploadToSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the Retry-After header when the body has no retryAfterSeconds", async () => {
+    stubCanvas(new Blob([new Uint8Array(8)], { type: "image/webp" }));
+    fetchMock.mockResolvedValueOnce(new Response("{}", { status: 429, headers: { "Retry-After": "90" } }));
+
+    const error = await uploadPostImage("found", 1, original).catch((e: unknown) => e);
+
+    expect((error as InstanceType<typeof UploadRateLimitedError>).retryAfterSeconds).toBe(90);
   });
 });

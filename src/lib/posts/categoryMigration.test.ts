@@ -16,12 +16,23 @@ describe("LEGACY_CATEGORY_TO_CODE", () => {
 
 describe("planCategoryMigration", () => {
   it("auto-confirms a 1:1 legacy category when the suggestion agrees", () => {
-    expect(plan("전자기기", "흰색 에어팟 주웠어요")).toMatchObject({
+    expect(plan("전자기기", "노트북 충전기 주웠어요")).toMatchObject({
       legacyCategoryCode: "electronics",
       autoCategoryCode: "electronics",
       reviewReason: null,
-      suggestion: { category: "electronics", subcategory: "electronics.earphones" },
+      suggestion: { category: "electronics" },
     });
+  });
+
+  it("moves a post to a category split out of its legacy one (휴대폰/이어폰/시계)", () => {
+    expect(plan("전자기기", "흰색 에어팟 주웠어요")).toMatchObject({
+      legacyCategoryCode: "electronics",
+      autoCategoryCode: "earphones",
+      reviewReason: null,
+      suggestion: { category: "earphones", subcategory: "earphones.airpods" },
+    });
+    expect(plan("액세서리", "애플워치 분실")).toMatchObject({ autoCategoryCode: "watch", reviewReason: null });
+    expect(plan("의류", "아이폰 주웠어요")).toMatchObject({ autoCategoryCode: null, reviewReason: "category_conflict" });
   });
 
   it("auto-confirms the legacy category when there is no suggestion, flagging it", () => {
@@ -80,7 +91,7 @@ describe("planCategoryMigration", () => {
   it("never auto-confirms a subcategory (the plan only carries it as a suggestion)", () => {
     const result = plan("전자기기", "흰색 에어팟 주웠어요");
     expect(result).not.toHaveProperty("autoSubcategory");
-    expect(result.suggestion?.subcategory).toBe("electronics.earphones");
+    expect(result.suggestion?.subcategory).toBe("earphones.airpods");
   });
 
   it("flags description-only suggestions", () => {

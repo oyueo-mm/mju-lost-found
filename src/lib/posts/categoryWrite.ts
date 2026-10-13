@@ -10,6 +10,11 @@ import type { CATEGORIES } from "./schema";
 // same-named old value and is written as "기타".
 export const CATEGORY_CODE_TO_LEGACY: Readonly<Record<CategoryCode, (typeof CATEGORIES)[number]>> = {
   electronics: "전자기기",
+  // New categories map onto the legacy value their items used to have, so
+  // the legacy column (and the embedding text built from it) is unchanged.
+  phone: "전자기기",
+  earphones: "전자기기",
+  watch: "액세서리",
   wallet: "지갑",
   card_id: "카드",
   bag: "가방",
@@ -18,6 +23,7 @@ export const CATEGORY_CODE_TO_LEGACY: Readonly<Record<CategoryCode, (typeof CATE
   book_document: "책",
   stationery: "필기구",
   living: "기타",
+  etc: "기타",
 };
 
 export type ResolvedCategoryWrite = {

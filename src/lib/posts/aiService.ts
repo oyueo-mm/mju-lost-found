@@ -25,7 +25,9 @@ import {
   AUTHOR_SELECT,
   PUBLIC_POST_WHERE,
   POST_ORGANIZATION_SELECT,
+  FOUND_STATUS_FROM_DB,
   FOUND_STATUS_TO_DB,
+  LOST_STATUS_FROM_DB,
   LOST_STATUS_TO_DB,
   searchPosts as searchPostsKeywordOnly,
   toFoundPostDTO,
@@ -125,6 +127,22 @@ export async function createLostPost(
   return { kind: "ok", data: toLostPostDTO(row) };
 }
 
+// Best-effort: the status itself is already saved -- a failed history
+// insert is logged, never turned into a failed edit.
+async function recordStatusChange(
+  postType: "lost" | "found",
+  postId: number,
+  fromStatus: string,
+  toStatus: string,
+  changedByUserId: number,
+): Promise<void> {
+  try {
+    await prisma.postStatusChange.create({ data: { postType, postId, fromStatus, toStatus, changedByUserId } });
+  } catch (error) {
+    console.error("Failed to record the post status change:", error);
+  }
+}
+
 export async function updateLostPost(
   id: number,
   userId: number,
@@ -177,6 +195,10 @@ export async function updateLostPost(
       await embedPostBestEffort("lost", row.id, row);
       await invalidateRecommendationCache("lost", row.id);
     });
+  }
+  // 게시판 상태 변경 이력 -- e.g. 완료 set by mistake and put back.
+  if (status !== undefined && LOST_STATUS_TO_DB[status] !== existing.status) {
+    await recordStatusChange("lost", id, LOST_STATUS_FROM_DB[existing.status], status, userId);
   }
   return { kind: "ok", data: toLostPostDTO(row) };
 }
@@ -255,6 +277,10 @@ export async function updateFoundPost(
       await embedPostBestEffort("found", row.id, row);
       await invalidateRecommendationCache("found", row.id);
     });
+  }
+  // 게시판 상태 변경 이력 -- e.g. 완료 set by mistake and put back.
+  if (status !== undefined && FOUND_STATUS_TO_DB[status] !== existing.status) {
+    await recordStatusChange("found", id, FOUND_STATUS_FROM_DB[existing.status], status, userId);
   }
   return { kind: "ok", data: toFoundPostDTO(row) };
 }

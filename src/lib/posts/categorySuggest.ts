@@ -19,8 +19,10 @@ type RuleTarget = CategoryCode | SubcategoryCode;
 // Ordered: the first match wins. Specific item words come before generic
 // ones, and the object itself before what's attached to or inside it.
 // Classification policy encoded here:
-//   - a phone-only case -> electronics.phone
-//   - AirPods/earphone cases, covers, ear tips -> electronics.earphones
+//   - a phone-only case -> phone.other (a brand when one is named)
+//   - AirPods/earphone cases, covers, ear tips -> earphones.* (에어팟 /
+//     버즈 when named)
+//   - car keys -> living.car_key; 과잠 / 학잠 -> their clothing kinds
 //   - student-ID cases, lanyard card cases, card holders -> wallet.card_case;
 //     card wallets / MagSafe card pockets -> wallet.card_wallet
 //   - laptop/cosmetic pouches -> bag.pouch
@@ -53,24 +55,33 @@ const RULES: ReadonlyArray<readonly [RegExp, RuleTarget]> = [
   [/케이블|젠더|랜선|충전\s?선/, "electronics.cable"],
   [/충전기|어댑터|충전\s?(패드|독)/, "electronics.charger"],
   [/에어팟\s?맥스|헤드폰|헤드셋/, "electronics.headphones"],
-  [/에어팟|airpods?|버즈|이어폰|이어팁|이어버드/i, "electronics.earphones"],
+  [/에어팟|airpods?/i, "earphones.airpods"],
+  [/버즈|galaxy\s?buds/i, "earphones.buds"],
+  [/이어폰|이어팁|이어버드/, "earphones.other"],
   [/(노트북|태블릿|아이패드)\s?(파우치|슬리브)/, "bag.pouch"],
   // A tablet with its pen is the tablet ("아이패드 + 애플펜슬").
   [/태블릿|아이패드|ipad|갤럭시\s?탭/i, "electronics.tablet"],
   [/애플\s?펜슬|S\s?펜|스타일러스|마우스|키보드|허브|거치대/i, "electronics.peripheral"],
   [/usb|외장\s?(하드|ssd)|ssd|sd\s?카드|메모리\s?카드/i, "electronics.storage"],
   [/노트북|맥북|macbook|갤럭시\s?북|lg\s?그램/i, "electronics.laptop"],
-  [/폰\s?케이스|휴대폰|핸드폰|스마트폰|아이폰|iphone|갤럭시\s?(s\s?\d|a\s?\d|노트\s?\d|z|폴드|플립)|폴더블/i, "electronics.phone"],
-  [/워치|스피커|카메라|손\s?선풍기|가습기|고데기|드라이기|전자\s?사전|게임기|닌텐도|멀티탭/, "electronics.other"],
+  // Watches before phones: "애플워치"/"갤럭시 워치" are watches, not phones.
+  [/워치|스마트\s?시계|미밴드|핏빗|fitbit/i, "watch.smartwatch"],
+  [/아이폰|iphone/i, "phone.apple"],
+  [/갤럭시\s?(s\s?\d|a\s?\d|노트\s?\d|z|폴드|플립)|삼성\s?(폰|휴대폰|핸드폰|스마트폰)/i, "phone.samsung"],
+  [/lg\s?(폰|휴대폰|핸드폰|스마트폰)|엘지\s?(폰|휴대폰|핸드폰)/i, "phone.lg"],
+  [/샤오미|xiaomi|레드미|redmi/i, "phone.xiaomi"],
+  [/폰\s?케이스|휴대폰|핸드폰|스마트폰|폴더블/i, "phone.other"],
+  [/스피커|카메라|손\s?선풍기|가습기|고데기|드라이기|전자\s?사전|게임기|닌텐도|멀티탭/, "electronics.other"],
 
   // A keyring attached to keys is still keys; a bare 열쇠고리 is a keyring.
-  [/열쇠(?!\s?고리)|자동차\s?키|차\s?키|스마트\s?키|도어\s?키|카드\s?키/, "living.key"],
+  [/자동차\s?(키|열쇠)|차\s?(키|열쇠)|스마트\s?키/, "living.car_key"],
+  [/열쇠(?!\s?고리)|도어\s?키|카드\s?키/, "living.key"],
 
   // Accessories. Glasses cloths/lens cases are not glasses.
   [/안경\s?닦이|안경\s?천|렌즈\s?케이스/, "living.other"],
   [/선글라스/, "accessory.sunglasses"],
   [/안경|뿔테/, "accessory.glasses"],
-  [/시계/, "accessory.watch"],
+  [/시계/, "watch.analog"],
   [/반지|목걸이|귀걸이|팔찌|피어싱|브로치/, "accessory.jewelry"],
   [/집게\s?핀|머리\s?끈|헤어\s?(핀|밴드|클립|끈)|곱창\s?밴드|머리띠|실핀/, "accessory.hair"],
   [/키링|키\s?홀더|열쇠\s?고리/, "accessory.keyring"],
@@ -114,7 +125,9 @@ const RULES: ReadonlyArray<readonly [RegExp, RuleTarget]> = [
   [/장갑/, "clothing.gloves"],
   [/신발|운동화|슬리퍼|구두|샌들|크록스|스니커즈|실내화|부츠/, "clothing.shoes"],
   [/바지|청바지|치마|스커트|슬랙스|레깅스/, "clothing.bottom"],
-  [/패딩|코트|자켓|재킷|점퍼|과잠|바람막이|가디건|집업|아우터/, "clothing.outer"],
+  [/과잠|과\s?점퍼|학과\s?점퍼/, "clothing.dept_jacket"],
+  [/학잠|학교\s?점퍼/, "clothing.school_jacket"],
+  [/패딩|코트|자켓|재킷|점퍼|바람막이|가디건|집업|아우터/, "clothing.outer"],
   [/후드|맨투맨|셔츠|니트|상의|조끼|체육복/, "clothing.top"],
   [/양말|잠옷/, "clothing.other"],
   [/옷/, "clothing"],

@@ -20,6 +20,8 @@ const foundPost = {
 // Phase 23: updateLostPost/updateFoundPost invalidate this cache after a
 // re-embed -- see aiService.ts's invalidateMatchCandidateCache().
 const matchCandidateCache = { deleteMany: vi.fn() };
+// 게시판 상태 변경 이력
+const postStatusChange = { create: vi.fn() };
 
 // Phase H-5-1: createLostPost/createFoundPost/updateLostPost/updateFoundPost
 // now defer embedPostBestEffort() (and, for updates, the match-candidate-
@@ -56,7 +58,7 @@ const findPostsByImageQuery = vi.fn();
 // cosine lookup, mocked the same way.
 const findCandidateCosinesForQuery = vi.fn();
 
-vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost, matchCandidateCache } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { lostPost, foundPost, matchCandidateCache, postStatusChange } }));
 vi.mock("@/generated/prisma/client", () => ({
   LostPostStatus: { SEARCHING: "SEARCHING", FOUND: "FOUND" },
   FoundPostStatus: { KEEPING: "KEEPING", COMPLETED: "COMPLETED" },
@@ -698,8 +700,8 @@ describe("updateLostPost", () => {
       title: "t",
       description: "d",
       category: "전자기기",
-      categoryCode: "electronics",
-      subcategory: "electronics.earphones",
+      categoryCode: "earphones",
+      subcategory: "earphones.airpods",
       location: "l",
       status: "SEARCHING",
       imageUrl: null,
@@ -710,11 +712,11 @@ describe("updateLostPost", () => {
       user: { id: 1, nickname: "닉네임" },
     });
 
-    await updateLostPost(1, 1, { category: "전자기기", categoryCode: "electronics", subcategory: "electronics.earphones" });
+    await updateLostPost(1, 1, { category: "전자기기", categoryCode: "earphones", subcategory: "earphones.airpods" });
     await flushAfterCallbacks();
 
     expect(lostPost.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { categoryCode: "electronics", subcategory: "electronics.earphones" } }),
+      expect.objectContaining({ data: { categoryCode: "earphones", subcategory: "earphones.airpods" } }),
     );
     expect(embedPostBestEffort).not.toHaveBeenCalled();
   });
@@ -846,6 +848,73 @@ describe("updateLostPost", () => {
       expect(result.data.foundAt).toBeNull();
     }
     expect(embedPostBestEffort).toHaveBeenCalledWith("found", 2, expect.objectContaining({ location: null }));
+  });
+
+  describe("상태 변경 이력", () => {
+    const foundRow = (status: string) => ({
+      id: 2,
+      title: "t",
+      description: "d",
+      category: "c",
+      location: null,
+      status,
+      imageUrl: null,
+      foundAt: null,
+      foundDate: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      user: { id: 1, nickname: "닉네임" },
+    });
+
+    it("records 완료 -> 보관 중 (putting a post back) with who changed it, without re-embedding", async () => {
+      foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, status: "COMPLETED" });
+      foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
+
+      const result = await updateFoundPost(2, 1, { status: "보관 중" });
+
+      expect(result.kind).toBe("ok");
+      expect(foundPost.update).toHaveBeenCalledWith(expect.objectContaining({ data: { status: "KEEPING" } }));
+      expect(postStatusChange.create).toHaveBeenCalledWith({
+        data: { postType: "found", postId: 2, fromStatus: "완료", toStatus: "보관 중", changedByUserId: 1 },
+      });
+      expect(embedPostBestEffort).not.toHaveBeenCalled();
+    });
+
+    it("records nothing when the status doesn't change or isn't sent", async () => {
+      foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, status: "KEEPING" });
+      foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
+      await updateFoundPost(2, 1, { status: "보관 중" });
+
+      foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, status: "KEEPING" });
+      foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
+      await updateFoundPost(2, 1, { title: "새 제목" });
+
+      expect(postStatusChange.create).not.toHaveBeenCalled();
+    });
+
+    it("records a lost post's change too, and a failed history write doesn't fail the edit", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      postStatusChange.create.mockRejectedValueOnce(new Error("db down"));
+      lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, status: "SEARCHING" });
+      lostPost.update.mockResolvedValueOnce({ ...foundRow("FOUND"), id: 1, lostAt: null, lostDate: null });
+
+      const result = await updateLostPost(1, 1, { status: "찾음" });
+
+      expect(result.kind).toBe("ok");
+      expect(postStatusChange.create).toHaveBeenCalledWith({
+        data: { postType: "lost", postId: 1, fromStatus: "찾는 중", toStatus: "찾음", changedByUserId: 1 },
+      });
+    });
+
+    it("doesn't let a non-owner change the status (or write history)", async () => {
+      foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 9, status: "COMPLETED" });
+
+      const result = await updateFoundPost(2, 1, { status: "보관 중" });
+
+      expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
+      expect(foundPost.update).not.toHaveBeenCalled();
+      expect(postStatusChange.create).not.toHaveBeenCalled();
+    });
   });
 
   // Phase 12-7 §4: organizationId is now editable on update -- reverses

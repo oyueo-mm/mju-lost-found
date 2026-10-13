@@ -33,11 +33,22 @@ export const RATE_LIMITS = {
       { windowSeconds: 10 * MINUTE, max: 30 },
       { windowSeconds: DAY, max: 200 },
     ],
+    // Staff (see rateLimitTierFor) register found items in batches -- e.g.
+    // a student-support office entering a day's drop-offs, several photos
+    // each. Higher, still bounded.
+    staff: [
+      { windowSeconds: 10 * MINUTE, max: 150 },
+      { windowSeconds: DAY, max: 1500 },
+    ],
   },
   postCreate: {
     user: [
       { windowSeconds: HOUR, max: 10 },
       { windowSeconds: DAY, max: 30 },
+    ],
+    staff: [
+      { windowSeconds: HOUR, max: 60 },
+      { windowSeconds: DAY, max: 300 },
     ],
   },
   chatMessage: {
@@ -52,10 +63,16 @@ export const RATE_LIMITS = {
       { windowSeconds: DAY, max: 30 },
     ],
   },
-} as const satisfies Record<string, { user: readonly RateLimitRule[]; anonymous?: readonly RateLimitRule[] }>;
+} as const satisfies Record<
+  string,
+  { user: readonly RateLimitRule[]; anonymous?: readonly RateLimitRule[]; staff?: readonly RateLimitRule[] }
+>;
 
 export type RateLimitAction = keyof typeof RATE_LIMITS;
-export type RateLimitSubject = { userId: number } | { ip: string | null };
+export type RateLimitTier = "user" | "staff";
+// tier only matters for actions that define staff rules; everyone else
+// (and every other action) uses the user rules.
+export type RateLimitSubject = { userId: number; tier?: RateLimitTier } | { ip: string | null };
 export type RateLimitResult = { ok: true } | { ok: false; retryAfterSeconds: number };
 
 // An anonymous caller is identified by a salted hash of their IP -- the raw
@@ -78,13 +95,18 @@ export function clientIpFrom(headers: Headers): string | null {
 const PRUNE_PROBABILITY = 0.01;
 
 export async function checkRateLimit(action: RateLimitAction, subject: RateLimitSubject): Promise<RateLimitResult> {
-  const limits = RATE_LIMITS[action] as { user: readonly RateLimitRule[]; anonymous?: readonly RateLimitRule[] };
-  const rules = "userId" in subject ? limits.user : limits.anonymous;
+  const limits = RATE_LIMITS[action] as {
+    user: readonly RateLimitRule[];
+    anonymous?: readonly RateLimitRule[];
+    staff?: readonly RateLimitRule[];
+  };
+  const rules = "userId" in subject ? (subject.tier === "staff" && limits.staff) || limits.user : limits.anonymous;
   if (!rules) return { ok: true };
 
   const now = Date.now();
   const who = subjectKey(subject);
   let retryAfterSeconds = 0;
+  const counted: { key: string; windowStart: Date }[] = [];
   try {
     for (const rule of rules) {
       const windowMs = rule.windowSeconds * 1000;
@@ -98,8 +120,21 @@ export async function checkRateLimit(action: RateLimitAction, subject: RateLimit
         ON CONFLICT ("key", "window_start") DO UPDATE SET "count" = "RateLimitCounter"."count" + 1
         RETURNING "count"
       `;
+      counted.push({ key, windowStart });
       if ((rows[0]?.count ?? 0) > rule.max) {
         retryAfterSeconds = Math.max(retryAfterSeconds, Math.ceil((windowStart.getTime() + windowMs - now) / 1000));
+      }
+    }
+    // A rejected request must not use up quota. Before, every blocked
+    // retry still counted -- including toward the daily window -- so a
+    // user retrying during a short block could push the daily count over
+    // its cap and stay blocked far past the wait the message announced.
+    if (retryAfterSeconds > 0) {
+      for (const { key, windowStart } of counted) {
+        await prisma.$executeRaw`
+          UPDATE "RateLimitCounter" SET "count" = "count" - 1
+          WHERE "key" = ${key} AND "window_start" = ${windowStart} AND "count" > 0
+        `;
       }
     }
     if (Math.random() < PRUNE_PROBABILITY) {
@@ -113,18 +148,51 @@ export async function checkRateLimit(action: RateLimitAction, subject: RateLimit
   return retryAfterSeconds > 0 ? { ok: false, retryAfterSeconds } : { ok: true };
 }
 
-function waitText(seconds: number): string {
+// The actual remaining wait, not a rounded-up bucket: "4분 10초",
+// "1시간 5분". Windows are fixed (they end on the window boundary), so this
+// is exact.
+export function waitText(seconds: number): string {
   if (seconds < 60) return `${seconds}초`;
-  if (seconds < 3600) return `${Math.ceil(seconds / 60)}분`;
-  return `${Math.ceil(seconds / 3600)}시간`;
+  if (seconds < 3600) {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return s === 0 ? `${m}분` : `${m}분 ${s}초`;
+  }
+  const h = Math.floor(seconds / 3600);
+  const m = Math.ceil((seconds % 3600) / 60);
+  return m === 0 ? `${h}시간` : m === 60 ? `${h + 1}시간` : `${h}시간 ${m}분`;
 }
 
-// 429 in the same `{ error }` shape every other API error uses.
+// 429 in the same `{ error }` shape every other API error uses, plus
+// retryAfterSeconds/retryAt so the client can show (and count down) the
+// real wait in the viewer's own language.
 export function rateLimitedResponse(retryAfterSeconds: number): NextResponse {
   return NextResponse.json(
-    { error: `요청이 너무 많습니다. ${waitText(retryAfterSeconds)} 후에 다시 시도해주세요.` },
+    {
+      error: `요청이 너무 많습니다. ${waitText(retryAfterSeconds)} 후에 다시 시도해주세요.`,
+      retryAfterSeconds,
+      retryAt: new Date(Date.now() + retryAfterSeconds * 1000).toISOString(),
+    },
     { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
   );
+}
+
+// Staff: an admin, an admin-approved external account (e.g. building or
+// lost-and-found office staff), or a leader/admin of an active
+// organization. Everyone else is a regular user.
+export async function rateLimitTierFor(user: { id: number; isAdmin: boolean; userType: string }): Promise<RateLimitTier> {
+  if (user.isAdmin || user.userType === "EXTERNAL_VERIFIED") return "staff";
+  try {
+    const managed = await prisma.organizationMember.count({
+      where: { userId: user.id, role: { in: ["LEADER", "ADMIN"] }, organization: { status: "ACTIVE" } },
+    });
+    return managed > 0 ? "staff" : "user";
+  } catch (error) {
+    // Same as the limiter itself: a lookup failure must not break the
+    // request -- fall back to the regular (lower) limits.
+    console.error("Rate limit tier lookup failed (using user limits):", error);
+    return "user";
+  }
 }
 
 // Convenience for route handlers: null when allowed, a 429 response

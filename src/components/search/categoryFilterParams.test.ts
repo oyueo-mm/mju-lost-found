@@ -12,9 +12,9 @@ const read = (query: string) => readCategoryFilterState(new URLSearchParams(quer
 describe("readCategoryFilterState", () => {
   it("reads a main category alone, and with its subcategory", () => {
     expect(read("categoryCode=electronics")).toEqual({ categoryCode: "electronics", subcategory: null, legacyCategory: null });
-    expect(read("categoryCode=electronics&subcategory=electronics.earphones")).toEqual({
-      categoryCode: "electronics",
-      subcategory: "electronics.earphones",
+    expect(read("categoryCode=earphones&subcategory=earphones.airpods")).toEqual({
+      categoryCode: "earphones",
+      subcategory: "earphones.airpods",
       legacyCategory: null,
     });
   });
@@ -31,6 +31,9 @@ describe("readCategoryFilterState", () => {
   it("reads a legacy ?category= link as the matching main category (기타 -> 생활용품)", () => {
     expect(read(`category=${encodeURIComponent("지갑")}`)).toMatchObject({ categoryCode: "wallet", legacyCategory: null });
     expect(read(`category=${encodeURIComponent("기타")}`)).toMatchObject({ categoryCode: "living", legacyCategory: null });
+    // not the new 휴대폰/시계/기타 codes that share the legacy label
+    expect(read(`category=${encodeURIComponent("전자기기")}`)).toMatchObject({ categoryCode: "electronics" });
+    expect(read(`category=${encodeURIComponent("액세서리")}`)).toMatchObject({ categoryCode: "accessory" });
   });
 
   it("keeps a legacy free-text category it can't map", () => {
@@ -56,12 +59,12 @@ describe("categoryFilterToEntries / withCategoryFilterParams", () => {
   it("replaces legacy and new category params while keeping the rest of the query", () => {
     const query = withCategoryFilterParams(
       `?q=${encodeURIComponent("에어팟")}&category=${encodeURIComponent("지갑")}&period=1w&searchMode=ai`,
-      { categoryCode: "electronics", subcategory: "electronics.earphones", legacyCategory: null },
+      { categoryCode: "earphones", subcategory: "earphones.airpods", legacyCategory: null },
     );
     const params = new URLSearchParams(query);
     expect(params.get("category")).toBeNull();
-    expect(params.get("categoryCode")).toBe("electronics");
-    expect(params.get("subcategory")).toBe("electronics.earphones");
+    expect(params.get("categoryCode")).toBe("earphones");
+    expect(params.get("subcategory")).toBe("earphones.airpods");
     expect(params.get("q")).toBe("에어팟");
     expect(params.get("period")).toBe("1w");
     expect(params.get("searchMode")).toBe("ai");

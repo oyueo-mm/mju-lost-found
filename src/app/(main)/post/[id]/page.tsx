@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth/session";
-import { getFoundPost, getLostPost, type PostDTO } from "@/lib/posts/service";
+import { getFoundPost, getLatestStatusChange, getLostPost, type PostDTO } from "@/lib/posts/service";
 import { dateOnlyToDb, postEventDateTime } from "@/lib/posts/eventDate";
 import { FOUND_STATUSES, LOST_STATUSES, postTypeSchema } from "@/lib/posts/schema";
 import { isAdmin } from "@/lib/moderation/service";
@@ -25,7 +25,7 @@ import { LinkButton } from "@/components/ui/Button";
 import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
 import { getLocale, getTranslator } from "@/lib/i18n/server";
 import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
-import { campusLabelKey, postCategoryLabel, postTypeLabelKey } from "@/lib/i18n/labels";
+import { campusLabelKey, postCategoryLabel, postTypeLabelKey, statusLabelKeyOrNull } from "@/lib/i18n/labels";
 
 // 다국어(i18n) Phase: 하드코딩된 "ko-KR" 대신 현재 언어의 Intl 태그를
 // 쓴다. 타임존은 언제나 Asia/Seoul 그대로 -- 캠퍼스에서 실제로 일어난
@@ -97,6 +97,12 @@ export default async function PostDetailPage({
 
   const isOwner = currentUser?.id === post.author.id;
   const viewerIsAdmin = currentUser ? isAdmin(currentUser) : false;
+  // 게시판 상태 변경 이력: shown to the author and admins only.
+  const lastStatusChange = isOwner || viewerIsAdmin ? await getLatestStatusChange(type, post.id) : null;
+  const statusText = (status: string) => {
+    const key = statusLabelKeyOrNull(status);
+    return key ? t(key) : status;
+  };
   // 회원탈퇴: a withdrawn author's leftover post is for admins only (it is
   // kept for other users' comments or as a pending report's evidence).
   if (post.removedAt && !viewerIsAdmin) notFound();
@@ -370,6 +376,15 @@ export default async function PostDetailPage({
             updated: formatDate(post.updatedAt, locale),
           })}
         </p>
+        {lastStatusChange && (
+          <p className="text-xs text-muted-foreground/70">
+            {t("post.lastStatusChange", {
+              from: statusText(lastStatusChange.fromStatus),
+              to: statusText(lastStatusChange.toStatus),
+              date: formatDate(lastStatusChange.createdAt, locale),
+            })}
+          </p>
+        )}
       </div>
 
       {post.type === "lost" && (

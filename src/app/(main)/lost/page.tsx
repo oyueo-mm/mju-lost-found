@@ -65,8 +65,12 @@ export default async function LostListPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-foreground">{t("board.lost.title")}</h1>
+      <div className="flex items-start justify-between gap-3">
+        {/* 게시판 의미 구분: one line saying whose posts these are. */}
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-semibold text-foreground">{t("board.lost.title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("board.lost.description")}</p>
+        </div>
         <LinkButton href="/lost/new" size="sm">
           {t("board.lost.new")}
         </LinkButton>

@@ -12,7 +12,8 @@ import {
 } from "@/lib/posts/schema";
 import type { PostType } from "@/lib/posts/schema";
 import { getLocalizedLocationSuggestions } from "@/lib/posts/campusLocations";
-import { ImageProcessingError, uploadPostImage } from "@/lib/images/client";
+import { ImageProcessingError, UploadRateLimitedError, uploadPostImage } from "@/lib/images/client";
+import { LOCALE_INTL_TAG } from "@/lib/i18n/config";
 import { MAX_IMAGES_PER_POST } from "@/lib/images/config";
 import {
   formatPartialUploadFailureMessage,
@@ -94,7 +95,12 @@ const DATE_FIELD = { lost: "lostDate", found: "foundDate" } as const;
 const TIME_FIELD = { lost: "lostTime", found: "foundTime" } as const;
 // 다국어(i18n) Phase: 폼이 서버로 보내는 필드 이름(DATE_FIELD/TIME_FIELD)은
 // 그대로 두고, 사람이 읽는 라벨/placeholder만 번역 키로 바꿨다.
-const DATE_LABEL_KEY: Record<PostType, TranslationKey> = { lost: "post.lostAt", found: "post.foundAt" };
+const DATE_LABEL_KEY: Record<PostType, TranslationKey> = { lost: "form.lostDate", found: "form.foundDate" };
+// 장소·날짜 입력 UX: "where it was lost" vs "where it was found" -- never
+// the place it's kept now, which the help line says to put in the
+// description instead.
+const LOCATION_LABEL_KEY: Record<PostType, TranslationKey> = { lost: "form.lostLocation", found: "form.foundLocation" };
+const LOCATION_HELP_KEY: Record<PostType, TranslationKey> = { lost: "form.lostLocationHelp", found: "form.foundLocationHelp" };
 const TITLE_PLACEHOLDER_KEY: Record<PostType, TranslationKey> = {
   lost: "form.lost.titlePlaceholder",
   found: "form.found.titlePlaceholder",
@@ -123,6 +129,39 @@ function fieldIfChanged<T>(isEdit: boolean, key: string, current: T, initial: T 
     return { [key]: current };
   }
   return {};
+}
+
+// Two-way 모름 / 알고 있어요 choice for place and date: a visible segmented
+// control instead of a small text link, with 모름 as the default.
+function KnownToggle({
+  unknown,
+  onChange,
+  disabled,
+  label,
+}: {
+  unknown: boolean;
+  onChange: (unknown: boolean) => void;
+  disabled: boolean;
+  label: string;
+}) {
+  const { t } = useI18n();
+  const base = "min-h-9 px-3 text-xs font-medium transition-colors disabled:opacity-60";
+  return (
+    <div role="group" aria-label={label} className="inline-flex shrink-0 overflow-hidden rounded-lg border border-border">
+      {([true, false] as const).map((value) => (
+        <button
+          key={String(value)}
+          type="button"
+          aria-pressed={unknown === value}
+          disabled={disabled}
+          onClick={() => onChange(value)}
+          className={`${base} ${unknown === value ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"}`}
+        >
+          {value ? t("form.unknown") : t("form.known")}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 export function PostForm({ type, postId, initialValues, myOrganizations = [] }: PostFormProps) {
@@ -204,15 +243,19 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
   // by CategoryPicker's suggestion hint.
   const [titleText, setTitleText] = useState(initialValues?.title ?? "");
   const [descriptionText, setDescriptionText] = useState(initialValues?.description ?? "");
-  const [locationUnknown, setLocationUnknown] = useState(initialValues?.location === null);
-  const [dateUnknown, setDateUnknown] = useState(initialValues?.dateValue === null);
+  // 장소·날짜 입력 UX: a new post starts with both place and date as 모름
+  // -- the poster fills in only what they actually know. Editing restores
+  // exactly what's stored.
+  const [locationUnknown, setLocationUnknown] = useState(initialValues ? initialValues.location === null : true);
+  const [dateUnknown, setDateUnknown] = useState(initialValues ? initialValues.dateValue === null : true);
   // Create-form default for the date/time inputs (KST "now"), fixed at mount.
   const [defaultNow] = useState(nowAsKstDateTimeLocalValue);
-  // Only meaningful while the date is known -- unchecking 날짜 모름 keeps
-  // this choice, and the date input's value is kept either way.
-  const [timeUnknown, setTimeUnknown] = useState(
-    initialValues !== undefined && initialValues.dateValue !== null && initialValues.timeValue === null,
+  // The exact time is opt-in: off by default, on only for a post that
+  // already has a stored time. The date input keeps its value either way.
+  const [exactTime, setExactTime] = useState(
+    initialValues !== undefined && initialValues.dateValue !== null && initialValues.timeValue !== null,
   );
+  const timeUnknown = !exactTime;
 
   // Same outside-click-to-close mechanism PostManageMenu already
   // established (Phase H-6) -- plain useState + a document listener, no
@@ -326,11 +369,19 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
   // the reorder endpoint. Existing-image deletion already happened
   // immediately (handleDeleteExistingImage above), so there's nothing left
   // to do for those here.
+  // "{time} 이후(약 {minutes}분 뒤)" in the viewer's language and clock.
+  function rateLimitMessage(seconds: number): string {
+    const at = new Date(Date.now() + seconds * 1000);
+    const time = new Intl.DateTimeFormat(LOCALE_INTL_TAG[t.locale], { timeStyle: "short" }).format(at);
+    return t("form.rateLimited", { time, minutes: Math.max(1, Math.ceil(seconds / 60)) });
+  }
+
   async function applyImageChanges(id: number): Promise<string | null> {
     const newItems = items.filter((item): item is Extract<GalleryItem, { kind: "new" }> => item.kind === "new");
     const attachedByLocalId = new Map<string, { id: number; imageUrl: string }>();
     let uploadFailedCount = 0;
     let processingFailed = false;
+    let rateLimitedSeconds = 0;
 
     if (newItems.length > 0) {
       const uploadResults = await Promise.allSettled(
@@ -343,6 +394,9 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
         else {
           uploadFailedCount++;
           if (result.reason instanceof ImageProcessingError) processingFailed = true;
+          if (result.reason instanceof UploadRateLimitedError) {
+            rateLimitedSeconds = Math.max(rateLimitedSeconds, result.reason.retryAfterSeconds);
+          }
         }
       }
 
@@ -401,6 +455,9 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
     }
 
     const partialFailure = formatPartialUploadFailureMessage(newItems.length, uploadFailedCount);
+    // Upload limit hit: say exactly when to retry. The photos that didn't
+    // go up stay in the gallery for "사진 다시 시도".
+    if (partialFailure && rateLimitedSeconds > 0) return `${partialFailure} ${rateLimitMessage(rateLimitedSeconds)}`;
     return partialFailure && processingFailed ? `${partialFailure} ${t("image.processFailed")}` : partialFailure;
   }
 
@@ -461,7 +518,13 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
       const json = await res.json();
 
       if (!res.ok) {
-        setError(json.error ?? t("form.requestFailed"));
+        // Nothing is cleared on failure -- every field and photo stays in
+        // the form. A rate limit shows the real time it lifts.
+        setError(
+          res.status === 429 && typeof json.retryAfterSeconds === "number"
+            ? rateLimitMessage(json.retryAfterSeconds)
+            : (json.error ?? t("form.requestFailed")),
+        );
         setPending(false);
         return;
       }
@@ -689,35 +752,27 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
           </div>
         </div>
 
-        <label className="flex flex-col gap-1.5 text-sm">
-          <span className="flex items-center justify-between gap-2">
+        <div className="flex flex-col gap-2 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="font-medium text-foreground">
-              {t("form.location")}
+              {t(LOCATION_LABEL_KEY[type])}
               {!locationUnknown && <RequiredMark />}
             </span>
-            {/* Phase P-5: a single toggle, not a two-button segmented
-                group (unlike 캠퍼스 above) -- there's only one meaningful
-                action from either state ("switch to the other one"), so
-                one button whose own label names that action is enough;
-                aria-pressed still reports which state is current for
-                assistive tech. Toggling to 모름 disables/unrequires the
-                input below and clears any popover open state, but never
-                erases whatever the poster already typed -- switching back
-                restores it exactly (the input itself is untouched, see
-                defaultValue below). */}
-            <button
-              type="button"
-              onClick={() => {
-                setLocationUnknown((unknown) => !unknown);
+            {/* 장소·날짜 입력 UX: 모름 is the default and a clear two-way
+                choice. Switching to 모름 only hides the input -- whatever was
+                typed is kept and comes back. */}
+            <KnownToggle
+              unknown={locationUnknown}
+              disabled={pending}
+              label={t(LOCATION_LABEL_KEY[type])}
+              onChange={(unknown) => {
+                setLocationUnknown(unknown);
                 setLocationMenuOpen(false);
               }}
-              aria-pressed={locationUnknown}
-              disabled={pending}
-              className="shrink-0 text-xs font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline disabled:opacity-60"
-            >
-              {locationUnknown ? t("form.locationKnown") : t("form.locationUnknown")}
-            </button>
-          </span>
+            />
+          </div>
+          {/* The place it was lost/found -- not where it's kept now. */}
+          <p className="text-xs leading-relaxed text-muted-foreground">{t(LOCATION_HELP_KEY[type])}</p>
           {/* Phase P-2: the popover now follows the `campus` toggle above
               (getLocationSuggestions(campus)) instead of always listing
               every campus's buildings under its own heading -- switching
@@ -728,14 +783,14 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
               directly still works exactly as before whether or not the
               popover is ever opened, and an already-typed value is never
               cleared by a campus change. */}
-          <div ref={locationMenuRef} className="relative flex gap-2">
+          <div ref={locationMenuRef} className={`relative flex gap-2 ${locationUnknown ? "hidden" : ""}`}>
             <input
               ref={locationInputRef}
               name="location"
               type="text"
               required={!locationUnknown}
               maxLength={200}
-              placeholder={locationUnknown ? t("form.locationUnknownPlaceholder") : t("form.locationPlaceholder")}
+              placeholder={t("form.locationPlaceholder")}
               defaultValue={initialValues?.location ?? undefined}
               disabled={pending || locationUnknown}
               className={`${FIELD_CLASS} flex-1`}
@@ -779,27 +834,20 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
               </div>
             )}
           </div>
-        </label>
+        </div>
 
-        <div className="flex flex-col gap-1.5 text-sm">
-          <span className="flex items-center justify-between gap-2">
+        <div className="flex flex-col gap-2 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="font-medium text-foreground">
               {t(DATE_LABEL_KEY[type])}
               {!dateUnknown && <RequiredMark />}
             </span>
-            {/* Phase P-5: same single-toggle pattern as 위치 above -- now
-                날짜 모름 (which also leaves the time unknown). */}
-            <button
-              type="button"
-              onClick={() => setDateUnknown((unknown) => !unknown)}
-              aria-pressed={dateUnknown}
-              disabled={pending}
-              className="shrink-0 text-xs font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline disabled:opacity-60"
-            >
-              {dateUnknown ? t("form.dateKnown") : t("form.dateUnknown")}
-            </button>
-          </span>
-          <span className="flex gap-2">
+            <KnownToggle unknown={dateUnknown} disabled={pending} label={t(DATE_LABEL_KEY[type])} onChange={setDateUnknown} />
+          </div>
+          {/* Date first (year-month-day); the exact time is a separate,
+              opt-in step and stays disabled until asked for. Inputs are
+              full width so the native mobile pickers are easy to hit. */}
+          <div className={`flex flex-col gap-2 ${dateUnknown ? "hidden" : ""}`}>
             <input
               name="date"
               type="date"
@@ -807,29 +855,28 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [] }: 
               required={!dateUnknown}
               defaultValue={initialValues?.dateValue ?? defaultNow.slice(0, 10)}
               disabled={pending || dateUnknown}
-              className={`${FIELD_CLASS} min-w-0 flex-1`}
+              className={`${FIELD_CLASS} w-full`}
             />
+            <label className="flex w-fit items-center gap-2 py-1 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                className="size-4"
+                checked={exactTime}
+                onChange={(event) => setExactTime(event.target.checked)}
+                disabled={pending || dateUnknown}
+              />
+              {t("form.addExactTime")}
+            </label>
             <input
               name="time"
               type="time"
-              aria-label={t(DATE_LABEL_KEY[type])}
-              required={!dateUnknown && !timeUnknown}
-              defaultValue={initialValues ? (initialValues.timeValue ?? "") : defaultNow.slice(11, 16)}
-              disabled={pending || dateUnknown || timeUnknown}
-              className={`${FIELD_CLASS} min-w-0 flex-1`}
+              aria-label={t("form.exactTime")}
+              required={!dateUnknown && exactTime}
+              defaultValue={initialValues?.timeValue ?? defaultNow.slice(11, 16)}
+              disabled={pending || dateUnknown || !exactTime}
+              className={`${FIELD_CLASS} w-full`}
             />
-          </span>
-          {!dateUnknown && (
-            <label className="flex w-fit items-center gap-2 text-xs text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={timeUnknown}
-                onChange={(event) => setTimeUnknown(event.target.checked)}
-                disabled={pending}
-              />
-              {t("form.timeUnknown")}
-            </label>
-          )}
+          </div>
         </div>
       </section>
 

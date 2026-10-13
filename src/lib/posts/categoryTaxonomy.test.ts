@@ -17,9 +17,12 @@ import {
 } from "./categoryTaxonomy";
 
 describe("category taxonomy", () => {
-  it("has the 9 confirmed main categories in display order", () => {
+  it("has the 13 confirmed main categories in display order", () => {
     expect(CATEGORY_CODES).toEqual([
       "electronics",
+      "phone",
+      "earphones",
+      "watch",
       "wallet",
       "card_id",
       "bag",
@@ -28,18 +31,20 @@ describe("category taxonomy", () => {
       "book_document",
       "stationery",
       "living",
+      "etc",
     ]);
   });
 
-  it("gives every category 5-11 single-item subcategories ending in its own 'other'", () => {
+  // 이어폰·시계 have 3 (split out of 전자기기/액세서리); 기타 has only its own 'other'.
+  it("gives every category 1-11 single-item subcategories ending in its own 'other'", () => {
     for (const category of CATEGORY_CODES) {
       const subs = subcategoriesOf(category);
-      expect(subs.length).toBeGreaterThanOrEqual(5);
+      expect(subs.length).toBeGreaterThanOrEqual(category === "etc" ? 1 : 3);
       expect(subs.length).toBeLessThanOrEqual(11);
       expect(subs.at(-1)).toBe(otherSubcategoryOf(category));
       expect(subs.filter(isOtherSubcategory)).toEqual([`${category}.other`]);
     }
-    expect(SUBCATEGORY_CODES).toHaveLength(65);
+    expect(SUBCATEGORY_CODES).toHaveLength(77);
   });
 
   it("uses unique codes that are prefixed by their parent and are plain ASCII", () => {
@@ -57,7 +62,11 @@ describe("category taxonomy", () => {
     expect(isCategoryCode("기타")).toBe(false);
     expect(isCategoryCode("toString")).toBe(false);
     expect(isCategoryCode(null)).toBe(false);
-    expect(isSubcategoryCode("electronics.phone")).toBe(true);
+    expect(isSubcategoryCode("phone.apple")).toBe(true);
+    // moved to their own categories (휴대폰/이어폰/시계)
+    expect(isSubcategoryCode("electronics.phone")).toBe(false);
+    expect(isSubcategoryCode("electronics.earphones")).toBe(false);
+    expect(isSubcategoryCode("accessory.watch")).toBe(false);
     expect(isSubcategoryCode("phone")).toBe(false);
     expect(isSubcategoryCode("휴대폰")).toBe(false);
     expect(isSubcategoryCode("electronics")).toBe(false);
@@ -74,9 +83,9 @@ describe("category taxonomy", () => {
 
 describe("validateCategorySelection", () => {
   it("accepts a subcategory under its own parent", () => {
-    expect(validateCategorySelection("electronics", "electronics.earphones")).toEqual({
+    expect(validateCategorySelection("earphones", "earphones.airpods")).toEqual({
       ok: true,
-      value: { category: "electronics", subcategory: "electronics.earphones" },
+      value: { category: "earphones", subcategory: "earphones.airpods" },
     });
   });
 
@@ -111,7 +120,7 @@ describe("validateCategorySelection", () => {
 describe("taxonomy labels", () => {
   it("has a non-empty label for every category and subcategory in all 7 locales", () => {
     const keys = [...CATEGORY_CODES.map(taxonomyCategoryLabelKey), ...SUBCATEGORY_CODES.map(taxonomySubcategoryLabelKey)];
-    expect(keys).toHaveLength(74);
+    expect(keys).toHaveLength(90);
     for (const [locale, dictionary] of Object.entries(DICTIONARIES)) {
       for (const key of keys) {
         expect(dictionary[key], `${locale} ${key}`).toBeTruthy();
@@ -123,6 +132,9 @@ describe("taxonomy labels", () => {
     const { ko } = DICTIONARIES;
     expect(CATEGORY_CODES.map((code) => ko[taxonomyCategoryLabelKey(code)])).toEqual([
       "전자기기",
+      "휴대폰",
+      "이어폰",
+      "시계",
       "지갑",
       "카드·신분증",
       "가방·파우치",
@@ -131,10 +143,13 @@ describe("taxonomy labels", () => {
       "도서·문서",
       "문구·학용품",
       "생활용품",
+      "기타",
     ]);
     expect(subcategoriesOf("clothing").map((code) => ko[taxonomySubcategoryLabelKey(code)])).toEqual([
       "상의",
       "아우터",
+      "과잠(학과 점퍼)",
+      "학잠(학교 점퍼)",
       "하의",
       "모자",
       "목도리",
@@ -143,8 +158,6 @@ describe("taxonomy labels", () => {
       "기타 의류",
     ]);
     expect(subcategoriesOf("electronics").map((code) => ko[taxonomySubcategoryLabelKey(code)])).toEqual([
-      "휴대폰",
-      "이어폰",
       "헤드폰",
       "노트북",
       "태블릿",
@@ -156,6 +169,14 @@ describe("taxonomy labels", () => {
       "기타 전자기기",
     ]);
     expect(ko[taxonomySubcategoryLabelKey("living.other")]).toBe("기타 생활용품");
+    expect(ko[taxonomySubcategoryLabelKey("living.car_key")]).toBe("자동차 키");
+    expect(subcategoriesOf("phone").map((code) => ko[taxonomySubcategoryLabelKey(code)])).toEqual([
+      "삼성",
+      "애플(아이폰)",
+      "LG",
+      "샤오미",
+      "기타 휴대폰",
+    ]);
     // Every subcategory other than the "기타 ○○" ones and 헤어 액세서리 names one kind of item.
     for (const code of SUBCATEGORY_CODES) {
       const label = ko[taxonomySubcategoryLabelKey(code)] ?? "";

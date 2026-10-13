@@ -36,7 +36,7 @@ export const LOST_STATUS_TO_DB: Record<string, PrismaLostPostStatus> = {
   "찾는 중": PrismaLostPostStatus.SEARCHING,
   "찾음": PrismaLostPostStatus.FOUND,
 };
-const LOST_STATUS_FROM_DB: Record<PrismaLostPostStatus, string> = {
+export const LOST_STATUS_FROM_DB: Record<PrismaLostPostStatus, string> = {
   SEARCHING: "찾는 중",
   FOUND: "찾음",
 };
@@ -44,7 +44,7 @@ export const FOUND_STATUS_TO_DB: Record<string, PrismaFoundPostStatus> = {
   "보관 중": PrismaFoundPostStatus.KEEPING,
   "완료": PrismaFoundPostStatus.COMPLETED,
 };
-const FOUND_STATUS_FROM_DB: Record<PrismaFoundPostStatus, string> = {
+export const FOUND_STATUS_FROM_DB: Record<PrismaFoundPostStatus, string> = {
   KEEPING: "보관 중",
   COMPLETED: "완료",
 };
@@ -575,19 +575,32 @@ export async function deleteFoundPost(
 
 type PostDeleteTx = Pick<
   Prisma.TransactionClient,
-  "lostPost" | "foundPost" | "postImage" | "chatRoom" | "postView" | "matchCandidateCache" | "$executeRaw"
+  "lostPost" | "foundPost" | "postImage" | "chatRoom" | "postView" | "matchCandidateCache" | "postStatusChange" | "$executeRaw"
 >;
+
+// 게시판 상태 변경 이력: the most recent change, for the author/admin view.
+export async function getLatestStatusChange(
+  type: PostType,
+  postId: number,
+): Promise<{ fromStatus: string; toStatus: string; createdAt: Date } | null> {
+  return prisma.postStatusChange.findFirst({
+    where: { postType: type, postId },
+    orderBy: { createdAt: "desc" },
+    select: { fromStatus: true, toStatus: true, createdAt: true },
+  });
+}
 
 // 개인정보 감사: rows derived from a post that no FK ties to it, so they
 // would otherwise outlive it -- its view records (viewerKey = a user id
-// or an anon_uid cookie value), its own cached recommendation ranking,
-// and every cached ranking on the other board that lists it. The latter
-// are only {id, score} pairs and a deleted id is already skipped when a
-// ranking is shown (PUBLIC_POST_WHERE), but they're dropped too so the
-// next view recomputes them without it. View counts (viewCount on the
-// post rows) are not touched.
+// or an anon_uid cookie value), its status-change history, its own cached
+// recommendation ranking, and every cached ranking on the other board
+// that lists it. The latter are only {id, score} pairs and a deleted id is
+// already skipped when a ranking is shown (PUBLIC_POST_WHERE), but they're
+// dropped too so the next view recomputes them without it. View counts
+// (viewCount on the post rows) are not touched.
 export async function deletePostDerivedDataInTx(tx: PostDeleteTx, type: PostType, id: number): Promise<void> {
   await tx.postView.deleteMany({ where: { postType: type, postId: id } });
+  await tx.postStatusChange.deleteMany({ where: { postType: type, postId: id } });
   await tx.matchCandidateCache.deleteMany({ where: { sourceType: type, sourcePostId: id } });
   const otherType: PostType = type === "lost" ? "found" : "lost";
   await tx.$executeRaw`DELETE FROM "MatchCandidateCache" WHERE source_type = ${otherType} AND candidates -> 'ranking' @> ${JSON.stringify([{ id }])}::jsonb`;

@@ -28,10 +28,11 @@ const chatRoom = { updateMany: vi.fn(), deleteMany: vi.fn(), delete: vi.fn() };
 // The delete runs inside an interactive transaction; the tx is the same
 // mocked tables so assertions read the same way.
 const postView = { deleteMany: vi.fn() };
+const postStatusChange = { deleteMany: vi.fn() };
 const matchCandidateCache = { deleteMany: vi.fn() };
 const $executeRaw = vi.fn();
 const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
-  fn({ lostPost, foundPost, postImage, chatRoom, postView, matchCandidateCache, $executeRaw }),
+  fn({ lostPost, foundPost, postImage, chatRoom, postView, postStatusChange, matchCandidateCache, $executeRaw }),
 );
 
 const deleteObjectSafely = vi.fn();
@@ -214,6 +215,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
     await deleteLostPost(1, 1);
 
     expect(postView.deleteMany).toHaveBeenCalledWith({ where: { postType: "lost", postId: 1 } });
+    expect(postStatusChange.deleteMany).toHaveBeenCalledWith({ where: { postType: "lost", postId: 1 } });
     expect(matchCandidateCache.deleteMany).toHaveBeenCalledWith({ where: { sourceType: "lost", sourcePostId: 1 } });
     // The other board's cached rankings that list this post.
     const [sql, ...values] = $executeRaw.mock.calls[0];

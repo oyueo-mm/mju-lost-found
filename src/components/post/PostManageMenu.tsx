@@ -42,6 +42,8 @@ export function PostManageMenu({ id, type, currentStatus, statuses }: PostManage
   // 한국어 원문 그대로다 -- 메뉴에 보이는 글자만 번역한다.
   const finalKey = statusLabelKeyOrNull(final);
   const finalLabel = finalKey ? t(finalKey) : final;
+  const initialKey = statusLabelKeyOrNull(initial);
+  const initialLabel = initialKey ? t(initialKey) : initial;
 
   // No dropdown/popover library in this project (see icons.tsx's own
   // "no new dependency" convention) -- a plain outside-click listener is
@@ -57,15 +59,20 @@ export function PostManageMenu({ id, type, currentStatus, statuses }: PostManage
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
 
+  // 상태 변경: forward to the final status, or -- e.g. 완료 set by mistake --
+  // back to the initial one (asks first). Either way the server records
+  // the change in PostStatusChange; only the author can do it.
   async function handleStatusChange() {
     if (pending !== null) return;
+    const target = isFinal ? initial : final;
+    if (isFinal && !confirm(t("post.revertStatusConfirm", { status: initialLabel }))) return;
     setPending("status");
     setError(null);
     try {
       const res = await fetch(`/api/posts/${id}?type=${type}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: final }),
+        body: JSON.stringify({ status: target }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -129,17 +136,19 @@ export function PostManageMenu({ id, type, currentStatus, statuses }: PostManage
           >
             {t("common.edit")}
           </Link>
-          {!isFinal && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={handleStatusChange}
-              disabled={pending !== null}
-              className="block w-full px-4 py-2.5 text-left text-sm text-foreground hover:bg-muted disabled:opacity-60"
-            >
-              {pending === "status" ? t("post.changingStatus") : t("post.changeStatusTo", { status: finalLabel })}
-            </button>
-          )}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={handleStatusChange}
+            disabled={pending !== null}
+            className="block w-full px-4 py-2.5 text-left text-sm text-foreground hover:bg-muted disabled:opacity-60"
+          >
+            {pending === "status"
+              ? t("post.changingStatus")
+              : isFinal
+                ? t("post.revertStatusTo", { status: initialLabel })
+                : t("post.changeStatusTo", { status: finalLabel })}
+          </button>
           <button
             type="button"
             role="menuitem"

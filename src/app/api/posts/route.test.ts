@@ -32,8 +32,10 @@ vi.mock("@/lib/posts/aiService", () => ({
 const getCurrentUser = vi.fn();
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser }));
 const enforceRateLimit = vi.fn();
+const rateLimitTierFor = vi.fn(async () => "user");
 vi.mock("@/lib/rateLimit", () => ({
   enforceRateLimit,
+  rateLimitTierFor,
   clientIpFrom: (headers: Headers) => headers.get("x-forwarded-for"),
 }));
 
@@ -416,7 +418,7 @@ describe("rate limits", () => {
     );
 
     expect(res.status).toBe(429);
-    expect(enforceRateLimit).toHaveBeenCalledWith("postCreate", { userId: 1 });
+    expect(enforceRateLimit).toHaveBeenCalledWith("postCreate", { userId: 1, tier: "user" });
     expect(createLostPost).not.toHaveBeenCalled();
   });
 });

@@ -18,7 +18,7 @@ import type { CategoryCode } from "./categoryTaxonomy";
 
 // Bump when RULES in categorySuggest.ts change, so stored candidates can be
 // told apart from ones a newer suggester would produce.
-export const CATEGORY_SUGGESTER_VERSION = "2026-09-30.2";
+export const CATEGORY_SUGGESTER_VERSION = "2026-10-13.1";
 
 export const LEGACY_CATEGORY_TO_CODE: Readonly<Record<string, CategoryCode>> = {
   전자기기: "electronics",
@@ -29,6 +29,15 @@ export const LEGACY_CATEGORY_TO_CODE: Readonly<Record<string, CategoryCode>> = {
   액세서리: "accessory",
   책: "book_document",
   필기구: "stationery",
+};
+
+// Categories split out of a legacy one (카테고리 개선): a 전자기기 post
+// suggested as 휴대폰/이어폰, or a 액세서리 post suggested as 시계, agrees
+// with its legacy value.
+const SPLIT_FROM: Partial<Record<CategoryCode, CategoryCode>> = {
+  phone: "electronics",
+  earphones: "electronics",
+  watch: "accessory",
 };
 
 export type CategoryReviewReason =
@@ -79,15 +88,19 @@ export function planCategoryMigration(post: {
   let reviewReason: CategoryReviewReason | null = null;
   if (legacyCategoryCode === null) {
     reviewReason = legacyCategory.trim() === "기타" ? "legacy_other" : "unknown_legacy";
-  } else if (suggestion && suggestion.category !== legacyCategoryCode) {
+  } else if (suggestion && (SPLIT_FROM[suggestion.category] ?? suggestion.category) !== legacyCategoryCode) {
     reviewReason = "category_conflict";
   }
+  // When the suggestion is a category split out of the legacy one, it's the
+  // more specific (and now correct) main category.
+  const autoCategoryCode =
+    reviewReason !== null ? null : suggestion && SPLIT_FROM[suggestion.category] ? suggestion.category : legacyCategoryCode;
 
   return {
     legacyCategory,
     legacyCategoryCode,
     suggestion,
-    autoCategoryCode: reviewReason === null ? legacyCategoryCode : null,
+    autoCategoryCode,
     reviewReason,
     ambiguities,
   };

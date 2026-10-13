@@ -14,7 +14,7 @@ import {
   type CategoryCode,
   type SubcategoryCode,
 } from "@/lib/posts/categoryTaxonomy";
-import { CATEGORY_CODE_TO_LEGACY } from "@/lib/posts/categoryWrite";
+import { LEGACY_CATEGORY_TO_CODE } from "@/lib/posts/categoryMigration";
 
 export const CATEGORY_FILTER_PARAM_KEYS = ["category", "categoryCode", "subcategory"] as const;
 
@@ -28,9 +28,14 @@ export type CategoryFilterState = {
 
 export const EMPTY_CATEGORY_FILTER: CategoryFilterState = { categoryCode: null, subcategory: null, legacyCategory: null };
 
-const LEGACY_TO_CODE: ReadonlyMap<string, CategoryCode> = new Map(
-  (Object.entries(CATEGORY_CODE_TO_LEGACY) as [CategoryCode, string][]).map(([code, legacy]) => [legacy, code]),
-);
+// Old ?category= links keep meaning what they always did. Several codes
+// now share a legacy value (phone/earphones -> 전자기기, watch -> 액세서리,
+// etc -> 기타), so this is the explicit legacy table, not an inversion of
+// CATEGORY_CODE_TO_LEGACY; 기타 stays 생활용품 as before.
+const LEGACY_TO_CODE: ReadonlyMap<string, CategoryCode> = new Map<string, CategoryCode>([
+  ...Object.entries(LEGACY_CATEGORY_TO_CODE),
+  ["기타", "living"],
+]);
 
 type ParamReader = { get(key: string): string | null };
 

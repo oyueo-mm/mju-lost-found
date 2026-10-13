@@ -7,8 +7,8 @@ import { I18nProvider } from "@/lib/i18n/client";
 import { ko } from "@/lib/i18n/messages/ko";
 import { PostForm } from "./PostForm";
 
-// 분실/습득 날짜/시각 분리: the date and time are separate inputs, and
-// "시간을 잘 모르겠어요" only disables the time -- the date stays.
+// 분실/습득 날짜/시각: place and date default to 모름; the date is a
+// year-month-day input and the exact time is a separate opt-in.
 
 const editValues = (dateValue: string | null, timeValue: string | null) => ({
   title: "지갑",
@@ -35,37 +35,62 @@ function render(initialValues?: ReturnType<typeof editValues>) {
 
 const input = (markup: string, name: string) => markup.match(new RegExp(`<input[^>]*name="${name}"[^>]*>`))?.[0] ?? "";
 
+const toggle = (markup: string, label: string) =>
+  markup.match(new RegExp(`<div role="group" aria-label="${label}"[^>]*>.*?</div>`))?.[0] ?? "";
+const checkbox = (markup: string) => markup.match(/<input type="checkbox"[^>]*>/)?.[0] ?? "";
+
 describe("PostForm 분실 일시", () => {
-  it("create: separate required date and time inputs, plus the 시간 모름 checkbox", () => {
+  it("create: place and date start as 모름; the exact time is a separate opt-in", () => {
     const markup = render();
+    expect(toggle(markup, "잃어버린 장소")).toMatch(/aria-pressed="true"[^>]*>모름</);
+    expect(toggle(markup, "잃어버린 날짜")).toMatch(/aria-pressed="true"[^>]*>모름</);
+    expect(input(markup, "location")).not.toContain('required=""');
     expect(input(markup, "date")).toContain('type="date"');
-    expect(input(markup, "date")).toContain('required=""');
+    expect(input(markup, "date")).toContain('disabled=""');
     expect(input(markup, "time")).toContain('type="time"');
-    expect(input(markup, "time")).toContain('required=""');
-    expect(markup).toContain("시간을 잘 모르겠어요");
+    expect(input(markup, "time")).toContain('disabled=""');
+    expect(checkbox(markup)).not.toContain('checked=""');
+    expect(markup).toContain("정확한 시간도 입력할게요");
   });
 
-  it("edit, date + time: both prefilled", () => {
+  it("labels the place by board, with help text that it isn't the storage place", () => {
+    expect(render()).toContain("잃어버린 장소");
+    const found = renderToStaticMarkup(
+      <I18nProvider locale="ko" messages={ko}>
+        <PostForm type="found" />
+      </I18nProvider>,
+    );
+    expect(found).toContain("발견한 장소");
+    expect(found).toContain(ko["form.foundLocationHelp"].replace(/'/g, "&#x27;"));
+  });
+
+  it("edit, date + time: both prefilled, the exact-time box checked", () => {
     const markup = render(editValues("2026-10-06", "14:30"));
     expect(input(markup, "date")).toContain('value="2026-10-06"');
+    expect(input(markup, "date")).toContain('required=""');
     expect(input(markup, "time")).toContain('value="14:30"');
     expect(input(markup, "time")).not.toContain('disabled=""');
+    expect(input(markup, "time")).toContain('required=""');
+    expect(checkbox(markup)).toContain('checked=""');
   });
 
-  it("edit, date only: the date stays, only the time is disabled", () => {
+  it("edit, date only: the date stays, the time stays off", () => {
     const markup = render(editValues("2026-10-06", null));
     expect(input(markup, "date")).toContain('value="2026-10-06"');
     expect(input(markup, "date")).not.toContain('disabled=""');
     expect(input(markup, "time")).toContain('disabled=""');
-    expect(markup).toMatch(/<input type="checkbox" checked=""/);
+    expect(checkbox(markup)).not.toContain('checked=""');
+    expect(toggle(markup, "잃어버린 날짜")).toMatch(/aria-pressed="true"[^>]*>알고 있어요</);
   });
 
-  it("edit, date unknown: both inputs disabled, no time checkbox", () => {
+  it("edit, date unknown: 모름 selected, both inputs disabled", () => {
     const markup = render(editValues(null, null));
     expect(input(markup, "date")).toContain('disabled=""');
     expect(input(markup, "time")).toContain('disabled=""');
-    expect(markup).not.toContain("시간을 잘 모르겠어요");
-    expect(markup).toContain("날짜를 알고 있어요");
+    expect(toggle(markup, "잃어버린 날짜")).toMatch(/aria-pressed="true"[^>]*>모름</);
+    // a stored location stays known
+    expect(toggle(markup, "잃어버린 장소")).toMatch(/aria-pressed="true"[^>]*>알고 있어요</);
+    expect(input(markup, "location")).toContain('value="학생회관"');
   });
 });
 

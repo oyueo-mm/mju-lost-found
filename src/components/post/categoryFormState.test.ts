@@ -11,8 +11,8 @@ describe("initialCategoryState", () => {
 
   it("restores a migrated post's own codes", () => {
     expect(
-      initialCategoryState({ category: "전자기기", categoryCode: "electronics", subcategory: "electronics.earphones" }),
-    ).toEqual({ categoryCode: "electronics", subcategory: "electronics.earphones", legacyUnmapped: null });
+      initialCategoryState({ category: "전자기기", categoryCode: "earphones", subcategory: "earphones.airpods" }),
+    ).toEqual({ categoryCode: "earphones", subcategory: "earphones.airpods", legacyUnmapped: null });
     expect(initialCategoryState({ category: "기타", categoryCode: "living", subcategory: "living.other" })).toMatchObject({
       categoryCode: "living",
       subcategory: "living.other",
@@ -74,17 +74,17 @@ describe("categoryBodyFields", () => {
 });
 
 describe("shouldShowSuggestion", () => {
-  const earphones = { category: "electronics" as const, subcategory: "electronics.earphones" as const, source: "title" as const };
+  const earphones = { category: "earphones" as const, subcategory: "earphones.airpods" as const, source: "title" as const };
 
   it("shows when the suggestion names another main category or an unpicked subcategory", () => {
     expect(shouldShowSuggestion(earphones, { categoryCode: "accessory", subcategory: null }, null)).toBe(true);
     expect(shouldShowSuggestion(earphones, { categoryCode: null, subcategory: null }, null)).toBe(true);
-    expect(shouldShowSuggestion(earphones, { categoryCode: "electronics", subcategory: null }, null)).toBe(true);
-    expect(shouldShowSuggestion(earphones, { categoryCode: "electronics", subcategory: "electronics.other" }, null)).toBe(true);
+    expect(shouldShowSuggestion(earphones, { categoryCode: "earphones", subcategory: null }, null)).toBe(true);
+    expect(shouldShowSuggestion(earphones, { categoryCode: "earphones", subcategory: "earphones.other" }, null)).toBe(true);
   });
 
   it("hides when the selection already matches, when dismissed, or with no suggestion", () => {
-    expect(shouldShowSuggestion(earphones, { categoryCode: "electronics", subcategory: "electronics.earphones" }, null)).toBe(false);
+    expect(shouldShowSuggestion(earphones, { categoryCode: "earphones", subcategory: "earphones.airpods" }, null)).toBe(false);
     expect(shouldShowSuggestion(earphones, { categoryCode: "accessory", subcategory: null }, suggestionKey(earphones))).toBe(false);
     expect(shouldShowSuggestion(null, { categoryCode: null, subcategory: null }, null)).toBe(false);
   });
@@ -118,8 +118,8 @@ describe("postCategoryLabelKeys (read compatibility)", () => {
 
   it("formats '대분류 · 소분류' for cards and the detail page, with legacy fallback", () => {
     const t = (key: keyof typeof ko) => ko[key];
-    expect(postCategoryLabel({ category: "전자기기", categoryCode: "electronics", subcategory: "electronics.earphones" }, t)).toBe(
-      "전자기기 · 이어폰",
+    expect(postCategoryLabel({ category: "전자기기", categoryCode: "earphones", subcategory: "earphones.airpods" }, t)).toBe(
+      "이어폰 · 에어팟",
     );
     expect(postCategoryLabel({ category: "기타", categoryCode: "living", subcategory: "living.other" }, t)).toBe(
       "생활용품 · 기타 생활용품",

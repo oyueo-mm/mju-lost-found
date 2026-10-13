@@ -502,6 +502,7 @@ model User {
   externalAccessGrantsRevoked  ExternalAccessGrant[]         @relation("ExternalAccessGrantRevokedBy")
   withdrawnIdentities          WithdrawnIdentity[]
   rejoinRequestsReviewed       RejoinRequest[]               @relation("RejoinRequestReviewer")
+  postStatusChanges            PostStatusChange[]            @relation("PostStatusChangedBy")
 
   @@map("User")
 }
@@ -1385,6 +1386,25 @@ model Comment {
 // LostPost/FoundPost (same polymorphic postType/postId convention as
 // Report.targetId) -- a row surviving after its post is deleted is inert
 // bookkeeping, never read back for anything once the post is gone.
+// 게시판 상태 변경 이력: one row per status change of a post (e.g. 보관 중 ->
+// 완료, and back again when 완료 was set by mistake). Statuses are stored as
+// the same labels the API uses. Like PostView there is no FK to the post
+// (lost and found live in two tables); deletePostDerivedDataInTx removes a
+// deleted post's rows. changedBy is nulled if that account row ever goes.
+model PostStatusChange {
+  id              Int      @id @default(autoincrement())
+  postType        String   @map("post_type")
+  postId          Int      @map("post_id")
+  fromStatus      String   @map("from_status")
+  toStatus        String   @map("to_status")
+  changedByUserId Int?     @map("changed_by_user_id")
+  changedBy       User?    @relation("PostStatusChangedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([postType, postId, createdAt], map: "idx_post_status_change_post")
+  @@map("PostStatusChange")
+}
+
 model PostView {
   id        Int      @id @default(autoincrement())
   postType  String   @map("post_type")

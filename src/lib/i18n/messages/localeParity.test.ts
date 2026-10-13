@@ -13,7 +13,7 @@ import { zh } from "./zh";
 describe("locale dictionary parity", () => {
   it("exposes every Korean dictionary key in all supported locales", () => {
     const keySet = Object.keys(ko).sort();
-    expect(keySet).toHaveLength(644);
+    expect(keySet).toHaveLength(669);
 
     for (const dictionary of [en, zh, vi, mn, ja, fr]) {
       expect(Object.keys(dictionary).sort()).toEqual(keySet);
@@ -37,7 +37,16 @@ describe("locale dictionary parity", () => {
         })
         .sort();
 
-    expect(identicalKeys(ja)).toEqual(["auth.login.title", "brand.name", "brand.shortName", "landing.headlineAi"]);
+    // Brand names (AirPods, Galaxy Buds, LG, ...) stay as-is in every locale.
+    expect(identicalKeys(ja)).toEqual([
+      "auth.login.title",
+      "brand.name",
+      "brand.shortName",
+      "landing.headlineAi",
+      "taxonomy.subcategory.earphones.airpods",
+      "taxonomy.subcategory.earphones.buds",
+      "taxonomy.subcategory.phone.lg",
+    ]);
     expect(identicalKeys(fr)).toEqual([
       "auth.login.title",
       "brand.name",
@@ -57,6 +66,12 @@ describe("locale dictionary parity", () => {
       "organization.inactive",
       "report.reason.spam",
       "search.filter.campus",
+      "taxonomy.subcategory.earphones.airpods",
+      "taxonomy.subcategory.earphones.buds",
+      "taxonomy.subcategory.phone.apple",
+      "taxonomy.subcategory.phone.lg",
+      "taxonomy.subcategory.phone.samsung",
+      "taxonomy.subcategory.phone.xiaomi",
       "theme.accent.rose",
     ]);
   });

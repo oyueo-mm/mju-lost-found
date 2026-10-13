@@ -9,11 +9,15 @@ import {
   BookIcon,
   CardIcon,
   GridIcon,
+  EarbudsIcon,
   HeadphonesIcon,
+  MoreIcon,
   PenIcon,
+  PhoneIcon,
   RingIcon,
   ShirtIcon,
   WalletIcon,
+  WatchIcon,
 } from "@/components/icons";
 
 // Phase 17: real CATEGORIES (posts/schema.ts) only -- never a hardcoded
@@ -31,6 +35,9 @@ import {
 // 한국어 값과 1:1 -- 생활용품만 예전 "기타" 자리).
 const CATEGORY_ICONS: Record<CategoryCode, ComponentType<SVGProps<SVGSVGElement>>> = {
   electronics: HeadphonesIcon,
+  phone: PhoneIcon,
+  earphones: EarbudsIcon,
+  watch: WatchIcon,
   wallet: WalletIcon,
   card_id: CardIcon,
   bag: BagIcon,
@@ -39,6 +46,7 @@ const CATEGORY_ICONS: Record<CategoryCode, ComponentType<SVGProps<SVGSVGElement>
   book_document: BookIcon,
   stationery: PenIcon,
   living: GridIcon,
+  etc: MoreIcon,
 };
 
 // 홈 카테고리 버튼 동작 수정 Phase: 이 바로가기는 "AI 검색을 실행하는
@@ -116,7 +124,7 @@ export async function CategoryShortcuts() {
     //   않는다.
     // - 카테고리명은 text-foreground 그대로 둔다 -- 아이콘(primary/70)
     //   보다 대비가 높아 여전히 이름이 먼저 읽힌다.
-    <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-9">
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-7">
       {CATEGORY_CODES.map((categoryCode) => {
         // URL에는 언어와 무관한 code가 들어가고, 버튼 글자만 현재 언어로 바뀐다.
         const Icon = CATEGORY_ICONS[categoryCode] ?? GridIcon;

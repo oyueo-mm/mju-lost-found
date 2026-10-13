@@ -77,8 +77,8 @@ describe("resolveCategoryWrite", () => {
 
 describe("post schemas with categoryCode", () => {
   it("create: normalizes into category + categoryCode + subcategory", () => {
-    const parsed = createLostPostSchema.parse({ ...base, categoryCode: "electronics", subcategory: "electronics.earphones" });
-    expect(parsed).toMatchObject({ category: "전자기기", categoryCode: "electronics", subcategory: "electronics.earphones" });
+    const parsed = createLostPostSchema.parse({ ...base, categoryCode: "earphones", subcategory: "earphones.airpods" });
+    expect(parsed).toMatchObject({ category: "전자기기", categoryCode: "earphones", subcategory: "earphones.airpods" });
     const found = createFoundPostSchema.parse({ ...base, lostAt: undefined, foundAt: null, categoryCode: "bag" });
     expect(found).toMatchObject({ category: "가방", categoryCode: "bag", subcategory: null });
   });

@@ -58,8 +58,8 @@ describe("categoryCodeConditions (vector search SQL)", () => {
     expect(main).toHaveLength(1);
     expect(main[0].sql).toBe("category_code = ?");
     expect(main[0].values).toEqual(["electronics"]);
-    const both = categoryCodeConditions({ categoryCode: "electronics", subcategory: "electronics.earphones" });
+    const both = categoryCodeConditions({ categoryCode: "earphones", subcategory: "earphones.airpods" });
     expect(both.map((c) => c.sql)).toEqual(["category_code = ?", "subcategory = ?"]);
-    expect(both[1].values).toEqual(["electronics.earphones"]);
+    expect(both[1].values).toEqual(["earphones.airpods"]);
   });
 });
