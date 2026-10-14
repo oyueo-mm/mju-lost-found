@@ -1851,6 +1851,12 @@ model UserIdentityInfo {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   realName       String   @map("real_name") @db.Text
   department     String   @db.Text
+  // Where each value came from when it was saved: "self" (typed or edited
+  // by the member), "google_profile" (the Google account name, kept as
+  // suggested) or "google_people" (the Google profile department, kept as
+  // suggested). Informational only -- none of them is a verified record.
+  realNameSource   String @default("self") @map("real_name_source") @db.Text
+  departmentSource String @default("self") @map("department_source") @db.Text
   consentVersion String   @map("consent_version") @db.Text
   consentedAt    DateTime @map("consented_at")
   createdAt      DateTime @default(now()) @map("created_at")

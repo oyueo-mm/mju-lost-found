@@ -3,35 +3,28 @@ import Google from "next-auth/providers/google";
 
 import { decideSignIn } from "@/lib/auth/access";
 import { resolveSignIn } from "@/lib/auth/user";
+import { fetchDepartmentHint, googleScopes, isOrgScopeEnabled, nameHintFromProfile } from "@/lib/identity/googleHints";
 
 // No next-auth Adapter/database session store here -- see the User.googleId
 // comment in schema.prisma. Sessions are JWT-based (a signed cookie), and
 // the only DB write in this whole flow is the upsert in the jwt callback
 // below.
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      // Phase 8: narrower than next-auth's own default ("openid email
-      // profile") -- this app never reads a Google profile picture, and
-      // the *only* thing "profile" scope actually earns this app is
-      // User.name (see resolveOrCreateUser below), which is itself only
-      // ever shown once, on the onboarding welcome line, and to admins in
-      // the user list -- everywhere else in this app (author bylines,
-      // chat, comments, ...) displays the user's own chosen `nickname`,
-      // never `name`. That one cosmetic use isn't worth the OAuth consent
-      // screen also asking for gender/locale/"other public profile info"
-      // (all bundled under Google's single indivisible "profile" scope,
-      // regardless of whether an app's code ever reads them). Dropping it
-      // costs nothing structurally: resolveOrCreateUser already falls
-      // back to the email's local part when Google reports no name (see
-      // its own comment), and its `update` branch only *writes* name when
-      // one is actually provided (`?? undefined`), so an existing user's
-      // already-stored real name is never overwritten with the fallback
-      // on a later login. email/email_verified (the signIn callback's own
-      // @mju.ac.kr gate) and `sub` (googleId) both come from `openid
-      // email` alone -- neither needs `profile`.
+      // 실명·학과 자동 입력: "profile" is requested again (Phase 8 had
+      // dropped it) so the 실명·학과 form can be pre-filled with the Google
+      // account name -- a suggestion only (see identity/googleHints.ts):
+      // it is kept in the encrypted session cookie, never written to the
+      // DB until the member saves the form with its consent, and never
+      // treated as a school-verified name. User.name is no longer filled
+      // from Google at all (see the jwt callback). The department scope
+      // (People API organizations) is added only when
+      // GOOGLE_ORG_SCOPE_ENABLED=true. email/email_verified (the signIn
+      // callback's @mju.ac.kr gate) and `sub` (googleId) come from
+      // "openid email" as before.
       //
       // Login UX: prompt=select_account makes Google show its account
       // chooser every time. Without it, a browser with one signed-in Google
@@ -41,7 +34,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // again silently picks it again and the user can never switch to
       // their @mju.ac.kr account. This only affects the chooser; who may
       // sign in is still decided solely by the signIn callback below.
-      authorization: { params: { scope: "openid email", prompt: "select_account" } },
+      authorization: { params: { scope: googleScopes(), prompt: "select_account" } },
     }),
   ],
   session: { strategy: "jwt" },
@@ -85,11 +78,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // email (already @unique on User) is what actually prevents duplicate
     // Users for the same Google account; googleId is recorded alongside it
     // as the more stable identifier for future lookups.
-    async jwt({ token, account, user }) {
+    async jwt({ token, account, user, profile, trigger, session }) {
+      // 실명·학과 자동 입력: Auth.js copies the Google name and picture into
+      // the token (and from there into /api/auth/session) by default --
+      // neither is kept. The name survives only as a form hint, below.
+      delete token.name;
+      delete token.picture;
+      // Once the member has saved the form, the hints are no longer needed.
+      if (trigger === "update" && (session as { clearIdentityHints?: boolean } | undefined)?.clearIdentityHints) {
+        delete token.identityHints;
+      }
       if (account && user?.email) {
         const resolved = await resolveSignIn({
           email: user.email,
-          name: user.name ?? null,
+          // Never the Google name: User.name stays the e-mail local part
+          // (see auth/user.ts), so nothing from "profile" reaches the DB
+          // without the 실명·학과 consent.
+          name: null,
           googleId: account.providerAccountId,
         });
         // 회원탈퇴: a held withdrawn identity gets no User -- only a marker
@@ -103,6 +108,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.userId = resolved.user.id;
           token.nickname = resolved.user.nickname;
         }
+        if (resolved.kind === "held") {
+          delete token.identityHints;
+        } else {
+          token.identityHints = {
+            name: nameHintFromProfile(profile),
+            department:
+              isOrgScopeEnabled() && account.access_token ? await fetchDepartmentHint(account.access_token) : null,
+          };
+        }
       }
       return token;
     },
@@ -111,7 +125,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token.userId) {
         session.user.id = String(token.userId);
         session.user.nickname = token.nickname ?? null;
+        // The member's own 실명·학과 suggestions, read by /me/identity.
+        if (token.identityHints) session.identityHints = token.identityHints;
       }
+      session.user.name = null;
+      session.user.image = null;
       if (token.rejoinIdentityId) session.rejoinIdentityId = token.rejoinIdentityId;
       return session;
     },

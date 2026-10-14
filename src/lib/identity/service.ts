@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { CURRENT_IDENTITY_CONSENT_VERSION } from "@/lib/auth/terms";
 import { resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "@/lib/report/targets";
 import type { User } from "@/generated/prisma/client";
+import type { IdentityValueSource } from "./googleHints";
 import type { IdentityInput } from "./validation";
 import { normalizeViewReason } from "./validation";
 
@@ -24,11 +25,22 @@ export async function hasIdentityInfo(userId: number): Promise<boolean> {
 }
 
 // Saving the form is also the 실명·학과 수집·이용 동의 (the form's required
-// checkbox), recorded with the current consent version and time.
-export async function saveOwnIdentityInfo(userId: number, input: IdentityInput, now = new Date()): Promise<void> {
+// checkbox), recorded with the current consent version and time -- the
+// only way a Google-suggested value ever reaches the DB. `sources` says
+// whether each value was kept as suggested or typed by the member.
+export type IdentitySources = { realName: IdentityValueSource; department: IdentityValueSource };
+
+export async function saveOwnIdentityInfo(
+  userId: number,
+  input: IdentityInput,
+  sources: IdentitySources = { realName: "self", department: "self" },
+  now = new Date(),
+): Promise<void> {
   const data = {
     realName: input.realName,
     department: input.department,
+    realNameSource: sources.realName,
+    departmentSource: sources.department,
     consentVersion: CURRENT_IDENTITY_CONSENT_VERSION,
     consentedAt: now,
   };
@@ -70,6 +82,8 @@ export type AdminIdentityView = {
   nickname: string | null;
   realName: string | null;
   department: string | null;
+  realNameSource: string | null;
+  departmentSource: string | null;
   updatedAt: Date | null;
 };
 
@@ -100,7 +114,9 @@ export async function viewIdentityForReport(
       where: { id: targetUserId },
       select: {
         nickname: true,
-        identityInfo: { select: { realName: true, department: true, updatedAt: true } },
+        identityInfo: {
+          select: { realName: true, department: true, realNameSource: true, departmentSource: true, updatedAt: true },
+        },
       },
     });
     if (!member) return { kind: "not_found" as const };
@@ -113,6 +129,8 @@ export async function viewIdentityForReport(
         nickname: member.nickname,
         realName: member.identityInfo?.realName ?? null,
         department: member.identityInfo?.department ?? null,
+        realNameSource: member.identityInfo?.realNameSource ?? null,
+        departmentSource: member.identityInfo?.departmentSource ?? null,
         updatedAt: member.identityInfo?.updatedAt ?? null,
       },
     };

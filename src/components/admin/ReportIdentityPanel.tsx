@@ -10,6 +10,14 @@ import {
 
 type Party = { userId: number; role: "신고자" | "피신고자"; nickname: string | null };
 
+// Where a saved value came from -- none of these is a school-verified record.
+const SOURCE_LABELS: Record<string, string> = {
+  self: "직접 입력",
+  google_profile: "Google 계정 이름을 본인이 확인",
+  google_people: "Google 프로필 소속을 본인이 확인",
+};
+const sourceLabel = (source: string | null) => (source ? (SOURCE_LABELS[source] ?? source) : null);
+
 // 신고 당사자 실명·학과 열람 (관리자). Nothing is loaded until the admin
 // picks one of this report's two parties and writes a reason; each view is
 // recorded (IdentityAccessLog) with that reason.
@@ -56,9 +64,15 @@ export function ReportIdentityPanel({ reportId, parties }: { reportId: number; p
           <dt className="text-muted-foreground">닉네임</dt>
           <dd className="text-foreground">{state.nickname ?? "-"}</dd>
           <dt className="text-muted-foreground">실명</dt>
-          <dd className="text-foreground">{state.realName ?? "미등록"}</dd>
+          <dd className="text-foreground">
+            {state.realName ?? "미등록"}
+            {state.realName && <span className="ml-1.5 text-xs text-muted-foreground">({sourceLabel(state.realNameSource)})</span>}
+          </dd>
           <dt className="text-muted-foreground">학과(소속)</dt>
-          <dd className="text-foreground">{state.department ?? "미등록"}</dd>
+          <dd className="text-foreground">
+            {state.department ?? "미등록"}
+            {state.department && <span className="ml-1.5 text-xs text-muted-foreground">({sourceLabel(state.departmentSource)})</span>}
+          </dd>
           {state.updatedAt && (
             <>
               <dt className="text-muted-foreground">최종 수정</dt>

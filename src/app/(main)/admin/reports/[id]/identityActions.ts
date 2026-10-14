@@ -4,7 +4,16 @@ import { requireAdmin } from "@/lib/auth/session";
 import { viewIdentityForReport } from "@/lib/identity/service";
 
 export type IdentityViewState =
-  | { ok: true; targetUserId: number; nickname: string | null; realName: string | null; department: string | null; updatedAt: string | null }
+  | {
+      ok: true;
+      targetUserId: number;
+      nickname: string | null;
+      realName: string | null;
+      department: string | null;
+      realNameSource: string | null;
+      departmentSource: string | null;
+      updatedAt: string | null;
+    }
   | { ok: false; error: string }
   | null;
 
@@ -27,6 +36,8 @@ export async function viewReportPartyIdentityAction(_prev: IdentityViewState, fo
         nickname: result.data.nickname,
         realName: result.data.realName,
         department: result.data.department,
+        realNameSource: result.data.realNameSource,
+        departmentSource: result.data.departmentSource,
         updatedAt: result.data.updatedAt?.toISOString() ?? null,
       };
     case "invalid_reason":

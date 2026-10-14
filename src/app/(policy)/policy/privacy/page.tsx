@@ -25,7 +25,8 @@ import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 // lib/retention (policy.ts / service.ts, daily Vercel Cron).
 //
 // 처리위탁·자동수집 정정: §1/§2 list exactly what Google sign-in returns
-// for scope "openid email" (sub, email, email_verified -- no name; the
+// for scope "openid email" (sub, email, email_verified; since 실명·학과
+// 자동 입력 also "profile", whose name only pre-fills the 실명·학과 form; the
 // internal User.name is the e-mail local part, auth/user.ts), §5 names
 // each processor with its task (no transfer country is stated: not yet
 // confirmed), §8 describes the IP/User-Agent/cookie handling the code
@@ -48,12 +49,18 @@ const SECTIONS: Section[] = [
         <li>Google 계정 식별 정보(Google 로그인 시 발급되는 고유 식별자)</li>
         <li>이메일 주소 및 이메일 인증 여부(인증 여부는 로그인 허용 여부 확인에만 쓰고 저장하지 않습니다)</li>
         <li>
-          직접 설정한 닉네임. Google 계정 이름은 받지 않으며, 계정의 내부 이름 값은 이메일 주소의 @ 앞부분으로
-          저장됩니다.
+          직접 설정한 닉네임. 계정의 내부 이름 값은 이메일 주소의 @ 앞부분으로 저장되며, Google 계정 이름은 여기에
+          저장하지 않습니다.
         </li>
         <li>
-          실명, 학과(소속): 게시글 등록과 채팅을 이용할 때 이용자가 직접 입력하며, 별도의 동의를 받습니다.
-          학교 학적 정보와 대조해 확인하지 않습니다.
+          실명, 학과(소속): 게시글 등록과 채팅을 이용할 때 입력하며, 별도의 동의를 받습니다. 입력란은 Google 계정
+          이름으로 미리 채워질 수 있고, 이용자가 확인·수정한 뒤 동의하고 저장한 값만 저장됩니다. Google 계정 이름과
+          입력한 값 모두 학교 학적 정보와 대조해 확인하지 않습니다.
+        </li>
+        <li>
+          Google 계정 이름: Google 로그인 시 전달받아 실명 입력란을 미리 채우는 데만 씁니다. 로그인 세션 쿠키에
+          암호화된 상태로만 보관되고, 실명·학과에 동의하고 저장하기 전에는 서버에 저장하지 않으며, 저장하면 세션에서도
+          지웁니다.
         </li>
         <li>작성한 게시글(제목, 내용, 장소, 날짜, 첨부 이미지)</li>
         <li>작성한 댓글 및 답글</li>
@@ -69,8 +76,9 @@ const SECTIONS: Section[] = [
       <>
         Google 로그인(OAuth)을 통해 Google 계정 고유 식별자, 이메일 주소, 이메일 인증 여부를 전달받습니다. 이때
         요청하는 권한 범위(scope)는
-        <span className="font-medium text-foreground"> openid, email</span>이며, 프로필 사진·성별·언어 등
-        이름을 포함한 Google의 별도 프로필 정보는 요청하지 않습니다. 그 외 항목은 이용자가 서비스를 이용하는 과정에서
+        <span className="font-medium text-foreground"> openid, email, profile</span>입니다. profile로 전달되는
+        정보 중 이름만 위 1조의 용도(실명 입력란 미리 채우기)로 쓰며, 프로필 사진 등 나머지 정보는 쓰거나 저장하지
+        않습니다. 그 외 항목은 이용자가 서비스를 이용하는 과정에서
         직접 입력하거나(닉네임, 실명·학과, 게시글, 댓글, 채팅 등) 서비스 이용에 따라 자동으로 생성됩니다(로그인
         일시 등).
       </>

@@ -27,6 +27,9 @@ declare module "@auth/core/types" {
     // 회원탈퇴: set instead of a user id when the sign-in belongs to a held
     // withdrawn identity (rejoin request needed).
     rejoinIdentityId?: number;
+    // 실명·학과 자동 입력: the member's own Google-based suggestions for the
+    // 실명·학과 form (identity/googleHints.ts). Never stored in the DB.
+    identityHints?: { name: string | null; department: string | null };
   }
 }
 
@@ -35,5 +38,6 @@ declare module "@auth/core/jwt" {
     userId?: number;
     nickname?: string | null;
     rejoinIdentityId?: number;
+    identityHints?: { name: string | null; department: string | null };
   }
 }

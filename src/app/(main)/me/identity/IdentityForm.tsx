@@ -15,11 +15,14 @@ type IdentityFormProps = {
   initial: { realName: string; department: string } | null;
   // Already agreed with the current consent version: the box reflects that.
   consentGiven: boolean;
+  // Which fields start from a Google suggestion (shown with a "check this"
+  // note -- never presented as verified).
+  prefilled?: { realName: boolean; department: boolean };
   callbackUrl: string | null;
   onboarding: boolean;
 };
 
-export function IdentityForm({ initial, consentGiven, callbackUrl, onboarding }: IdentityFormProps) {
+export function IdentityForm({ initial, consentGiven, prefilled, callbackUrl, onboarding }: IdentityFormProps) {
   const { t } = useI18n();
   const [state, formAction, pending] = useActionState<SaveIdentityState, FormData>(saveIdentityAction, null);
   const errors = state?.errors ?? {};
@@ -50,6 +53,7 @@ export function IdentityForm({ initial, consentGiven, callbackUrl, onboarding }:
             aria-invalid={errors.realName ? true : undefined}
             className={FIELD_CLASS}
           />
+          {prefilled?.realName && <span className="text-xs text-primary">{t("identity.prefilledName")}</span>}
           {errors.realName && <span className="text-xs text-destructive">{t(errors.realName)}</span>}
         </label>
 
@@ -68,6 +72,7 @@ export function IdentityForm({ initial, consentGiven, callbackUrl, onboarding }:
             className={FIELD_CLASS}
           />
           <span className="text-xs text-muted-foreground">{t("identity.departmentHelp")}</span>
+          {prefilled?.department && <span className="text-xs text-primary">{t("identity.prefilledDepartment")}</span>}
           {errors.department && <span className="text-xs text-destructive">{t(errors.department)}</span>}
         </label>
 
@@ -87,6 +92,7 @@ export function IdentityForm({ initial, consentGiven, callbackUrl, onboarding }:
           </summary>
           <ul className="mt-2 flex list-disc flex-col gap-1.5 pl-5 text-xs leading-relaxed text-muted-foreground">
             <li>{t("identity.consent.items")}</li>
+            <li>{t("identity.consent.prefill")}</li>
             <li>{t("identity.consent.purpose")}</li>
             <li>{t("identity.consent.access")}</li>
             <li>{t("identity.consent.retention")}</li>

@@ -7,6 +7,9 @@ vi.mock("next/navigation", () => ({ redirect }));
 
 const requireReadyUser = vi.fn();
 vi.mock("@/lib/auth/session", () => ({ requireReadyUser }));
+const auth = vi.fn();
+const unstable_update = vi.fn();
+vi.mock("@/lib/auth/auth", () => ({ auth, unstable_update }));
 const saveOwnIdentityInfo = vi.fn();
 vi.mock("@/lib/identity/service", () => ({ saveOwnIdentityInfo }));
 
@@ -22,12 +25,13 @@ const valid = { realName: "홍길동", department: "컴퓨터공학과", consent
 beforeEach(() => {
   vi.clearAllMocks();
   requireReadyUser.mockResolvedValue({ id: 7 });
+  auth.mockResolvedValue(null);
 });
 
 describe("saveIdentityAction", () => {
   it("saves the session member's own values and returns to where they came from", async () => {
     await expect(saveIdentityAction(null, form({ ...valid, callbackUrl: "/found/new" }))).rejects.toThrow("REDIRECT:/found/new");
-    expect(saveOwnIdentityInfo).toHaveBeenCalledWith(7, { realName: "홍길동", department: "컴퓨터공학과" });
+    expect(saveOwnIdentityInfo).toHaveBeenCalledWith(7, { realName: "홍길동", department: "컴퓨터공학과" }, { realName: "self", department: "self" });
   });
 
   it("never redirects off the site", async () => {
@@ -62,5 +66,28 @@ describe("saveIdentityAction", () => {
     const logged = JSON.stringify(consoleError.mock.calls);
     expect(logged).not.toContain("홍길동");
     expect(logged).not.toContain("컴퓨터공학과");
+  });
+
+  // 실명·학과 자동 입력: a Google suggestion reaches the DB only through
+  // this consented save, marked as kept-as-suggested or edited.
+  it("records whether each value is the Google suggestion as-is, then drops the suggestions from the session", async () => {
+    auth.mockResolvedValue({ identityHints: { name: "홍길동", department: "학생지원팀" } });
+
+    await expect(saveIdentityAction(null, form({ realName: "홍길동", department: "컴퓨터공학과", consent: "on" }))).rejects.toThrow("REDIRECT:/me");
+
+    expect(saveOwnIdentityInfo).toHaveBeenCalledWith(
+      7,
+      { realName: "홍길동", department: "컴퓨터공학과" },
+      { realName: "google_profile", department: "self" },
+    );
+    expect(unstable_update).toHaveBeenCalledWith({ clearIdentityHints: true });
+  });
+
+  it("stores nothing from the suggestions without the consent checkbox", async () => {
+    auth.mockResolvedValue({ identityHints: { name: "홍길동", department: null } });
+    const result = await saveIdentityAction(null, form({ realName: "홍길동", department: "컴퓨터공학과" }));
+    expect(result).toEqual({ errors: { consent: "identity.error.consent" } });
+    expect(saveOwnIdentityInfo).not.toHaveBeenCalled();
+    expect(unstable_update).not.toHaveBeenCalled();
   });
 });

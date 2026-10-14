@@ -33,7 +33,11 @@ import { PrivacyConsentButton } from "./PrivacyConsentButton";
 const COLLECTED_ITEMS: { label: string; detail: string }[] = [
   { label: "Google 계정 식별 정보", detail: "Google 계정의 고유 식별자(구글 로그인 시 발급)" },
   { label: "이메일 주소", detail: "Google 계정의 이메일 주소(이메일 인증 여부는 로그인 확인에만 쓰고 저장하지 않음)" },
-  { label: "닉네임", detail: "직접 설정한 닉네임(Google 계정 이름은 받지 않으며, 내부 이름 값은 이메일 주소의 @ 앞부분)" },
+  { label: "닉네임", detail: "직접 설정한 닉네임(내부 이름 값은 이메일 주소의 @ 앞부분이며, Google 계정 이름은 여기에 저장하지 않음)" },
+  {
+    label: "Google 계정 이름",
+    detail: "Google 로그인 시 전달받아 실명 입력란을 미리 채우는 데만 사용(실명·학과 동의 후 저장하기 전에는 서버에 저장하지 않음)",
+  },
   { label: "게시글 정보", detail: "분실물/습득물 게시글의 제목, 내용, 장소, 날짜, 첨부 이미지" },
   { label: "댓글/답글", detail: "게시글에 작성한 댓글 및 답글 내용" },
   { label: "채팅 메시지", detail: "다른 이용자와 주고받은 채팅 메시지, 채팅으로 전송한 사진" },

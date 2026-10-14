@@ -34,8 +34,15 @@ describe("own 실명·학과", () => {
 
   it("saving records the separate consent version and time with the values", async () => {
     const now = new Date("2026-10-14T00:00:00Z");
-    await saveOwnIdentityInfo(5, { realName: "홍길동", department: "컴퓨터공학과" }, now);
-    const data = { realName: "홍길동", department: "컴퓨터공학과", consentVersion: CURRENT_IDENTITY_CONSENT_VERSION, consentedAt: now };
+    await saveOwnIdentityInfo(5, { realName: "홍길동", department: "컴퓨터공학과" }, { realName: "google_profile", department: "self" }, now);
+    const data = {
+      realName: "홍길동",
+      department: "컴퓨터공학과",
+      realNameSource: "google_profile",
+      departmentSource: "self",
+      consentVersion: CURRENT_IDENTITY_CONSENT_VERSION,
+      consentedAt: now,
+    };
     expect(userIdentityInfo.upsert).toHaveBeenCalledWith({ where: { userId: 5 }, create: { userId: 5, ...data }, update: data });
   });
 
@@ -74,11 +81,17 @@ describe("admin view of 실명·학과", () => {
     partiesOfReport();
     resolveUserTarget.mockResolvedValueOnce({ id: 2 });
     const updatedAt = new Date("2026-10-14T01:00:00Z");
-    txUser.findUnique.mockResolvedValueOnce({ nickname: "습득자", identityInfo: { realName: "홍길동", department: "학생지원팀", updatedAt } });
+    txUser.findUnique.mockResolvedValueOnce({
+      nickname: "습득자",
+      identityInfo: { realName: "홍길동", department: "학생지원팀", realNameSource: "google_profile", departmentSource: "self", updatedAt },
+    });
 
     const result = await viewIdentityForReport(admin, { reportId: 10, targetUserId: 2, reason: `  ${REASON}  ` });
 
-    expect(result).toEqual({ kind: "ok", data: { nickname: "습득자", realName: "홍길동", department: "학생지원팀", updatedAt } });
+    expect(result).toEqual({
+      kind: "ok",
+      data: { nickname: "습득자", realName: "홍길동", department: "학생지원팀", realNameSource: "google_profile", departmentSource: "self", updatedAt },
+    });
     expect(identityAccessLog.create).toHaveBeenCalledWith({
       data: { adminUserId: 9, targetUserId: 2, reportId: 10, reason: REASON },
     });
@@ -115,7 +128,10 @@ describe("admin view of 실명·학과", () => {
 
     const result = await viewIdentityForReport(admin, { reportId: 10, targetUserId: 1, reason: REASON });
 
-    expect(result).toEqual({ kind: "ok", data: { nickname: "습득자", realName: null, department: null, updatedAt: null } });
+    expect(result).toEqual({
+      kind: "ok",
+      data: { nickname: "습득자", realName: null, department: null, realNameSource: null, departmentSource: null, updatedAt: null },
+    });
     expect(identityAccessLog.create).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,3 +1,4 @@
+import { auth } from "@/lib/auth/auth";
 import { requireReadyUser, sanitizeCallbackUrl } from "@/lib/auth/session";
 import { CURRENT_IDENTITY_CONSENT_VERSION } from "@/lib/auth/terms";
 import { getOwnIdentityInfo } from "@/lib/identity/service";
@@ -8,13 +9,19 @@ import { IdentityForm } from "./IdentityForm";
 // their nickname (?onboarding=1, with a "나중에 할게요" way out), from 내
 // 정보, or when posting/chatting needs it (?callbackUrl= -- back there
 // after saving). Only the signed-in member's own values are ever loaded.
+//
+// 실명·학과 자동 입력: with nothing saved yet, the form starts from the
+// member's own Google suggestions (session identityHints -- the Google
+// account name, and a Google profile department only if that scope is on),
+// each flagged as a suggestion to check. Saved values always win.
 export default async function IdentityPage({
   searchParams,
 }: {
   searchParams: Promise<{ callbackUrl?: string; onboarding?: string }>;
 }) {
   const user = await requireReadyUser("mypost", "/me/identity");
-  const [t, own, params] = await Promise.all([getTranslator(), getOwnIdentityInfo(user.id), searchParams]);
+  const [t, own, params, session] = await Promise.all([getTranslator(), getOwnIdentityInfo(user.id), searchParams, auth()]);
+  const hints = own ? null : (session?.identityHints ?? null);
   const callbackUrl = sanitizeCallbackUrl(params.callbackUrl) ?? null;
   const onboarding = params.onboarding === "1";
 
@@ -30,7 +37,14 @@ export default async function IdentityPage({
       )}
 
       <IdentityForm
-        initial={own ? { realName: own.realName, department: own.department } : null}
+        initial={
+          own
+            ? { realName: own.realName, department: own.department }
+            : hints?.name || hints?.department
+              ? { realName: hints.name ?? "", department: hints.department ?? "" }
+              : null
+        }
+        prefilled={{ realName: Boolean(hints?.name), department: Boolean(hints?.department) }}
         consentGiven={own?.consentVersion === CURRENT_IDENTITY_CONSENT_VERSION}
         callbackUrl={callbackUrl}
         onboarding={onboarding}
