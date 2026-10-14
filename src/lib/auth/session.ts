@@ -103,12 +103,15 @@ function privacyConsentRedirectUrl(callbackUrl?: string): string {
 // regardless of who normally sets it -- only a same-origin relative path
 // is accepted (must start with exactly one "/", never "//..." which a
 // browser resolves as protocol-relative to an *external* host, and never
-// contain "://"), so this can never become an open redirect to another
-// site. Returns undefined for anything else, which callers treat as "no
-// callback url" rather than an error.
+// contain "://"), and never a backslash or control character (browsers
+// read "/\evil.example" as "//evil.example" and drop tabs/newlines, so
+// those land on another host too), so this can never become an open
+// redirect to another site. Returns undefined for anything else, which
+// callers treat as "no callback url" rather than an error.
 export function sanitizeCallbackUrl(url: string | undefined | null): string | undefined {
   if (!url) return undefined;
   if (!url.startsWith("/") || url.startsWith("//") || url.includes("://")) return undefined;
+  if (/[\\\u0000-\u001f\u007f]/.test(url)) return undefined;
   return url;
 }
 

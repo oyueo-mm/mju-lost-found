@@ -282,6 +282,24 @@ describe("sanitizeCallbackUrl", () => {
   it("rejects a path that doesn't start with a slash", () => {
     expect(sanitizeCallbackUrl("chat/5")).toBeUndefined();
   });
+
+  // Browsers treat "\" as "/" in a URL path and strip tabs/newlines, so
+  // each of these resolves to another host.
+  it("rejects a backslash or a control character anywhere", () => {
+    expect(sanitizeCallbackUrl("/\\evil.example")).toBeUndefined();
+    expect(sanitizeCallbackUrl("/\\/evil.example")).toBeUndefined();
+    expect(sanitizeCallbackUrl("/\t/evil.example")).toBeUndefined();
+    expect(sanitizeCallbackUrl("/\n/evil.example")).toBeUndefined();
+    expect(sanitizeCallbackUrl("/found\u0000")).toBeUndefined();
+    expect(sanitizeCallbackUrl("/found\u007f")).toBeUndefined();
+  });
+
+  // The app's own return trips keep working unchanged.
+  it("still accepts the app's own return paths", () => {
+    for (const path of ["/", "/onboarding", "/found/new", "/post/6?type=found#comments", "/search?q=%EC%A7%80%EA%B0%91"]) {
+      expect(sanitizeCallbackUrl(path)).toBe(path);
+    }
+  });
 });
 
 describe("requireActiveUser", () => {
