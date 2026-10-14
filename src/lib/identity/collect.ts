@@ -12,9 +12,17 @@ import { syncIdentityFromHints, type IdentitySyncResult } from "./service";
 // from the session cookie.
 export async function collectIdentityAfterConsent(userId: number): Promise<IdentitySyncResult> {
   const session = await auth();
-  const result = await syncIdentityFromHints(
-    { id: userId, identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION },
-    session?.identityHints,
+  const hints = session?.identityHints;
+  const result = await syncIdentityFromHints({ id: userId, identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION }, hints);
+  // Value-free: whether this session had hints, and whether they were a
+  // display-name split the collection could use.
+  console.info(
+    "Identity collection after consent:",
+    JSON.stringify({
+      user: userId,
+      hints: hints === undefined ? "none" : hints.nameSource === "google_display_name" && hints.departmentSource === "google_display_name" ? "display_name" : "unusable",
+      result,
+    }),
   );
   if (result !== "skipped") {
     try {

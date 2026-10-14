@@ -173,6 +173,18 @@ describe("실명·학과 자동 입력 in the session", () => {
     expect((await signIn({ name: "홍길동/학생/컴퓨터공학과", hd: "mju.ac.kr" })).identityHints).toMatchObject({ name: "홍길동" });
   });
 
+  // The sign-in diagnostic says which check skipped 이름·소속, never the values.
+  it("logs a value-free sign-in check", async () => {
+    const consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+    resolveSignIn.mockResolvedValueOnce({ kind: "user", user: { id: 7, nickname: "닉", identityConsentVersion: null } });
+    await signIn({ name: "홍길동/학생/컴퓨터공학과" });
+    const logged = JSON.stringify(consoleInfo.mock.calls);
+    expect(logged).toContain('\\"hd\\":\\"absent\\"');
+    expect(logged).toContain('\\"consent\\":\\"none\\"');
+    expect(logged).not.toMatch(/홍길동|컴퓨터공학과|학생|student@|Google Name|at-1/);
+    consoleInfo.mockRestore();
+  });
+
   it("a failed sync never blocks sign-in and logs no values", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     resolveSignIn.mockResolvedValueOnce({ kind: "user", user: { id: 7, nickname: "닉" } });

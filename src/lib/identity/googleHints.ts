@@ -87,6 +87,35 @@ export function hintsFromProfile(profile: unknown, { allowStructured = true }: {
   return checked.ok ? { name: checked.value.realName, department: null, nameSource: "google_profile" } : { name: null, department: null };
 }
 
+// Value-free sign-in diagnostics: which check let 이름·소속 through or
+// skipped them, as categories and booleans only -- never the name, the
+// affiliation, the e-mail or the hd value itself (beyond "is it the school").
+export type SignInIdentityCheck = {
+  hd: "school" | "absent" | "other";
+  emailSchool: boolean;
+  nameClaim: boolean;
+  parts: number;
+  roleKnown: boolean;
+  nameValid: boolean;
+  affiliationValid: boolean;
+};
+
+export function describeSignInIdentity(profile: unknown, email: string | null | undefined): SignInIdentityCheck {
+  const hdRaw = (profile as { hd?: unknown } | null | undefined)?.hd;
+  const raw = (profile as { name?: unknown } | null | undefined)?.name;
+  const parts = typeof raw === "string" ? raw.normalize("NFC").split("/").map((part) => part.trim()) : [];
+  const checked = parts.length === 3 ? validateIdentityInput({ realName: parts[0], department: parts[2] }) : null;
+  return {
+    hd: hdRaw === undefined || hdRaw === null || hdRaw === "" ? "absent" : hdRaw === SCHOOL_WORKSPACE_DOMAIN ? "school" : "other",
+    emailSchool: typeof email === "string" && email.toLowerCase().endsWith(`@${SCHOOL_WORKSPACE_DOMAIN}`),
+    nameClaim: typeof raw === "string" && raw.trim() !== "",
+    parts: typeof raw === "string" ? parts.length : 0,
+    roleKnown: parts.length === 3 && (MEMBER_TYPE_WORDS as readonly string[]).includes(parts[1]),
+    nameValid: checked !== null && (checked.ok || !checked.errors.realName),
+    affiliationValid: checked !== null && (checked.ok || !checked.errors.department),
+  };
+}
+
 // A usable name suggestion, or null (then the member types it in).
 export function nameHintFromProfile(profile: unknown): string | null {
   return hintsFromProfile(profile).name;

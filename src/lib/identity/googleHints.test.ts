@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  describeSignInIdentity,
   fetchDepartmentHint,
   GOOGLE_ORG_SCOPE,
   googleScopes,
@@ -147,5 +148,40 @@ describe("probe script format check matches the app parser", () => {
     }
     expect(classifyDisplayName("홍길동/학생/컴퓨터공학과").affiliationLevel).toBe("department_like");
     expect(classifyDisplayName("홍길동/학생/인공지능·소프트웨어융합대학").affiliationLevel).toBe("college_like");
+  });
+});
+
+// Sign-in diagnostics: which check skipped 이름·소속, without any value.
+describe("describeSignInIdentity", () => {
+  const email = "student@mju.ac.kr";
+
+  it("a school Workspace account with a well-formed display name passes every check", () => {
+    expect(describeSignInIdentity({ name: "홍길동/학생/컴퓨터공학과", hd: "mju.ac.kr" }, email)).toEqual({
+      hd: "school",
+      emailSchool: true,
+      nameClaim: true,
+      parts: 3,
+      roleKnown: true,
+      nameValid: true,
+      affiliationValid: true,
+    });
+  });
+
+  it("tells a missing or different hd apart", () => {
+    expect(describeSignInIdentity({ name: "홍길동/학생/컴퓨터공학과" }, email).hd).toBe("absent");
+    expect(describeSignInIdentity({ name: "홍길동/학생/컴퓨터공학과", hd: "other.ac.kr" }, email).hd).toBe("other");
+  });
+
+  it("points at the part of the display name that failed", () => {
+    expect(describeSignInIdentity({ name: "홍길동", hd: "mju.ac.kr" }, email)).toMatchObject({ parts: 1, roleKnown: false });
+    expect(describeSignInIdentity({ name: "홍길동/재학생/컴퓨터공학과", hd: "mju.ac.kr" }, email)).toMatchObject({ parts: 3, roleKnown: false, nameValid: true });
+    expect(describeSignInIdentity({ name: "홍1/학생/컴퓨터공학과", hd: "mju.ac.kr" }, email)).toMatchObject({ nameValid: false, affiliationValid: true });
+    expect(describeSignInIdentity({ hd: "mju.ac.kr" }, email)).toMatchObject({ nameClaim: false, parts: 0 });
+    expect(describeSignInIdentity({ name: "홍길동/학생/컴퓨터공학과", hd: "mju.ac.kr" }, "someone@gmail.com").emailSchool).toBe(false);
+  });
+
+  it("never carries the name, affiliation, e-mail or a foreign hd", () => {
+    const out = JSON.stringify(describeSignInIdentity({ name: "홍길동/학생/컴퓨터공학과", hd: "other.example" }, "secret.person@other.example"));
+    expect(out).not.toMatch(/홍길동|컴퓨터공학과|학생|secret|other\.example/);
   });
 });

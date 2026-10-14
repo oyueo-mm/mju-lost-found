@@ -2,8 +2,16 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 
 import { decideSignIn } from "@/lib/auth/access";
+import { CURRENT_IDENTITY_CONSENT_VERSION } from "@/lib/auth/terms";
 import { resolveSignIn } from "@/lib/auth/user";
-import { fetchDepartmentHint, googleScopes, hintsFromProfile, isOrgScopeEnabled, isSchoolWorkspaceAccount } from "@/lib/identity/googleHints";
+import {
+  describeSignInIdentity,
+  fetchDepartmentHint,
+  googleScopes,
+  hintsFromProfile,
+  isOrgScopeEnabled,
+  isSchoolWorkspaceAccount,
+} from "@/lib/identity/googleHints";
 import { syncIdentityFromHints } from "@/lib/identity/service";
 
 // No next-auth Adapter/database session store here -- see the User.googleId
@@ -127,11 +135,26 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           // never blocks sign-in, and logs no values.
           // Once stored, the hints leave the session (as the 개인정보처리방침
           // says); they stay only while nothing could be stored.
+          let sync: string;
           try {
-            if ((await syncIdentityFromHints(resolved.user, token.identityHints)) !== "skipped") delete token.identityHints;
+            sync = await syncIdentityFromHints(resolved.user, token.identityHints);
+            if (sync !== "skipped") delete token.identityHints;
           } catch (error) {
+            sync = "error";
             console.error("Identity sync at sign-in failed:", error instanceof Error ? error.name : "unknown");
           }
+          // Which check let 이름·소속 through or skipped them -- categories
+          // and booleans only (see describeSignInIdentity), never values.
+          console.info(
+            "Identity sign-in check:",
+            JSON.stringify({
+              user: resolved.user.id,
+              ...describeSignInIdentity(profile, user.email),
+              structured: fromName.nameSource === "google_display_name",
+              consent: resolved.user.identityConsentVersion === CURRENT_IDENTITY_CONSENT_VERSION ? "current" : resolved.user.identityConsentVersion ? "outdated" : "none",
+              sync,
+            }),
+          );
         }
       }
       return token;
