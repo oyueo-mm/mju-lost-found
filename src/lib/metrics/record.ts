@@ -202,22 +202,48 @@ export async function flushTimings(): Promise<void> {
     ping.buckets[bucketOf(ping.totalMs)] = 1;
     rows.push(ping);
   } catch {
-    // The upsert below will fail the same way; nothing else to do.
+    // The write below will fail the same way and keep the batch for later.
   }
-  for (const [key, n] of daily) {
-    const [day, metric] = key.split("|");
-    await prisma.$executeRaw`INSERT INTO "MetricDaily" ("day", "metric", "value") VALUES (${day}::date, ${metric}, ${n})
-      ON CONFLICT ("day", "metric") DO UPDATE SET "value" = "MetricDaily"."value" + EXCLUDED."value"`;
+  // One statement per table, both in one transaction: a batch is written
+  // whole or not at all. If it fails it goes back into memory and is retried
+  // with the next batch (never written twice: nothing was committed).
+  const dailyJson = JSON.stringify(daily.map(([key, n]) => ({ day: key.split("|")[0], metric: key.split("|")[1], value: n })));
+  const rowsJson = JSON.stringify(rows.map((r) => ({ hour: r.hour, route: r.route, count: r.count, errors: r.errors, total_ms: r.totalMs, buckets: r.buckets })));
+  try {
+    await prisma.$transaction([
+      prisma.$executeRaw`INSERT INTO "MetricDaily" ("day", "metric", "value")
+        SELECT x.day, x.metric, x.value FROM json_to_recordset(${dailyJson}::json) AS x(day date, metric text, value int)
+        ON CONFLICT ("day", "metric") DO UPDATE SET "value" = "MetricDaily"."value" + EXCLUDED."value"`,
+      prisma.$executeRaw`INSERT INTO "ApiMetricHourly" ("hour", "route", "count", "errors", "total_ms", "buckets")
+        SELECT x.hour, x.route, x.count, x.errors, x.total_ms, x.buckets
+        FROM json_to_recordset(${rowsJson}::json) AS x(hour timestamp, route text, count int, errors int, total_ms bigint, buckets int[])
+        ON CONFLICT ("hour", "route") DO UPDATE SET
+          "count" = "ApiMetricHourly"."count" + EXCLUDED."count",
+          "errors" = "ApiMetricHourly"."errors" + EXCLUDED."errors",
+          "total_ms" = "ApiMetricHourly"."total_ms" + EXCLUDED."total_ms",
+          "buckets" = ARRAY(SELECT a + b FROM unnest("ApiMetricHourly"."buckets", EXCLUDED."buckets") WITH ORDINALITY AS u(a, b, i) ORDER BY i)`,
+    ]);
+  } catch (error) {
+    requeue(rows.filter((r) => r.route !== "db:ping"), daily);
+    throw error;
   }
+}
+
+// Puts a failed batch back (bounded, so a long outage can't grow memory).
+function requeue(rows: Agg[], daily: [string, number][]) {
+  if (pending.size > 2000) return;
   for (const r of rows) {
-    await prisma.$executeRaw`INSERT INTO "ApiMetricHourly" ("hour", "route", "count", "errors", "total_ms", "buckets")
-      VALUES (${r.hour}::timestamp, ${r.route}, ${r.count}, ${r.errors}, ${r.totalMs}, ${r.buckets}::int[])
-      ON CONFLICT ("hour", "route") DO UPDATE SET
-        "count" = "ApiMetricHourly"."count" + EXCLUDED."count",
-        "errors" = "ApiMetricHourly"."errors" + EXCLUDED."errors",
-        "total_ms" = "ApiMetricHourly"."total_ms" + EXCLUDED."total_ms",
-        "buckets" = ARRAY(SELECT a + b FROM unnest("ApiMetricHourly"."buckets", EXCLUDED."buckets") WITH ORDINALITY AS u(a, b, i) ORDER BY i)`;
+    const key = `${r.hour}|${r.route}`;
+    const agg = pending.get(key);
+    if (!agg) pending.set(key, r);
+    else {
+      agg.count += r.count;
+      agg.errors += r.errors;
+      agg.totalMs += r.totalMs;
+      r.buckets.forEach((n, i) => (agg.buckets[i] += n));
+    }
   }
+  for (const [key, n] of daily) pendingDaily.set(key, (pendingDaily.get(key) ?? 0) + n);
 }
 
 // Times an async step (AI inference etc.) into the same histogram.

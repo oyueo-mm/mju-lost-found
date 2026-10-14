@@ -85,7 +85,24 @@ Supabase Free에는 **자동 백업이 없다.** 백업은 운영자가 직접 �
 - 실제 복원: 새(빈) Supabase 프로젝트에 같은 migration을 적용하지 말고, `extensions` 스키마와 `vector` 확장을 만든 뒤
   `pg_restore --no-owner --no-privileges db/public.dump`, Storage 파일을 같은 경로·MIME으로 다시 올린다. **운영 중인 DB 위에
   덮어쓰지 않는다.**
-- 2026-10-14 이름·소속 배포 직전 백업: `production-2026-10-14-pre-identity` (복원 검증 완료).
+- 암호화: `BACKUP_PASSPHRASE=... node scripts/backup/seal.mjs seal <백업 폴더> --remove-plain` → `<폴더>.tar.enc`
+  (AES-256-GCM, scrypt 키, 만든 직후 복호화해 원본과 대조한 뒤에만 평문을 지운다). 복원할 때
+  `seal.mjs unseal <파일> <폴더>`. 암호는 암호 관리자에만 두고 2명 이상이 안다(잃으면 복원 불가). Windows 11 Home에는
+  EFS·BitLocker가 없어 이 방식을 쓴다.
+- **자동 실행(주 1회)**: `scripts/backup/weekly.ps1`이 백업 → 암호화 → 평문 삭제 → `weekly-*.tar.enc` 최근 4개만 보존을 한다.
+  이름이 다른 백업(예: migration 직전본)은 지우지 않는다. 실패하면 로그(`weekly-backup.log`)에 남기고 메시지 창을 띄우며
+  종료 코드 1로 끝난다(작업 스케줄러의 "마지막 실행 결과"에도 표시). 등록(운영자 PC, 한 번만):
+  ```
+  [Environment]::SetEnvironmentVariable("BACKUP_PASSPHRASE", "<암호>", "User")
+  schtasks /Create /TN "MJU Find weekly backup" /SC WEEKLY /D SUN /ST 04:00 /RL LIMITED /TR ^
+    "powershell -NoProfile -ExecutionPolicy Bypass -File C:\proj_claude\mju-lost-found-vercel\scriptsackup\weekly.ps1"
+  ```
+  PC가 꺼져 있으면 실행되지 않는다(작업 스케줄러에서 "예약된 시작 시간을 놓친 경우 가능한 대로 빨리 실행" 설정 권장).
+  매월 1회 로그와 최신 파일 날짜를 확인하고, 분기마다 1회 `unseal` + `verify-restore.mjs`로 복원 검증을 한다.
+- 저장 위치와 권한: 운영자 PC의 `%USERPROFILE%\mju-lost-found-backups`(상속 해제, 본인·SYSTEM·Administrators만 접근).
+  같은 디스크 고장에 대비해 월 1회 암호화본(`.tar.enc`)만 외장 저장장치 등 다른 매체에 복사한다. 평문 백업은 외부로 옮기지 않는다.
+- 보존: 주간 암호화본 4개, migration 직전본은 다음 migration 검증까지. 기간이 지난 평문 폴더는 확인 후 삭제한다.
+- 2026-10-14 이름·소속 배포 직전 백업: `production-2026-10-14-pre-identity` (복원 검증 완료, 평문 — 암호를 정한 뒤 seal 권장).
 
 ## 6. 관리자
 

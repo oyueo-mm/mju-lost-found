@@ -12,7 +12,7 @@ export const PERIODS: Record<Granularity, number> = { day: 30, week: 12, month: 
 
 export const METRICS = [
   { key: "signups", label: "신규 가입" },
-  { key: "active", label: "활성 이용자" },
+  { key: "active", label: "활성 회원(로그인)" },
   { key: "lost", label: "분실물 등록" },
   { key: "found", label: "습득물 등록" },
   { key: "searchKeyword", label: "키워드 검색" },
@@ -21,7 +21,7 @@ export const METRICS = [
   { key: "recommend", label: "AI 추천 노출" },
   { key: "chatRooms", label: "신규 채팅방" },
   { key: "messages", label: "채팅 메시지" },
-  { key: "returned", label: "반환 완료 처리" },
+  { key: "completed", label: "완료 처리(작성자 표시)" },
 ] as const;
 export type MetricKey = (typeof METRICS)[number]["key"];
 
@@ -35,7 +35,13 @@ const TIMESTAMP_SOURCES: Partial<Record<MetricKey, { table: string; where?: stri
   found: { table: "FoundPost" },
   chatRooms: { table: "ChatRoom" },
   messages: { table: "Message" },
-  returned: { table: "PostStatusChange", where: `"to_status" IN ('찾음', '완료')` },
+  // A poster marking the post 찾음/완료 and not putting it back since: the
+  // latest status change of that post. Not a confirmed hand-over -- the app
+  // records no such confirmation -- so it is never shown as one.
+  completed: {
+    table: "PostStatusChange",
+    where: `"to_status" IN ('찾음', '완료') AND NOT EXISTS (SELECT 1 FROM "PostStatusChange" l WHERE l."post_type" = "PostStatusChange"."post_type" AND l."post_id" = "PostStatusChange"."post_id" AND l."created_at" > "PostStatusChange"."created_at")`,
+  },
 };
 const DAILY_SOURCES: Partial<Record<MetricKey, string>> = {
   searchKeyword: "search.keyword",
