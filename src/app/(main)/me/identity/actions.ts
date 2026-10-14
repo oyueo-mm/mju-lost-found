@@ -33,8 +33,8 @@ export async function saveIdentityAction(_prev: SaveIdentityState, formData: For
   // Kept as suggested by Google, or the member's own typing/edit.
   const hints = (await auth())?.identityHints;
   const sources = {
-    realName: sourceOf(validation.value.realName, hints?.name, "google_profile"),
-    department: sourceOf(validation.value.department, hints?.department, "google_people"),
+    realName: sourceOf(validation.value.realName, hints?.name, hints?.nameSource ?? "google_profile"),
+    department: sourceOf(validation.value.department, hints?.department, hints?.departmentSource ?? "google_people"),
   };
 
   try {

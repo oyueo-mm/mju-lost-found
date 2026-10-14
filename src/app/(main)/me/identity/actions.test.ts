@@ -90,4 +90,24 @@ describe("saveIdentityAction", () => {
     expect(saveOwnIdentityInfo).not.toHaveBeenCalled();
     expect(unstable_update).not.toHaveBeenCalled();
   });
+
+  it("records google_display_name when the display-name values are kept, and self for an edited one", async () => {
+    auth.mockResolvedValue({
+      identityHints: { name: "홍길동", department: "경영대학", nameSource: "google_display_name", departmentSource: "google_display_name" },
+    });
+    await expect(saveIdentityAction(null, form({ realName: "홍길동", department: "경영대학", consent: "on" }))).rejects.toThrow("REDIRECT:/me");
+    expect(saveOwnIdentityInfo).toHaveBeenLastCalledWith(
+      7,
+      { realName: "홍길동", department: "경영대학" },
+      { realName: "google_display_name", department: "google_display_name" },
+    );
+
+    await expect(saveIdentityAction(null, form({ realName: "홍길동", department: "경영학과", consent: "on" }))).rejects.toThrow("REDIRECT:/me");
+    expect(saveOwnIdentityInfo).toHaveBeenLastCalledWith(
+      7,
+      { realName: "홍길동", department: "경영학과" },
+      { realName: "google_display_name", department: "self" },
+    );
+  });
 });
+

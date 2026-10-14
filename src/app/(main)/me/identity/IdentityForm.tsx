@@ -6,7 +6,9 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { ChevronRightIcon } from "@/components/icons";
 import { useI18n } from "@/lib/i18n/client";
+import type { IdentityHintSource } from "@/lib/identity/googleHints";
 import { DEPARTMENT_MAX_LENGTH, REAL_NAME_MAX_LENGTH } from "@/lib/identity/validation";
+import type { TranslationKey } from "@/lib/i18n/translate";
 import { saveIdentityAction, type SaveIdentityState } from "./actions";
 
 const FIELD_CLASS = "rounded-lg border border-border bg-transparent px-3 py-2.5 text-sm text-foreground disabled:opacity-60";
@@ -15,11 +17,23 @@ type IdentityFormProps = {
   initial: { realName: string; department: string } | null;
   // Already agreed with the current consent version: the box reflects that.
   consentGiven: boolean;
-  // Which fields start from a Google suggestion (shown with a "check this"
-  // note -- never presented as verified).
-  prefilled?: { realName: boolean; department: boolean };
+  // Which fields start from a Google suggestion, and from where (shown
+  // with a "check this" note -- never presented as verified).
+  prefilled?: { realName: IdentityHintSource | null; department: IdentityHintSource | null };
   callbackUrl: string | null;
   onboarding: boolean;
+};
+
+const NAME_NOTICE: Record<IdentityHintSource, TranslationKey> = {
+  google_profile: "identity.prefilledName",
+  google_display_name: "identity.prefilledNameFromDisplayName",
+  google_people: "identity.prefilledName",
+};
+// The display-name affiliation may be a college, not a department.
+const DEPARTMENT_NOTICE: Record<IdentityHintSource, TranslationKey> = {
+  google_profile: "identity.prefilledDepartment",
+  google_display_name: "identity.prefilledAffiliationFromDisplayName",
+  google_people: "identity.prefilledDepartment",
 };
 
 export function IdentityForm({ initial, consentGiven, prefilled, callbackUrl, onboarding }: IdentityFormProps) {
@@ -31,6 +45,10 @@ export function IdentityForm({ initial, consentGiven, prefilled, callbackUrl, on
     <form action={formAction} className="flex flex-col gap-5">
       {callbackUrl && <input type="hidden" name="callbackUrl" value={callbackUrl} />}
       {onboarding && <input type="hidden" name="onboarding" value="1" />}
+
+      {prefilled?.realName && prefilled.department && (
+        <p className="rounded-card bg-primary-muted px-4 py-2.5 text-sm text-primary">{t("identity.prefilledReadyToSave")}</p>
+      )}
 
       {errors.form && (
         <p className="rounded-card border border-destructive/30 bg-destructive-muted px-4 py-2.5 text-sm text-destructive">
@@ -53,7 +71,7 @@ export function IdentityForm({ initial, consentGiven, prefilled, callbackUrl, on
             aria-invalid={errors.realName ? true : undefined}
             className={FIELD_CLASS}
           />
-          {prefilled?.realName && <span className="text-xs text-primary">{t("identity.prefilledName")}</span>}
+          {prefilled?.realName && <span className="text-xs text-primary">{t(NAME_NOTICE[prefilled.realName])}</span>}
           {errors.realName && <span className="text-xs text-destructive">{t(errors.realName)}</span>}
         </label>
 
@@ -72,7 +90,7 @@ export function IdentityForm({ initial, consentGiven, prefilled, callbackUrl, on
             className={FIELD_CLASS}
           />
           <span className="text-xs text-muted-foreground">{t("identity.departmentHelp")}</span>
-          {prefilled?.department && <span className="text-xs text-primary">{t("identity.prefilledDepartment")}</span>}
+          {prefilled?.department && <span className="text-xs text-primary">{t(DEPARTMENT_NOTICE[prefilled.department])}</span>}
           {errors.department && <span className="text-xs text-destructive">{t(errors.department)}</span>}
         </label>
 

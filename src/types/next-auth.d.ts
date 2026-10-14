@@ -1,4 +1,5 @@
 import type { DefaultSession } from "next-auth";
+import type { IdentityHints } from "@/lib/identity/googleHints";
 
 // Kept intentionally small: only what's needed to route a request without
 // hitting Prisma (id, for getCurrentUser() to look up; nickname, only to
@@ -29,7 +30,7 @@ declare module "@auth/core/types" {
     rejoinIdentityId?: number;
     // 실명·학과 자동 입력: the member's own Google-based suggestions for the
     // 실명·학과 form (identity/googleHints.ts). Never stored in the DB.
-    identityHints?: { name: string | null; department: string | null };
+    identityHints?: IdentityHints;
   }
 }
 
@@ -38,6 +39,6 @@ declare module "@auth/core/jwt" {
     userId?: number;
     nickname?: string | null;
     rejoinIdentityId?: number;
-    identityHints?: { name: string | null; department: string | null };
+    identityHints?: IdentityHints;
   }
 }

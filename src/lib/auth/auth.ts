@@ -3,7 +3,7 @@ import Google from "next-auth/providers/google";
 
 import { decideSignIn } from "@/lib/auth/access";
 import { resolveSignIn } from "@/lib/auth/user";
-import { fetchDepartmentHint, googleScopes, isOrgScopeEnabled, nameHintFromProfile } from "@/lib/identity/googleHints";
+import { fetchDepartmentHint, googleScopes, hintsFromProfile, isOrgScopeEnabled } from "@/lib/identity/googleHints";
 
 // No next-auth Adapter/database session store here -- see the User.googleId
 // comment in schema.prisma. Sessions are JWT-based (a signed cookie), and
@@ -111,11 +111,15 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         if (resolved.kind === "held") {
           delete token.identityHints;
         } else {
-          token.identityHints = {
-            name: nameHintFromProfile(profile),
-            department:
-              isOrgScopeEnabled() && account.access_token ? await fetchDepartmentHint(account.access_token) : null,
-          };
+          // The Google name (split when it is "이름/신분/소속"); a People API
+          // department, when that scope is on, takes precedence over the
+          // display-name affiliation.
+          const fromName = hintsFromProfile(profile);
+          const peopleDepartment =
+            isOrgScopeEnabled() && account.access_token ? await fetchDepartmentHint(account.access_token) : null;
+          token.identityHints = peopleDepartment
+            ? { ...fromName, department: peopleDepartment, departmentSource: "google_people" }
+            : fromName;
         }
       }
       return token;

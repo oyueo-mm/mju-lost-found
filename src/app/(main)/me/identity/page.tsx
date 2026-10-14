@@ -13,7 +13,9 @@ import { IdentityForm } from "./IdentityForm";
 // 실명·학과 자동 입력: with nothing saved yet, the form starts from the
 // member's own Google suggestions (session identityHints -- the Google
 // account name, and a Google profile department only if that scope is on),
-// each flagged as a suggestion to check. Saved values always win.
+// each flagged as a suggestion to check. A "이름/신분/소속" Google name
+// fills both fields (google_display_name), so the member only has to check
+// them and agree. Saved values always win.
 export default async function IdentityPage({
   searchParams,
 }: {
@@ -44,7 +46,10 @@ export default async function IdentityPage({
               ? { realName: hints.name ?? "", department: hints.department ?? "" }
               : null
         }
-        prefilled={{ realName: Boolean(hints?.name), department: Boolean(hints?.department) }}
+        prefilled={{
+          realName: hints?.name ? (hints.nameSource ?? "google_profile") : null,
+          department: hints?.department ? (hints.departmentSource ?? "google_people") : null,
+        }}
         consentGiven={own?.consentVersion === CURRENT_IDENTITY_CONSENT_VERSION}
         callbackUrl={callbackUrl}
         onboarding={onboarding}

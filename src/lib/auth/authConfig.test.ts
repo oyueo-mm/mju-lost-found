@@ -100,4 +100,40 @@ describe("실명·학과 자동 입력 in the session", () => {
     });
     expect(session).toMatchObject({ identityHints: { name: "홍길동", department: null }, user: { id: "7", name: null, image: null } });
   });
+
+  it("splits an 이름/신분/소속 Google name into name and affiliation hints, never keeping the whole name", async () => {
+    resolveSignIn.mockResolvedValueOnce({ kind: "user", user: { id: 7, nickname: "닉" } });
+    const token = await signIn({ name: "홍길동/학생/컴퓨터공학과" });
+    expect(token.identityHints).toEqual({
+      name: "홍길동",
+      department: "컴퓨터공학과",
+      nameSource: "google_display_name",
+      departmentSource: "google_display_name",
+    });
+    expect(JSON.stringify(token)).not.toContain("학생/");
+  });
+
+  it("a malformed structured name gives no hint at all (no wrong name or department)", async () => {
+    resolveSignIn.mockResolvedValueOnce({ kind: "user", user: { id: 7, nickname: "닉" } });
+    const token = await signIn({ name: "홍길동/졸업생/컴퓨터공학과" });
+    expect(token.identityHints).toEqual({ name: null, department: null });
+  });
+
+  it("with the department scope on, a People API department takes precedence over the display-name affiliation", async () => {
+    process.env.GOOGLE_ORG_SCOPE_ENABLED = "true";
+    try {
+      resolveSignIn.mockResolvedValueOnce({ kind: "user", user: { id: 7, nickname: "닉" } });
+      fetchDepartmentHint.mockResolvedValueOnce("경영학과");
+      const token = await signIn({ name: "홍길동/학생/경영대학" });
+      expect(fetchDepartmentHint).toHaveBeenCalledWith("at-1");
+      expect(token.identityHints).toEqual({
+        name: "홍길동",
+        department: "경영학과",
+        nameSource: "google_display_name",
+        departmentSource: "google_people",
+      });
+    } finally {
+      delete process.env.GOOGLE_ORG_SCOPE_ENABLED;
+    }
+  });
 });
