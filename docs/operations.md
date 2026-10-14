@@ -95,7 +95,7 @@ Supabase Free에는 **자동 백업이 없다.** 백업은 운영자가 직접 �
   ```
   [Environment]::SetEnvironmentVariable("BACKUP_PASSPHRASE", "<암호>", "User")
   schtasks /Create /TN "MJU Find weekly backup" /SC WEEKLY /D SUN /ST 04:00 /RL LIMITED /TR ^
-    "powershell -NoProfile -ExecutionPolicy Bypass -File C:\proj_claude\mju-lost-found-vercel\scriptsackup\weekly.ps1"
+    "powershell -NoProfile -ExecutionPolicy Bypass -File C:\proj_claude\mju-lost-found-vercel\scripts\backup\weekly.ps1"
   ```
   PC가 꺼져 있으면 실행되지 않는다(작업 스케줄러에서 "예약된 시작 시간을 놓친 경우 가능한 대로 빨리 실행" 설정 권장).
   매월 1회 로그와 최신 파일 날짜를 확인하고, 분기마다 1회 `unseal` + `verify-restore.mjs`로 복원 검증을 한다.
