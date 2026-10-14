@@ -1891,3 +1891,34 @@ model IdentityAccessLog {
   @@index([targetUserId], map: "idx_identityaccesslog_target")
   @@map("IdentityAccessLog")
 }
+
+// 운영 통계 (admin dashboard). See migration 20261101000000_operational_metrics.
+model MetricDaily {
+  day    DateTime @db.Date
+  metric String
+  value  Int      @default(0)
+
+  @@id([day, metric])
+  @@map("MetricDaily")
+}
+
+model ActivityDay {
+  day   DateTime @db.Date
+  actor String
+
+  @@id([day, actor])
+  @@map("ActivityDay")
+}
+
+model ApiMetricHourly {
+  hour    DateTime @db.Timestamp(3)
+  route   String
+  count   Int      @default(0)
+  errors  Int      @default(0)
+  totalMs BigInt   @default(0) @map("total_ms")
+  buckets Int[]
+
+  @@id([hour, route])
+  @@map("ApiMetricHourly")
+}
+

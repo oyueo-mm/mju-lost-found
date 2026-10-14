@@ -26,6 +26,7 @@ import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
 import { getLocale, getTranslator } from "@/lib/i18n/server";
 import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
 import { campusLabelKey, postCategoryLabel, postTypeLabelKey, statusLabelKeyOrNull } from "@/lib/i18n/labels";
+import { recordDaily } from "@/lib/metrics/record";
 
 // 다국어(i18n) Phase: 하드코딩된 "ko-KR" 대신 현재 언어의 Intl 태그를
 // 쓴다. 타임존은 언제나 Asia/Seoul 그대로 -- 캠퍼스에서 실제로 일어난
@@ -161,7 +162,10 @@ export default async function PostDetailPage({
     recommendationsFailed: boolean;
   }> {
     try {
-      return { recommendations: await findPostRecommendations(type, post!.id), recommendationsFailed: false };
+      const recommendations = await findPostRecommendations(type, post!.id);
+      // 운영 통계: AI 추천 shown on a post page (not the creator's polling).
+      if (recommendations.length > 0) recordDaily("recommend.shown");
+      return { recommendations, recommendationsFailed: false };
     } catch (error) {
       console.error("Failed to load recommendations", error);
       return { recommendations: [], recommendationsFailed: true };

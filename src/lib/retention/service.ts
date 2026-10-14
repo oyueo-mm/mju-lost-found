@@ -9,6 +9,8 @@ import {
   ACCESS_LOG_MIN_RETENTION_DAYS,
   CHAT_TEXT_RETENTION_DAYS,
   RECORD_RETENTION_DAYS,
+  ACTIVITY_RETENTION_DAYS,
+  API_METRIC_RETENTION_DAYS,
   daysBefore,
   evidenceReleased,
   type ReportFacts,
@@ -51,6 +53,7 @@ export type RetentionResult = {
   appealsDeleted: number;
   proposalsDeleted: number;
   rejoinRequestsDeleted: number;
+  metricsDeleted: number;
 };
 
 const key = (type: ReportTargetType, id: number) => `${type}:${id}`;
@@ -68,6 +71,7 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
     appealsDeleted: 0,
     proposalsDeleted: 0,
     rejoinRequestsDeleted: 0,
+    metricsDeleted: 0,
   };
   const recordCutoff = daysBefore(now, RECORD_RETENTION_DAYS);
   const accessLogCutoff = daysBefore(now, ACCESS_LOG_MIN_RETENTION_DAYS);
@@ -219,6 +223,17 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
   result.rejoinRequestsDeleted = (
     await prisma.rejoinRequest.deleteMany({ where: { status: { not: RejoinRequestStatus.PENDING }, reviewedAt: { lte: recordCutoff } } })
   ).count;
+
+  // ---- 운영 통계: active-day marks after ACTIVITY_RETENTION_DAYS, API
+  // timings after API_METRIC_RETENTION_DAYS. Best-effort: a missing table
+  // (before its migration) never stops the rest of the clean-up.
+  try {
+    result.metricsDeleted =
+      (await prisma.activityDay.deleteMany({ where: { day: { lt: daysBefore(now, ACTIVITY_RETENTION_DAYS) } } })).count +
+      (await prisma.apiMetricHourly.deleteMany({ where: { hour: { lt: daysBefore(now, API_METRIC_RETENTION_DAYS) } } })).count;
+  } catch (error) {
+    console.error("Metrics retention skipped:", error instanceof Error ? error.name : "unknown");
+  }
 
   return result;
 }

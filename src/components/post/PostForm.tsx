@@ -332,6 +332,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
   const [restoredPhotoCount, setRestoredPhotoCount] = useState(0);
   const draftBaselineRef = useRef<string | null>(null);
   const draftClosedRef = useRef(false);
+  const draftTimerRef = useRef<number | null>(null);
 
   const fieldValue = (name: string) =>
     (formRef.current?.elements.namedItem(name) as HTMLInputElement | null)?.value ?? "";
@@ -364,12 +365,14 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
     }
     if (snapshot === draftBaselineRef.current) return;
     const timer = window.setTimeout(() => {
+      draftTimerRef.current = null;
       if (draftClosedRef.current) return;
       setDraftOfferClosed(true);
       const now = Date.now();
       const stored = writeDraft(browserStorage(), draftStorageKey, { ...currentDraft(), savedAt: now });
       setDraftSavedAt(stored ? now : null);
     }, 800);
+    draftTimerRef.current = timer;
     return () => window.clearTimeout(timer);
     // currentDraft() reads exactly these values (plus the uncontrolled
     // inputs, which bump draftTick through the form's onInput).
@@ -408,6 +411,11 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
   }
 
   function discardDraft() {
+    // A save still waiting from the last edit must not bring it back; the
+    // current form becomes the new starting point (the next edit saves again).
+    if (draftTimerRef.current !== null) window.clearTimeout(draftTimerRef.current);
+    draftTimerRef.current = null;
+    draftBaselineRef.current = JSON.stringify(currentDraft());
     if (draftStorageKey) clearDraft(browserStorage(), draftStorageKey);
     setDraftOfferClosed(true);
     setDraftSavedAt(null);

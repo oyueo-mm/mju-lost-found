@@ -6,6 +6,10 @@ import { ReportStatus } from "@/generated/prisma/client";
 export const CHAT_TEXT_RETENTION_DAYS = 90;
 export const RECORD_RETENTION_DAYS = 365;
 export const ACCESS_LOG_MIN_RETENTION_DAYS = 365;
+// 운영 통계: active-day marks (HMAC actors) are kept long enough for a
+// year-over-year month view; per-hour API timings only for recent trends.
+export const ACTIVITY_RETENTION_DAYS = 400;
+export const API_METRIC_RETENTION_DAYS = 90;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const daysBefore = (now: Date, days: number) => new Date(now.getTime() - days * DAY_MS);

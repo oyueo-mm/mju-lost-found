@@ -49,6 +49,7 @@ export const vi: Dictionary = {
   "footer.disclaimer": "Đây không phải là dịch vụ chính thức của Đại học Myongji mà là dịch vụ do sinh viên phát triển và vận hành.",
   "footer.contact": "Liên hệ đội ngũ vận hành",
   "footer.createdBy": "Created by MJU students",
+  "footer.github": "Mã nguồn trên GitHub",
   "footer.copyright":
     "© {year} MYONGJI L&F. Nếu cần phản ánh về một bài đăng, tin nhắn hay người dùng cụ thể, vui lòng dùng chức năng báo cáo trên màn hình đó.",
   "footer.section.service": "Dịch vụ",
@@ -547,7 +548,7 @@ export const vi: Dictionary = {
   "form.lost.titlePlaceholder": "Ví dụ: Làm mất chiếc ô đen trước nhà sinh viên",
   "form.found.titlePlaceholder": "Ví dụ: Nhặt được một chiếc ô ở phòng đọc thư viện",
   "form.lost.descriptionPlaceholder": "Hãy mô tả màu sắc, thương hiệu, đặc điểm và nơi bạn thấy nó lần cuối. VD: Hộp AirPods Pro màu đen, có nhãn dán trắng bên trái, để quên ở phòng học 종합관(S1) sau tiết 3",
-  "form.found.descriptionPlaceholder": "Hãy mô tả màu sắc, đặc điểm và nơi đang giữ đồ hiện tại. VD: Ví đựng thẻ màu xanh navy, có thẻ sinh viên, đã gửi ở quầy thông tin tầng 1 학생회관(S2)",
+  "form.found.descriptionPlaceholder": "Hãy mô tả màu sắc, đặc điểm và nơi đang giữ đồ hiện tại. VD: Ví đựng thẻ màu xanh navy, sờn ở góc, đã gửi ở quầy thông tin tầng 1 학생회관(S2)",
   "draft.found": "Bạn có bài viết đang soạn dở (lưu tạm lúc {time}).",
   "draft.photosNote": "{count} ảnh không được lưu tạm. Vui lòng chọn lại ảnh.",
   "draft.replaceNote": "Nếu viết mới thay vì khôi phục, bản lưu tạm trước sẽ bị thay thế.",

@@ -1,3 +1,4 @@
+import { timed } from "@/lib/metrics/record";
 import path from "node:path";
 import { ONNX_SESSION_OPTIONS } from "./onnxSessionOptions";
 
@@ -75,7 +76,8 @@ export class TransformersImageEmbeddingProvider implements ImageEmbeddingProvide
 
   private static getSession() {
     if (!this.sessionPromise) {
-      this.sessionPromise = import("@huggingface/transformers").then(
+      // 운영 통계: model load time (once per instance) -- lib/metrics/record.ts.
+      this.sessionPromise = timed("ai:image-load", () => import("@huggingface/transformers").then(
         async ({ env, AutoProcessor, SiglipVisionModel }) => {
           env.allowRemoteModels = false;
           env.localModelPath = path.join(process.cwd(), "models");
@@ -94,7 +96,7 @@ export class TransformersImageEmbeddingProvider implements ImageEmbeddingProvide
             model: (inputs: unknown) => model(inputs),
           };
         },
-      );
+      ));
     }
     return this.sessionPromise;
   }
@@ -112,12 +114,14 @@ export class TransformersImageEmbeddingProvider implements ImageEmbeddingProvide
   // caller (embedPostImageBestEffort / searchPostsByImage) is what decides
   // what to do with that failure, not this class's concern.
   async embed(input: string | Blob): Promise<number[]> {
-    const { processor, model } = await TransformersImageEmbeddingProvider.getSession();
-    const { RawImage } = await import("@huggingface/transformers");
-    const image = await RawImage.read(input);
-    const inputs = await processor(image);
-    const { pooler_output } = await model(inputs);
-    return normalize(Array.from(pooler_output.data));
+    return timed("ai:image-embed", async () => {
+      const { processor, model } = await TransformersImageEmbeddingProvider.getSession();
+      const { RawImage } = await import("@huggingface/transformers");
+      const image = await RawImage.read(input);
+      const inputs = await processor(image);
+      const { pooler_output } = await model(inputs);
+      return normalize(Array.from(pooler_output.data));
+    });
   }
 }
 

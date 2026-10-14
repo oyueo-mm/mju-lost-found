@@ -59,6 +59,7 @@ export const ko = {
   "footer.disclaimer": "본 서비스는 명지대학교의 공식 서비스가 아닌, 학생이 개발·운영하는 서비스입니다.",
   "footer.contact": "운영팀 문의",
   "footer.createdBy": "Created by MJU students",
+  "footer.github": "GitHub 소스 코드",
   "footer.copyright":
     "© {year} MYONGJI L&F. 특정 게시물·메시지·사용자에 대한 문의는 해당 화면의 신고 기능을 이용해주세요.",
   "footer.section.service": "서비스",
@@ -576,7 +577,7 @@ export const ko = {
   "form.lost.titlePlaceholder": "예: 학생회관 앞에서 검정색 우산을 잃어버렸어요",
   "form.found.titlePlaceholder": "예: 도서관 열람실에서 우산을 주웠어요",
   "form.lost.descriptionPlaceholder": "색상, 브랜드, 특징과 마지막으로 본 장소·상황을 자세히 적어주세요. 예: 검은색 에어팟 프로 케이스, 왼쪽에 흰 스티커, 3교시 후 종합관(S1) 강의실에 두고 나옴",
-  "form.found.descriptionPlaceholder": "색상, 특징과 지금 보관 중인 장소를 자세히 적어주세요. 예: 남색 카드지갑, 학생증 들어 있음, 학생회관(S2) 1층 안내데스크에 맡겨 둠",
+  "form.found.descriptionPlaceholder": "색상, 특징과 지금 보관 중인 장소를 자세히 적어주세요. 예: 남색 카드지갑, 모서리가 해짐, 학생회관(S2) 1층 안내데스크에 맡겨 둠",
   "draft.found": "작성 중이던 내용이 있어요 ({time} 임시저장).",
   "draft.photosNote": "사진 {count}장은 임시저장되지 않아요. 사진은 다시 선택해 주세요.",
   "draft.replaceNote": "불러오지 않고 새로 작성하면 이전 임시저장은 지워져요.",

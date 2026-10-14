@@ -1,6 +1,7 @@
 import { after } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
+import { recordDaily } from "@/lib/metrics/record";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { EMBEDDING_INPUT_FIELDS, embedPostBestEffort } from "@/lib/ai/postEmbedding";
 import { getEmbeddingProvider } from "@/lib/ai/embedding";
@@ -531,6 +532,12 @@ export async function searchPosts({
   q,
   ...params
 }: ListParams & { type: PostListType; mode?: SearchMode }): Promise<PagedResult<PostDTO>> {
+  // 운영 통계: a search is counted once, on its first page, only when there
+  // is a query (a plain board listing isn't a search). The query itself is
+  // never stored -- only hashed in memory to ignore an immediate repeat.
+  if (q?.trim() && (params.page ?? 1) === 1) {
+    recordDaily(mode === "semantic" ? "search.semantic" : "search.keyword", [type, q.trim(), params]);
+  }
   if (mode === "semantic") {
     // q is guaranteed non-empty here by listQuerySchema's superRefine.
     if (type === "all") return searchPostsSemanticAll(q as string, params);
@@ -562,6 +569,8 @@ export async function searchPostsByImage(
   { page, limit, ...filters }: ListParams,
   scoreScale: SearchScoreScale = "search",
 ): Promise<PagedResult<PostDTO>> {
+  // Counted here only for the image-search mode; searchPostsAI counts its own.
+  if (scoreScale === "search" && page === 1) recordDaily("search.image", [targetType, image.size, filters]);
   const vector = await getImageEmbeddingProvider().embed(image);
   const ranked = filterAiSearchResults(await findPostsByImageQuery(targetType, vector, IMAGE_SEARCH_TOP_K, filters));
 
@@ -633,6 +642,9 @@ export async function searchPostsAI(
   const trimmedQuery = query?.trim();
   const hasQuery = !!trimmedQuery;
   const hasImage = !!image;
+  if ((hasQuery || hasImage) && page === 1) {
+    recordDaily(hasImage ? "search.image" : "search.semantic", [type, trimmedQuery ?? "", image?.size ?? 0, filters]);
+  }
 
   if (!hasQuery && !hasImage) {
     throw new Error("searchPostsAI requires a query, an image, or both");

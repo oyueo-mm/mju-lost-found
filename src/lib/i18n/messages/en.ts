@@ -51,6 +51,7 @@ export const en: Dictionary = {
   "footer.disclaimer": "This is not an official Myongji University service; it is developed and operated by students.",
   "footer.contact": "Contact the team",
   "footer.createdBy": "Created by MJU students",
+  "footer.github": "Source code on GitHub",
   "footer.copyright":
     "© {year} MYONGJI L&F. To raise an issue about a specific post, message or user, please use the report feature on that screen.",
   "footer.section.service": "Service",
@@ -549,7 +550,7 @@ export const en: Dictionary = {
   "form.lost.titlePlaceholder": "e.g. Lost a black umbrella in front of the student union",
   "form.found.titlePlaceholder": "e.g. Found an umbrella in the library reading room",
   "form.lost.descriptionPlaceholder": "Describe the color, brand, distinctive marks, and where you last had it. e.g. Black AirPods Pro case, white sticker on the left, left in a classroom in 종합관(S1) after 3rd period",
-  "form.found.descriptionPlaceholder": "Describe the color, distinctive marks, and where it is kept now. e.g. Navy card wallet with a student ID, left at the 1st-floor info desk of 학생회관(S2)",
+  "form.found.descriptionPlaceholder": "Describe the color, distinctive marks, and where it is kept now. e.g. Navy card wallet with worn corners, left at the 1st-floor info desk of 학생회관(S2)",
   "draft.found": "You have an unfinished post (saved {time}).",
   "draft.photosNote": "{count} photo(s) weren't saved. Please choose them again.",
   "draft.replaceNote": "If you start over instead, the saved draft will be replaced.",

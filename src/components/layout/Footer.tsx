@@ -5,7 +5,7 @@ import { LocaleSwitcher } from "@/components/layout/LocaleSwitcher";
 import { FooterSections } from "@/components/layout/FooterSections";
 import { getTranslator } from "@/lib/i18n/server";
 import type { TranslationKey } from "@/lib/i18n/translate";
-import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
+import { REPOSITORY_URL, SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 
 // Phase 9: this app's first Footer -- there was none before (checked
 // before writing this). Placed in (main)/layout.tsx, after <main> and
@@ -133,6 +133,16 @@ export async function Footer() {
               {t("footer.contact")}:{" "}
               <a href={SUPPORT_MAILTO} className="break-all text-primary transition-colors hover:opacity-80">
                 {SUPPORT_EMAIL}
+              </a>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              <a
+                href={REPOSITORY_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary transition-colors hover:opacity-80"
+              >
+                {t("footer.github")}
               </a>
             </p>
             <p className="text-[11px] text-muted-foreground/80">{t("footer.createdBy")}</p>

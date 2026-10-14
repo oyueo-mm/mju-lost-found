@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import { normalizeRoute, observeTiming } from "@/lib/metrics/record";
+
 import type { PostMutationResult } from "./service";
 
 // Consistent JSON envelope for every Route Handler in this project:
@@ -27,11 +29,20 @@ export function withErrorHandling<Args extends unknown[]>(
   handler: (...args: Args) => Promise<NextResponse>,
 ) {
   return async (...args: Args): Promise<NextResponse> => {
+    // 운영 통계: every API route's time and outcome, aggregated in memory
+    // (lib/metrics/record.ts) -- never ids, never bodies.
+    const request = args[0] as { method?: string; url?: string } | undefined;
+    const t0 = performance.now();
+    let status = 500;
     try {
-      return await handler(...args);
+      const response = await handler(...args);
+      status = response.status;
+      return response;
     } catch (error) {
       console.error("Unhandled error in API route:", error);
       return jsonError(500, "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      observeTiming(normalizeRoute(request?.method ?? "?", request?.url), performance.now() - t0, status >= 500);
     }
   };
 }

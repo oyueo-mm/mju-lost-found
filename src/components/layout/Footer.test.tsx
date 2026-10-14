@@ -27,7 +27,7 @@ describe("Footer contact", () => {
     const html = await render();
 
     expect(html).toContain(ko["footer.contact"]);
-    expect(html).toMatch(/<a href="mailto:mjusmartlostfound@gmail\.com"[^>]*>mjusmartlostfound@gmail\.com<\/a>/);
+    expect(html).toMatch(/<a href="mailto:oyeo\.mm@mju\.ac\.kr"[^>]*>oyeo\.mm@mju\.ac\.kr<\/a>/);
   });
 
   it("labels it in the current language", async () => {
@@ -35,6 +35,17 @@ describe("Footer contact", () => {
     const html = await render();
 
     expect(html).toContain(en["footer.contact"]);
-    expect(html).toContain('href="mailto:mjusmartlostfound@gmail.com"');
+    expect(html).toContain('href="mailto:oyeo.mm@mju.ac.kr"');
+  });
+
+  it("links the public GitHub repository and says it is a student-run, unofficial service", async () => {
+    locale = "ko";
+    const html = await render();
+
+    expect(html).toContain('href="https://github.com/oyueo-mm/mju-lost-found"');
+    expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).toContain(ko["footer.github"]);
+    expect(html).toContain(ko["footer.disclaimer"]);
+    expect(ko["footer.disclaimer"]).toMatch(/공식 서비스가 아닌.*학생이 개발·운영/);
   });
 });

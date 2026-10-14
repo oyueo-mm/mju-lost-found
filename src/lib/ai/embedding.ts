@@ -1,3 +1,4 @@
+import { timed } from "@/lib/metrics/record";
 import path from "node:path";
 
 // Type-only import: erased at compile time, so this never triggers the
@@ -86,7 +87,8 @@ export class TransformersEmbeddingProvider implements EmbeddingProvider {
 
   private static getSession() {
     if (!this.sessionPromise) {
-      this.sessionPromise = import("@huggingface/transformers").then(({ env, pipeline }) => {
+      // 운영 통계: model load time (once per instance) -- lib/metrics/record.ts.
+      this.sessionPromise = timed("ai:text-load", () => import("@huggingface/transformers").then(({ env, pipeline }) => {
         // A real Vercel deployment (Phase 6) proved transformers.js's
         // default behavior doesn't work there: it lazily downloads the
         // model on first use and writes it to a cache dir under
@@ -114,19 +116,21 @@ export class TransformersEmbeddingProvider implements EmbeddingProvider {
           // One ONNX Runtime thread -- see onnxSessionOptions.ts.
           session_options: { ...ONNX_SESSION_OPTIONS },
         });
-      });
+      }));
     }
     return this.sessionPromise;
   }
 
   async embed(text: string): Promise<number[]> {
-    const extractor = await TransformersEmbeddingProvider.getSession();
-    // mean pooling + L2 normalization: the standard sentence-transformers
-    // recipe (matches what the legacy Python sentence_transformers library
-    // does internally for this same model), so cosine similarity between
-    // two normalized vectors is just their dot product.
-    const output = await extractor(text, { pooling: "mean", normalize: true });
-    return Array.from(output.data as Float32Array);
+    return timed("ai:text-embed", async () => {
+      const extractor = await TransformersEmbeddingProvider.getSession();
+      // mean pooling + L2 normalization: the standard sentence-transformers
+      // recipe (matches what the legacy Python sentence_transformers library
+      // does internally for this same model), so cosine similarity between
+      // two normalized vectors is just their dot product.
+      const output = await extractor(text, { pooling: "mean", normalize: true });
+      return Array.from(output.data as Float32Array);
+    });
   }
 }
 

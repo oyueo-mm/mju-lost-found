@@ -203,6 +203,13 @@ export default async function AdminDashboardPage() {
           <span className="text-2xl font-bold text-foreground">{externalAccessCount}</span>
         </Link>
         <Link
+          href="/admin/stats"
+          className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"
+        >
+          <span className="text-xs text-muted-foreground">운영 통계</span>
+          <span className="text-sm font-semibold text-foreground">이용 현황·성능 보기</span>
+        </Link>
+        <Link
           href="/admin/rejoin-requests"
           className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"
         >
