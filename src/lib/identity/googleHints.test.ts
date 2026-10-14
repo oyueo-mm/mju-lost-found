@@ -170,6 +170,8 @@ describe("describeSignInIdentity", () => {
   it("tells a missing or different hd apart", () => {
     expect(describeSignInIdentity({ name: "홍길동/학생/컴퓨터공학과" }, email).hd).toBe("absent");
     expect(describeSignInIdentity({ name: "홍길동/학생/컴퓨터공학과", hd: "other.ac.kr" }, email).hd).toBe("other");
+    expect(describeSignInIdentity({ name: "홍길동/학생/컴퓨터공학과", hd: "student.mju.ac.kr" }, email).hd).toBe("school_subdomain");
+    expect(describeSignInIdentity({ name: "홍길동/학생/컴퓨터공학과", hd: "evilmju.ac.kr" }, email).hd).toBe("other");
   });
 
   it("points at the part of the display name that failed", () => {
