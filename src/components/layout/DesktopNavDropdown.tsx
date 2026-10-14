@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import {
   BellIcon,
   BoxIcon,
+  ChartIcon,
   ChatBubbleIcon,
   ChevronDownIcon,
   HandboxIcon,
@@ -45,6 +46,7 @@ const ICONS: Record<NavIconName, typeof BoxIcon> = {
   logout: LogoutIcon,
   shield: ShieldIcon,
   info: InfoIcon,
+  chart: ChartIcon,
 };
 
 const DROPDOWN_OPEN_EVENT = "mju-desktop-nav-dropdown-open";

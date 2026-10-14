@@ -24,7 +24,8 @@ export type NavIconName =
   | "chatBubble"
   | "logout"
   | "shield"
-  | "info";
+  | "info"
+  | "chart";
 
 export type NavChild = {
   href?: string;
@@ -117,6 +118,7 @@ export const DESKTOP_ADMIN_NAV_ITEM: NavItem = {
     { href: "/admin/organizations", labelKey: "nav.adminOrganizations", icon: "user" },
     { href: "/admin/organization-requests", labelKey: "nav.adminOrganizationRequests", icon: "chatBubble" },
     { href: "/admin/sanctions", labelKey: "nav.adminSanctions", icon: "shield" },
+    { href: "/admin/stats", labelKey: "nav.adminStats", icon: "chart" },
   ],
 };
 

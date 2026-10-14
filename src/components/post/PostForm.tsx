@@ -848,26 +848,37 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
             finder must still return the item, hand it in to the police
             (법 제1조), or hand it to the building manager (제10조), within
             the 7 days of 제9조. Text only; no new procedure is implemented. */}
-        {type === "found" && (
-          <div className="flex flex-col gap-2">
-            <p className="rounded-lg border border-border px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
-              {t("form.foundLegalNotice")}
-            </p>
-            <p className="rounded-lg bg-primary-muted px-3.5 py-3 text-xs text-primary">
-              {t("form.foundNotice")}
-            </p>
-          </div>
-        )}
-        {type === "lost" && (
-          <div className="flex flex-col gap-2">
-            <p className="rounded-lg bg-primary-muted px-3.5 py-3 text-xs text-primary">
-              {t("form.lostRewardNotice")}
-            </p>
-            <p className="rounded-lg border border-border px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
-              {t("form.lostRewardPrivacyNotice")}
-            </p>
-          </div>
-        )}
+        {/* 등록 안내 개선: one restrained notice per board -- the key points
+            up front, the full legal text (unchanged, form.foundLegalNotice /
+            form.lostRewardNotice) behind a toggle. */}
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
+          <p className="font-medium text-foreground">{t("form.notice.title")}</p>
+          <ul className="flex list-disc flex-col gap-1 pl-4">
+            {type === "found" ? (
+              <>
+                <li>{t("form.found.noticeHandover")}</li>
+                <li>{t("form.found.noticeVerify")}</li>
+              </>
+            ) : (
+              <>
+                <li>{t("form.lostRewardPrivacyNotice")}</li>
+                <li>{t("form.lost.noticeReward")}</li>
+              </>
+            )}
+          </ul>
+          <details className="group">
+            <summary className="cursor-pointer select-none font-medium text-primary marker:text-primary">
+              {t(type === "found" ? "form.found.noticeMore" : "form.lost.noticeMore")}
+            </summary>
+            <div className="mt-2 flex flex-col gap-2">
+              {(type === "found" ? (["form.foundLegalNotice", "form.foundNotice"] as const) : (["form.lostRewardNotice"] as const)).map(
+                (key) => (
+                  <p key={key}>{t(key).replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "")}</p>
+                ),
+              )}
+            </div>
+          </details>
+        </div>
       </section>
 
       {/* Phase 12-8 §1: 개인/단체 토글 + (단체 선택 시) 대표 단체 드롭다운 --

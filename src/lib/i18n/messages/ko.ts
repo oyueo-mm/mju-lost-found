@@ -50,8 +50,8 @@ export const ko = {
   "nav.unreadNotifications": "읽지 않은 알림 {count}개",
 
   // ---------- 브랜드 ----------
-  "brand.name": "MYONGJI L&F",
-  "brand.shortName": "MYONGJI L&F",
+  "brand.name": "MJU Find",
+  "brand.shortName": "MJU Find",
   "brand.description": "명지인을 위한 스마트 분실물 센터",
 
   // ---------- Footer ----------
@@ -60,8 +60,9 @@ export const ko = {
   "footer.contact": "운영팀 문의",
   "footer.createdBy": "Created by MJU students",
   "footer.github": "GitHub 소스 코드",
+  "footer.developerContact": "개발자 문의",
   "footer.copyright":
-    "© {year} MYONGJI L&F. 특정 게시물·메시지·사용자에 대한 문의는 해당 화면의 신고 기능을 이용해주세요.",
+    "© {year} MJU Find. 특정 게시물·메시지·사용자에 대한 문의는 해당 화면의 신고 기능을 이용해주세요.",
   "footer.section.service": "서비스",
   "footer.section.community": "커뮤니티",
   "footer.section.guide": "안내",
@@ -503,7 +504,7 @@ export const ko = {
   "report.submitting": "제출 중...",
 
   // ---------- 로그인 / 온보딩 ----------
-  "auth.login.title": "MYONGJI L&F",
+  "auth.login.title": "MJU Find",
   "auth.login.subtitle": "캠퍼스에서 잃어버린 물건을 빠르게 찾아드려요",
   "auth.login.google": "Google로 로그인",
   "auth.login.domainNotice": "학교 계정(@mju.ac.kr) 또는 관리자가 승인한 외부 관계자 계정만 로그인할 수 있습니다.",
@@ -578,6 +579,12 @@ export const ko = {
   "form.found.titlePlaceholder": "예: 도서관 열람실에서 우산을 주웠어요",
   "form.lost.descriptionPlaceholder": "색상, 브랜드, 특징과 마지막으로 본 장소·상황을 자세히 적어주세요. 예: 검은색 에어팟 프로 케이스, 왼쪽에 흰 스티커, 3교시 후 종합관(S1) 강의실에 두고 나옴",
   "form.found.descriptionPlaceholder": "색상, 특징과 지금 보관 중인 장소를 자세히 적어주세요. 예: 남색 카드지갑, 모서리가 해짐, 학생회관(S2) 1층 안내데스크에 맡겨 둠",
+  "form.notice.title": "등록 전 확인해 주세요",
+  "form.found.noticeHandover": "이 글은 경찰 신고나 습득물 제출이 아니에요. 소유자에게 돌려주거나 경찰서·지구대·파출소, 또는 건물 관리자(경비실 등)에게 맡겨 주세요.",
+  "form.found.noticeVerify": "물건의 고유한 특징이나 안에 든 내용은 설명에 모두 적지 마세요. 문의가 오면 그 정보로 실제 소유자인지 확인할 수 있어요.",
+  "form.found.noticeMore": "유실물 처리 절차 자세히 보기",
+  "form.lost.noticeReward": "사례는 작성자가 정하는 선택사항이며 반환이나 지급을 보장하지 않아요. 법정 보상금과는 별개예요.",
+  "form.lost.noticeMore": "사례와 법정 보상금 안내 자세히 보기",
   "draft.found": "작성 중이던 내용이 있어요 ({time} 임시저장).",
   "draft.photosNote": "사진 {count}장은 임시저장되지 않아요. 사진은 다시 선택해 주세요.",
   "draft.replaceNote": "불러오지 않고 새로 작성하면 이전 임시저장은 지워져요.",
@@ -744,6 +751,7 @@ export const ko = {
   "nav.adminOrganizations": "단체 관리",
   "nav.adminOrganizationRequests": "단체 가입 요청",
   "nav.adminSanctions": "제재 관리",
+  "nav.adminStats": "운영 통계",
   "nav.mobile.home": "홈",
   "nav.mobile.lost": "분실물",
   "nav.mobile.found": "습득물",

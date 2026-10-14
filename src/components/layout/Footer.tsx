@@ -5,7 +5,7 @@ import { LocaleSwitcher } from "@/components/layout/LocaleSwitcher";
 import { FooterSections } from "@/components/layout/FooterSections";
 import { getTranslator } from "@/lib/i18n/server";
 import type { TranslationKey } from "@/lib/i18n/translate";
-import { REPOSITORY_URL, SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
+import { DEVELOPER_EMAIL, DEVELOPER_MAILTO, REPOSITORY_URL, SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 
 // Phase 9: this app's first Footer -- there was none before (checked
 // before writing this). Placed in (main)/layout.tsx, after <main> and
@@ -126,25 +126,29 @@ export async function Footer() {
             {/* Legal pre-beta Phase: shown on every screen size (it used to
                 be desktop-only), since most users are on phones. */}
             <p className="text-xs text-muted-foreground">{t("footer.disclaimer")}</p>
-            {/* 운영팀 문의: the privacy policy's existing contact address
-                (lib/contact.ts), shown on every screen size so a visitor who
-                isn't signed in can reach the team without an account. */}
-            <p className="text-xs text-muted-foreground">
-              {t("footer.contact")}:{" "}
-              <a href={SUPPORT_MAILTO} className="break-all text-primary transition-colors hover:opacity-80">
-                {SUPPORT_EMAIL}
-              </a>
-            </p>
-            <p className="text-xs text-muted-foreground">
-              <a
-                href={REPOSITORY_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary transition-colors hover:opacity-80"
-              >
-                {t("footer.github")}
-              </a>
-            </p>
+            {/* 연락처: 운영팀 (the privacy policy's contact address, lib/contact.ts),
+                개발자, and the public repository -- one compact list on every
+                screen size, so a visitor who isn't signed in can reach us. */}
+            <dl className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+              {[
+                { label: t("footer.contact"), href: SUPPORT_MAILTO, text: SUPPORT_EMAIL },
+                { label: t("footer.developerContact"), href: DEVELOPER_MAILTO, text: DEVELOPER_EMAIL },
+                { label: "GitHub", href: REPOSITORY_URL, text: "oyueo-mm/mju-lost-found", external: true },
+              ].map((c) => (
+                <div key={c.href} className="flex flex-col">
+                  <dt className="text-[11px]">{c.label}</dt>
+                  <dd className="min-w-0 [overflow-wrap:anywhere]">
+                    <a
+                      href={c.href}
+                      {...(c.external ? { target: "_blank", rel: "noopener noreferrer", "aria-label": t("footer.github") } : {})}
+                      className="text-primary transition-colors hover:opacity-80"
+                    >
+                      {c.text}
+                    </a>
+                  </dd>
+                </div>
+              ))}
+            </dl>
             <p className="text-[11px] text-muted-foreground/80">{t("footer.createdBy")}</p>
           </div>
 

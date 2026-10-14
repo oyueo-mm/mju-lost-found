@@ -41,8 +41,8 @@ export const mn: Dictionary = {
   "nav.notifications": "Мэдэгдэл",
   "nav.unreadNotifications": "Уншаагүй {count} мэдэгдэл",
 
-  "brand.name": "MYONGJI L&F",
-  "brand.shortName": "MYONGJI L&F",
+  "brand.name": "MJU Find",
+  "brand.shortName": "MJU Find",
   "brand.description": "Мёнжийнхэнд зориулсан ухаалаг гээгдсэн эд зүйлийн төв",
 
   "footer.tagline":
@@ -51,8 +51,9 @@ export const mn: Dictionary = {
   "footer.contact": "Ажиллуулах багтай холбогдох",
   "footer.createdBy": "Created by MJU students",
   "footer.github": "GitHub дээрх эх код",
+  "footer.developerContact": "Хөгжүүлэгчтэй холбогдох",
   "footer.copyright":
-    "© {year} MYONGJI L&F. Тодорхой нийтлэл, мессеж, хэрэглэгчийн талаар санал гомдол байвал тухайн дэлгэц дэх мэдээлэх товчийг ашиглана уу.",
+    "© {year} MJU Find. Тодорхой нийтлэл, мессеж, хэрэглэгчийн талаар санал гомдол байвал тухайн дэлгэц дэх мэдээлэх товчийг ашиглана уу.",
   "footer.section.service": "Үйлчилгээ",
   "footer.section.community": "Нийгэмлэг",
   "footer.section.guide": "Мэдээлэл",
@@ -478,7 +479,7 @@ export const mn: Dictionary = {
   "report.submit": "Мэдээлэл илгээх",
   "report.submitting": "Илгээж байна...",
 
-  "auth.login.title": "MYONGJI L&F",
+  "auth.login.title": "MJU Find",
   "auth.login.subtitle": "Кампуст гээсэн эд зүйлээ хурдан олоход тусална",
   "auth.login.google": "Google-ээр нэвтрэх",
   "auth.login.domainNotice": "Зөвхөн сургуулийн бүртгэл (@mju.ac.kr) эсвэл админы баталсан гадны бүртгэлээр нэвтрэх боломжтой.",
@@ -551,6 +552,12 @@ export const mn: Dictionary = {
   "form.found.titlePlaceholder": "Жишээ: Номын сангийн уншлагын танхимд шүхэр олсон",
   "form.lost.descriptionPlaceholder": "Өнгө, брэнд, онцлог болон хамгийн сүүлд хаана байсныг дэлгэрэнгүй бичнэ үү. Жишээ: Хар өнгийн AirPods Pro хайрцаг, зүүн талд цагаан наалттай, 3-р цагийн дараа 종합관(S1)-ийн ангид орхисон",
   "form.found.descriptionPlaceholder": "Өнгө, онцлог болон одоо хаана хадгалж байгааг дэлгэрэнгүй бичнэ үү. Жишээ: Хар хөх картын түрийвч, булан нь элэгдсэн, 학생회관(S2)-ийн 1 давхрын лавлах ширээнд өгсөн",
+  "form.notice.title": "Нийтлэхээс өмнө шалгана уу",
+  "form.found.noticeHandover": "Энд нийтлэх нь цагдаад мэдэгдэх эсвэл олдвор албан ёсоор хүлээлгэн өгөх биш. Эд зүйлийг эзэнд нь буцааж өгөх, цагдаад, эсвэл барилгын хариуцагчид (харуулд гэх мэт) хүлээлгэн өгнө үү.",
+  "form.found.noticeVerify": "Эд зүйлийн өвөрмөц онцлог, доторх зүйлсийг тайлбарт бүгдийг бичихгүй байна уу. Асуух хүн гарвал түүгээр жинхэнэ эзнийг шалгаж болно.",
+  "form.found.noticeMore": "Гээгдэл эд зүйлийн журмыг дэлгэрэнгүй харах",
+  "form.lost.noticeReward": "Талархлын шагнал нь таны сонголтоор, буцаалт эсвэл төлбөрийг баталгаажуулахгүй бөгөөд хуулийн шагналаас тусдаа.",
+  "form.lost.noticeMore": "Талархлын болон хуулийн шагналын тухай дэлгэрэнгүй",
   "draft.found": "Дуусгаагүй нийтлэл байна ({time}-д түр хадгалсан).",
   "draft.photosNote": "{count} зураг түр хадгалагдаагүй. Зургаа дахин сонгоно уу.",
   "draft.replaceNote": "Сэргээхгүйгээр шинээр бичвэл өмнөх түр хадгалалт солигдоно.",
@@ -689,6 +696,7 @@ export const mn: Dictionary = {
   "nav.adminOrganizations": "Байгууллагын удирдлага",
   "nav.adminOrganizationRequests": "Байгууллагын хүсэлт",
   "nav.adminSanctions": "Хариуцлагын удирдлага",
+  "nav.adminStats": "Үйл ажиллагааны статистик",
   "nav.mobile.home": "Нүүр",
   "nav.mobile.lost": "Гээсэн",
   "nav.mobile.found": "Олдсон",

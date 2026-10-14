@@ -18,7 +18,7 @@ export const CAMPUS_LOCATIONS: Record<(typeof CAMPUSES)[number], readonly string
     "베리타스홀",
     "코이노니아홀",
     "운동장",
-    "방목학술정보관(S9)",
+    "방목학술정보관(도서관, S9)",
     "후문·기타 출입구",
     "학생회관(S2)",
     "강경대민주광장",

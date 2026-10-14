@@ -10,7 +10,7 @@ export default function GlobalError({ error, retry }: { error: Error & { digest?
   return (
     <html lang="ko">
       <body className="flex min-h-dvh flex-col bg-background text-foreground antialiased">
-        <title>오류 | MYONGJI L&F</title>
+        <title>오류 | MJU Find</title>
         <ErrorScreen error={error} retry={retry} />
       </body>
     </html>

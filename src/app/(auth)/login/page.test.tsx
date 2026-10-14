@@ -49,6 +49,6 @@ describe("login page", () => {
     const html = await render({ error: "AccessDenied" });
 
     expect(html).toContain(ko["auth.login.troublePrompt"]);
-    expect(html).toMatch(/<a href="mailto:oyeo\.mm@mju\.ac\.kr"[^>]*>운영팀에 문의하기<\/a>/);
+    expect(html).toMatch(/<a href="mailto:mjusmartlostfound@gmail\.com"[^>]*>운영팀에 문의하기<\/a>/);
   });
 });

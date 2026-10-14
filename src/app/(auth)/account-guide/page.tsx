@@ -75,7 +75,7 @@ export default function AccountGuidePage() {
                 4
               </span>
               <span>
-                생성한 @mju.ac.kr 계정으로 MYONGJI L&amp;F에서 &apos;Google로 로그인&apos;을
+                생성한 @mju.ac.kr 계정으로 MJU Find에서 &apos;Google로 로그인&apos;을
                 클릭합니다.
               </span>
             </li>

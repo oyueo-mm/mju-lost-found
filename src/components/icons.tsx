@@ -400,6 +400,18 @@ export function RingIcon(props: IconProps) {
   );
 }
 
+// 운영 통계 -- 막대 세 개와 기준선
+export function ChartIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 20h16" />
+      <path d="M7 16v-5" />
+      <path d="M12 16V7" />
+      <path d="M17 16v-8" />
+    </svg>
+  );
+}
+
 // 화장품 -- 립스틱(본체 + 비스듬히 깎인 심)
 export function LipstickIcon(props: IconProps) {
   return (

@@ -40,6 +40,7 @@ describe("desktop navigation links", () => {
       "/admin/organizations",
       "/admin/organization-requests",
       "/admin/sanctions",
+      "/admin/stats",
     ]);
   });
 

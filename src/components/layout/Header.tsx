@@ -69,7 +69,7 @@ export async function Header() {
       <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-2 px-4 py-3 sm:gap-3 md:grid md:grid-cols-[minmax(min-content,1fr)_auto_minmax(min-content,1fr)] md:gap-2 md:px-6">
         <Link href="/" className="flex min-w-0 shrink-0 items-center gap-1.5 font-semibold text-foreground sm:gap-2 md:min-w-0 md:justify-self-start">
           <LogoMark size={32} />
-          {/* 브랜드명 통일 Phase: "MYONGJI L&F"는 짧아 모바일(320px)부터
+          {/* 브랜드명 통일 Phase: "MJU Find"는 짧아 모바일(320px)부터
               데스크톱까지 어느 locale/breakpoint에서도 겹치거나 잘리지
               않으므로, 이전의 "숨김" 정책을 모두 제거하고 항상 표시한다.
               가장 좁은 화면(320~400px)에서 알림/프로필과 겹치지 않도록
