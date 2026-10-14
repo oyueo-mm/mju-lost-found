@@ -127,7 +127,7 @@ export const ja: Dictionary = {
   "common.edit": "編集", "common.delete": "削除", "common.deleting": "削除中...", "common.submit": "投稿する", "common.submitting": "投稿中...", "common.confirm": "確認", "common.back": "戻る", "common.more": "もっと見る", "common.viewAll": "すべて見る", "common.retry": "再試行", "common.optional": "任意", "common.required": "必須", "common.all": "すべて", "common.openInNewWindow": "（新しいウィンドウで開きます）",
   "nav.primary": "メインメニュー", "nav.admin": "管理", "nav.unreadChat": "未読のチャット {count} 件", "nav.notifications": "通知", "nav.unreadNotifications": "未読の通知 {count} 件",
   "brand.shortName": "MJU Find",
-  "footer.tagline": "明知大学の学生のための、落とし物の登録・検索・連絡サービスです。", "footer.disclaimer": "本サービスは明知大学の公式サービスではなく、学生が開発・運営するサービスです。", "footer.contact": "運営チームへのお問い合わせ", "footer.createdBy": "明知大学の学生が制作", "footer.copyright": "© {year} MJU Find。特定の投稿、メッセージ、利用者についての問題は、その画面の通報機能をご利用ください。",
+  "footer.tagline": "明知大学の学生のための、落とし物の登録・検索・連絡サービスです。", "footer.disclaimer": "本サービスは明知大学の公式サービスではなく、学生が開発・運営するサービスです。", "footer.contact": "運営チームへのお問い合わせ", "footer.copyright": "© {year} MJU Find。特定の投稿、メッセージ、利用者についての問題は、その画面の通報機能をご利用ください。",
   "footer.github": "GitHub のソースコード",
   "footer.developerContact": "開発者への問い合わせ",
   "footer.link.home": "ホーム", "footer.link.lost": "落とし物を見る", "footer.link.found": "拾得物を見る", "footer.link.aiSearch": "AI検索", "footer.link.organizations": "団体", "footer.link.chat": "チャット", "footer.link.notifications": "通知", "footer.link.terms": "利用規約", "footer.link.privacy": "プライバシーポリシー", "footer.link.community": "運営方針", "footer.link.accountGuide": "アカウント案内", "footer.link.feedback": "サービス改善の提案", "footer.link.organizationGuide": "団体利用ガイド",

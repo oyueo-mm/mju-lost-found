@@ -48,7 +48,6 @@ export const zh: Dictionary = {
   "footer.tagline": "面向明知大学学生的失物登记、搜索与联系服务。",
   "footer.disclaimer": "本服务并非明知大学的官方服务，而是由学生开发和运营的服务。",
   "footer.contact": "联系运营团队",
-  "footer.createdBy": "Created by MJU students",
   "footer.github": "GitHub 源代码",
   "footer.developerContact": "开发者联系",
   "footer.copyright": "© {year} MJU Find。如需反馈特定帖子、消息或用户，请使用该页面的举报功能。",

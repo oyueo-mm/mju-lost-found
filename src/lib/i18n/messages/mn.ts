@@ -49,7 +49,6 @@ export const mn: Dictionary = {
     "Мёнжи их сургуулийн оюутнуудад зориулсан гээгдсэн эд зүйл бүртгэх, хайх, холбоо барих үйлчилгээ.",
   "footer.disclaimer": "Энэ нь Мёнжи их сургуулийн албан ёсны үйлчилгээ биш бөгөөд оюутнууд хөгжүүлж, ажиллуулдаг үйлчилгээ юм.",
   "footer.contact": "Ажиллуулах багтай холбогдох",
-  "footer.createdBy": "Created by MJU students",
   "footer.github": "GitHub дээрх эх код",
   "footer.developerContact": "Хөгжүүлэгчтэй холбогдох",
   "footer.copyright":

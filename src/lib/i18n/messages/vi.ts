@@ -48,7 +48,6 @@ export const vi: Dictionary = {
   "footer.tagline": "Dịch vụ đăng tin, tìm kiếm và liên hệ về đồ thất lạc dành cho sinh viên Đại học Myongji.",
   "footer.disclaimer": "Đây không phải là dịch vụ chính thức của Đại học Myongji mà là dịch vụ do sinh viên phát triển và vận hành.",
   "footer.contact": "Liên hệ đội ngũ vận hành",
-  "footer.createdBy": "Created by MJU students",
   "footer.github": "Mã nguồn trên GitHub",
   "footer.developerContact": "Liên hệ nhà phát triển",
   "footer.copyright":

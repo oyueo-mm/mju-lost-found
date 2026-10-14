@@ -28,7 +28,8 @@ import { DEVELOPER_EMAIL, DEVELOPER_MAILTO, REPOSITORY_URL, SUPPORT_EMAIL, SUPPO
 // that component), so whatever is at the very bottom of a fully-scrolled
 // page needs its own clearance from it -- exactly the same reasoning
 // (main)/layout.tsx's own `<main>` already uses `pb-20 md:pb-0` for.
-const FOOTER_LINK_CLASS = "text-muted-foreground transition-colors hover:text-foreground";
+const FOOTER_LINK_CLASS =
+  "text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40";
 
 // Footer 구조 개선 Phase: 예전에는 링크 6개짜리 "바로가기" nav 하나와
 // 6개짜리 "도움말" nav 하나, 이렇게 라벨 없는 두 묶음이 나란히 있었다 --
@@ -53,7 +54,8 @@ const FOOTER_LINK_CLASS = "text-muted-foreground transition-colors hover:text-fo
 // 전용, 이번에 데스크톱까지 재사용)에만 두고, 이 섹션에는 도움말 성격의
 // 3개만 남긴다. href/라벨 텍스트는 하나도 바꾸지 않았다 -- 정책 링크
 // 3개가 안내 섹션과 legalLinks 양쪽에 동시에 나타나던 모바일 아코디언의
-// 중복도 이 분리로 함께 없어진다.
+// 중복도 이 분리로 함께 없어진다. (Footer 레이아웃 정리 Phase부터 정책
+// 링크는 FooterSections가 아니라 이 파일의 하단 줄에서 직접 그린다.)
 const FOOTER_SECTIONS: { titleKey: TranslationKey; links: { href: string; labelKey: TranslationKey }[] }[] = [
   {
     titleKey: "footer.section.service",
@@ -101,64 +103,34 @@ export async function Footer() {
   return (
     <footer className="border-t border-border bg-background">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 pt-8 pb-20 md:px-6 md:pb-8">
-        {/* Footer 구조 개선 Phase: 브랜드 블록 + 섹션들을 하나의 grid로 묶어
-            데스크톱(md 이상)에서는 4칸이 한 줄로 나란히("가로 배치"), 그보다
-            좁은 화면에서는 2칸씩 자연스럽게 다음 줄로 넘어간다("2열 또는
-            1열로 wrapping") -- 브랜드 블록만 모바일에서 2칸을 다 차지하게
-            해(col-span-2) 짧은 링크 묶음들과 나란히 눌리지 않도록 했다. */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-8 md:grid-cols-4 md:gap-x-8">
-          <div className="col-span-2 flex max-w-sm flex-col gap-2 md:col-span-1">
+        {/* Footer 레이아웃 정리 Phase: 위에서부터 세 줄 -- (1) 브랜드 소개 +
+            서비스/커뮤니티/안내 메뉴, (2) 연락처 3개, (3) 정책 링크·언어
+            선택·저작권. 예전에는 연락처/GitHub/약관까지 브랜드 칸 하나에
+            몰려 왼쪽만 길고 오른쪽은 비어 있었다. 데스크톱에서는 브랜드 칸을
+            조금 넓게 두고 메뉴 3개를 나란히, 모바일에서는 브랜드 블록 아래로
+            메뉴(FooterSections 아코디언)가 이어진다. */}
+        <div className="grid gap-8 md:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] md:gap-x-8">
+          <div className="flex max-w-sm flex-col gap-2">
             <div className="flex items-center gap-2">
               <LogoMark size={24} />
               <span className="text-sm font-semibold text-foreground">{t("brand.name")}</span>
             </div>
-            {/* Deliberately never claims official university operation
-                (this phase's own explicit rule) -- describes only what the
-                service actually does. */}
-            <p className="hidden text-xs text-muted-foreground md:block">{t("footer.tagline")}</p>
-            <p className="text-xs text-muted-foreground md:hidden">{t("brand.name")}</p>
-            {/* Phase 12-9 §5: explicit "이 학교 공식 서비스가 아니다" +
-                "학생이 자발적으로 만들었다" 고지 -- 학교 로고/브랜드는 이
-                텍스트 한 줄 외에 새로 추가하지 않는다. 실제로 확인된 팀원
-                이름/연락처가 없으므로(현재 프로젝트에 공개하기로 정해진
-                정보 없음) 구체적인 개인정보는 넣지 않고, "학생이 만들었다"는
-                사실만 표시한다. */}
-            {/* Legal pre-beta Phase: shown on every screen size (it used to
-                be desktop-only), since most users are on phones. */}
+            {/* Deliberately never claims official university operation --
+                describes only what the service actually does. 한 줄 소개는
+                이제 모든 화면 크기에서 한 번만 나온다(모바일에서 브랜드명을
+                한 번 더 적던 중복 문구는 없앴다). */}
+            <p className="text-xs text-muted-foreground">{t("footer.tagline")}</p>
+            {/* Phase 12-9 §5: "이 학교 공식 서비스가 아니다" + "학생이
+                개발·운영한다" 고지 -- 모든 화면 크기에서 보인다. 같은 사실을
+                되풀이하던 "Created by MJU students" 줄은 이 문장과 중복이라
+                뺐다. */}
             <p className="text-xs text-muted-foreground">{t("footer.disclaimer")}</p>
-            {/* 연락처: 운영팀 (the privacy policy's contact address, lib/contact.ts),
-                개발자, and the public repository -- one compact list on every
-                screen size, so a visitor who isn't signed in can reach us. */}
-            <dl className="flex flex-col gap-1.5 text-xs text-muted-foreground">
-              {[
-                { label: t("footer.contact"), href: SUPPORT_MAILTO, text: SUPPORT_EMAIL },
-                { label: t("footer.developerContact"), href: DEVELOPER_MAILTO, text: DEVELOPER_EMAIL },
-                { label: "GitHub", href: REPOSITORY_URL, text: "oyueo-mm/mju-lost-found", external: true },
-              ].map((c) => (
-                <div key={c.href} className="flex flex-col">
-                  <dt className="text-[11px]">{c.label}</dt>
-                  <dd className="min-w-0 [overflow-wrap:anywhere]">
-                    <a
-                      href={c.href}
-                      {...(c.external ? { target: "_blank", rel: "noopener noreferrer", "aria-label": t("footer.github") } : {})}
-                      className="text-primary transition-colors hover:opacity-80"
-                    >
-                      {c.text}
-                    </a>
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <p className="text-[11px] text-muted-foreground/80">{t("footer.createdBy")}</p>
           </div>
 
-          {/* Footer 구조 개선 Phase: 섹션 제목(text-foreground, font-semibold)이
-              그 아래 링크(text-muted-foreground, 더 작은 굵기)보다 뚜렷하게
-              강조되도록 위계를 나눴다 -- 이전에는 두 nav 모두 제목 없이
-              링크만 나열돼 있었다. 링크는 항상 세로로 쌓인다(가로 wrap이던
-              이전 md: 레이아웃과 다른 점) -- 섹션 자체가 이미 grid로 가로
-              배치되므로, 섹션 "안" 링크까지 가로로 흐르면 어느 링크가 어느
-              섹션 소속인지 다시 헷갈리게 된다. */}
+          {/* 섹션 제목(text-foreground, font-semibold)이 그 아래 링크보다
+              뚜렷하게 강조되고, 섹션 안 링크는 항상 세로로 쌓인다 -- 섹션이
+              이미 가로로 놓이므로 링크까지 가로로 흐르면 소속이 헷갈린다.
+              모바일에서는 아래 FooterSections 아코디언이 같은 목록을 보여준다. */}
           {FOOTER_SECTIONS.map((section) => (
             <div key={section.titleKey} className="hidden flex-col gap-2.5 md:flex">
               <h3 className="text-xs font-semibold text-foreground">{t(section.titleKey)}</h3>
@@ -173,28 +145,58 @@ export async function Footer() {
           ))}
         </div>
 
-        <FooterSections sections={localizedSections} legalLinks={legalLinks} />
+        <FooterSections sections={localizedSections} />
 
-        {/* 다국어(i18n) Phase §8: 언어 선택 UI는 Footer에 둔다 -- 이 앱의
-            Header는 이미 로고/5탭 내비/알림/내 정보로 가로 폭이 꽉 차 있고,
-            언어는 한 번 고르면 계속 유지되는(쿠키) 설정이라 매 화면 상단에
-            상주할 필요가 없다. 기존 섹션들과 같은 grid 안에 5번째 칸으로
-            끼워 넣지 않고 그 아래 별도 줄에 둔 이유: 위 세 묶음은 "링크
-            목록"이고 이건 "설정 컨트롤"이라, 같은 줄에 두면 언어 이름들이
-            링크처럼 보인다. */}
-        <div className="border-t border-border pt-4">
-          <LocaleSwitcher />
+        {/* 연락처: 운영팀 (the privacy policy's contact address, lib/contact.ts),
+            개발자, and the public repository -- 데스크톱에서는 세 칸이 한 줄로,
+            모바일에서는 세로로 쌓인다. 로그인하지 않은 방문자도 연락할 수 있게
+            모든 화면 크기에서 보인다. 모바일에서는 바로 위 아코디언의 마지막
+            구분선이 경계 역할을 하므로 상단 선은 데스크톱에서만 긋는다. */}
+        <dl className="grid gap-3 text-xs text-muted-foreground md:grid-cols-3 md:gap-8 md:border-t md:border-border md:pt-6">
+          {[
+            { label: t("footer.contact"), href: SUPPORT_MAILTO, text: SUPPORT_EMAIL },
+            { label: t("footer.developerContact"), href: DEVELOPER_MAILTO, text: DEVELOPER_EMAIL },
+            { label: "GitHub", href: REPOSITORY_URL, text: "oyueo-mm/mju-lost-found", external: true },
+          ].map((c) => (
+            <div key={c.href} className="flex min-w-0 flex-col gap-0.5">
+              <dt className="text-[11px]">{c.label}</dt>
+              <dd className="min-w-0 [overflow-wrap:anywhere]">
+                <a
+                  href={c.href}
+                  {...(c.external ? { target: "_blank", rel: "noopener noreferrer", "aria-label": t("footer.github") } : {})}
+                  className="text-primary transition-colors hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                >
+                  {c.text}
+                </a>
+              </dd>
+            </div>
+          ))}
+        </dl>
+
+        {/* 하단: 정책 링크 -> 언어 선택 -> 저작권. 데스크톱에서는 정책
+            링크(왼쪽)와 언어 선택(오른쪽)이 한 줄에 놓이고 저작권이 그 아래,
+            모바일에서는 이 순서대로 세로로 쌓인다. 언어 선택은 "설정
+            컨트롤"이라 링크 목록인 메뉴 grid와는 계속 따로 둔다(i18n Phase §8). */}
+        <div className="flex flex-col gap-4 border-t border-border pt-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-8">
+            <nav className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
+              {legalLinks.map((link) => (
+                <Link key={link.href} href={link.href} prefetch={false} className={FOOTER_LINK_CLASS}>
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+            <LocaleSwitcher />
+          </div>
+
+          {/* No fabricated business registration number/address/phone --
+              none of those exist in this app or its operation. The real
+              contacts are listed above; problems with specific content still
+              go through the in-app 신고 기능 (Report), pointed to from 운영정책. */}
+          <p className="text-[11px] text-muted-foreground">
+            {t("footer.copyright", { year: new Date().getFullYear() })}
+          </p>
         </div>
-
-        {/* No fabricated business registration number/address/phone --
-            none of those exist in this app or its operation, and this
-            phase's own rule is not to invent them. The one real contact
-            address (lib/contact.ts) is shown in the brand block above;
-            problems with specific content still go through the in-app
-            신고 기능 (Report), pointed to from 운영정책. */}
-        <p className="border-t border-border pt-4 text-[11px] text-muted-foreground">
-          {t("footer.copyright", { year: new Date().getFullYear() })}
-        </p>
       </div>
     </footer>
   );

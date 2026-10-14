@@ -50,7 +50,6 @@ export const en: Dictionary = {
   "footer.tagline": "A lost-and-found posting, search and contact service for Myongji University students.",
   "footer.disclaimer": "This is not an official Myongji University service; it is developed and operated by students.",
   "footer.contact": "Contact the team",
-  "footer.createdBy": "Created by MJU students",
   "footer.github": "Source code on GitHub",
   "footer.developerContact": "Developer",
   "footer.copyright":

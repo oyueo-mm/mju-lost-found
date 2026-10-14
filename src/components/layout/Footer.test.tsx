@@ -53,3 +53,41 @@ describe("Footer contact", () => {
     expect(ko["footer.disclaimer"]).toMatch(/공식 서비스가 아닌.*학생이 개발·운영/);
   });
 });
+
+describe("Footer layout", () => {
+  it("orders brand + menus, then contacts, then policy links and copyright", async () => {
+    locale = "ko";
+    const html = await render();
+
+    const at = (s: string) => {
+      const i = html.indexOf(s);
+      expect(i, s).toBeGreaterThan(-1);
+      return i;
+    };
+    const brand = at(ko["footer.tagline"]);
+    const menus = at(`aria-label="${ko["footer.section.service"]}"`);
+    const contacts = at("mailto:mjusmartlostfound@gmail.com");
+    const developer = at("mailto:oyueo.mm@mju.ac.kr");
+    const github = at("https://github.com/oyueo-mm/mju-lost-found");
+    const terms = at('href="/policy/terms"');
+    const copyright = at("특정 게시물·메시지");
+
+    expect(brand).toBeLessThan(menus);
+    expect(menus).toBeLessThan(contacts);
+    expect(contacts).toBeLessThan(developer);
+    expect(developer).toBeLessThan(github);
+    expect(github).toBeLessThan(terms);
+    expect(terms).toBeLessThan(copyright);
+  });
+
+  it("shows the description once and drops the redundant credit line", async () => {
+    locale = "ko";
+    const html = await render();
+
+    expect(html.split(ko["footer.tagline"])).toHaveLength(2);
+    expect(html.split(ko["footer.disclaimer"])).toHaveLength(2);
+    expect(html).not.toContain("Created by MJU students");
+    // Policy links appear once (not in both the menus and the bottom row).
+    expect(html.split('href="/policy/privacy"')).toHaveLength(2);
+  });
+});
