@@ -22,3 +22,10 @@ export const CURRENT_TERMS_VERSION = "2026-10-04";
 // 2026-10-05: collected items corrected (Google sign-in returns id, e-mail
 // and e-mail-verified only; IP/User-Agent/cookies listed). Terms unchanged.
 export const CURRENT_PRIVACY_VERSION = "2026-10-05";
+
+// 실명·학과 수집·이용 동의: a separate consent given on the 실명·학과 form
+// (UserIdentityInfo.consentVersion). Bumping it only asks members who
+// entered their details again when they next update them -- it does not
+// touch CURRENT_PRIVACY_VERSION, so nobody is sent back through the
+// general consent screen because of it.
+export const CURRENT_IDENTITY_CONSENT_VERSION = "2026-10-14";

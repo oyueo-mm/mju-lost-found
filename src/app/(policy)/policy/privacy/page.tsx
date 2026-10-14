@@ -31,6 +31,13 @@ import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 // confirmed), §8 describes the IP/User-Agent/cookie handling the code
 // actually does (rateLimit/index.ts, posts/views.ts, i18n locale cookie,
 // Auth.js session cookie), §10 the privacy contact.
+//
+// 실명·학과: §1-§7 add the member-entered real name and department
+// (UserIdentityInfo) exactly as the code handles them -- collected with a
+// separate consent on /me/identity, needed only to post or chat, never
+// shown to other members, viewable by an admin only for a report with a
+// logged reason (identity/service.ts), deleted at 회원탈퇴. Whether they
+// may be required at all is a legal question still open (see the report).
 type Section = { title: string; body: React.ReactNode };
 
 const SECTIONS: Section[] = [
@@ -43,6 +50,10 @@ const SECTIONS: Section[] = [
         <li>
           직접 설정한 닉네임. Google 계정 이름은 받지 않으며, 계정의 내부 이름 값은 이메일 주소의 @ 앞부분으로
           저장됩니다.
+        </li>
+        <li>
+          실명, 학과(소속): 게시글 등록과 채팅을 이용할 때 이용자가 직접 입력하며, 별도의 동의를 받습니다.
+          학교 학적 정보와 대조해 확인하지 않습니다.
         </li>
         <li>작성한 게시글(제목, 내용, 장소, 날짜, 첨부 이미지)</li>
         <li>작성한 댓글 및 답글</li>
@@ -60,14 +71,20 @@ const SECTIONS: Section[] = [
         요청하는 권한 범위(scope)는
         <span className="font-medium text-foreground"> openid, email</span>이며, 프로필 사진·성별·언어 등
         이름을 포함한 Google의 별도 프로필 정보는 요청하지 않습니다. 그 외 항목은 이용자가 서비스를 이용하는 과정에서
-        직접 입력하거나(닉네임, 게시글, 댓글, 채팅 등) 서비스 이용에 따라 자동으로 생성됩니다(로그인
+        직접 입력하거나(닉네임, 실명·학과, 게시글, 댓글, 채팅 등) 서비스 이용에 따라 자동으로 생성됩니다(로그인
         일시 등).
       </>
     ),
   },
   {
     title: "3. 이용 목적",
-    body: "회원 식별 및 로그인, 분실물·습득물 게시글/댓글/채팅 등 서비스 핵심 기능 제공, 신고 처리 및 부정 이용 방지를 위해 이용합니다.",
+    body: (
+      <>
+        회원 식별 및 로그인, 분실물·습득물 게시글/댓글/채팅 등 서비스 핵심 기능 제공, 신고 처리 및 부정 이용 방지를 위해
+        이용합니다. 실명·학과는 게시글·채팅으로 실제 물건을 주고받을 때의 본인 확인과 신고·분쟁 처리에만 이용하며, 다른
+        이용자에게 공개하지 않습니다(게시글·댓글·채팅에는 닉네임만 표시됩니다).
+      </>
+    ),
   },
   {
     title: "4. 보유 및 이용 기간",
@@ -116,7 +133,8 @@ const SECTIONS: Section[] = [
         <p className="mt-2">
           이 서비스가 직접 마케팅이나 광고 등 다른 목적으로 개인정보를 제3자에게 제공하지는 않습니다. 다만 서비스
           운영(신고 처리, 이용자 관리)을 위해 관리자 권한을 가진 운영자는 이용자의 이메일 주소를 조회할 수
-          있습니다.
+          있습니다. 실명·학과는 관리자가 처리 중인 신고의 신고자 또는 피신고자에 한해, 열람 사유를 입력한 경우에만 조회할
+          수 있으며, 열람할 때마다 열람한 관리자, 대상, 신고, 사유, 시각이 기록됩니다.
         </p>
       </>
     ),
@@ -126,7 +144,7 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p>
-          이용자는 내 정보 화면에서 닉네임을 변경할 수 있고, 본인이 작성한 게시글·댓글·채팅 메시지를
+          이용자는 내 정보 화면에서 닉네임과 실명·학과를 변경할 수 있고, 본인이 작성한 게시글·댓글·채팅 메시지를
           직접 수정하거나 삭제할 수 있습니다. 내 정보의 &lsquo;계정 비활성화 · 회원탈퇴&rsquo; 화면에서 아래 두
           가지 중 하나를 선택할 수 있습니다. 활성 단체의 유일한 대표 관리자는 대표 관리자 권한을 먼저
           위임해야 합니다.
@@ -139,7 +157,7 @@ const SECTIONS: Section[] = [
         </p>
         <p className="mt-2">
           <span className="font-medium text-foreground">회원탈퇴(복구 불가)</span>: 이메일, Google 계정
-          식별자, 이름, 닉네임, 개인정보·약관 동의 기록, 최근 로그인 기록 등 계정을 직접 식별할 수 있는
+          식별자, 이름, 닉네임, 실명·학과, 개인정보·약관 동의 기록, 최근 로그인 기록 등 계정을 직접 식별할 수 있는
           정보가 즉시 삭제됩니다. 다른 이용자의 댓글·채팅·신고 기록과의 연결을 유지하기 위해 계정 자체는
           식별정보가 제거된 가명 상태(&lsquo;탈퇴한 사용자&rsquo;)로만 남습니다. 탈퇴한 계정은 복구할 수
           없으며, 같은 Google 계정으로 다시 가입하면 새 계정이 만들어지고 이전 게시글·댓글·채팅과
@@ -184,7 +202,7 @@ const SECTIONS: Section[] = [
             미처리 신고·제재 절차, 검토 전 이의신청 등 보관 사유가 모두 끝나는 즉시 삭제. 재가입 요청과 그
             처리 기록은 처리 후 1년.
           </li>
-          <li>관리자의 채팅 열람 기록: 최소 1년</li>
+          <li>관리자의 채팅 열람 기록, 실명·학과 열람 기록: 최소 1년</li>
         </ul>
         <p className="mt-2">보관 기간이 지난 정보는 매일 자동으로 삭제됩니다.</p>
       </>

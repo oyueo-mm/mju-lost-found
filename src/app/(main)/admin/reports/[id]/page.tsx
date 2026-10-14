@@ -13,6 +13,9 @@ import {
 } from "@/lib/report/schema";
 import { ReportProcessForm } from "@/components/admin/ReportProcessForm";
 import { RestoreTempHideButton } from "@/components/admin/RestoreTempHideButton";
+import { ReportIdentityPanel } from "@/components/admin/ReportIdentityPanel";
+import { reportPartyUserIds } from "@/lib/identity/service";
+import { prisma } from "@/lib/db/prisma";
 import { ShieldIcon, AlertIcon } from "@/components/icons";
 
 const STATUS_TONE_CLASSES: Record<ReportStatusValue, string> = {
@@ -52,6 +55,25 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
   }
 
   const report = result.data;
+
+  // 신고 당사자 (실명·학과 열람 대상): nicknames only here -- the 실명·학과
+  // themselves load only through the logged view (ReportIdentityPanel).
+  const partyIds = await reportPartyUserIds(id);
+  const partyRows = partyIds
+    ? await prisma.user.findMany({
+        where: { id: { in: [partyIds.reporterUserId, ...(partyIds.targetUserId !== null ? [partyIds.targetUserId] : [])] } },
+        select: { id: true, nickname: true },
+      })
+    : [];
+  const nicknameOf = (userId: number) => partyRows.find((row) => row.id === userId)?.nickname ?? null;
+  const parties = partyIds
+    ? [
+        { userId: partyIds.reporterUserId, role: "신고자" as const, nickname: nicknameOf(partyIds.reporterUserId) },
+        ...(partyIds.targetUserId !== null && partyIds.targetUserId !== partyIds.reporterUserId
+          ? [{ userId: partyIds.targetUserId, role: "피신고자" as const, nickname: nicknameOf(partyIds.targetUserId) }]
+          : []),
+      ]
+    : [];
 
   return (
     <div className="flex flex-col gap-5">
@@ -209,6 +231,9 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
           </div>
         </Section>
       )}
+      <Section title="신고 당사자 실명·학과 (열람 기록됨)">
+        <ReportIdentityPanel reportId={report.id} parties={parties} />
+      </Section>
     </div>
   );
 }

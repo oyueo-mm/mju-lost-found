@@ -3,27 +3,45 @@ import type { ReactNode } from "react";
 import { BellIcon, WalletIcon } from "@/components/icons";
 import { ScrollReveal } from "@/components/ui/ScrollReveal";
 import { getTranslator } from "@/lib/i18n/server";
+import { DemoPlayer } from "./DemoPlayer";
 import { demoDelay } from "./demoDelay";
 
 // 랜딩 애니메이션 (등록 이후): what happens after posting, as three small
 // mockups -- an AI match connecting a lost post with a similar found post,
 // a 1:1 chat to confirm the item, and an alert followed by the post moving
-// from 보관 중 to 완료. Each card has its own ScrollReveal, so on a phone
-// (cards stacked) each plays once as it scrolls in. Example data only (no
-// personal details); status labels are the app's own.
+// from 보관 중 to 완료. Each card has its own ScrollReveal and DemoPlayer, so
+// on a phone (cards stacked) each plays as it scrolls in; side by side on a
+// desktop they play one after another (DemoPlayer's one-at-a-time rule). Example data only
+// (no personal details); status labels and the "AI 유사도 0.87" score
+// format are the app's own (PostCard's decimal AI score).
 const CARD_CLASS =
   "flex h-full flex-col gap-4 rounded-card border border-border bg-card p-5 transition hover:border-foreground/30 hover:shadow-md motion-safe:hover:-translate-y-0.5";
 
-function Card({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+function Card({
+  title,
+  description,
+  durationMs,
+  children,
+}: {
+  title: string;
+  description: string;
+  durationMs: number;
+  children: ReactNode;
+}) {
   return (
     <div className={CARD_CLASS}>
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
-      <div aria-hidden className="mt-auto flex flex-col gap-2 rounded-card bg-muted/50 p-3">
+      <DemoPlayer
+        loop
+        decorative
+        durationMs={durationMs}
+        className="mt-auto flex flex-col gap-2 rounded-card bg-muted/50 p-3"
+      >
         {children}
-      </div>
+      </DemoPlayer>
     </div>
   );
 }
@@ -42,8 +60,12 @@ export async function AfterPostingShowcase() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {/* AI 추천 매칭: lost post -> connector + score -> similar found post */}
-        <ScrollReveal className="h-full">
-          <Card title={t("landing.after.match.title")} description={t("landing.after.match.description")}>
+        <ScrollReveal replay className="h-full">
+          <Card
+            title={t("landing.after.match.title")}
+            description={t("landing.after.match.description")}
+            durationMs={1600}
+          >
             <div className={`demo-rise ${miniPost}`} style={demoDelay(300)}>
               <span className={`${typeTag} bg-muted text-muted-foreground`}>{t("post.type.lost")}</span>
               <span className="truncate text-xs text-foreground">{t("landing.after.match.lostTitle")}</span>
@@ -54,7 +76,7 @@ export async function AfterPostingShowcase() {
                 className="demo-pop relative rounded-full bg-primary px-2.5 py-0.5 text-[11px] font-medium text-primary-foreground"
                 style={demoDelay(1150)}
               >
-                {t("landing.aiShowcase.matchScore", { score: 94 })}
+                {t("post.score.ai")} 0.87
               </span>
             </div>
             <div className={`demo-rise ${miniPost}`} style={demoDelay(850)}>
@@ -65,8 +87,12 @@ export async function AfterPostingShowcase() {
         </ScrollReveal>
 
         {/* 1:1 채팅: lost-item owner (right) and finder (left) */}
-        <ScrollReveal className="h-full" delayMs={70}>
-          <Card title={t("landing.after.chat.title")} description={t("landing.after.chat.description")}>
+        <ScrollReveal replay className="h-full" delayMs={70}>
+          <Card
+            title={t("landing.after.chat.title")}
+            description={t("landing.after.chat.description")}
+            durationMs={2100}
+          >
             <p
               className="demo-rise max-w-[85%] self-end rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-xs text-primary-foreground"
               style={demoDelay(300)}
@@ -89,8 +115,12 @@ export async function AfterPostingShowcase() {
         </ScrollReveal>
 
         {/* 알림 -> 보관 중 becomes 완료 */}
-        <ScrollReveal className="h-full" delayMs={140}>
-          <Card title={t("landing.after.done.title")} description={t("landing.after.done.description")}>
+        <ScrollReveal replay className="h-full" delayMs={140}>
+          <Card
+            title={t("landing.after.done.title")}
+            description={t("landing.after.done.description")}
+            durationMs={1900}
+          >
             <div className="demo-drop flex items-center gap-2 rounded-lg bg-card px-2.5 py-2 shadow-sm" style={demoDelay(300)}>
               <span className="relative flex size-7 shrink-0 items-center justify-center rounded-full bg-primary-muted text-primary">
                 <BellIcon className="size-3.5" />

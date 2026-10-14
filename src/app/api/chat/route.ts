@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { chatMutationResultToResponse, jsonError, requireUserForApi, withErrorHandling } from "@/lib/chat/http";
+import { chatMutationResultToResponse, jsonError, requireIdentityForApi, requireUserForApi, withErrorHandling } from "@/lib/chat/http";
 import { createChatRoomSchema } from "@/lib/chat/schema";
 import { getOrCreateDirectChatRoom, listChatRoomsForUser } from "@/lib/chat/service";
 
@@ -23,6 +23,8 @@ export const GET = withErrorHandling(async () => {
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const auth = await requireUserForApi();
   if ("response" in auth) return auth.response;
+  const identityMissing = await requireIdentityForApi(auth.user);
+  if (identityMissing) return identityMissing;
 
   let body: unknown;
   try {

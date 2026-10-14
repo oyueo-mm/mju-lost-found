@@ -1,6 +1,8 @@
-import type { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
 import { getCurrentUser, hasRequiredConsents } from "@/lib/auth/session";
+import { IDENTITY_REQUIRED_CODE } from "@/lib/identity/client";
+import { hasIdentityInfo } from "@/lib/identity/service";
 import type { User } from "@/generated/prisma/client";
 import { jsonError } from "./response";
 
@@ -36,4 +38,16 @@ export async function requireUserForApi(): Promise<
     return { response: jsonError(403, "닉네임을 먼저 설정해주세요.") };
   }
   return { user };
+}
+
+// 실명·학과: required before anything that puts two members in touch --
+// creating a post, starting a chat, sending a message or chat photo.
+// Browsing and reading stay open. `code` lets the client send the member
+// to /me/identity instead of only showing the message.
+export async function requireIdentityForApi(user: Pick<User, "id">): Promise<NextResponse | null> {
+  if (await hasIdentityInfo(user.id)) return null;
+  return NextResponse.json(
+    { error: "게시글 등록과 채팅을 하려면 실명·학과 정보를 먼저 등록해주세요.", code: IDENTITY_REQUIRED_CODE },
+    { status: 403 },
+  );
 }

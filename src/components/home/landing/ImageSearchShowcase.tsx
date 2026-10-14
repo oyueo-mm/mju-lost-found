@@ -1,5 +1,6 @@
 import { ChevronRightIcon, HandboxIcon, PlusIcon } from "@/components/icons";
 import { getTranslator } from "@/lib/i18n/server";
+import { DemoPlayer } from "./DemoPlayer";
 import { demoDelay } from "./demoDelay";
 
 // Phase 30: same "static mockup, no real API call" rule as
@@ -7,7 +8,7 @@ import { demoDelay } from "./demoDelay";
 // fixed placeholders that only illustrate the idea (a photo in, similar
 // posts out). Real image-similarity search is untouched elsewhere.
 // 랜딩 애니메이션: on reveal the photo drops in, a band scans down it,
-// then the arrow and the similar results follow -- once.
+// then the arrow and the similar results follow (DemoPlayer replays it).
 export async function ImageSearchShowcase() {
   const t = await getTranslator();
 
@@ -22,7 +23,7 @@ export async function ImageSearchShowcase() {
           </p>
         </div>
 
-        <div className="order-1 flex items-center justify-center gap-3 md:order-2 md:gap-4">
+        <DemoPlayer loop durationMs={2400} className="order-1 flex items-center justify-center gap-3 md:order-2 md:gap-4">
           <div
             className="demo-drop relative flex size-24 shrink-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-card border border-dashed border-border text-muted-foreground md:size-28"
             style={demoDelay(300)}
@@ -49,7 +50,7 @@ export async function ImageSearchShowcase() {
               </span>
             ))}
           </div>
-        </div>
+        </DemoPlayer>
       </div>
     </section>
   );

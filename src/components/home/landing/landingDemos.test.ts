@@ -9,7 +9,6 @@ const root = join(__dirname, "../../../..");
 const DEMO_FILES = [
   "AiSearchShowcase.tsx",
   "ImageSearchShowcase.tsx",
-  "HowItWorks.tsx",
   "FeatureGrid.tsx",
   "RegisterShowcase.tsx",
   "AfterPostingShowcase.tsx",
@@ -54,16 +53,19 @@ describe("landing demo CSS", () => {
     }
   });
 
-  it("only hides content while its section is waiting to be revealed", () => {
-    const media = blocks.find((b) => b.head.startsWith("@media (prefers-reduced-motion: no-preference)"));
-    const rules = topLevelBlocks(media!.body);
-    for (const { head, body } of rules) {
-      if (/opacity:\s*0|clip-path/.test(body) && !/animation/.test(body)) {
-        expect(head).toMatch(/^\[data-reveal="hidden"\]/);
-      }
-      if (/animation/.test(body)) {
-        expect(head).toMatch(/^\[data-reveal="visible"\]/);
-        expect(body).toMatch(/ backwards;/);
+  it("only hides content while its demo is waiting to play, and only animates while playing", () => {
+    expect(demoCss).not.toContain("[data-reveal");
+    const media = blocks.filter((b) => b.head.startsWith("@media (prefers-reduced-motion: no-preference)"));
+    expect(media.length).toBeGreaterThan(0);
+    for (const { body: mediaBody } of media) {
+      for (const { head, body } of topLevelBlocks(mediaBody)) {
+        if (/opacity:\s*0|clip-path/.test(body) && !/animation/.test(body)) {
+          expect(head).toMatch(/^\[data-demo="ready"\]/);
+        }
+        if (/animation/.test(body)) {
+          expect(head).toMatch(/^\[data-demo="play"\]/);
+          expect(body).toMatch(/ backwards;/);
+        }
       }
     }
   });
@@ -78,14 +80,12 @@ describe("landing demo CSS", () => {
     for (const name of used) expect(demoCss).toContain(`.${name}`);
   });
 
-  // A demo inside two ScrollReveal wrappers would match both the hidden and
-  // the visible rules at once. AfterPostingShowcase reveals its own cards,
-  // so LandingHero must not wrap it.
-  it("never nests reveal wrappers around a demo", () => {
-    const hero = readFileSync(join(root, "src/components/home/LandingHero.tsx"), "utf8");
-    expect(hero).toMatch(/\n\s*<AfterPostingShowcase \/>/);
-    expect(hero).not.toMatch(/<ScrollReveal>\s*<AfterPostingShowcase/);
-    const after = readFileSync(join(root, "src/components/home/landing/AfterPostingShowcase.tsx"), "utf8");
-    expect(after.match(/<ScrollReveal/g)).toHaveLength(3);
+  // Every component with demo parts runs them through DemoPlayer (which
+  // sets data-demo); demo classes outside one would never play.
+  it("wraps every demo in a DemoPlayer", () => {
+    const dir = join(root, "src/components/home/landing");
+    for (const file of DEMO_FILES) {
+      expect(readFileSync(join(dir, file), "utf8"), file).toContain("<DemoPlayer");
+    }
   });
 });

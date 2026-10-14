@@ -365,66 +365,66 @@ option {
   }
 }
 
-/* Landing demos: the AI-search, image-search and how-it-works mockups
-   play their "this is what happens" sequence once, when their section's
-   ScrollReveal wrapper turns [data-reveal="visible"]. While the wrapper is
-   still [data-reveal="hidden"] (below the fold), the animated parts wait
-   in their start state; with no data-reveal at all (already on screen at
-   load, JS failed, or reduced motion -- ScrollReveal skips all three) the
-   mockups are simply static and complete. Only opacity, transform and
-   clip-path move, so nothing shifts the layout; nothing loops. Fill mode
-   is `backwards` so each part returns to its normal styles afterwards and
-   hover effects keep working. Per-element delay: style="--demo-delay". */
+/* Landing demos: the posting, AI-search, image-search and after-posting
+   mockups play their "this is what happens" sequence when DemoPlayer
+   (src/components/home/landing/DemoPlayer.tsx) sets data-demo="play" on
+   their wrapper; data-demo="ready" holds the animated parts in their start
+   state until then. With no data-demo at all (already on screen at load
+   and not yet replayed, JS failed, or reduced motion) the mockups are
+   simply static and complete. Only opacity, transform and clip-path move,
+   so nothing shifts the layout. Fill mode is `backwards` so each part
+   returns to its normal styles afterwards and hover effects keep working.
+   Per-element delay: style="--demo-delay". */
 @media (prefers-reduced-motion: no-preference) {
-  [data-reveal="hidden"] :is(.demo-rise, .demo-pop, .demo-drop, .demo-nudge) {
+  [data-demo="ready"] :is(.demo-rise, .demo-pop, .demo-drop, .demo-nudge) {
     opacity: 0;
   }
-  [data-reveal="hidden"] .demo-type {
+  [data-demo="ready"] .demo-type {
     clip-path: inset(0 100% 0 0);
   }
-  [data-reveal="visible"] .demo-rise {
+  [data-demo="play"] .demo-rise {
     animation: demo-rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) var(--demo-delay, 0ms) backwards;
   }
-  [data-reveal="visible"] .demo-pop {
+  [data-demo="play"] .demo-pop {
     animation: demo-pop 380ms cubic-bezier(0.2, 0.8, 0.3, 1.2) var(--demo-delay, 0ms) backwards;
   }
-  [data-reveal="visible"] .demo-drop {
+  [data-demo="play"] .demo-drop {
     animation: demo-drop 460ms cubic-bezier(0.2, 0.7, 0.2, 1) var(--demo-delay, 0ms) backwards;
   }
-  [data-reveal="visible"] .demo-nudge {
+  [data-demo="play"] .demo-nudge {
     animation: demo-nudge 360ms ease-out var(--demo-delay, 0ms) backwards;
   }
   /* The example query "typed" into the search box, left to right. */
-  [data-reveal="visible"] .demo-type {
+  [data-demo="play"] .demo-type {
     animation: demo-type 1100ms steps(26, end) var(--demo-delay, 0ms) backwards;
   }
   /* A thin line under the search box / a band down the photo: "AI is
      reading this". Invisible before and after. */
-  [data-reveal="visible"] .demo-progress {
+  [data-demo="play"] .demo-progress {
     animation: demo-progress 700ms ease-in-out var(--demo-delay, 0ms) backwards;
   }
-  [data-reveal="visible"] .demo-scan {
+  [data-demo="play"] .demo-scan {
     animation: demo-scan 900ms ease-in-out var(--demo-delay, 0ms) backwards;
   }
   /* How it works: each step lights up in turn; the AI-match step also
      sends out one soft ring. */
-  [data-reveal="visible"] .demo-step {
+  [data-demo="play"] .demo-step {
     animation: demo-step 520ms ease-out var(--demo-delay, 0ms) backwards;
   }
-  [data-reveal="visible"] .demo-ring {
+  [data-demo="play"] .demo-ring {
     animation: demo-ring 900ms ease-out var(--demo-delay, 0ms) backwards;
   }
   /* Feature grid icons: one small motion each, hinting at the feature. */
-  [data-reveal="visible"] .demo-icon-rotate {
+  [data-demo="play"] .demo-icon-rotate {
     animation: demo-icon-rotate 520ms ease-out var(--demo-delay, 0ms) backwards;
   }
-  [data-reveal="visible"] .demo-icon-sweep {
+  [data-demo="play"] .demo-icon-sweep {
     animation: demo-icon-sweep 620ms ease-in-out var(--demo-delay, 0ms) backwards;
   }
-  [data-reveal="visible"] .demo-icon-blink {
+  [data-demo="play"] .demo-icon-blink {
     animation: demo-icon-blink 520ms ease-in-out var(--demo-delay, 0ms) backwards;
   }
-  [data-reveal="visible"] .demo-icon-bob {
+  [data-demo="play"] .demo-icon-bob {
     animation: demo-icon-bob 560ms ease-out var(--demo-delay, 0ms) backwards;
   }
 }
@@ -497,19 +497,19 @@ option {
    "보관 중" badge before "완료"), and a connector drawn between a lost and
    a found post. Same rules as above. */
 @media (prefers-reduced-motion: no-preference) {
-  [data-reveal="hidden"] .demo-draw {
+  [data-demo="ready"] .demo-draw {
     opacity: 0;
   }
-  [data-reveal="hidden"] .demo-out {
+  [data-demo="ready"] .demo-out {
     opacity: 1;
   }
-  [data-reveal="visible"] .demo-press {
+  [data-demo="play"] .demo-press {
     animation: demo-press 320ms ease-in-out var(--demo-delay, 0ms) backwards;
   }
-  [data-reveal="visible"] .demo-out {
+  [data-demo="play"] .demo-out {
     animation: demo-out 300ms ease-out var(--demo-delay, 0ms) backwards;
   }
-  [data-reveal="visible"] .demo-draw {
+  [data-demo="play"] .demo-draw {
     animation: demo-draw 520ms ease-out var(--demo-delay, 0ms) backwards;
   }
 }

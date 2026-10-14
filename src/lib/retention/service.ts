@@ -169,12 +169,18 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
     });
     for (const r of expiredReports) {
       if ((r.processedAt ?? r.createdAt) > recordCutoff) continue;
-      if ((await prisma.adminAccessLog.count({ where: { reportId: r.id, accessedAt: { gt: accessLogCutoff } } })) > 0) {
+      // Chat views and 실명·학과 views alike: a report viewed through within
+      // the last year waits; older view logs go with the report.
+      const recentViews =
+        (await prisma.adminAccessLog.count({ where: { reportId: r.id, accessedAt: { gt: accessLogCutoff } } })) +
+        (await prisma.identityAccessLog.count({ where: { reportId: r.id, accessedAt: { gt: accessLogCutoff } } }));
+      if (recentViews > 0) {
         result.reportsDeferredForAccessLogs++;
         continue;
       }
       await prisma.$transaction(async (tx) => {
         await tx.adminAccessLog.deleteMany({ where: { reportId: r.id } });
+        await tx.identityAccessLog.deleteMany({ where: { reportId: r.id } });
         if (aboutIds.has(r.id)) {
           result.actionsDeleted += (await tx.moderationAction.deleteMany({ where: { reportId: r.id } })).count;
         } else {

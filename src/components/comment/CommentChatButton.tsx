@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import type { PostType } from "@/lib/posts/schema";
 import { useI18n } from "@/lib/i18n/client";
+import { identityFormHref, isIdentityRequired } from "@/lib/identity/client";
 
 type CommentChatButtonProps = {
   postType: PostType;
@@ -41,6 +42,11 @@ export function CommentChatButton({ postType, postId, commentId }: CommentChatBu
       });
       const json = await res.json();
       if (!res.ok) {
+        // 실명·학과 not entered yet: to the form, then back here.
+        if (isIdentityRequired(json)) {
+          router.push(identityFormHref(window.location.pathname + window.location.search));
+          return;
+        }
         setError(json.error ?? t("common.networkError"));
         setPending(false);
         return;

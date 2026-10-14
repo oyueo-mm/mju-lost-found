@@ -96,21 +96,9 @@ function privacyConsentRedirectUrl(callbackUrl?: string): string {
   return query ? `/privacy-consent?${query}` : "/privacy-consent";
 }
 
-// /login reads a caller-supplied `callbackUrl` back out of its own query
-// string (see loginRedirectUrl above, and DirectChatButton's login-prompt
-// link on /post/[id]) to send the user back where they came from after
-// signing in. That value crosses a client-visible URL, so it's untrusted
-// regardless of who normally sets it -- only a same-origin relative path
-// is accepted (must start with exactly one "/", never "//..." which a
-// browser resolves as protocol-relative to an *external* host, and never
-// contain "://"), so this can never become an open redirect to another
-// site. Returns undefined for anything else, which callers treat as "no
-// callback url" rather than an error.
-export function sanitizeCallbackUrl(url: string | undefined | null): string | undefined {
-  if (!url) return undefined;
-  if (!url.startsWith("/") || url.startsWith("//") || url.includes("://")) return undefined;
-  return url;
-}
+// Open-redirect-safe callback paths -- see callbackUrl.ts.
+export { sanitizeCallbackUrl } from "./callbackUrl";
+import { sanitizeCallbackUrl } from "./callbackUrl";
 
 // For Server Components/Server Actions that require a signed-in user --
 // redirects to /login instead of returning null so callers don't each
@@ -212,5 +200,19 @@ export async function requireActiveUser(): Promise<User> {
 export async function requireAdmin(): Promise<User> {
   const user = await requireReadyUser();
   if (!user.isAdmin) redirect("/");
+  return user;
+}
+
+// 실명·학과: pages where members get in touch (writing a post) send a
+// member without them to the form first, then back. Browsing never does.
+export function identityFormUrl(callbackUrl?: string): string {
+  const safe = sanitizeCallbackUrl(callbackUrl);
+  return safe ? `/me/identity?callbackUrl=${encodeURIComponent(safe)}` : "/me/identity";
+}
+
+export async function requireIdentityReadyUser(reason: LoginReason, callbackUrl: string): Promise<User> {
+  const user = await requireReadyUser(reason, callbackUrl);
+  const { hasIdentityInfo } = await import("@/lib/identity/service");
+  if (!(await hasIdentityInfo(user.id))) redirect(identityFormUrl(callbackUrl));
   return user;
 }

@@ -503,6 +503,8 @@ model User {
   withdrawnIdentities          WithdrawnIdentity[]
   rejoinRequestsReviewed       RejoinRequest[]               @relation("RejoinRequestReviewer")
   postStatusChanges            PostStatusChange[]            @relation("PostStatusChangedBy")
+  identityInfo                 UserIdentityInfo?
+  identityAccessLogs           IdentityAccessLog[]           @relation("IdentityAccessLogAdmin")
 
   @@map("User")
 }
@@ -1042,6 +1044,7 @@ model Report {
 
   moderationAction ModerationAction?
   adminAccessLogs  AdminAccessLog[]
+  identityAccessLogs IdentityAccessLog[]
 
   @@unique([reporterUserId, targetType, targetId])
   @@index([reporterUserId], map: "idx_report_reporter_user_id")
@@ -1829,4 +1832,49 @@ model RejoinRequest {
   @@index([identityId], map: "idx_rejoin_request_identity")
   @@index([status, createdAt], map: "idx_rejoin_request_status_created")
   @@map("RejoinRequest")
+}
+
+// ---------- 실명·학과 ----------
+
+// The member's real name and department (학과/소속), entered by the member
+// themself -- never verified against school records, and not taken from
+// Google (sign-in asks only for "openid email"). Kept out of User on
+// purpose: no existing query, include or API response can carry it by
+// accident. Read only by the member (내 정보) and, for a report, by an admin
+// (identity/service.ts, every read written to IdentityAccessLog). Required
+// before posting or chatting, not for browsing. consentVersion/consentedAt
+// record the separate 실명·학과 수집·이용 동의 given on the form.
+// Deleted at 회원탈퇴 (auth/withdrawal.ts); kept while an account is only
+// deactivated, like the rest of the account.
+model UserIdentityInfo {
+  userId         Int      @id @map("user_id")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  realName       String   @map("real_name") @db.Text
+  department     String   @db.Text
+  consentVersion String   @map("consent_version") @db.Text
+  consentedAt    DateTime @map("consented_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("UserIdentityInfo")
+}
+
+// One row per admin view of a member's 실명·학과: who looked, whose, for
+// which report, and why. Only the reporter or the owner of the reported
+// content of that report can be looked up (identity/service.ts). Never
+// updated or deleted by the app. targetUserId has no FK so a log row never
+// blocks anything about the account it names.
+model IdentityAccessLog {
+  id           Int      @id @default(autoincrement())
+  adminUserId  Int      @map("admin_user_id")
+  admin        User     @relation("IdentityAccessLogAdmin", fields: [adminUserId], references: [id], onDelete: Restrict)
+  targetUserId Int      @map("target_user_id")
+  reportId     Int      @map("report_id")
+  report       Report   @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  reason       String   @db.Text
+  accessedAt   DateTime @default(now()) @map("accessed_at")
+
+  @@index([adminUserId, accessedAt], map: "idx_identityaccesslog_admin_accessed")
+  @@index([targetUserId], map: "idx_identityaccesslog_target")
+  @@map("IdentityAccessLog")
 }

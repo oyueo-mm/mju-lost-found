@@ -115,6 +115,13 @@ export default async function PrivacyConsentPage({
             <p className="text-muted-foreground">
               분실물을 등록하고 검색하고 연락하기 위해 사용됩니다.
             </p>
+            {/* 실명·학과 are not part of this consent: they are asked for,
+                with their own consent, on /me/identity when a member first
+                posts or chats -- so this version (and every existing
+                member's consent) is unchanged by them. */}
+            <p className="text-xs text-muted-foreground">
+              실명·학과는 게시글 등록과 채팅을 이용할 때 별도로 동의를 받아 수집합니다.
+            </p>
           </div>
 
           {/* Native <details>/<summary> -- no JS, no client component

@@ -1,4 +1,5 @@
 import { BoxIcon, SearchIcon } from "@/components/icons";
+import { DemoPlayer } from "./DemoPlayer";
 import { demoDelay } from "./demoDelay";
 import { getTranslator } from "@/lib/i18n/server";
 import type { TranslationKey } from "@/lib/i18n/translate";
@@ -9,23 +10,17 @@ import type { TranslationKey } from "@/lib/i18n/translate";
 // keywords" click at a glance. Real search/AI matching is untouched
 // elsewhere in the app; nothing here calls it.
 // 랜딩 애니메이션: when the section is revealed, the query is typed in, a
-// thin "AI reading" line runs under the box, then the results and their
-// match scores arrive -- once (see globals.css's "Landing demos").
+// thin "AI reading" line runs under the box, then the results arrive
+// (DemoPlayer: replays while on screen, see globals.css "Landing demos").
 // 다국어(i18n) Phase: 이 두 줄은 실제 게시글이 아니라 화면을 설명하기
 // 위한 고정 예시 문구다(위 주석 참고) -- 그래서 DB 값과 달리 번역해도
 // 안전하고, 번역해야 유학생에게도 "이런 식으로 검색하면 이런 게 나온다"가
 // 전달된다.
-const MOCK_RESULTS: { titleKey: TranslationKey; locationKey: TranslationKey; score: number }[] = [
-  {
-    titleKey: "landing.aiShowcase.sample1.title",
-    locationKey: "landing.aiShowcase.sample1.location",
-    score: 92,
-  },
-  {
-    titleKey: "landing.aiShowcase.sample2.title",
-    locationKey: "landing.aiShowcase.sample2.location",
-    score: 78,
-  },
+// No score badge: the real AI search results show none either (see
+// AISearchPanel's scoreDisplay="hidden").
+const MOCK_RESULTS: { titleKey: TranslationKey; locationKey: TranslationKey }[] = [
+  { titleKey: "landing.aiShowcase.sample1.title", locationKey: "landing.aiShowcase.sample1.location" },
+  { titleKey: "landing.aiShowcase.sample2.title", locationKey: "landing.aiShowcase.sample2.location" },
 ];
 
 export async function AiSearchShowcase() {
@@ -42,7 +37,7 @@ export async function AiSearchShowcase() {
           </p>
         </div>
 
-        <div className="flex flex-col gap-3 rounded-card border border-border bg-card p-4 shadow-sm md:p-5">
+        <DemoPlayer loop durationMs={2900} className="flex flex-col gap-3 rounded-card border border-border bg-card p-4 shadow-sm md:p-5">
           <div className="relative flex items-center gap-2 overflow-hidden rounded-full border border-border bg-background px-4 py-3">
             <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
             <p className="demo-type truncate text-sm text-foreground" style={demoDelay(350)}>
@@ -72,16 +67,10 @@ export async function AiSearchShowcase() {
                   <p className="truncate text-sm font-medium text-foreground">{t(result.titleKey)}</p>
                   <p className="truncate text-xs text-muted-foreground">{t(result.locationKey)}</p>
                 </div>
-                <span
-                  className="demo-pop shrink-0 rounded-full bg-primary-muted px-2.5 py-1 text-xs font-medium text-primary"
-                  style={demoDelay(2550 + index * 150)}
-                >
-                  {t("landing.aiShowcase.matchScore", { score: result.score })}
-                </span>
               </div>
             ))}
           </div>
-        </div>
+        </DemoPlayer>
       </div>
     </section>
   );

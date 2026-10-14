@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 
 import { ImageProcessingError, uploadChatImage, validateImageFile } from "@/lib/images/client";
@@ -65,7 +65,18 @@ function formatChatDay(date: Date, locale: keyof typeof LOCALE_INTL_TAG): string
 // direct DB/AI call from this Client Component) -- see Phase 10 spec
 // section 16. `isMine` comes pre-computed from the server (relative to
 // the authenticated session), never derived from anything client-side.
-export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; currentUserId: number }) {
+// sendBlockedNotice (실명·학과 not entered yet): the conversation stays
+// readable, and this notice takes the place of the message box -- the
+// server refuses sending anyway (requireIdentityForApi).
+export function ChatThread({
+  chatRoomId,
+  currentUserId,
+  sendBlockedNotice,
+}: {
+  chatRoomId: number;
+  currentUserId: number;
+  sendBlockedNotice?: ReactNode;
+}) {
   const { t, locale } = useI18n();
   const [messages, setMessages] = useState<MessageItem[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -727,40 +738,42 @@ export function ChatThread({ chatRoomId, currentUserId }: { chatRoomId: number; 
           </div>
         )}
 
-        <form onSubmit={handleSend} className="flex gap-2">
-          <label
-            aria-label={t("chatThread.photo")}
-            className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border text-foreground hover:border-primary hover:bg-primary-muted has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50"
-          >
-            <CameraIcon className="size-4.5" />
-            <span className="sr-only">{t("chatThread.photo")}</span>
+        {sendBlockedNotice ?? (
+          <form onSubmit={handleSend} className="flex gap-2">
+            <label
+              aria-label={t("chatThread.photo")}
+              className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border text-foreground hover:border-primary hover:bg-primary-muted has-[:disabled]:pointer-events-none has-[:disabled]:opacity-50"
+            >
+              <CameraIcon className="size-4.5" />
+              <span className="sr-only">{t("chatThread.photo")}</span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                disabled={sending}
+                onChange={handleFileChange}
+                className="sr-only"
+              />
+            </label>
             <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
+              ref={messageInputRef}
+              type="text"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder={t("chatThread.placeholder")}
+              maxLength={2000}
               disabled={sending}
-              onChange={handleFileChange}
-              className="sr-only"
+              className="flex-1 rounded-full border border-border bg-transparent px-4 py-2 text-sm text-foreground disabled:opacity-60"
             />
-          </label>
-          <input
-            ref={messageInputRef}
-            type="text"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder={t("chatThread.placeholder")}
-            maxLength={2000}
-            disabled={sending}
-            className="flex-1 rounded-full border border-border bg-transparent px-4 py-2 text-sm text-foreground disabled:opacity-60"
-          />
-          <button
-            type="submit"
-            disabled={sending || (!content.trim() && !selectedFile)}
-            className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
-          >
-            {sending ? t("chatThread.sending") : t("chatThread.send")}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={sending || (!content.trim() && !selectedFile)}
+              className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
+            >
+              {sending ? t("chatThread.sending") : t("chatThread.send")}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

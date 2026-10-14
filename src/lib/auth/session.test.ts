@@ -271,6 +271,14 @@ describe("sanitizeCallbackUrl", () => {
     expect(sanitizeCallbackUrl("//evil.com")).toBeUndefined();
   });
 
+  // Browsers read a backslash as a slash, so "/\evil.com" is "//evil.com".
+  it("rejects backslash and control-character tricks", () => {
+    expect(sanitizeCallbackUrl("/\\evil.com")).toBeUndefined();
+    expect(sanitizeCallbackUrl("/\\/evil.com")).toBeUndefined();
+    expect(sanitizeCallbackUrl("/\t/evil.com")).toBeUndefined();
+    expect(sanitizeCallbackUrl("/me/identity?callbackUrl=%2Ffound%2Fnew")).toBe("/me/identity?callbackUrl=%2Ffound%2Fnew");
+  });
+
   it("rejects an absolute external URL", () => {
     expect(sanitizeCallbackUrl("https://evil.com/phish")).toBeUndefined();
   });

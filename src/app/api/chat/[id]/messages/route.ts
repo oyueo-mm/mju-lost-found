@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { chatMutationResultToResponse, jsonError, requireUserForApi, withErrorHandling } from "@/lib/chat/http";
+import { chatMutationResultToResponse, jsonError, requireIdentityForApi, requireUserForApi, withErrorHandling } from "@/lib/chat/http";
 import {
   deleteMessageQuerySchema,
   editMessageSchema,
@@ -76,6 +76,8 @@ export const POST = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const auth = await requireUserForApi();
     if ("response" in auth) return auth.response;
+    const identityMissing = await requireIdentityForApi(auth.user);
+    if (identityMissing) return identityMissing;
 
     const { id: idParam } = await params;
     const id = Number(idParam);

@@ -1,10 +1,11 @@
-import { requireReadyUser } from "@/lib/auth/session";
+import { requireIdentityReadyUser } from "@/lib/auth/session";
 import { getMyOrganizationMemberships } from "@/lib/organization/service";
 import { loadNextPostDefaults } from "@/lib/posts/nextPostDefaults";
 import { PostForm } from "@/components/post/PostForm";
 
 export default async function NewFoundPostPage({ searchParams }: { searchParams: Promise<{ after?: string }> }) {
-  const user = await requireReadyUser("write", "/found/new"); // redirects to /login or /onboarding as needed
+  // Redirects to /login, /onboarding or (no 실명·학과 yet) /me/identity as needed.
+  const user = await requireIdentityReadyUser("write", "/found/new");
 
   // See lost/new/page.tsx's own comment -- identical shape/reasoning.
   const myOrganizations = (await getMyOrganizationMemberships(user.id)).filter((m) => m.organizationStatus === "active");

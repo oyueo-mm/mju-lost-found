@@ -1,10 +1,11 @@
-import { requireReadyUser } from "@/lib/auth/session";
+import { requireIdentityReadyUser } from "@/lib/auth/session";
 import { getMyOrganizationMemberships } from "@/lib/organization/service";
 import { loadNextPostDefaults } from "@/lib/posts/nextPostDefaults";
 import { PostForm } from "@/components/post/PostForm";
 
 export default async function NewLostPostPage({ searchParams }: { searchParams: Promise<{ after?: string }> }) {
-  const user = await requireReadyUser("write", "/lost/new"); // redirects to /login or /onboarding as needed
+  // Redirects to /login, /onboarding or (no 실명·학과 yet) /me/identity as needed.
+  const user = await requireIdentityReadyUser("write", "/lost/new");
 
   // Phase 12-5 §13/§14: the org selector's option list always comes from a
   // fresh server-side membership query, never client state -- only ACTIVE

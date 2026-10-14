@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   jsonError,
   postMutationResultToResponse,
+  requireIdentityForApi,
   requireUserForApi,
   withErrorHandling,
 } from "@/lib/posts/http";
@@ -238,6 +239,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   const auth = await requireUserForApi();
   if ("response" in auth) return auth.response;
+  const identityMissing = await requireIdentityForApi(auth.user);
+  if (identityMissing) return identityMissing;
 
   let body: unknown;
   try {

@@ -11,6 +11,8 @@ import { NicknameSettings } from "@/components/settings/NicknameSettings";
 import { CopyPublicId } from "@/components/settings/CopyPublicId";
 import type { ReactNode } from "react";
 import { getTranslator } from "@/lib/i18n/server";
+import { getOwnIdentityInfo } from "@/lib/identity/service";
+import { LinkButton } from "@/components/ui/Button";
 
 // Phase 17: "내 정보" -- the hub this phase's Navigation redesign
 // consolidates every personal-account feature into (내 게시물/알림/
@@ -52,6 +54,8 @@ export default async function MePage() {
   }
 
   const admin = isAdmin(user);
+  // 실명·학과: the member's own, shown only here (and on its form).
+  const identity = await getOwnIdentityInfo(user.id);
 
   return (
     <div className="flex flex-col gap-6">
@@ -83,6 +87,26 @@ export default async function MePage() {
           Phase I section 7: now also cooldown-gated -- see
           NicknameSettings/me/actions.ts's own comments. */}
       <NicknameSettings currentNickname={user.nickname ?? ""} nicknameChangeAvailableAt={user.nicknameChangeAvailableAt} />
+
+      <section className="flex flex-col gap-3 rounded-card border border-border bg-card p-5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-foreground">{t("identity.title")}</h2>
+          <LinkButton href="/me/identity" variant="secondary" size="sm">
+            {identity ? t("identity.edit") : t("identity.register")}
+          </LinkButton>
+        </div>
+        {identity ? (
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+            <dt className="text-muted-foreground">{t("identity.realName")}</dt>
+            <dd className="min-w-0 break-words text-foreground">{identity.realName}</dd>
+            <dt className="text-muted-foreground">{t("identity.department")}</dt>
+            <dd className="min-w-0 break-words text-foreground">{identity.department}</dd>
+          </dl>
+        ) : (
+          <p className="text-sm text-muted-foreground">{t("identity.notRegistered")}</p>
+        )}
+        <p className="text-xs text-muted-foreground">{t("identity.privateNote")}</p>
+      </section>
 
       {/* Phase H-8: "내 활동" -- 내가 쓴 게시글(기존 /posts/mine, 라벨만 통일) +
           내가 쓴 댓글(신규 /me/comments). 두 페이지 모두 세션의 본인 id만 사용,

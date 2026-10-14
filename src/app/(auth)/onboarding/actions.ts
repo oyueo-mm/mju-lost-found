@@ -57,5 +57,7 @@ export async function setNicknameAction(
     redirect("/");
   }
 
-  redirect("/");
+  // 실명·학과: a new member is shown that form next (they can skip it and
+  // add it later; posting and chatting ask for it then).
+  redirect("/me/identity?onboarding=1");
 }

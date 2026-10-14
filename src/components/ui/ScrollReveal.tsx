@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 
+import { isOutsideInitialView, observeViewCycle, prefersReducedMotion } from "./viewCycle";
+
 type ScrollRevealProps = {
   children: ReactNode;
   className?: string;
@@ -9,6 +11,10 @@ type ScrollRevealProps = {
   // Kept to small multiples of ~70ms -- long enough to read as a sequence,
   // short enough that the last item never feels late.
   delayMs?: number;
+  // Opt-in (the landing page): reveal again each time the element comes
+  // back after leaving the screen (see viewCycle.ts for the hysteresis).
+  // Off by default, so every other page keeps the reveal-once behavior.
+  replay?: boolean;
 };
 
 // Phase K: fade+rise a section in the first time it scrolls into view.
@@ -29,12 +35,30 @@ type ScrollRevealProps = {
 // 3. It reveals once and then stops observing -- scrolling back up never
 //    re-animates, which is what makes repeated scrolling feel calm rather
 //    than busy.
-export function ScrollReveal({ children, className = "", delayMs = 0 }: ScrollRevealProps) {
+export function ScrollReveal({ children, className = "", delayMs = 0, replay = false }: ScrollRevealProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || !replay) return;
+    if (typeof IntersectionObserver === "undefined" || prefersReducedMotion()) return;
+    // Already on screen at load: shown as rendered; it only animates after
+    // it has left and come back.
+    if (isOutsideInitialView(el)) el.dataset.reveal = "hidden";
+    if (delayMs > 0) el.style.transitionDelay = `${delayMs}ms`;
+    return observeViewCycle(el, {
+      onEnter: () => {
+        if (el.dataset.reveal === "hidden") el.dataset.reveal = "visible";
+      },
+      onLeave: () => {
+        el.dataset.reveal = "hidden";
+      },
+    });
+  }, [delayMs, replay]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || replay) return;
     if (typeof IntersectionObserver === "undefined") return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
@@ -61,7 +85,7 @@ export function ScrollReveal({ children, className = "", delayMs = 0 }: ScrollRe
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [delayMs]);
+  }, [delayMs, replay]);
 
   return (
     <div ref={ref} className={className}>

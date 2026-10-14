@@ -1,16 +1,18 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { jsonError } from "@/lib/posts/response";
 
 const requireUserForApi = vi.fn();
+// 실명·학과 gate: passes (null) unless a test says otherwise.
+const requireIdentityForApi = vi.fn();
 const getOrCreateDirectChatRoom = vi.fn();
 const listChatRoomsForUser = vi.fn();
 
 vi.mock("@/lib/chat/http", async () => {
   const response = await import("@/lib/posts/response");
   const chatResponse = await import("@/lib/chat/response");
-  return { ...response, ...chatResponse, requireUserForApi };
+  return { ...response, ...chatResponse, requireUserForApi, requireIdentityForApi };
 });
 vi.mock("@/lib/chat/service", () => ({ getOrCreateDirectChatRoom, listChatRoomsForUser }));
 
@@ -177,5 +179,21 @@ describe("POST /api/chat", () => {
       expect(res.status).toBe(400);
       expect(getOrCreateDirectChatRoom).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("실명·학과 gate", () => {
+  it("refuses with 403 identity_required before doing anything when 실명·학과 is missing", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    requireIdentityForApi.mockResolvedValueOnce(NextResponse.json({ error: "실명·학과 정보를 먼저 등록해주세요.", code: "identity_required" }, { status: 403 }));
+
+    const res = await POST(
+        new NextRequest("http://localhost/api/chat", { method: "POST", body: JSON.stringify({ postType: "lost", postId: 1 }) }),
+      );
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("identity_required");
+    expect(requireIdentityForApi).toHaveBeenCalledWith(sessionUser);
+    expect(getOrCreateDirectChatRoom).not.toHaveBeenCalled();
   });
 });

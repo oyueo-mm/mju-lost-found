@@ -1,9 +1,11 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { jsonError } from "@/lib/posts/response";
 
 const requireUserForApi = vi.fn();
+// 실명·학과 gate: passes (null) unless a test says otherwise.
+const requireIdentityForApi = vi.fn();
 const searchPosts = vi.fn();
 const searchPostsAI = vi.fn();
 const createLostPost = vi.fn();
@@ -17,7 +19,7 @@ const createFoundPost = vi.fn();
 // requireUserForApi is faked.
 vi.mock("@/lib/posts/http", async () => {
   const response = await import("@/lib/posts/response");
-  return { ...response, requireUserForApi };
+  return { ...response, requireUserForApi, requireIdentityForApi };
 });
 vi.mock("@/lib/posts/aiService", () => ({
   searchPosts,
@@ -419,6 +421,25 @@ describe("rate limits", () => {
 
     expect(res.status).toBe(429);
     expect(enforceRateLimit).toHaveBeenCalledWith("postCreate", { userId: 1, tier: "user" });
+    expect(createLostPost).not.toHaveBeenCalled();
+  });
+});
+
+describe("실명·학과 gate", () => {
+  it("refuses with 403 identity_required before doing anything when 실명·학과 is missing", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    requireIdentityForApi.mockResolvedValueOnce(NextResponse.json({ error: "실명·학과 정보를 먼저 등록해주세요.", code: "identity_required" }, { status: 403 }));
+
+    const res = await POST(
+        new NextRequest("http://localhost/api/posts", {
+          method: "POST",
+          body: JSON.stringify({ type: "lost", title: "t", description: "d", categoryCode: "wallet", campus: "인문캠퍼스" }),
+        }),
+      );
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("identity_required");
+    expect(requireIdentityForApi).toHaveBeenCalledWith(sessionUser);
     expect(createLostPost).not.toHaveBeenCalled();
   });
 });

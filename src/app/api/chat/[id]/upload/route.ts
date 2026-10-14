@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 
-import { jsonError, jsonOk, requireUserForApi, withErrorHandling } from "@/lib/chat/http";
+import { jsonError, jsonOk, requireIdentityForApi, requireUserForApi, withErrorHandling } from "@/lib/chat/http";
 import { getChatRoomForUser } from "@/lib/chat/service";
 import { isAllowedImageContentType } from "@/lib/images/config";
 import { buildChatImagePathname } from "@/lib/images/pathname";
@@ -24,6 +24,8 @@ export const POST = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const auth = await requireUserForApi();
     if ("response" in auth) return auth.response;
+    const identityMissing = await requireIdentityForApi(auth.user);
+    if (identityMissing) return identityMissing;
 
     const { id: idParam } = await params;
     const chatRoomId = Number(idParam);

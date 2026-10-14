@@ -1,12 +1,13 @@
 import { CameraIcon, CheckIcon, InfoIcon, WalletIcon } from "@/components/icons";
 import { getTranslator } from "@/lib/i18n/server";
+import { DemoPlayer } from "./DemoPlayer";
 import { demoDelay } from "./demoDelay";
 
 // 랜딩 애니메이션 (게시글 등록): a static mockup of the real post form, in
 // the same order the form asks for things -- lost or found, title,
 // category, place and date, photos, then 등록하기 and the "posted"
-// message. When the section is revealed it fills in once, step by step
-// (see globals.css "Landing demos"); otherwise it is shown complete. The
+// message. DemoPlayer fills it in step by step when it comes into view
+// and replays it while on screen (see globals.css "Landing demos"). The
 // labels are the form's own translation keys; the example values are
 // made-up item details with no personal data. Nothing here posts
 // anything, and the note under the copy says posting needs a sign-in.
@@ -28,7 +29,7 @@ export async function RegisterShowcase() {
           </p>
         </div>
 
-        <div aria-hidden className="flex flex-col gap-3 rounded-card border border-border bg-background/60 p-4 md:p-5">
+        <DemoPlayer loop decorative durationMs={4000} className="flex flex-col gap-3 rounded-card border border-border bg-background/60 p-4 md:p-5">
           {/* 분실물 / 습득물 */}
           <div className="relative grid grid-cols-2 rounded-full border border-border bg-card p-1 text-center text-xs font-medium">
             <span className="py-1.5 text-muted-foreground">{t("post.type.lost")}</span>
@@ -112,7 +113,7 @@ export async function RegisterShowcase() {
             <CheckIcon className="size-3.5 shrink-0" />
             {t("post.created")}
           </p>
-        </div>
+        </DemoPlayer>
       </div>
     </section>
   );

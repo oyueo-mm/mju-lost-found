@@ -2,7 +2,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { requireReadyUser } from "@/lib/auth/session";
+import { identityFormUrl, requireReadyUser } from "@/lib/auth/session";
+import { hasIdentityInfo } from "@/lib/identity/service";
+import { LinkButton } from "@/components/ui/Button";
 import { getChatRoomForUser } from "@/lib/chat/service";
 import { ChatThread } from "@/components/chat/ChatThread";
 import { ReportButton } from "@/components/report/ReportButton";
@@ -32,6 +34,7 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
   }
 
   const room = result.data;
+  const identityReady = await hasIdentityInfo(user.id);
 
   // Phase H-6: every room is about exactly one post -- kept as a
   // one-element array (rather than collapsed into a bare object) so the
@@ -148,7 +151,22 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
         ))}
       </div>
 
-      <ChatThread chatRoomId={room.id} currentUserId={user.id} />
+      <ChatThread
+        chatRoomId={room.id}
+        currentUserId={user.id}
+        sendBlockedNotice={
+          // 실명·학과: the conversation stays readable; sending waits for
+          // the member's details (the API refuses it as well).
+          identityReady ? undefined : (
+            <div className="flex flex-col gap-2 rounded-card border border-primary/30 bg-primary-muted px-4 py-3 text-sm text-primary sm:flex-row sm:items-center sm:justify-between">
+              <p>{t("identity.chatBlocked")}</p>
+              <LinkButton href={identityFormUrl(`/chat/${room.id}`)} size="sm" className="w-full sm:w-auto">
+                {t("identity.goToForm")}
+              </LinkButton>
+            </div>
+          )
+        }
+      />
     </div>
   );
 }

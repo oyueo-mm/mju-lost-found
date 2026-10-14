@@ -6,7 +6,6 @@ import { AiSearchShowcase } from "./landing/AiSearchShowcase";
 import { ImageSearchShowcase } from "./landing/ImageSearchShowcase";
 import { RegisterShowcase } from "./landing/RegisterShowcase";
 import { AfterPostingShowcase } from "./landing/AfterPostingShowcase";
-import { HowItWorks } from "./landing/HowItWorks";
 import { FinalCta } from "./landing/FinalCta";
 import { LandingStickyCta } from "./landing/LandingStickyCta";
 
@@ -33,33 +32,32 @@ export function LandingHero() {
           there instantly rather than arrive on scroll. */}
       <LandingStats />
 
-      <ScrollReveal>
+      <ScrollReveal replay>
         <FeatureGrid />
       </ScrollReveal>
 
-      {/* 랜딩 애니메이션: posting comes first (it's how everything starts),
-          then the two ways to search, then what happens after posting.
-          AfterPostingShowcase reveals its own cards one by one, so it is
-          not wrapped again here -- data-reveal must not nest. */}
+      {/* 랜딩 애니메이션: the story in order -- 등록 -> AI 검색 (and photo
+          search) -> AI 매칭 -> 채팅 -> 반환 완료 (AfterPostingShowcase's
+          three cards). The old "이용 방법은 간단합니다" step strip repeated
+          that same story and was removed. Sections fade in again each time
+          they come back into view (replay); the mockups inside are run by
+          DemoPlayer. AfterPostingShowcase reveals its own cards, so it is
+          not wrapped again here. */}
       <div className="flex flex-col gap-6 py-6 md:gap-8">
-        <ScrollReveal>
+        <ScrollReveal replay>
           <RegisterShowcase />
         </ScrollReveal>
-        <ScrollReveal>
+        <ScrollReveal replay>
           <AiSearchShowcase />
         </ScrollReveal>
-        <ScrollReveal>
+        <ScrollReveal replay>
           <ImageSearchShowcase />
         </ScrollReveal>
       </div>
 
       <AfterPostingShowcase />
 
-      <ScrollReveal>
-        <HowItWorks />
-      </ScrollReveal>
-
-      <ScrollReveal>
+      <ScrollReveal replay>
         <FinalCta />
       </ScrollReveal>
 

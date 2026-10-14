@@ -239,6 +239,8 @@ export async function withdrawAccount(userId: number): Promise<WithdrawAccountRe
       await tx.rateLimitCounter.deleteMany({ where: { key: { contains: `:u:${userId}:` } } });
       // An approved outside account starts over: a new approval is needed.
       await tx.externalAccessGrant.deleteMany({ where: { email: normalizeEmail(user.email) } });
+      // 실명·학과: direct identifiers, deleted with the rest of them.
+      await tx.userIdentityInfo.deleteMany({ where: { userId } });
 
       // ---- the account itself: identifiers removed, row kept
       await tx.user.update({
