@@ -491,3 +491,40 @@ option {
   60% { transform: translateY(-2px); }
   100% { transform: none; }
 }
+
+/* Landing demos, continued (posting / after posting): a button press, a
+   state that is replaced (it shows first, then fades out -- e.g. the
+   "보관 중" badge before "완료"), and a connector drawn between a lost and
+   a found post. Same rules as above. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-reveal="hidden"] .demo-draw {
+    opacity: 0;
+  }
+  [data-reveal="hidden"] .demo-out {
+    opacity: 1;
+  }
+  [data-reveal="visible"] .demo-press {
+    animation: demo-press 320ms ease-in-out var(--demo-delay, 0ms) backwards;
+  }
+  [data-reveal="visible"] .demo-out {
+    animation: demo-out 300ms ease-out var(--demo-delay, 0ms) backwards;
+  }
+  [data-reveal="visible"] .demo-draw {
+    animation: demo-draw 520ms ease-out var(--demo-delay, 0ms) backwards;
+  }
+}
+.demo-out {
+  opacity: 0;
+}
+@keyframes demo-press {
+  0%, 100% { transform: none; }
+  45% { transform: scale(0.94); }
+}
+@keyframes demo-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes demo-draw {
+  from { opacity: 0; transform: scaleY(0); }
+  to { opacity: 1; transform: none; }
+}

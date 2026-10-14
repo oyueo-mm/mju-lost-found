@@ -6,6 +6,14 @@ import { describe, expect, it } from "vitest";
 // prefers-reduced-motion, must never hide content outside a pending reveal,
 // and every demo-* class a landing component uses must exist in the CSS.
 const root = join(__dirname, "../../../..");
+const DEMO_FILES = [
+  "AiSearchShowcase.tsx",
+  "ImageSearchShowcase.tsx",
+  "HowItWorks.tsx",
+  "FeatureGrid.tsx",
+  "RegisterShowcase.tsx",
+  "AfterPostingShowcase.tsx",
+];
 const css = readFileSync(join(root, "src/app/globals.css"), "utf8");
 const start = css.indexOf("/* Landing demos");
 const demoCss = css.slice(start);
@@ -41,7 +49,7 @@ describe("landing demo CSS", () => {
       if (head.startsWith("@keyframes")) continue;
       if (head.startsWith("@media (prefers-reduced-motion: no-preference)")) continue;
       // Outside the media query only "stays invisible" decoration is allowed.
-      expect(head).toMatch(/^\.demo-(progress|scan|ring)/);
+      expect(head).toMatch(/^\.demo-(progress|scan|ring|out)\b/);
       expect(body.trim()).toBe("opacity: 0;");
     }
   });
@@ -63,10 +71,21 @@ describe("landing demo CSS", () => {
   it("defines every demo-* class the landing components use", () => {
     const dir = join(root, "src/components/home/landing");
     const used = new Set<string>();
-    for (const file of ["AiSearchShowcase.tsx", "ImageSearchShowcase.tsx", "HowItWorks.tsx", "FeatureGrid.tsx"]) {
+    for (const file of DEMO_FILES) {
       for (const match of readFileSync(join(dir, file), "utf8").matchAll(/\bdemo-[a-z-]+/g)) used.add(match[0]);
     }
     expect(used.size).toBeGreaterThan(5);
     for (const name of used) expect(demoCss).toContain(`.${name}`);
+  });
+
+  // A demo inside two ScrollReveal wrappers would match both the hidden and
+  // the visible rules at once. AfterPostingShowcase reveals its own cards,
+  // so LandingHero must not wrap it.
+  it("never nests reveal wrappers around a demo", () => {
+    const hero = readFileSync(join(root, "src/components/home/LandingHero.tsx"), "utf8");
+    expect(hero).toMatch(/\n\s*<AfterPostingShowcase \/>/);
+    expect(hero).not.toMatch(/<ScrollReveal>\s*<AfterPostingShowcase/);
+    const after = readFileSync(join(root, "src/components/home/landing/AfterPostingShowcase.tsx"), "utf8");
+    expect(after.match(/<ScrollReveal/g)).toHaveLength(3);
   });
 });

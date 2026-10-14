@@ -4,6 +4,8 @@ import { LandingStats } from "./landing/LandingStats";
 import { FeatureGrid } from "./landing/FeatureGrid";
 import { AiSearchShowcase } from "./landing/AiSearchShowcase";
 import { ImageSearchShowcase } from "./landing/ImageSearchShowcase";
+import { RegisterShowcase } from "./landing/RegisterShowcase";
+import { AfterPostingShowcase } from "./landing/AfterPostingShowcase";
 import { HowItWorks } from "./landing/HowItWorks";
 import { FinalCta } from "./landing/FinalCta";
 import { LandingStickyCta } from "./landing/LandingStickyCta";
@@ -35,7 +37,14 @@ export function LandingHero() {
         <FeatureGrid />
       </ScrollReveal>
 
+      {/* 랜딩 애니메이션: posting comes first (it's how everything starts),
+          then the two ways to search, then what happens after posting.
+          AfterPostingShowcase reveals its own cards one by one, so it is
+          not wrapped again here -- data-reveal must not nest. */}
       <div className="flex flex-col gap-6 py-6 md:gap-8">
+        <ScrollReveal>
+          <RegisterShowcase />
+        </ScrollReveal>
         <ScrollReveal>
           <AiSearchShowcase />
         </ScrollReveal>
@@ -43,6 +52,8 @@ export function LandingHero() {
           <ImageSearchShowcase />
         </ScrollReveal>
       </div>
+
+      <AfterPostingShowcase />
 
       <ScrollReveal>
         <HowItWorks />
