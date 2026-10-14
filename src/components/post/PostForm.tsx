@@ -744,7 +744,11 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
     <form
       ref={formRef}
       onSubmit={handleSubmit}
-      onInput={draftStorageKey ? () => setDraftTick((n) => n + 1) : undefined}
+      // React's onChange, never the native onInput: a <select> fires `input`
+      // before `change`, and re-rendering on `input` put a controlled select
+      // (카테고리) back to its old value before its own onChange ran -- the
+      // choice never stuck. onChange runs in the same update as the field's own.
+      onChange={draftStorageKey ? () => setDraftTick((n) => n + 1) : undefined}
       className="flex flex-col gap-5"
     >
       {pendingDraft && (
