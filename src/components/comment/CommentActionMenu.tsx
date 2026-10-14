@@ -76,6 +76,8 @@ export function CommentActionMenu({
   useEffect(() => {
     if (!open) return;
     function handlePointerDown(event: MouseEvent | TouchEvent) {
+      // The report dialog is portaled outside this container but belongs to it.
+      if ((event.target as Element).closest?.("[data-report-dialog]")) return;
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         closeMenu();
       }
@@ -160,7 +162,7 @@ export function CommentActionMenu({
         </button>
       )}
 
-      {open && (
+      {open && step !== "reporting" && (
         <div className="absolute top-full right-0 z-10 mt-1 flex min-w-40 flex-col gap-0.5 rounded-lg border border-border bg-card p-1 text-sm shadow-md">
           {step === "menu" && (
             <>
@@ -200,11 +202,15 @@ export function CommentActionMenu({
               )}
             </>
           )}
-
-          {step === "reporting" && (
-            <ReportButton targetType="comment" targetId={commentId} autoOpen onSuccess={closeMenu} />
-          )}
         </div>
+      )}
+
+      {/* 모바일 신고창 Phase: the report form is a viewport-centered dialog
+          (ReportButton portals it to <body>), so the menu box itself is not
+          drawn while reporting -- it used to hold the form and stretch past
+          the screen edge on a phone. */}
+      {open && step === "reporting" && (
+        <ReportButton targetType="comment" targetId={commentId} autoOpen onSuccess={closeMenu} onClose={closeMenu} />
       )}
     </div>
   );
