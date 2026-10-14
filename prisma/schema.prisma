@@ -394,6 +394,13 @@ model User {
   // backfilled, so those users really see the current notice and agree
   // again (session.ts::hasRequiredConsents).
   privacyConsentVersion     String?   @map("privacy_consent_version")
+  // 실명·소속 수집·이용 동의 (선택): kept on the account, apart from the
+  // values themselves (UserIdentityInfo), because consent comes first and
+  // the values follow from the Google display name -- possibly not at once
+  // (no usable name yet). Given on the 가입 동의 screen or later on
+  // /me/identity; cleared at 회원탈퇴.
+  identityConsentVersion    String?   @map("identity_consent_version")
+  identityConsentAt         DateTime? @map("identity_consent_at")
   // Phase 10: NULL means this account is active; a timestamp means the
   // user deactivated it at that instant (auth/user.ts's withdrawUser --
   // the only place this is ever set, always by the account's own owner,

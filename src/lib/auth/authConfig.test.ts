@@ -25,6 +25,8 @@ vi.mock("@/lib/auth/access", () => ({ decideSignIn }));
 const resolveSignIn = vi.fn();
 vi.mock("@/lib/auth/user", () => ({ resolveSignIn }));
 const fetchDepartmentHint = vi.fn();
+const syncIdentityFromHints = vi.fn();
+vi.mock("@/lib/identity/service", () => ({ syncIdentityFromHints }));
 vi.mock("@/lib/identity/googleHints", async () => {
   const actual = await vi.importActual<typeof import("@/lib/identity/googleHints")>("@/lib/identity/googleHints");
   return { ...actual, fetchDepartmentHint };
@@ -103,7 +105,7 @@ describe("실명·학과 자동 입력 in the session", () => {
 
   it("splits an 이름/신분/소속 Google name into name and affiliation hints, never keeping the whole name", async () => {
     resolveSignIn.mockResolvedValueOnce({ kind: "user", user: { id: 7, nickname: "닉" } });
-    const token = await signIn({ name: "홍길동/학생/컴퓨터공학과" });
+    const token = await signIn({ name: "홍길동/학생/컴퓨터공학과", hd: "mju.ac.kr" });
     expect(token.identityHints).toEqual({
       name: "홍길동",
       department: "컴퓨터공학과",
@@ -115,7 +117,7 @@ describe("실명·학과 자동 입력 in the session", () => {
 
   it("a malformed structured name gives no hint at all (no wrong name or department)", async () => {
     resolveSignIn.mockResolvedValueOnce({ kind: "user", user: { id: 7, nickname: "닉" } });
-    const token = await signIn({ name: "홍길동/졸업생/컴퓨터공학과" });
+    const token = await signIn({ name: "홍길동/졸업생/컴퓨터공학과", hd: "mju.ac.kr" });
     expect(token.identityHints).toEqual({ name: null, department: null });
   });
 
@@ -124,7 +126,7 @@ describe("실명·학과 자동 입력 in the session", () => {
     try {
       resolveSignIn.mockResolvedValueOnce({ kind: "user", user: { id: 7, nickname: "닉" } });
       fetchDepartmentHint.mockResolvedValueOnce("경영학과");
-      const token = await signIn({ name: "홍길동/학생/경영대학" });
+      const token = await signIn({ name: "홍길동/학생/경영대학", hd: "mju.ac.kr" });
       expect(fetchDepartmentHint).toHaveBeenCalledWith("at-1");
       expect(token.identityHints).toEqual({
         name: "홍길동",
@@ -135,5 +137,33 @@ describe("실명·학과 자동 입력 in the session", () => {
     } finally {
       delete process.env.GOOGLE_ORG_SCOPE_ENABLED;
     }
+  });
+
+  // hd: only a school Workspace account's display name is read as 이름/신분/소속.
+  it("does not split the display name without the school hd claim", async () => {
+    resolveSignIn.mockResolvedValueOnce({ kind: "user", user: { id: 7, nickname: "닉" } });
+    const token = await signIn({ name: "홍길동/학생/컴퓨터공학과" });
+    expect(token.identityHints).toEqual({ name: null, department: null });
+
+    resolveSignIn.mockResolvedValueOnce({ kind: "user", user: { id: 7, nickname: "닉" } });
+    const other = await signIn({ name: "홍길동/학생/컴퓨터공학과", hd: "other.ac.kr" });
+    expect(other.identityHints).toEqual({ name: null, department: null });
+  });
+
+  it("syncs the stored 실명·소속 at sign-in with the account and this sign-in's hints", async () => {
+    const account = { id: 7, nickname: "닉", identityConsentVersion: "2026-10-15" };
+    resolveSignIn.mockResolvedValueOnce({ kind: "user", user: account });
+    await signIn({ name: "홍길동/학생/컴퓨터공학과", hd: "mju.ac.kr" });
+    expect(syncIdentityFromHints).toHaveBeenLastCalledWith(account, expect.objectContaining({ name: "홍길동", department: "컴퓨터공학과" }));
+  });
+
+  it("a failed sync never blocks sign-in and logs no values", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    resolveSignIn.mockResolvedValueOnce({ kind: "user", user: { id: 7, nickname: "닉" } });
+    syncIdentityFromHints.mockRejectedValueOnce(new Error("홍길동 컴퓨터공학과 db down"));
+    const token = await signIn({ name: "홍길동/학생/컴퓨터공학과", hd: "mju.ac.kr" });
+    expect(token.userId).toBe(7);
+    expect(JSON.stringify(consoleError.mock.calls)).not.toMatch(/홍길동|컴퓨터공학과/);
+    consoleError.mockRestore();
   });
 });

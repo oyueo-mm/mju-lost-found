@@ -1,21 +1,29 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const userIdentityInfo = { findUnique: vi.fn(), count: vi.fn(), upsert: vi.fn() };
+const userIdentityInfo = { findUnique: vi.fn(), count: vi.fn(), upsert: vi.fn(), create: vi.fn(), update: vi.fn(), deleteMany: vi.fn() };
+const user = { update: vi.fn() };
 const report = { findUnique: vi.fn() };
 const comment = { findUnique: vi.fn() };
-const txUser = { findUnique: vi.fn() };
+const txUser = { findUnique: vi.fn(), update: vi.fn() };
 const identityAccessLog = { create: vi.fn() };
-const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn({ user: txUser, identityAccessLog }));
-vi.mock("@/lib/db/prisma", () => ({ prisma: { userIdentityInfo, report, comment, $transaction } }));
+const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn({ user: txUser, identityAccessLog, userIdentityInfo }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { userIdentityInfo, user, report, comment, $transaction } }));
 
 const resolvePostTarget = vi.fn();
 const resolveMessageTarget = vi.fn();
 const resolveUserTarget = vi.fn();
 vi.mock("@/lib/report/targets", () => ({ resolvePostTarget, resolveMessageTarget, resolveUserTarget }));
 
-const { getOwnIdentityInfo, hasIdentityInfo, reportPartyUserIds, saveOwnIdentityInfo, viewIdentityForReport } = await import(
-  "./service"
-);
+const {
+  getOwnIdentityInfo,
+  hasIdentityInfo,
+  recordIdentityConsent,
+  reportPartyUserIds,
+  saveOwnIdentityInfo,
+  syncIdentityFromHints,
+  viewIdentityForReport,
+  withdrawIdentityConsent,
+} = await import("./service");
 const { CURRENT_IDENTITY_CONSENT_VERSION } = await import("@/lib/auth/terms");
 
 const admin = { id: 9, isAdmin: true };
@@ -46,10 +54,13 @@ describe("own 실명·학과", () => {
     expect(userIdentityInfo.upsert).toHaveBeenCalledWith({ where: { userId: 5 }, create: { userId: 5, ...data }, update: data });
   });
 
-  it("hasIdentityInfo is a plain existence check", async () => {
+  it("hasIdentityInfo needs values on file and the current 실명·소속 consent", async () => {
     userIdentityInfo.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
     expect(await hasIdentityInfo(5)).toBe(false);
     expect(await hasIdentityInfo(5)).toBe(true);
+    expect(userIdentityInfo.count).toHaveBeenCalledWith({
+      where: { userId: 5, user: { identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION } },
+    });
   });
 });
 
@@ -133,5 +144,71 @@ describe("admin view of 실명·학과", () => {
       data: { nickname: "습득자", realName: null, department: null, realNameSource: null, departmentSource: null, updatedAt: null },
     });
     expect(identityAccessLog.create).toHaveBeenCalledTimes(1);
+  });
+});
+
+// 실명·소속 자동 수집
+describe("consent and automatic collection", () => {
+  const consented = { id: 5, identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION };
+  const fromDisplayName = { name: "홍길동", department: "컴퓨터공학과", nameSource: "google_display_name" as const, departmentSource: "google_display_name" as const };
+  const now = new Date("2026-10-15T00:00:00Z");
+
+  it("records the consent with the current version and time", async () => {
+    await recordIdentityConsent(5, now);
+    expect(user.update).toHaveBeenCalledWith({
+      where: { id: 5 },
+      data: { identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION, identityConsentAt: now },
+    });
+  });
+
+  it("stores nothing without the current consent, or without a display-name split", async () => {
+    expect(await syncIdentityFromHints({ id: 5, identityConsentVersion: null }, fromDisplayName)).toBe("skipped");
+    expect(await syncIdentityFromHints({ id: 5, identityConsentVersion: "2026-10-14" }, fromDisplayName)).toBe("skipped");
+    expect(await syncIdentityFromHints(consented, { name: "홍길동", department: null, nameSource: "google_profile" })).toBe("skipped");
+    expect(await syncIdentityFromHints(consented, { name: null, department: null })).toBe("skipped");
+    expect(await syncIdentityFromHints(consented, undefined)).toBe("skipped");
+    expect(await syncIdentityFromHints(consented, { ...fromDisplayName, departmentSource: "google_people" })).toBe("skipped");
+    expect(userIdentityInfo.findUnique).not.toHaveBeenCalled();
+    expect(userIdentityInfo.create).not.toHaveBeenCalled();
+  });
+
+  it("creates the values from the display name the first time", async () => {
+    userIdentityInfo.findUnique.mockResolvedValueOnce(null);
+    expect(await syncIdentityFromHints(consented, fromDisplayName, now)).toBe("created");
+    expect(userIdentityInfo.create).toHaveBeenCalledWith({
+      data: {
+        userId: 5,
+        realName: "홍길동",
+        department: "컴퓨터공학과",
+        realNameSource: "google_display_name",
+        departmentSource: "google_display_name",
+        consentVersion: CURRENT_IDENTITY_CONSENT_VERSION,
+        consentedAt: now,
+      },
+    });
+  });
+
+  it("writes nothing when Google still says the same", async () => {
+    userIdentityInfo.findUnique.mockResolvedValueOnce({ realName: "홍길동", department: "컴퓨터공학과", realNameSource: "google_display_name", departmentSource: "google_display_name" });
+    expect(await syncIdentityFromHints(consented, fromDisplayName)).toBe("unchanged");
+    expect(userIdentityInfo.update).not.toHaveBeenCalled();
+  });
+
+  it("updates when the Google name changed, and replaces values the member had to type", async () => {
+    userIdentityInfo.findUnique.mockResolvedValueOnce({ realName: "홍길동", department: "경영학과", realNameSource: "google_display_name", departmentSource: "google_display_name" });
+    expect(await syncIdentityFromHints(consented, fromDisplayName)).toBe("updated");
+    userIdentityInfo.findUnique.mockResolvedValueOnce({ realName: "홍길동", department: "컴퓨터공학과", realNameSource: "self", departmentSource: "self" });
+    expect(await syncIdentityFromHints(consented, fromDisplayName)).toBe("updated");
+    expect(userIdentityInfo.update).toHaveBeenCalledTimes(2);
+    expect(userIdentityInfo.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({ where: { userId: 5 }, data: expect.objectContaining({ realNameSource: "google_display_name" }) }),
+    );
+  });
+
+  it("withdrawing deletes the values and clears the consent in one transaction", async () => {
+    await withdrawIdentityConsent(5);
+    expect($transaction).toHaveBeenCalledTimes(1);
+    expect(userIdentityInfo.deleteMany).toHaveBeenCalledWith({ where: { userId: 5 } });
+    expect(txUser.update).toHaveBeenCalledWith({ where: { id: 5 }, data: { identityConsentVersion: null, identityConsentAt: null } });
   });
 });

@@ -14,7 +14,7 @@ type Party = { userId: number; role: "신고자" | "피신고자"; nickname: str
 const SOURCE_LABELS: Record<string, string> = {
   self: "직접 입력",
   google_profile: "Google 계정 이름을 본인이 확인",
-  google_display_name: "Google 표시 이름(이름/신분/소속)에서 추출해 본인이 확인 · 소속은 단과대학일 수 있음",
+  google_display_name: "Google 표시 이름(이름/신분/소속)에서 자동 수집 · 로그인 시 갱신 · 학적 검증 아님 · 소속은 단과대학일 수 있음",
   google_people: "Google 프로필 소속을 본인이 확인",
 };
 const sourceLabel = (source: string | null) => (source ? (SOURCE_LABELS[source] ?? source) : null);

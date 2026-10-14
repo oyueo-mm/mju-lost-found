@@ -247,6 +247,8 @@ export async function withdrawAccount(userId: number): Promise<WithdrawAccountRe
         where: { id: userId },
         data: {
           email: `withdrawn-${userId}@withdrawn.invalid`,
+          identityConsentVersion: null,
+          identityConsentAt: null,
           name: WITHDRAWN_USER_LABEL,
           nickname: WITHDRAWN_USER_LABEL,
           googleId: null,

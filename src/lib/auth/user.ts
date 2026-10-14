@@ -28,6 +28,17 @@ import { RejoinRequestStatus, type Prisma } from "@/generated/prisma/client";
 // googleId/name/lastLoginAt exactly as before. No row is ever created for
 // an email that already exists -- only a genuinely new email creates a
 // new User.
+// Google `sub` (googleId) identifies the account first -- it is stable even
+// if the Google account's e-mail is renamed. The e-mail is the fallback for
+// a first sign-in and for accounts recorded before googleId was kept.
+// Withdrawn accounts have neither, so they never match.
+async function findAccountForSignIn(params: { email: string; googleId: string }) {
+  return (
+    (await prisma.user.findUnique({ where: { googleId: params.googleId } })) ??
+    (await prisma.user.findUnique({ where: { email: params.email } }))
+  );
+}
+
 export async function resolveOrCreateUser(params: {
   email: string;
   name: string | null;
@@ -36,11 +47,17 @@ export async function resolveOrCreateUser(params: {
   // External access Phase: recomputed on every sign-in from the server-side
   // approval state (never from anything the client sends).
   const userType = await userTypeForEmail(params.email);
-  const existing = await prisma.user.findUnique({ where: { email: params.email } });
+  const existing = await findAccountForSignIn(params);
   if (existing) {
+    // Matched by `sub` with a renamed e-mail: follow the new address, unless
+    // another account already uses it (then keep the old one; never merge).
+    const emailMoved =
+      existing.email !== params.email &&
+      (await prisma.user.findUnique({ where: { email: params.email }, select: { id: true } })) === null;
     return prisma.user.update({
       where: { id: existing.id },
       data: {
+        ...(emailMoved ? { email: params.email } : {}),
         googleId: params.googleId,
         name: params.name ?? undefined,
         lastLoginAt: new Date(),
@@ -78,7 +95,7 @@ export type SignInResolution =
   | { kind: "held"; identityId: number };
 
 export async function resolveSignIn(params: SignInAccount): Promise<SignInResolution> {
-  const existing = await prisma.user.findUnique({ where: { email: params.email }, select: { id: true } });
+  const existing = await findAccountForSignIn(params);
   if (existing) return { kind: "user", user: await resolveOrCreateUser(params) };
 
   const held = await findHeldIdentity(params);

@@ -5,8 +5,9 @@ import { hasRequiredConsents, requireUser, sanitizeCallbackUrl } from "@/lib/aut
 import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 import { signOut } from "@/lib/auth/auth";
 import { LogoMark } from "@/components/layout/Logo";
-import { ShieldIcon, ChevronRightIcon, BookIcon } from "@/components/icons";
+import { ShieldIcon, ChevronRightIcon, BookIcon, UserIcon } from "@/components/icons";
 import { PrivacyConsentButton } from "./PrivacyConsentButton";
+import { hasCurrentIdentityConsent } from "@/lib/identity/service";
 
 // Phase 8: the actual items/purposes below are drawn directly from this
 // app's real schema and features (see prisma/schema.prisma, and this
@@ -37,7 +38,7 @@ const COLLECTED_ITEMS: { label: string; detail: string }[] = [
   {
     label: "Google 계정 이름",
     detail:
-      "Google 로그인 시 전달받아 실명·소속 입력란을 미리 채우는 데만 사용(표시 이름이 '이름/신분/소속' 형식이면 이름·소속만 사용하고 신분은 저장하지 않음, 실명·학과 동의 후 저장하기 전에는 서버에 저장하지 않음)",
+      "Google 로그인 시 전달받아, 아래 실명·소속(선택)에 동의한 경우에만 실명·소속 자동 수집에 사용(동의 전에는 서버에 저장하지 않음)",
   },
   { label: "게시글 정보", detail: "분실물/습득물 게시글의 제목, 내용, 장소, 날짜, 첨부 이미지" },
   { label: "댓글/답글", detail: "게시글에 작성한 댓글 및 답글 내용" },
@@ -69,6 +70,7 @@ export default async function PrivacyConsentPage({
   // Someone who agreed before is told why they see this again.
   const isReconsent = user.privacyConsentAt !== null || user.termsAcceptedAt !== null;
   const needsTerms = user.termsAcceptedAt === null || user.termsVersion !== CURRENT_TERMS_VERSION;
+  const offerIdentity = !hasCurrentIdentityConsent(user);
 
   // Already consented to everything currently required (e.g. re-visiting
   // this URL directly, or a race with a second tab) -- send them straight
@@ -201,7 +203,48 @@ export default async function PrivacyConsentPage({
           </div>
         </div>
 
-        <PrivacyConsentButton callbackUrl={callbackUrl} needsPrivacy={needsPrivacy} needsTerms={needsTerms} />
+        {/* 실명·소속 (선택): what is collected, from where, and that it is
+            optional for browsing -- asked on this same screen so that a
+            member who agrees never sees a separate input step. */}
+        {offerIdentity && (
+          <div className="flex w-full flex-col gap-2 rounded-card border border-border bg-card p-5 text-sm text-foreground">
+            <div className="flex items-center gap-1.5 font-semibold">
+              <UserIcon className="size-4.5 text-primary" />
+              실명·소속 (선택)
+            </div>
+            <p className="text-muted-foreground">
+              동의하면 명지대 Google 계정의 표시 이름이 &lsquo;이름/신분/소속&rsquo; 형식일 때 이름과 소속을 자동으로 가져와
+              저장해요. 직접 입력할 필요는 없어요.
+            </p>
+            <details className="group flex flex-col gap-2 border-t border-border pt-3">
+              <summary className="flex cursor-pointer list-none items-center justify-between font-medium text-primary">
+                자세한 내용 보기
+                <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
+              </summary>
+              <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-xs leading-relaxed text-muted-foreground">
+                <li>수집 항목: 실명, 소속(학과 또는 단과대학 등 상위 소속일 수 있음). 신분(학생·교수 등)은 저장하지 않아요.</li>
+                <li>
+                  수집 방법: 명지대 Google Workspace 계정의 표시 이름에서 자동 추출하고, 로그인할 때마다 비교해 바뀌었으면
+                  자동으로 갱신해요. 학교 학적 시스템에서 확인된 정보는 아니에요.
+                </li>
+                <li>이용 목적: 게시글·채팅으로 물건을 주고받을 때의 본인 확인, 신고·분쟁 처리</li>
+                <li>
+                  열람 범위: 본인, 그리고 신고·분쟁을 처리하는 관리자(열람 사유와 기록이 남아요). 다른 이용자에게는 공개되지
+                  않고 닉네임만 보여요.
+                </li>
+                <li>보유 기간: 회원탈퇴 시 즉시 삭제(계정 비활성화 중에는 보관)</li>
+                <li>동의하지 않아도 둘러보기와 검색은 할 수 있지만, 게시글 등록과 채팅은 할 수 없어요.</li>
+              </ul>
+            </details>
+          </div>
+        )}
+
+        <PrivacyConsentButton
+          callbackUrl={callbackUrl}
+          needsPrivacy={needsPrivacy}
+          needsTerms={needsTerms}
+          offerIdentity={offerIdentity}
+        />
 
         {/* Calm, single line -- states the fact (consent is required to
             continue) and the way out, without a separate warning block or

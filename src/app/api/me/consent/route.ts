@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/lib/auth/session";
 import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 import { recordRequiredConsents } from "@/lib/auth/user";
+import { consentAndCollectIdentity } from "@/lib/identity/collect";
 import { jsonError, jsonOk, withErrorHandling } from "@/lib/posts/http";
 
 // 이용약관 동의 Phase: replaces the old POST /api/me/privacy-consent --
@@ -13,9 +14,13 @@ import { jsonError, jsonOk, withErrorHandling } from "@/lib/posts/http";
 // to run for a user who hasn't consented to either document yet, since
 // it's the only thing that can ever change that. Login is still required
 // (getCurrentUser()), nickname is not.
-export const POST = withErrorHandling(async () => {
+// 실명·소속 (optional, same screen): `{ identityConsent: true }` also records
+// that consent and collects the values from the Google display name at
+// once (identity/collect.ts). Leaving it out changes nothing about it.
+export const POST = withErrorHandling(async (request?: Request) => {
   const user = await getCurrentUser();
   if (!user) return jsonError(401, "로그인이 필요합니다.");
+  const body = (request ? await request.json().catch(() => null) : null) as { identityConsent?: unknown } | null;
 
   // recordRequiredConsents() ignores the client entirely beyond the
   // authenticated user's own id -- no body is read, no client-supplied
@@ -23,7 +28,9 @@ export const POST = withErrorHandling(async () => {
   // comment for why). The current terms/privacy versions are this
   // server's own constants, never something the client could influence.
   const updated = await recordRequiredConsents(user.id, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION);
+  const identity = body?.identityConsent === true ? await consentAndCollectIdentity(user.id) : null;
   return jsonOk({
+    identity,
     privacyConsentAt: updated.privacyConsentAt,
     privacyConsentVersion: updated.privacyConsentVersion,
     termsAcceptedAt: updated.termsAcceptedAt,

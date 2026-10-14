@@ -16,6 +16,10 @@ type PrivacyConsentButtonProps = {
   // tick again -- see the two branches inside each label below.
   needsPrivacy: boolean;
   needsTerms: boolean;
+  // 실명·소속 수집·이용 동의 (선택): offered when not yet given for the
+  // current version. Unchecked by default; leaving it unchecked never
+  // blocks continuing -- posting and chatting ask for it later.
+  offerIdentity: boolean;
 };
 
 // Phase 8 (checkbox revision): each checkbox is purely a client-side gate
@@ -36,11 +40,13 @@ type PrivacyConsentButtonProps = {
 // checked -- only that the request happened, from an authenticated
 // session, and which of the two fields were still unset/stale at that
 // moment (recordRequiredConsents' own idempotent guards decide that).
-export function PrivacyConsentButton({ callbackUrl, needsPrivacy, needsTerms }: PrivacyConsentButtonProps) {
+export function PrivacyConsentButton({ callbackUrl, needsPrivacy, needsTerms, offerIdentity }: PrivacyConsentButtonProps) {
   const { t } = useI18n();
   const router = useRouter();
   const privacyCheckboxId = useId();
   const termsCheckboxId = useId();
+  const identityCheckboxId = useId();
+  const [identityChecked, setIdentityChecked] = useState(false);
   // Already-satisfied consents start "checked" (nothing left for this
   // user to tick) -- see the disabled/checked branch below for how that's
   // actually rendered.
@@ -56,7 +62,11 @@ export function PrivacyConsentButton({ callbackUrl, needsPrivacy, needsTerms }: 
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch("/api/me/consent", { method: "POST" });
+      const res = await fetch("/api/me/consent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identityConsent: offerIdentity && identityChecked }),
+      });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(json.error ?? "동의를 처리하지 못했습니다. 다시 시도해주세요.");
@@ -139,6 +149,23 @@ export function PrivacyConsentButton({ callbackUrl, needsPrivacy, needsTerms }: 
           />
           <span>[필수] 이용약관 동의 — 이미 동의하셨어요.</span>
         </div>
+      )}
+
+      {offerIdentity && (
+        <label htmlFor={identityCheckboxId} className="flex cursor-pointer items-start gap-2.5 text-sm text-foreground">
+          <input
+            id={identityCheckboxId}
+            type="checkbox"
+            checked={identityChecked}
+            onChange={(e) => setIdentityChecked(e.target.checked)}
+            disabled={submitting}
+            className="mt-0.5 size-5 shrink-0 cursor-pointer rounded border-border text-primary accent-primary disabled:cursor-not-allowed disabled:opacity-60"
+          />
+          <span>
+            [선택] 실명·소속 수집·이용 동의
+            <span className="block text-xs text-muted-foreground">게시글 등록과 채팅에 필요해요. 나중에 동의해도 돼요.</span>
+          </span>
+        </label>
       )}
 
       {/* 이용약관 동의 Phase: "동의하고 계속하기" -- unambiguous about

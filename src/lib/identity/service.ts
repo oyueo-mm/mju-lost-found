@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { CURRENT_IDENTITY_CONSENT_VERSION } from "@/lib/auth/terms";
 import { resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "@/lib/report/targets";
 import type { User } from "@/generated/prisma/client";
-import type { IdentityValueSource } from "./googleHints";
+import type { IdentityHints, IdentityValueSource } from "./googleHints";
 import type { IdentityInput } from "./validation";
 import { normalizeViewReason } from "./validation";
 
@@ -10,18 +10,98 @@ import { normalizeViewReason } from "./validation";
 // this file: the member's own (내 정보, the form) and an admin's, for a
 // report, logged. Nothing here ever logs the values themselves.
 
-export type OwnIdentityInfo = { realName: string; department: string; updatedAt: Date; consentVersion: string };
+export type OwnIdentityInfo = {
+  realName: string;
+  department: string;
+  realNameSource: string;
+  departmentSource: string;
+  updatedAt: Date;
+  consentVersion: string;
+};
 
 export async function getOwnIdentityInfo(userId: number): Promise<OwnIdentityInfo | null> {
   return prisma.userIdentityInfo.findUnique({
     where: { userId },
-    select: { realName: true, department: true, updatedAt: true, consentVersion: true },
+    select: { realName: true, department: true, realNameSource: true, departmentSource: true, updatedAt: true, consentVersion: true },
   });
 }
 
-// Required before posting or chatting (see requireIdentityForApi).
+// Required before posting or chatting (see requireIdentityForApi): values on
+// file, and the current 실명·소속 consent.
 export async function hasIdentityInfo(userId: number): Promise<boolean> {
-  return (await prisma.userIdentityInfo.count({ where: { userId } })) > 0;
+  return (
+    (await prisma.userIdentityInfo.count({
+      where: { userId, user: { identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION } },
+    })) > 0
+  );
+}
+
+export function hasCurrentIdentityConsent(user: { identityConsentVersion: string | null }): boolean {
+  return user.identityConsentVersion === CURRENT_IDENTITY_CONSENT_VERSION;
+}
+
+// The optional 실명·소속 수집·이용 동의 (가입 동의 screen or /me/identity).
+export async function recordIdentityConsent(userId: number, now = new Date()): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION, identityConsentAt: now },
+  });
+}
+
+// 실명·소속 동의 철회: the values are deleted and the consent cleared in one
+// transaction, so sign-in stops syncing them. Posting and chatting ask for
+// the consent again.
+export async function withdrawIdentityConsent(userId: number): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.userIdentityInfo.deleteMany({ where: { userId } });
+    await tx.user.update({ where: { id: userId }, data: { identityConsentVersion: null, identityConsentAt: null } });
+  });
+}
+
+export type IdentitySyncResult = "created" | "updated" | "unchanged" | "skipped";
+
+// 실명·소속 자동 수집: stores (or brings up to date) the name and affiliation
+// split from the member's Google display name -- only with the current
+// consent, and only when both came from an "이름/신분/소속" name of a
+// Workspace account (the jwt callback checks hd). Anything else is
+// "skipped": nothing invented, nothing overwritten. A value the member had
+// to type (source "self", no usable Google name before) is replaced once
+// the Google name becomes usable. Values are never logged.
+export async function syncIdentityFromHints(
+  user: { id: number; identityConsentVersion: string | null },
+  hints: IdentityHints | null | undefined,
+  now = new Date(),
+): Promise<IdentitySyncResult> {
+  if (!hasCurrentIdentityConsent(user)) return "skipped";
+  if (!hints?.name || !hints.department) return "skipped";
+  if (hints.nameSource !== "google_display_name" || hints.departmentSource !== "google_display_name") return "skipped";
+
+  const current = await prisma.userIdentityInfo.findUnique({
+    where: { userId: user.id },
+    select: { realName: true, department: true, realNameSource: true, departmentSource: true },
+  });
+  const data = {
+    realName: hints.name,
+    department: hints.department,
+    realNameSource: "google_display_name",
+    departmentSource: "google_display_name",
+    consentVersion: CURRENT_IDENTITY_CONSENT_VERSION,
+    consentedAt: now,
+  };
+  if (!current) {
+    await prisma.userIdentityInfo.create({ data: { userId: user.id, ...data } });
+    return "created";
+  }
+  if (
+    current.realName === hints.name &&
+    current.department === hints.department &&
+    current.realNameSource === "google_display_name" &&
+    current.departmentSource === "google_display_name"
+  ) {
+    return "unchanged";
+  }
+  await prisma.userIdentityInfo.update({ where: { userId: user.id }, data });
+  return "updated";
 }
 
 // Saving the form is also the 실명·학과 수집·이용 동의 (the form's required

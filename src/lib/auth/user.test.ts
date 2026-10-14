@@ -41,7 +41,7 @@ queryRaw.mockResolvedValue([]);
 
 describe("resolveOrCreateUser", () => {
   it("looks up an existing user by email (login) -- get-or-create, not duplicate-create", async () => {
-    findUnique.mockResolvedValueOnce({
+    findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({
       id: 1,
       email: "existing@mju.ac.kr",
       nickname: "기존닉네임",
@@ -64,7 +64,7 @@ describe("resolveOrCreateUser", () => {
   });
 
   it("creates a new user with a name fallback when Google reports no name", async () => {
-    findUnique.mockResolvedValueOnce(null);
+    findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
     create.mockResolvedValueOnce({ id: 2, email: "new@mju.ac.kr", nickname: null });
 
     await resolveOrCreateUser({ email: "new@mju.ac.kr", name: null, googleId: "google-sub-2" });
@@ -79,7 +79,7 @@ describe("resolveOrCreateUser", () => {
   });
 
   it("records googleId on the update branch too, for a user re-linking/re-logging in", async () => {
-    findUnique.mockResolvedValueOnce({ id: 1, email: "existing@mju.ac.kr", nickname: null, deletedAt: null });
+    findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 1, email: "existing@mju.ac.kr", nickname: null, deletedAt: null });
     update.mockResolvedValueOnce({ id: 1, email: "existing@mju.ac.kr", nickname: null });
 
     await resolveOrCreateUser({
@@ -99,7 +99,7 @@ describe("resolveOrCreateUser", () => {
   // `account`-present branch (a real sign-in exchange), so stamping
   // lastLoginAt here is a true "last login", not "session still valid".
   it("stamps lastLoginAt on both the create and update branches", async () => {
-    findUnique.mockResolvedValueOnce({ id: 1, email: "existing@mju.ac.kr", deletedAt: null });
+    findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 1, email: "existing@mju.ac.kr", deletedAt: null });
     update.mockResolvedValueOnce({ id: 1, email: "existing@mju.ac.kr" });
 
     await resolveOrCreateUser({
@@ -112,7 +112,7 @@ describe("resolveOrCreateUser", () => {
       expect.objectContaining({ data: expect.objectContaining({ lastLoginAt: expect.any(Date) }) }),
     );
 
-    findUnique.mockResolvedValueOnce(null);
+    findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
     create.mockResolvedValueOnce({ id: 3, email: "brandnew@mju.ac.kr" });
 
     await resolveOrCreateUser({ email: "brandnew@mju.ac.kr", name: "New", googleId: "google-sub-3" });
@@ -127,7 +127,7 @@ describe("resolveOrCreateUser", () => {
   // Google account is reactivated in place, never re-created and never
   // stripped of its nickname/history.
   it("reactivates a deactivated user in place -- clears deletedAt, keeps nickname/history untouched", async () => {
-    findUnique.mockResolvedValueOnce({
+    findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({
       id: 5,
       email: "returning@mju.ac.kr",
       nickname: "옛날닉네임",
@@ -153,12 +153,37 @@ describe("resolveOrCreateUser", () => {
   });
 
   it("does not touch deletedAt at all for a user who was never deactivated", async () => {
-    findUnique.mockResolvedValueOnce({ id: 1, email: "active@mju.ac.kr", deletedAt: null });
+    findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 1, email: "active@mju.ac.kr", deletedAt: null });
     update.mockResolvedValueOnce({ id: 1, email: "active@mju.ac.kr", deletedAt: null });
 
     await resolveOrCreateUser({ email: "active@mju.ac.kr", name: "Active", googleId: "google-sub-1" });
 
     expect(update.mock.calls[0][0].data).not.toHaveProperty("deletedAt");
+  });
+
+  // Google `sub` first: a renamed e-mail still reaches the same account.
+  it("finds the account by Google sub before e-mail, and follows a renamed e-mail", async () => {
+    findUnique
+      .mockResolvedValueOnce({ id: 9, email: "old@mju.ac.kr", deletedAt: null }) // by googleId
+      .mockResolvedValueOnce(null); // nobody else has the new e-mail
+    update.mockResolvedValueOnce({ id: 9 });
+
+    await resolveOrCreateUser({ email: "new@mju.ac.kr", name: null, googleId: "g-9" });
+
+    expect(findUnique).toHaveBeenNthCalledWith(1, { where: { googleId: "g-9" } });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 9 }, data: expect.objectContaining({ email: "new@mju.ac.kr" }) }));
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("keeps the old e-mail when another account already uses the new one (never merges)", async () => {
+    findUnique
+      .mockResolvedValueOnce({ id: 9, email: "old@mju.ac.kr", deletedAt: null })
+      .mockResolvedValueOnce({ id: 4 });
+    update.mockResolvedValueOnce({ id: 9 });
+
+    await resolveOrCreateUser({ email: "taken@mju.ac.kr", name: null, googleId: "g-9" });
+
+    expect(update.mock.calls[0][0].data).not.toHaveProperty("email");
   });
 });
 

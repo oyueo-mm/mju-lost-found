@@ -87,9 +87,9 @@ describe("setNicknameAction", () => {
   // Phase H-7: duplicate nicknames are allowed by design now (User.nickname's
   // old @unique constraint was dropped -- public identity is publicId
   // instead), so there is no longer a "nickname already taken" error path
-  // to test here; a successful update always continues, even if another
-  // user already has the same nickname -- to the 실명·학과 form next
-  // (skippable there), not straight home.
+  // to test here; a successful update always redirects home, even if
+  // another user already has the same nickname (실명·소속 is not a step of
+  // its own any more -- see setNicknameAction).
   it("allows setting a nickname another user already has", async () => {
     requireUser.mockResolvedValueOnce({ id: 7, nickname: null, ...readyConsent });
     updateMany.mockResolvedValueOnce({ count: 1 });
@@ -97,7 +97,7 @@ describe("setNicknameAction", () => {
     const form = new FormData();
     form.set("nickname", "중복닉네임");
 
-    await expect(setNicknameAction(null, form)).rejects.toThrow(/^REDIRECT:\/me\/identity\?onboarding=1$/);
+    await expect(setNicknameAction(null, form)).rejects.toThrow(/^REDIRECT:\/$/);
     expect(updateMany).toHaveBeenCalledWith({
       where: { id: 7, nickname: null },
       data: { nickname: "중복닉네임" },

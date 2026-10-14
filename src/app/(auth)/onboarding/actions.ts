@@ -57,7 +57,8 @@ export async function setNicknameAction(
     redirect("/");
   }
 
-  // 실명·학과: a new member is shown that form next (they can skip it and
-  // add it later; posting and chatting ask for it then).
-  redirect("/me/identity?onboarding=1");
+  // 실명·소속 is no longer a step here: it was offered (optional) on the
+  // 가입 동의 screen and collected from the Google name; posting and
+  // chatting ask for the consent later if it wasn't given.
+  redirect("/");
 }

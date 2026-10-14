@@ -60,13 +60,25 @@ export function parseGoogleDisplayName(raw: unknown): ParsedDisplayName | null {
   return checked.ok ? { name: checked.value.realName, affiliation: checked.value.department } : null;
 }
 
+// An account of the school's Google Workspace: the ID token's `hd` (hosted
+// domain) claim is the school domain -- Google sets it only for accounts
+// the organisation manages -- and the e-mail is in that domain too. Only
+// such a display name is read as "이름/신분/소속".
+export const SCHOOL_WORKSPACE_DOMAIN = "mju.ac.kr";
+
+export function isSchoolWorkspaceAccount(profile: unknown, email: string | null | undefined): boolean {
+  const hd = (profile as { hd?: unknown } | null | undefined)?.hd;
+  return hd === SCHOOL_WORKSPACE_DOMAIN && typeof email === "string" && email.toLowerCase().endsWith(`@${SCHOOL_WORKSPACE_DOMAIN}`);
+}
+
 // Suggestions from the Google name: split when it has the "이름/신분/소속"
-// form; otherwise the whole name, if it is a plausible name by itself (a
+// form (and the account is a school Workspace one, when the caller says
+// so); otherwise the whole name, if it is a plausible name by itself (a
 // name with any "/" never is, so a malformed structured name gives no
 // suggestion rather than a wrong one).
-export function hintsFromProfile(profile: unknown): IdentityHints {
+export function hintsFromProfile(profile: unknown, { allowStructured = true }: { allowStructured?: boolean } = {}): IdentityHints {
   const raw = (profile as { name?: unknown } | null | undefined)?.name;
-  const parsed = parseGoogleDisplayName(raw);
+  const parsed = allowStructured ? parseGoogleDisplayName(raw) : null;
   if (parsed) {
     return { name: parsed.name, department: parsed.affiliation, nameSource: "google_display_name", departmentSource: "google_display_name" };
   }

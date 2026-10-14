@@ -92,7 +92,7 @@ export default async function MePage() {
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-foreground">{t("identity.title")}</h2>
           <LinkButton href="/me/identity" variant="secondary" size="sm">
-            {identity ? t("identity.edit") : t("identity.register")}
+            {identity ? t("identity.view") : t("identity.goToForm")}
           </LinkButton>
         </div>
         {identity ? (
@@ -102,6 +102,11 @@ export default async function MePage() {
             <dt className="text-muted-foreground">{t("identity.department")}</dt>
             <dd className="min-w-0 break-words text-foreground">{identity.department}</dd>
           </dl>
+        ) : null}
+        {identity ? (
+          <p className="text-xs text-muted-foreground">
+            {identity.realNameSource === "google_display_name" ? t("identity.source.google") : t("identity.source.self")}
+          </p>
         ) : (
           <p className="text-sm text-muted-foreground">{t("identity.notRegistered")}</p>
         )}

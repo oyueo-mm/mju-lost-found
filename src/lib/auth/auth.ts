@@ -3,7 +3,8 @@ import Google from "next-auth/providers/google";
 
 import { decideSignIn } from "@/lib/auth/access";
 import { resolveSignIn } from "@/lib/auth/user";
-import { fetchDepartmentHint, googleScopes, hintsFromProfile, isOrgScopeEnabled } from "@/lib/identity/googleHints";
+import { fetchDepartmentHint, googleScopes, hintsFromProfile, isOrgScopeEnabled, isSchoolWorkspaceAccount } from "@/lib/identity/googleHints";
+import { syncIdentityFromHints } from "@/lib/identity/service";
 
 // No next-auth Adapter/database session store here -- see the User.googleId
 // comment in schema.prisma. Sessions are JWT-based (a signed cookie), and
@@ -114,12 +115,21 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           // The Google name (split when it is "이름/신분/소속"); a People API
           // department, when that scope is on, takes precedence over the
           // display-name affiliation.
-          const fromName = hintsFromProfile(profile);
+          // "이름/신분/소속" is read only from a school Workspace account (hd).
+          const fromName = hintsFromProfile(profile, { allowStructured: isSchoolWorkspaceAccount(profile, user.email) });
           const peopleDepartment =
             isOrgScopeEnabled() && account.access_token ? await fetchDepartmentHint(account.access_token) : null;
           token.identityHints = peopleDepartment
             ? { ...fromName, department: peopleDepartment, departmentSource: "google_people" }
             : fromName;
+          // 실명·소속 자동 수집: with the member's consent on file, store or
+          // refresh the values from this sign-in's Google name. A failure
+          // never blocks sign-in, and logs no values.
+          try {
+            await syncIdentityFromHints(resolved.user, token.identityHints);
+          } catch (error) {
+            console.error("Identity sync at sign-in failed:", error instanceof Error ? error.name : "unknown");
+          }
         }
       }
       return token;
