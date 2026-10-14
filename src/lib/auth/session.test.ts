@@ -164,7 +164,7 @@ describe("hasRequiredConsents", () => {
   it("is false without the current 이름·소속 consent", () => {
     expect(hasRequiredConsents({ ...readyConsent, identityConsentVersion: null })).toBe(false);
     expect(hasRequiredConsents({ ...readyConsent, identityConsentVersion: "2026-10-15" })).toBe(false);
-    expect(hasRequiredConsents({ ...readyConsent, identityConsentVersion: "2026-10-14" })).toBe(false);
+    expect(hasRequiredConsents({ ...readyConsent, identityConsentVersion: "2026-10-01" })).toBe(false);
   });
 });
 

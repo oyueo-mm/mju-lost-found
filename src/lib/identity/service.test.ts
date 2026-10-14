@@ -155,7 +155,7 @@ describe("automatic collection", () => {
   // one) -> never collected, at sign-in or anywhere else.
   it("stores nothing without the current consent, or without a display-name split", async () => {
     expect(await syncIdentityFromHints({ id: 5, identityConsentVersion: null }, fromDisplayName)).toBe("skipped");
-    expect(await syncIdentityFromHints({ id: 5, identityConsentVersion: "2026-10-14" }, fromDisplayName)).toBe("skipped");
+    expect(await syncIdentityFromHints({ id: 5, identityConsentVersion: "2026-10-01" }, fromDisplayName)).toBe("skipped");
     expect(await syncIdentityFromHints(consented, { name: "홍길동", department: null, nameSource: "google_profile" })).toBe("skipped");
     expect(await syncIdentityFromHints(consented, { name: null, department: null })).toBe("skipped");
     expect(await syncIdentityFromHints(consented, undefined)).toBe("skipped");
