@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { DraftJanitor } from "@/components/post/DraftJanitor";
 import { getCurrentUser, getRejoinIdentityId, hasRequiredConsents } from "@/lib/auth/session";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { countUnreadMessagesForUser } from "@/lib/chat/service";
@@ -97,6 +98,7 @@ export default async function MainLayout({ children }: { children: React.ReactNo
   return (
     <div className="flex flex-1 flex-col">
       <Header />
+      <DraftJanitor userId={user?.id ?? null} />
       {/* Phase 9: BottomNav-clearance padding (pb-20/no-pb on md+) moved
           off this <main> and onto Footer below, now that Footer -- not
           this <main> -- is the last element in the page flow that a fully

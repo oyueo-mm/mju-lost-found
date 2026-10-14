@@ -57,6 +57,7 @@ const RULES: ReadonlyArray<readonly [RegExp, RuleTarget]> = [
   [/에어팟\s?맥스|헤드폰|헤드셋/, "electronics.headphones"],
   [/에어팟|airpods?/i, "earphones.airpods"],
   [/버즈|galaxy\s?buds/i, "earphones.buds"],
+  [/줄\s?이어폰|유선\s?이어폰|이어폰\s?줄/, "earphones.wired"],
   [/이어폰|이어팁|이어버드/, "earphones.other"],
   [/(노트북|태블릿|아이패드)\s?(파우치|슬리브)/, "bag.pouch"],
   // A tablet with its pen is the tablet ("아이패드 + 애플펜슬").
@@ -132,10 +133,17 @@ const RULES: ReadonlyArray<readonly [RegExp, RuleTarget]> = [
   [/양말|잠옷/, "clothing.other"],
   [/옷/, "clothing"],
 
+  // Cosmetics. After bags, so "화장품 파우치" stays a pouch.
+  [/립스틱|립밤|립\s?글로스|틴트/, "cosmetics.lip"],
+  [/쿠션\s?팩트|팩트|파운데이션|컨실러|파우더/, "cosmetics.base"],
+  [/향수|퍼퓸|perfume/i, "cosmetics.perfume"],
+  [/핸드\s?크림|선\s?크림|선\s?스틱|로션|스킨케어/, "cosmetics.skincare"],
+  [/화장품|마스카라|아이\s?라이너|아이\s?섀도|뷰러|메이크업/, "cosmetics.other"],
+
   // Everyday items.
   [/줄넘기|글러브|라켓|손목\s?보호대|요가\s?매트|농구공|축구공|배구공|야구공|테니스공|셔틀콕/, "living.sports"],
   [/악기|기타\s?피크|퍼즐|레고/, "living.hobby"],
-  [/목베개|담요|립밤|도장|손거울|핸드크림|자물쇠/, "living.other"],
+  [/목베개|담요|도장|손거울|자물쇠/, "living.other"],
 
   // A bare "카드" ("카드 한 장") is last, so "SD카드" / "카드키" win above.
   [/카드/, "card_id"],

@@ -23,6 +23,7 @@ export const CATEGORY_CODE_TO_LEGACY: Readonly<Record<CategoryCode, (typeof CATE
   book_document: "책",
   stationery: "필기구",
   living: "기타",
+  cosmetics: "기타",
   etc: "기타",
 };
 

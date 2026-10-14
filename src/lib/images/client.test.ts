@@ -4,9 +4,10 @@ const uploadToSignedUrl = vi.fn();
 const uploadChatImageToSignedUrl = vi.fn();
 vi.mock("./supabaseBrowser", () => ({ uploadToSignedUrl, uploadChatImageToSignedUrl }));
 
-const { ImageProcessingError, UploadRateLimitedError, uploadChatImage, uploadPostImage } = await import("./client");
+const { ImageProcessingError, prepareImageForUpload, UploadRateLimitedError, uploadChatImage, uploadPostImage } = await import("./client");
 
-const original = new File([new Uint8Array(16)], "photo.jpg", { type: "image/jpeg" });
+// A fresh File per test: prepareImageForUpload() remembers its result per File.
+let original: File;
 const fetchMock = vi.fn();
 
 // Minimal browser surface optimizeImageForUpload() uses: decode -> canvas
@@ -28,6 +29,7 @@ function stubCanvas(reencoded: Blob | null) {
 }
 
 beforeEach(() => {
+  original = new File([new Uint8Array(16)], "photo.jpg", { type: "image/jpeg" });
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => {});
   fetchMock.mockResolvedValue(
@@ -119,5 +121,28 @@ describe("upload rate limit", () => {
     const error = await uploadPostImage("found", 1, original).catch((e: unknown) => e);
 
     expect((error as InstanceType<typeof UploadRateLimitedError>).retryAfterSeconds).toBe(90);
+  });
+});
+
+// 등록 지연 개선: the photo step starts when a photo is picked and is reused at upload.
+describe("prepareImageForUpload", () => {
+  it("processes each picked photo once, and the upload reuses that result", async () => {
+    const reencoded = new Blob([new Uint8Array(8)], { type: "image/webp" });
+    stubCanvas(reencoded);
+
+    const early = prepareImageForUpload(original);
+    await uploadPostImage("lost", 1, original);
+
+    expect(createImageBitmap).toHaveBeenCalledTimes(1);
+    expect(await early).toEqual({ blob: reencoded, contentType: "image/webp" });
+    expect(uploadToSignedUrl).toHaveBeenCalledWith("posts/lost/1/x.webp", "tok", reencoded);
+  });
+
+  it("an early failure surfaces only at upload, as before", async () => {
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => { throw new Error("decode failed"); }));
+    void prepareImageForUpload(original);
+
+    await expect(uploadPostImage("lost", 1, original)).rejects.toBeInstanceOf(ImageProcessingError);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

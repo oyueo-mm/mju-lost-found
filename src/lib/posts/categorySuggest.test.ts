@@ -105,6 +105,17 @@ describe("suggestCategory", () => {
     ["제도 샤프 분실", "stationery.mechanical_pencil"],
     ["흰 양산 두고 갔어요", "living.parasol"],
     ["날진 물병 분실", "living.water_bottle"],
+    // 등록 UX 개선: 화장품, 유선 이어폰
+    ["줄이어폰 주웠어요", "earphones.wired"],
+    ["유선 이어폰 분실", "earphones.wired"],
+    ["에어팟 프로 케이스", "earphones.airpods"],
+    ["립스틱 분실했어요", "cosmetics.lip"],
+    ["립밤 주웠어요", "cosmetics.lip"],
+    ["쿠션 팩트 습득", "cosmetics.base"],
+    ["향수 두고 갔어요", "cosmetics.perfume"],
+    ["핸드크림 습득", "cosmetics.skincare"],
+    ["마스카라 분실", "cosmetics.other"],
+    ["화장품 파우치 분실", "bag.pouch"],
   ])("%s -> %s", (title, subcategory) => {
     expect(fromTitle(title)?.subcategory).toBe(subcategory);
     expect(fromTitle(title)?.category).toBe(subcategory.split(".")[0]);

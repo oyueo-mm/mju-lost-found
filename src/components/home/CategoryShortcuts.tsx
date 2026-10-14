@@ -11,6 +11,7 @@ import {
   GridIcon,
   EarbudsIcon,
   HeadphonesIcon,
+  LipstickIcon,
   MoreIcon,
   PenIcon,
   PhoneIcon,
@@ -46,6 +47,7 @@ const CATEGORY_ICONS: Record<CategoryCode, ComponentType<SVGProps<SVGSVGElement>
   book_document: BookIcon,
   stationery: PenIcon,
   living: GridIcon,
+  cosmetics: LipstickIcon,
   etc: MoreIcon,
 };
 

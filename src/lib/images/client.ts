@@ -87,6 +87,25 @@ async function optimizeImageForUpload(
 // The selected image couldn't be re-encoded in the browser, so it was not
 // uploaded at all (see optimizeImageForUpload). Callers show the user a
 // "pick another image" message for this case.
+// 등록 지연 개선: the photo step (decode -> 1920px -> WebP) takes ~0.3s per
+// photo on a laptop and ~1s for three on a phone, and used to run only after
+// "등록" was pressed. prepareImageForUpload() starts it as soon as a photo is
+// picked and remembers the result per File, so uploadPostImage() just picks
+// it up. Same output, same failure (ImageProcessingError when awaited).
+const prepared = new WeakMap<File, Promise<{ blob: Blob; contentType: AllowedImageContentType }>>();
+
+export function prepareImageForUpload(file: File): Promise<{ blob: Blob; contentType: AllowedImageContentType }> {
+  let promise = prepared.get(file);
+  if (!promise) {
+    promise = optimizeImageForUpload(file);
+    // Handled by whoever awaits it later (the upload); this only keeps an
+    // early failure from being reported as an unhandled rejection.
+    promise.catch(() => {});
+    prepared.set(file, promise);
+  }
+  return promise;
+}
+
 export class ImageProcessingError extends Error {
   constructor() {
     super("Image could not be processed for upload");
@@ -126,7 +145,7 @@ export async function uploadPostImage(
   postId: number,
   file: File,
 ): Promise<{ path: string }> {
-  const { blob, contentType } = await optimizeImageForUpload(file);
+  const { blob, contentType } = await prepareImageForUpload(file);
 
   const res = await fetch("/api/upload", {
     method: "POST",

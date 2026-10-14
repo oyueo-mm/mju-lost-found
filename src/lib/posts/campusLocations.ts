@@ -13,6 +13,7 @@ export const CAMPUS_LOCATIONS: Record<(typeof CAMPUSES)[number], readonly string
   인문캠퍼스: [
     "정문",
     "종합관(S1)",
+    "종합관 대강당(채플관, S11001)",
     "MCC관(S10)",
     "베리타스홀",
     "코이노니아홀",

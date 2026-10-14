@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -11,8 +11,10 @@ import {
   POST_TITLE_MAX_LENGTH,
 } from "@/lib/posts/schema";
 import type { PostType } from "@/lib/posts/schema";
-import { getLocalizedLocationSuggestions } from "@/lib/posts/campusLocations";
-import { ImageProcessingError, UploadRateLimitedError, uploadPostImage } from "@/lib/images/client";
+import { getLocalizedLocationSuggestions, getLocationSuggestions } from "@/lib/posts/campusLocations";
+import { ImageProcessingError, prepareImageForUpload, UploadRateLimitedError, uploadPostImage } from "@/lib/images/client";
+import { browserStorage, clearDraft, draftKey, readDraft, writeDraft, type PostDraft } from "@/lib/posts/postDraft";
+import { isValidCategorySelection } from "@/lib/posts/categoryTaxonomy";
 import { LOCALE_INTL_TAG } from "@/lib/i18n/config";
 import { MAX_IMAGES_PER_POST } from "@/lib/images/config";
 import {
@@ -94,6 +96,10 @@ type PostFormProps = {
   // 주체 of the poster's previous post (see posts/nextPostDefaults.ts).
   // Nothing about the item itself is ever carried over.
   defaults?: NextPostDefaults | null;
+  // 임시저장: the signed-in account, set only on the create pages -- drafts
+  // are kept per account and board (see posts/postDraft.ts). Edit mode never
+  // has one.
+  draftOwnerId?: number | null;
 };
 
 const DATE_FIELD = { lost: "lostDate", found: "foundDate" } as const;
@@ -136,6 +142,9 @@ function fieldIfChanged<T>(isEdit: boolean, key: string, current: T, initial: T 
   return {};
 }
 
+// useSyncExternalStore's "is this the browser yet" probe: nothing to subscribe to.
+const subscribeNothing = () => () => {};
+
 // Two-way 모름 / 알고 있어요 choice for place and date: a visible segmented
 // control instead of a small text link, with 모름 as the default.
 function KnownToggle({
@@ -169,7 +178,7 @@ function KnownToggle({
   );
 }
 
-export function PostForm({ type, postId, initialValues, myOrganizations = [], defaults = null }: PostFormProps) {
+export function PostForm({ type, postId, initialValues, myOrganizations = [], defaults = null, draftOwnerId = null }: PostFormProps) {
   const router = useRouter();
   const { t } = useI18n();
   const [error, setError] = useState<string | null>(null);
@@ -305,11 +314,122 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
     };
   }, []);
 
+  // ---------- 임시저장 (create mode only) ----------
+  const formRef = useRef<HTMLFormElement>(null);
+  const draftStorageKey = postId === undefined && draftOwnerId ? draftKey(draftOwnerId, type) : null;
+  // A draft found on arrival, offered until restored, discarded, or replaced
+  // by the first edit. Read once the page is hydrated (localStorage exists
+  // only in the browser) -- the same useSyncExternalStore pattern as
+  // ThemeSettings, so no setState runs inside an effect.
+  const hydrated = useSyncExternalStore(subscribeNothing, () => true, () => false);
+  const storedDraft = useMemo(
+    () => (hydrated && draftStorageKey ? readDraft(browserStorage(), draftStorageKey) : null),
+    [hydrated, draftStorageKey],
+  );
+  const [draftOfferClosed, setDraftOfferClosed] = useState(false);
+  const pendingDraft = draftOfferClosed ? null : storedDraft;
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
+  const [restoredPhotoCount, setRestoredPhotoCount] = useState(0);
+  const draftBaselineRef = useRef<string | null>(null);
+  const draftClosedRef = useRef(false);
+
+  const fieldValue = (name: string) =>
+    (formRef.current?.elements.namedItem(name) as HTMLInputElement | null)?.value ?? "";
+  const currentDraft = (): Omit<PostDraft, "savedAt"> => ({
+    title: titleText,
+    description: descriptionText,
+    categoryCode: categoryValue.categoryCode,
+    subcategory: categoryValue.subcategory,
+    campus,
+    location: fieldValue("location"),
+    locationUnknown,
+    date: fieldValue("date"),
+    time: fieldValue("time"),
+    dateUnknown,
+    exactTime,
+    organizationId,
+    photoCount: items.filter((item) => item.kind === "new").length,
+  });
+
+  // Saves shortly after any change (typing, toggles, category, photos).
+  // Nothing is written until the form differs from how it first rendered,
+  // so merely opening the page never replaces an earlier draft.
+  const [draftTick, setDraftTick] = useState(0);
+  useEffect(() => {
+    if (!draftStorageKey || draftClosedRef.current) return;
+    const snapshot = JSON.stringify(currentDraft());
+    if (draftBaselineRef.current === null) {
+      draftBaselineRef.current = snapshot;
+      return;
+    }
+    if (snapshot === draftBaselineRef.current) return;
+    const timer = window.setTimeout(() => {
+      if (draftClosedRef.current) return;
+      setDraftOfferClosed(true);
+      const now = Date.now();
+      const stored = writeDraft(browserStorage(), draftStorageKey, { ...currentDraft(), savedAt: now });
+      setDraftSavedAt(stored ? now : null);
+    }, 800);
+    return () => window.clearTimeout(timer);
+    // currentDraft() reads exactly these values (plus the uncontrolled
+    // inputs, which bump draftTick through the form's onInput).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftStorageKey, draftTick, titleText, descriptionText, categoryValue, campus, locationUnknown, dateUnknown, exactTime, organizationId, items]);
+
+  function setFieldValue(name: string, value: string) {
+    const input = formRef.current?.elements.namedItem(name) as HTMLInputElement | HTMLTextAreaElement | null;
+    if (input) input.value = value;
+  }
+
+  function restoreDraft() {
+    const d = pendingDraft;
+    if (!d) return;
+    setFieldValue("title", d.title);
+    setFieldValue("description", d.description);
+    setFieldValue("location", d.location);
+    if (d.date) setFieldValue("date", d.date);
+    if (d.time) setFieldValue("time", d.time);
+    setTitleText(d.title);
+    setDescriptionText(d.description);
+    // Only values that are still valid now are taken back.
+    if (d.categoryCode !== null && isValidCategorySelection(d.categoryCode, d.subcategory)) {
+      setCategoryValue({ categoryCode: d.categoryCode, subcategory: d.subcategory } as CategoryFormValue);
+    }
+    if (getLocationSuggestions(d.campus).length > 0) setCampus(d.campus);
+    setLocationUnknown(d.locationUnknown);
+    setDateUnknown(d.dateUnknown);
+    setExactTime(d.exactTime);
+    if (d.organizationId === null || myOrganizations.some((m) => m.organizationId === d.organizationId)) {
+      setOrganizationId(d.organizationId);
+    }
+    setRestoredPhotoCount(d.photoCount);
+    setDraftOfferClosed(true);
+    setDraftSavedAt(d.savedAt);
+  }
+
+  function discardDraft() {
+    if (draftStorageKey) clearDraft(browserStorage(), draftStorageKey);
+    setDraftOfferClosed(true);
+    setDraftSavedAt(null);
+    setRestoredPhotoCount(0);
+  }
+
+  // The post exists now: its draft is done (also stops any pending save).
+  function closeDraft() {
+    draftClosedRef.current = true;
+    if (draftStorageKey) clearDraft(browserStorage(), draftStorageKey);
+  }
+
+  const draftTime = (at: number) =>
+    new Intl.DateTimeFormat(LOCALE_INTL_TAG[t.locale], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(at);
+
   function handleFilesSelected(files: File[]) {
     setError(null);
     const { accepted, rejectedForCount, validationError } = selectNewImages(files, items.length);
 
     if (accepted.length > 0) {
+      // Start the photo step now, while the rest of the form is filled in.
+      for (const file of accepted) void prepareImageForUpload(file);
       setItems((prev) => [
         ...prev,
         ...accepted.map((file) => ({
@@ -556,6 +676,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
 
       const id = postId ?? json.data.id;
       setSavedPostId(id);
+      if (postId === undefined) closeDraft();
 
       const imageError = await applyImageChanges(id);
       if (imageError) {
@@ -612,7 +733,29 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+    <form
+      ref={formRef}
+      onSubmit={handleSubmit}
+      onInput={draftStorageKey ? () => setDraftTick((n) => n + 1) : undefined}
+      className="flex flex-col gap-5"
+    >
+      {pendingDraft && (
+        <div role="status" className="flex flex-col gap-2 rounded-card border border-primary/30 bg-primary-muted px-4 py-3 text-sm">
+          <p className="text-foreground">{t("draft.found", { time: draftTime(pendingDraft.savedAt) })}</p>
+          {pendingDraft.photoCount > 0 && (
+            <p className="text-xs text-muted-foreground">{t("draft.photosNote", { count: pendingDraft.photoCount })}</p>
+          )}
+          <p className="text-xs text-muted-foreground">{t("draft.replaceNote")}</p>
+          <div className="flex gap-2">
+            <Button type="button" size="sm" onClick={restoreDraft}>
+              {t("draft.restore")}
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={discardDraft}>
+              {t("draft.discard")}
+            </Button>
+          </div>
+        </div>
+      )}
       {error &&
         (savedPostId === null ? (
           <p className="rounded-card border border-destructive/30 bg-destructive-muted px-4 py-2.5 text-sm text-destructive">
@@ -930,6 +1073,21 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
           onMove={handleMoveItem}
         />
       </section>
+
+      {draftStorageKey && !createdAlready && (draftSavedAt !== null || restoredPhotoCount > 0) && (
+        <div className="flex flex-col gap-1 text-xs text-muted-foreground" aria-live="polite">
+          {restoredPhotoCount > 0 && <p>{t("draft.photosNote", { count: restoredPhotoCount })}</p>}
+          {draftSavedAt !== null && (
+            <p className="flex flex-wrap items-center gap-x-2">
+              <span>{t("draft.saved", { time: draftTime(draftSavedAt) })}</span>
+              <button type="button" onClick={discardDraft} className="font-medium text-primary underline-offset-2 hover:underline">
+                {t("draft.clear")}
+              </button>
+            </p>
+          )}
+          <p>{t("draft.privacyNote")}</p>
+        </div>
+      )}
 
       <Button type="submit" disabled={pending} className="w-full sm:w-auto sm:self-start">
         {pending

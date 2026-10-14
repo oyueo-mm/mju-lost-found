@@ -17,7 +17,7 @@ import {
 } from "./categoryTaxonomy";
 
 describe("category taxonomy", () => {
-  it("has the 13 confirmed main categories in display order", () => {
+  it("has the 14 confirmed main categories in display order", () => {
     expect(CATEGORY_CODES).toEqual([
       "electronics",
       "phone",
@@ -31,6 +31,7 @@ describe("category taxonomy", () => {
       "book_document",
       "stationery",
       "living",
+      "cosmetics",
       "etc",
     ]);
   });
@@ -44,7 +45,7 @@ describe("category taxonomy", () => {
       expect(subs.at(-1)).toBe(otherSubcategoryOf(category));
       expect(subs.filter(isOtherSubcategory)).toEqual([`${category}.other`]);
     }
-    expect(SUBCATEGORY_CODES).toHaveLength(77);
+    expect(SUBCATEGORY_CODES).toHaveLength(83);
   });
 
   it("uses unique codes that are prefixed by their parent and are plain ASCII", () => {
@@ -120,7 +121,7 @@ describe("validateCategorySelection", () => {
 describe("taxonomy labels", () => {
   it("has a non-empty label for every category and subcategory in all 7 locales", () => {
     const keys = [...CATEGORY_CODES.map(taxonomyCategoryLabelKey), ...SUBCATEGORY_CODES.map(taxonomySubcategoryLabelKey)];
-    expect(keys).toHaveLength(90);
+    expect(keys).toHaveLength(97);
     for (const [locale, dictionary] of Object.entries(DICTIONARIES)) {
       for (const key of keys) {
         expect(dictionary[key], `${locale} ${key}`).toBeTruthy();
@@ -143,6 +144,7 @@ describe("taxonomy labels", () => {
       "도서·문서",
       "문구·학용품",
       "생활용품",
+      "화장품",
       "기타",
     ]);
     expect(subcategoriesOf("clothing").map((code) => ko[taxonomySubcategoryLabelKey(code)])).toEqual([
@@ -193,5 +195,21 @@ describe("taxonomy labels", () => {
         expect(new Set(labels).size, `${locale} ${category}`).toBe(labels.length);
       }
     }
+  });
+});
+
+// 등록 UX 개선: 화장품 and 유선 이어폰 (줄이어폰).
+describe("added categories", () => {
+  it("has 화장품 with its own subcategories and 유선 이어폰 under 이어폰", () => {
+    const { ko } = DICTIONARIES;
+    expect(subcategoriesOf("cosmetics").map((code) => ko[taxonomySubcategoryLabelKey(code)])).toEqual([
+      "립 제품(립스틱, 립밤)",
+      "베이스 메이크업(쿠션, 팩트)",
+      "향수",
+      "스킨케어(핸드크림, 선크림)",
+      "기타 화장품",
+    ]);
+    expect(subcategoriesOf("earphones")).toContain("earphones.wired");
+    expect(ko[taxonomySubcategoryLabelKey("earphones.wired")]).toBe("유선 이어폰(줄이어폰)");
   });
 });

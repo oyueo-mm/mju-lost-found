@@ -7,6 +7,7 @@ describe("CAMPUS_LOCATIONS", () => {
     expect(CAMPUS_LOCATIONS["인문캠퍼스"]).toEqual([
       "정문",
       "종합관(S1)",
+      "종합관 대강당(채플관, S11001)",
       "MCC관(S10)",
       "베리타스홀",
       "코이노니아홀",

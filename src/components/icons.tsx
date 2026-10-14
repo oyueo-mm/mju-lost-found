@@ -400,6 +400,17 @@ export function RingIcon(props: IconProps) {
   );
 }
 
+// 화장품 -- 립스틱(본체 + 비스듬히 깎인 심)
+export function LipstickIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="8" y="13" width="8" height="8" rx="1.5" />
+      <path d="M9.5 13V9h5v4" />
+      <path d="M9.5 9 14.5 4.5V9" />
+    </svg>
+  );
+}
+
 // 기타 -- 2x2 격자("그 외 분류")
 export function GridIcon(props: IconProps) {
   return (
