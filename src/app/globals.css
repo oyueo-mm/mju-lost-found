@@ -364,3 +364,130 @@ option {
     transform: translateY(0);
   }
 }
+
+/* Landing demos: the AI-search, image-search and how-it-works mockups
+   play their "this is what happens" sequence once, when their section's
+   ScrollReveal wrapper turns [data-reveal="visible"]. While the wrapper is
+   still [data-reveal="hidden"] (below the fold), the animated parts wait
+   in their start state; with no data-reveal at all (already on screen at
+   load, JS failed, or reduced motion -- ScrollReveal skips all three) the
+   mockups are simply static and complete. Only opacity, transform and
+   clip-path move, so nothing shifts the layout; nothing loops. Fill mode
+   is `backwards` so each part returns to its normal styles afterwards and
+   hover effects keep working. Per-element delay: style="--demo-delay". */
+@media (prefers-reduced-motion: no-preference) {
+  [data-reveal="hidden"] :is(.demo-rise, .demo-pop, .demo-drop, .demo-nudge) {
+    opacity: 0;
+  }
+  [data-reveal="hidden"] .demo-type {
+    clip-path: inset(0 100% 0 0);
+  }
+  [data-reveal="visible"] .demo-rise {
+    animation: demo-rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) var(--demo-delay, 0ms) backwards;
+  }
+  [data-reveal="visible"] .demo-pop {
+    animation: demo-pop 380ms cubic-bezier(0.2, 0.8, 0.3, 1.2) var(--demo-delay, 0ms) backwards;
+  }
+  [data-reveal="visible"] .demo-drop {
+    animation: demo-drop 460ms cubic-bezier(0.2, 0.7, 0.2, 1) var(--demo-delay, 0ms) backwards;
+  }
+  [data-reveal="visible"] .demo-nudge {
+    animation: demo-nudge 360ms ease-out var(--demo-delay, 0ms) backwards;
+  }
+  /* The example query "typed" into the search box, left to right. */
+  [data-reveal="visible"] .demo-type {
+    animation: demo-type 1100ms steps(26, end) var(--demo-delay, 0ms) backwards;
+  }
+  /* A thin line under the search box / a band down the photo: "AI is
+     reading this". Invisible before and after. */
+  [data-reveal="visible"] .demo-progress {
+    animation: demo-progress 700ms ease-in-out var(--demo-delay, 0ms) backwards;
+  }
+  [data-reveal="visible"] .demo-scan {
+    animation: demo-scan 900ms ease-in-out var(--demo-delay, 0ms) backwards;
+  }
+  /* How it works: each step lights up in turn; the AI-match step also
+     sends out one soft ring. */
+  [data-reveal="visible"] .demo-step {
+    animation: demo-step 520ms ease-out var(--demo-delay, 0ms) backwards;
+  }
+  [data-reveal="visible"] .demo-ring {
+    animation: demo-ring 900ms ease-out var(--demo-delay, 0ms) backwards;
+  }
+  /* Feature grid icons: one small motion each, hinting at the feature. */
+  [data-reveal="visible"] .demo-icon-rotate {
+    animation: demo-icon-rotate 520ms ease-out var(--demo-delay, 0ms) backwards;
+  }
+  [data-reveal="visible"] .demo-icon-sweep {
+    animation: demo-icon-sweep 620ms ease-in-out var(--demo-delay, 0ms) backwards;
+  }
+  [data-reveal="visible"] .demo-icon-blink {
+    animation: demo-icon-blink 520ms ease-in-out var(--demo-delay, 0ms) backwards;
+  }
+  [data-reveal="visible"] .demo-icon-bob {
+    animation: demo-icon-bob 560ms ease-out var(--demo-delay, 0ms) backwards;
+  }
+}
+.demo-progress,
+.demo-scan,
+.demo-ring {
+  opacity: 0;
+}
+@keyframes demo-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes demo-pop {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes demo-drop {
+  from { opacity: 0; transform: translateY(-10px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes demo-nudge {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes demo-type {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+@keyframes demo-progress {
+  0% { opacity: 1; transform: scaleX(0); }
+  80% { opacity: 1; transform: scaleX(1); }
+  100% { opacity: 0; transform: scaleX(1); }
+}
+@keyframes demo-scan {
+  0% { opacity: 1; transform: translateY(-100%); }
+  85% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(300%); }
+}
+@keyframes demo-step {
+  0% { transform: none; }
+  45% { transform: scale(1.08); border-color: var(--color-primary); }
+  100% { transform: none; }
+}
+@keyframes demo-ring {
+  0% { opacity: 0.6; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+@keyframes demo-icon-rotate {
+  from { transform: rotate(-90deg); }
+  to { transform: none; }
+}
+@keyframes demo-icon-sweep {
+  0% { transform: none; }
+  35% { transform: translate(-2px, -2px); }
+  70% { transform: translate(2px, 1px); }
+  100% { transform: none; }
+}
+@keyframes demo-icon-blink {
+  0%, 100% { transform: none; }
+  50% { transform: scaleY(0.15); }
+}
+@keyframes demo-icon-bob {
+  0% { transform: translateY(4px); }
+  60% { transform: translateY(-2px); }
+  100% { transform: none; }
+}

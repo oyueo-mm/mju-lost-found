@@ -18,7 +18,7 @@ export async function FinalCta() {
       <p className="max-w-sm text-sm text-muted-foreground md:text-base">
         {t("landing.finalCta.description")}
       </p>
-      <LinkButton href="/login" size="md" className="px-8">
+      <LinkButton href="/login" size="md" className="px-8 hover:shadow-md motion-safe:hover:-translate-y-0.5">
         {t("landing.cta")}
       </LinkButton>
     </section>

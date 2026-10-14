@@ -34,7 +34,7 @@ export async function Hero() {
           has scrolled away (and its floating copy should take over).
           Wrapper only -- the button itself is unchanged. */}
       <div id="landing-hero-cta" className="mt-2">
-        <LinkButton href="/login" size="md" className="px-8">
+        <LinkButton href="/login" size="md" className="px-8 hover:shadow-md motion-safe:hover:-translate-y-0.5">
           {t("landing.cta")}
         </LinkButton>
       </div>
