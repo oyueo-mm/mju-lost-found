@@ -32,8 +32,8 @@ export function ReportIdentityPanel({ reportId, parties }: { reportId: number; p
   return (
     <div className="flex flex-col gap-3 text-sm">
       <p className="text-xs leading-relaxed text-muted-foreground">
-        신고·분쟁 처리에 꼭 필요한 경우에만 열람하세요. 열람할 때마다 관리자, 대상, 신고, 사유, 시각이 기록됩니다. 실명·학과는
-        이용자가 직접 입력한 정보로, 학적과 대조해 확인된 정보가 아닙니다.
+        신고·분쟁 처리에 꼭 필요한 경우에만 열람하세요. 열람할 때마다 관리자, 대상, 신고, 사유, 시각이 기록됩니다. 이름·소속은
+        Google 표시 이름에서 자동으로 가져왔거나 이용자가 직접 입력한 정보로, 학교 학적 시스템에서 확인된 정보가 아닙니다.
       </p>
       <form action={formAction} className="flex flex-col gap-2">
         <input type="hidden" name="reportId" value={reportId} />
@@ -56,7 +56,7 @@ export function ReportIdentityPanel({ reportId, parties }: { reportId: number; p
           className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
         />
         <Button type="submit" variant="secondary" size="sm" disabled={pending} className="self-start">
-          {pending ? "확인 중..." : "실명·학과 열람 (기록됨)"}
+          {pending ? "확인 중..." : "이름·소속 열람 (기록됨)"}
         </Button>
       </form>
       {state && !state.ok && <p className="text-sm text-destructive">{state.error}</p>}
@@ -64,12 +64,12 @@ export function ReportIdentityPanel({ reportId, parties }: { reportId: number; p
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-lg border border-border bg-muted p-3">
           <dt className="text-muted-foreground">닉네임</dt>
           <dd className="text-foreground">{state.nickname ?? "-"}</dd>
-          <dt className="text-muted-foreground">실명</dt>
+          <dt className="text-muted-foreground">이름</dt>
           <dd className="text-foreground">
             {state.realName ?? "미등록"}
             {state.realName && <span className="ml-1.5 text-xs text-muted-foreground">({sourceLabel(state.realNameSource)})</span>}
           </dd>
-          <dt className="text-muted-foreground">학과(소속)</dt>
+          <dt className="text-muted-foreground">소속(학과·단과대학)</dt>
           <dd className="text-foreground">
             {state.department ?? "미등록"}
             {state.department && <span className="ml-1.5 text-xs text-muted-foreground">({sourceLabel(state.departmentSource)})</span>}

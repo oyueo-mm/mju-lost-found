@@ -36,6 +36,7 @@ vi.mock("@/lib/db/prisma", () => ({
 const { resolveOrCreateUser, recordRequiredConsents, withdrawUser } = await import("./user");
 const CURRENT_VERSION = "2026-09-27";
 const PRIVACY_VERSION = "2026-10-04";
+const IDENTITY_VERSION = "2026-10-16";
 
 queryRaw.mockResolvedValue([]);
 
@@ -197,7 +198,7 @@ describe("recordRequiredConsents", () => {
       termsVersion: CURRENT_VERSION,
     });
 
-    await recordRequiredConsents(5, CURRENT_VERSION, PRIVACY_VERSION);
+    await recordRequiredConsents(5, CURRENT_VERSION, PRIVACY_VERSION, IDENTITY_VERSION);
 
     expect($transaction).toHaveBeenCalledTimes(1);
     expect(updateMany).toHaveBeenNthCalledWith(1, {
@@ -211,6 +212,12 @@ describe("recordRequiredConsents", () => {
       where: { id: 5, OR: [{ termsAcceptedAt: null }, { termsVersion: { not: CURRENT_VERSION } }] },
       data: { termsAcceptedAt: expect.any(Date), termsVersion: CURRENT_VERSION },
     });
+    // 이름·소속 (a required item of the 개인정보 동의) is stamped in the same
+    // transaction; an earlier optional version is re-stamped.
+    expect(updateMany).toHaveBeenNthCalledWith(3, {
+      where: { id: 5, OR: [{ identityConsentVersion: null }, { identityConsentVersion: { not: IDENTITY_VERSION } }] },
+      data: { identityConsentAt: expect.any(Date), identityConsentVersion: IDENTITY_VERSION },
+    });
   });
 
   it("returns the fresh user row after recording both consents", async () => {
@@ -223,7 +230,7 @@ describe("recordRequiredConsents", () => {
       termsVersion: CURRENT_VERSION,
     });
 
-    const user = await recordRequiredConsents(5, CURRENT_VERSION, PRIVACY_VERSION);
+    const user = await recordRequiredConsents(5, CURRENT_VERSION, PRIVACY_VERSION, IDENTITY_VERSION);
 
     expect(findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 5 } });
     expect(user).toEqual({
@@ -249,7 +256,7 @@ describe("recordRequiredConsents", () => {
       termsVersion: CURRENT_VERSION,
     });
 
-    const user = await recordRequiredConsents(5, CURRENT_VERSION, PRIVACY_VERSION);
+    const user = await recordRequiredConsents(5, CURRENT_VERSION, PRIVACY_VERSION, IDENTITY_VERSION);
 
     expect(user.privacyConsentAt).toEqual(original);
   });
@@ -269,7 +276,7 @@ describe("recordRequiredConsents", () => {
       termsVersion: CURRENT_VERSION,
     });
 
-    const user = await recordRequiredConsents(5, CURRENT_VERSION, PRIVACY_VERSION);
+    const user = await recordRequiredConsents(5, CURRENT_VERSION, PRIVACY_VERSION, IDENTITY_VERSION);
 
     expect(user.termsAcceptedAt).toEqual(original);
     expect(user.termsVersion).toBe(CURRENT_VERSION);
@@ -287,7 +294,7 @@ describe("recordRequiredConsents", () => {
       termsVersion: CURRENT_VERSION,
     });
 
-    await recordRequiredConsents(5, CURRENT_VERSION, PRIVACY_VERSION);
+    await recordRequiredConsents(5, CURRENT_VERSION, PRIVACY_VERSION, IDENTITY_VERSION);
 
     expect(updateMany).toHaveBeenNthCalledWith(2, {
       where: { id: 5, OR: [{ termsAcceptedAt: null }, { termsVersion: { not: CURRENT_VERSION } }] },

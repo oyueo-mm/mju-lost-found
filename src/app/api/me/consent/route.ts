@@ -1,7 +1,7 @@
 import { getCurrentUser } from "@/lib/auth/session";
-import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
+import { CURRENT_IDENTITY_CONSENT_VERSION, CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 import { recordRequiredConsents } from "@/lib/auth/user";
-import { consentAndCollectIdentity } from "@/lib/identity/collect";
+import { collectIdentityAfterConsent } from "@/lib/identity/collect";
 import { jsonError, jsonOk, withErrorHandling } from "@/lib/posts/http";
 
 // 이용약관 동의 Phase: replaces the old POST /api/me/privacy-consent --
@@ -14,21 +14,20 @@ import { jsonError, jsonOk, withErrorHandling } from "@/lib/posts/http";
 // to run for a user who hasn't consented to either document yet, since
 // it's the only thing that can ever change that. Login is still required
 // (getCurrentUser()), nickname is not.
-// 실명·소속 (optional, same screen): `{ identityConsent: true }` also records
-// that consent and collects the values from the Google display name at
-// once (identity/collect.ts). Leaving it out changes nothing about it.
-export const POST = withErrorHandling(async (request?: Request) => {
+// 이름·소속 필수 수집: the 개인정보 동의 now covers 이름·소속; right after it
+// is recorded, the values are collected from the Google display name
+// (identity/collect.ts) -- never before.
+export const POST = withErrorHandling(async () => {
   const user = await getCurrentUser();
   if (!user) return jsonError(401, "로그인이 필요합니다.");
-  const body = (request ? await request.json().catch(() => null) : null) as { identityConsent?: unknown } | null;
 
   // recordRequiredConsents() ignores the client entirely beyond the
   // authenticated user's own id -- no body is read, no client-supplied
   // timestamp or version is ever trusted (see that function's own
   // comment for why). The current terms/privacy versions are this
   // server's own constants, never something the client could influence.
-  const updated = await recordRequiredConsents(user.id, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION);
-  const identity = body?.identityConsent === true ? await consentAndCollectIdentity(user.id) : null;
+  const updated = await recordRequiredConsents(user.id, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION, CURRENT_IDENTITY_CONSENT_VERSION);
+  const identity = await collectIdentityAfterConsent(user.id);
   return jsonOk({
     identity,
     privacyConsentAt: updated.privacyConsentAt,

@@ -5,7 +5,7 @@ import { hasRequiredConsents, requireUser, sanitizeCallbackUrl } from "@/lib/aut
 import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 import { signOut } from "@/lib/auth/auth";
 import { LogoMark } from "@/components/layout/Logo";
-import { ShieldIcon, ChevronRightIcon, BookIcon, UserIcon } from "@/components/icons";
+import { ShieldIcon, ChevronRightIcon, BookIcon } from "@/components/icons";
 import { PrivacyConsentButton } from "./PrivacyConsentButton";
 import { hasCurrentIdentityConsent } from "@/lib/identity/service";
 
@@ -34,11 +34,15 @@ import { hasCurrentIdentityConsent } from "@/lib/identity/service";
 const COLLECTED_ITEMS: { label: string; detail: string }[] = [
   { label: "Google 계정 식별 정보", detail: "Google 계정의 고유 식별자(구글 로그인 시 발급)" },
   { label: "이메일 주소", detail: "Google 계정의 이메일 주소(이메일 인증 여부는 로그인 확인에만 쓰고 저장하지 않음)" },
-  { label: "닉네임", detail: "직접 설정한 닉네임(내부 이름 값은 이메일 주소의 @ 앞부분이며, Google 계정 이름은 여기에 저장하지 않음)" },
+  { label: "닉네임", detail: "직접 설정한 닉네임(다른 이용자에게 공개되는 이름으로, 아래 이름과는 별개)" },
+  {
+    label: "이름, 소속(학과·단과대학)",
+    detail:
+      "명지대 Google 계정의 표시 이름이 '이름/신분/소속' 형식이면 이름과 소속을 자동으로 추출해 저장하고, 로그인할 때마다 비교해 갱신(신분은 저장하지 않음). 학교 학적 시스템에서 확인된 정보가 아니며, 소속은 학과가 아닌 단과대학일 수 있음. 자동으로 가져올 수 없는 계정은 게시글 등록·채팅 전에 직접 입력. 본인과 신고·분쟁을 처리하는 관리자(열람 기록)만 볼 수 있음",
+  },
   {
     label: "Google 계정 이름",
-    detail:
-      "Google 로그인 시 전달받아, 아래 실명·소속(선택)에 동의한 경우에만 실명·소속 자동 수집에 사용(동의 전에는 서버에 저장하지 않음)",
+    detail: "Google 로그인 시 전달받아 위 이름·소속 자동 추출에만 사용(동의 전에는 서버에 저장하지 않음)",
   },
   { label: "게시글 정보", detail: "분실물/습득물 게시글의 제목, 내용, 장소, 날짜, 첨부 이미지" },
   { label: "댓글/답글", detail: "게시글에 작성한 댓글 및 답글 내용" },
@@ -66,11 +70,15 @@ export default async function PrivacyConsentPage({
   // consent this user already gave.
   // 개인정보 동의 버전: a consent on file for an older (or no) version is
   // asked again, same as the terms.
-  const needsPrivacy = user.privacyConsentAt === null || user.privacyConsentVersion !== CURRENT_PRIVACY_VERSION;
+  // 이름·소속 are part of the 개인정보 동의 now: a member on an older (or the
+  // earlier optional) 이름·소속 consent ticks the privacy box again.
+  const needsPrivacy =
+    user.privacyConsentAt === null ||
+    user.privacyConsentVersion !== CURRENT_PRIVACY_VERSION ||
+    !hasCurrentIdentityConsent(user);
   // Someone who agreed before is told why they see this again.
   const isReconsent = user.privacyConsentAt !== null || user.termsAcceptedAt !== null;
   const needsTerms = user.termsAcceptedAt === null || user.termsVersion !== CURRENT_TERMS_VERSION;
-  const offerIdentity = !hasCurrentIdentityConsent(user);
 
   // Already consented to everything currently required (e.g. re-visiting
   // this URL directly, or a race with a second tab) -- send them straight
@@ -118,16 +126,9 @@ export default async function PrivacyConsentPage({
           </div>
 
           <div className="flex flex-col gap-2">
-            <p>Google 계정 · 닉네임 · 게시글 · 이미지 · 댓글 · 채팅</p>
+            <p>Google 계정 · 이름·소속 · 닉네임 · 게시글 · 이미지 · 댓글 · 채팅</p>
             <p className="text-muted-foreground">
               분실물을 등록하고 검색하고 연락하기 위해 사용됩니다.
-            </p>
-            {/* 실명·학과 are not part of this consent: they are asked for,
-                with their own consent, on /me/identity when a member first
-                posts or chats -- so this version (and every existing
-                member's consent) is unchanged by them. */}
-            <p className="text-xs text-muted-foreground">
-              실명·학과는 게시글 등록과 채팅을 이용할 때 별도로 동의를 받아 수집합니다.
             </p>
           </div>
 
@@ -203,47 +204,10 @@ export default async function PrivacyConsentPage({
           </div>
         </div>
 
-        {/* 실명·소속 (선택): what is collected, from where, and that it is
-            optional for browsing -- asked on this same screen so that a
-            member who agrees never sees a separate input step. */}
-        {offerIdentity && (
-          <div className="flex w-full flex-col gap-2 rounded-card border border-border bg-card p-5 text-sm text-foreground">
-            <div className="flex items-center gap-1.5 font-semibold">
-              <UserIcon className="size-4.5 text-primary" />
-              실명·소속 (선택)
-            </div>
-            <p className="text-muted-foreground">
-              동의하면 명지대 Google 계정의 표시 이름이 &lsquo;이름/신분/소속&rsquo; 형식일 때 이름과 소속을 자동으로 가져와
-              저장해요. 직접 입력할 필요는 없어요.
-            </p>
-            <details className="group flex flex-col gap-2 border-t border-border pt-3">
-              <summary className="flex cursor-pointer list-none items-center justify-between font-medium text-primary">
-                자세한 내용 보기
-                <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
-              </summary>
-              <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-xs leading-relaxed text-muted-foreground">
-                <li>수집 항목: 실명, 소속(학과 또는 단과대학 등 상위 소속일 수 있음). 신분(학생·교수 등)은 저장하지 않아요.</li>
-                <li>
-                  수집 방법: 명지대 Google Workspace 계정의 표시 이름에서 자동 추출하고, 로그인할 때마다 비교해 바뀌었으면
-                  자동으로 갱신해요. 학교 학적 시스템에서 확인된 정보는 아니에요.
-                </li>
-                <li>이용 목적: 게시글·채팅으로 물건을 주고받을 때의 본인 확인, 신고·분쟁 처리</li>
-                <li>
-                  열람 범위: 본인, 그리고 신고·분쟁을 처리하는 관리자(열람 사유와 기록이 남아요). 다른 이용자에게는 공개되지
-                  않고 닉네임만 보여요.
-                </li>
-                <li>보유 기간: 회원탈퇴 시 즉시 삭제(계정 비활성화 중에는 보관)</li>
-                <li>동의하지 않아도 둘러보기와 검색은 할 수 있지만, 게시글 등록과 채팅은 할 수 없어요.</li>
-              </ul>
-            </details>
-          </div>
-        )}
-
         <PrivacyConsentButton
           callbackUrl={callbackUrl}
           needsPrivacy={needsPrivacy}
           needsTerms={needsTerms}
-          offerIdentity={offerIdentity}
         />
 
         {/* Calm, single line -- states the fact (consent is required to

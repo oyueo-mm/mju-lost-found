@@ -17,12 +17,10 @@ vi.mock("@/lib/report/targets", () => ({ resolvePostTarget, resolveMessageTarget
 const {
   getOwnIdentityInfo,
   hasIdentityInfo,
-  recordIdentityConsent,
   reportPartyUserIds,
   saveOwnIdentityInfo,
   syncIdentityFromHints,
   viewIdentityForReport,
-  withdrawIdentityConsent,
 } = await import("./service");
 const { CURRENT_IDENTITY_CONSENT_VERSION } = await import("@/lib/auth/terms");
 
@@ -147,20 +145,14 @@ describe("admin view of 실명·학과", () => {
   });
 });
 
-// 실명·소속 자동 수집
-describe("consent and automatic collection", () => {
+// 이름·소속 자동 수집
+describe("automatic collection", () => {
   const consented = { id: 5, identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION };
   const fromDisplayName = { name: "홍길동", department: "컴퓨터공학과", nameSource: "google_display_name" as const, departmentSource: "google_display_name" as const };
   const now = new Date("2026-10-15T00:00:00Z");
 
-  it("records the consent with the current version and time", async () => {
-    await recordIdentityConsent(5, now);
-    expect(user.update).toHaveBeenCalledWith({
-      where: { id: 5 },
-      data: { identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION, identityConsentAt: now },
-    });
-  });
-
+  // No consent on the current version (never given, or the earlier optional
+  // one) -> never collected, at sign-in or anywhere else.
   it("stores nothing without the current consent, or without a display-name split", async () => {
     expect(await syncIdentityFromHints({ id: 5, identityConsentVersion: null }, fromDisplayName)).toBe("skipped");
     expect(await syncIdentityFromHints({ id: 5, identityConsentVersion: "2026-10-14" }, fromDisplayName)).toBe("skipped");
@@ -205,10 +197,4 @@ describe("consent and automatic collection", () => {
     );
   });
 
-  it("withdrawing deletes the values and clears the consent in one transaction", async () => {
-    await withdrawIdentityConsent(5);
-    expect($transaction).toHaveBeenCalledTimes(1);
-    expect(userIdentityInfo.deleteMany).toHaveBeenCalledWith({ where: { userId: 5 } });
-    expect(txUser.update).toHaveBeenCalledWith({ where: { id: 5 }, data: { identityConsentVersion: null, identityConsentAt: null } });
-  });
 });

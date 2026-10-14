@@ -1,16 +1,16 @@
 import { auth, unstable_update } from "@/lib/auth/auth";
 import { CURRENT_IDENTITY_CONSENT_VERSION } from "@/lib/auth/terms";
-import { recordIdentityConsent, syncIdentityFromHints, type IdentitySyncResult } from "./service";
+import { syncIdentityFromHints, type IdentitySyncResult } from "./service";
 
-// 실명·소속 자동 수집 at the moment of consent (가입 동의 screen or
-// /me/identity): records the member's optional consent, then stores the
+// 이름·소속 자동 수집 right after the required 개인정보 동의 (which now
+// covers 이름·소속 and is stamped by recordRequiredConsents): stores the
 // name and affiliation from this session's Google display name hints -- no
-// form, no typing. When there is nothing usable (not a school Workspace
-// account, a name without the "이름/신분/소속" form, or a session from before
-// the hints existed) nothing is stored ("skipped") and the caller decides
-// what to show. Once stored, the hints are dropped from the session cookie.
-export async function consentAndCollectIdentity(userId: number): Promise<IdentitySyncResult> {
-  await recordIdentityConsent(userId);
+// form, no extra step. When there is nothing usable (not a school Workspace
+// account, a name without the "이름/신분/소속" form, or a session from
+// before the hints existed) nothing is stored ("skipped"); posting/chatting
+// then send the member to /me/identity. Once stored, the hints are dropped
+// from the session cookie.
+export async function collectIdentityAfterConsent(userId: number): Promise<IdentitySyncResult> {
   const session = await auth();
   const result = await syncIdentityFromHints(
     { id: userId, identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION },

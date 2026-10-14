@@ -13,8 +13,6 @@ const FIELD_CLASS = "rounded-lg border border-border bg-transparent px-3 py-2.5 
 
 type IdentityFormProps = {
   initial: { realName: string; department: string } | null;
-  // Already agreed with the current consent version: the box reflects that.
-  consentGiven: boolean;
   // Which fields start from a plain Google name suggestion (shown with a
   // "check this" note -- never presented as verified).
   prefilled?: { realName: boolean; department: boolean };
@@ -25,7 +23,7 @@ type IdentityFormProps = {
 // 직접 입력 -- the exception path of /me/identity, only for an account
 // whose Google display name gives no usable 실명·소속 (values collected from
 // Google are shown read-only instead).
-export function IdentityForm({ initial, consentGiven, prefilled, callbackUrl, onboarding }: IdentityFormProps) {
+export function IdentityForm({ initial, prefilled, callbackUrl, onboarding }: IdentityFormProps) {
   const { t } = useI18n();
   const [state, formAction, pending] = useActionState<SaveIdentityState, FormData>(saveIdentityAction, null);
   const errors = state?.errors ?? {};
@@ -83,12 +81,9 @@ export function IdentityForm({ initial, consentGiven, prefilled, callbackUrl, on
       </section>
 
       <section className="flex flex-col gap-3 rounded-card border border-border bg-card p-5 text-sm">
-        <label className="flex items-start gap-2.5">
-          <input type="checkbox" name="consent" defaultChecked={consentGiven} disabled={pending} className="mt-0.5 size-4 shrink-0" />
-          <span className="font-medium text-foreground">{t("identity.consentLabel")}</span>
-        </label>
-        {errors.consent && <span className="text-xs text-destructive">{t(errors.consent)}</span>}
-        <details className="group flex flex-col gap-2 border-t border-border pt-3">
+        {/* 이름·소속 are required items of the 개인정보 동의 the member already
+            gave -- shown here for reference, no separate checkbox. */}
+        <details className="group flex flex-col gap-2">
           <summary className="flex cursor-pointer list-none items-center justify-between font-medium text-primary">
             {t("identity.consentDetails")}
             <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />

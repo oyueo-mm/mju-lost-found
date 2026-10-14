@@ -231,7 +231,7 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
           </div>
         </Section>
       )}
-      <Section title="신고 당사자 실명·학과 (열람 기록됨)">
+      <Section title="신고 당사자 이름·소속 (열람 기록됨)">
         <ReportIdentityPanel reportId={report.id} parties={parties} />
       </Section>
     </div>

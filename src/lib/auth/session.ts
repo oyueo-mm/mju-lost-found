@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/auth";
 import { hasOngoingExternalAccess } from "@/lib/auth/access";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
-import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
+import { CURRENT_IDENTITY_CONSENT_VERSION, CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 import { prisma } from "@/lib/db/prisma";
 import type { User } from "@/generated/prisma/client";
 
@@ -151,14 +151,21 @@ export async function requireUser(reason?: LoginReason, callbackUrl?: string): P
 // whose privacyConsentVersion isn't the current one (including every
 // pre-versioning account, NULL) is re-routed exactly like a stale terms
 // version.
+// 이름·소속 필수 수집: the 이름·소속 consent is part of the required one, so
+// a member without it on the current version (never given, or the earlier
+// optional consent) goes through the consent screen again.
 export function hasRequiredConsents(
-  user: Pick<User, "privacyConsentAt" | "privacyConsentVersion" | "termsAcceptedAt" | "termsVersion">,
+  user: Pick<
+    User,
+    "privacyConsentAt" | "privacyConsentVersion" | "termsAcceptedAt" | "termsVersion" | "identityConsentVersion"
+  >,
 ): boolean {
   return (
     user.privacyConsentAt !== null &&
     user.privacyConsentVersion === CURRENT_PRIVACY_VERSION &&
     user.termsAcceptedAt !== null &&
-    user.termsVersion === CURRENT_TERMS_VERSION
+    user.termsVersion === CURRENT_TERMS_VERSION &&
+    user.identityConsentVersion === CURRENT_IDENTITY_CONSENT_VERSION
   );
 }
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
+import { CURRENT_IDENTITY_CONSENT_VERSION, CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 
 const auth = vi.fn();
 const findUnique = vi.fn();
@@ -35,6 +35,7 @@ const readyConsent = {
   privacyConsentVersion: CURRENT_PRIVACY_VERSION,
   termsAcceptedAt: new Date(),
   termsVersion: CURRENT_TERMS_VERSION,
+  identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION,
 };
 
 beforeEach(() => {
@@ -156,6 +157,14 @@ describe("hasRequiredConsents", () => {
     // (every account that consented before versioning has NULL).
     expect(hasRequiredConsents({ ...readyConsent, privacyConsentVersion: null })).toBe(false);
     expect(hasRequiredConsents({ ...readyConsent, privacyConsentVersion: "2025-01-01" })).toBe(false);
+  });
+
+  // 이름·소속 필수 수집: part of the required consent. Never given, or the
+  // earlier optional 실명·소속 consent (2026-10-14/15), is outstanding.
+  it("is false without the current 이름·소속 consent", () => {
+    expect(hasRequiredConsents({ ...readyConsent, identityConsentVersion: null })).toBe(false);
+    expect(hasRequiredConsents({ ...readyConsent, identityConsentVersion: "2026-10-15" })).toBe(false);
+    expect(hasRequiredConsents({ ...readyConsent, identityConsentVersion: "2026-10-14" })).toBe(false);
   });
 });
 

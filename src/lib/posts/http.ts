@@ -47,7 +47,7 @@ export async function requireUserForApi(): Promise<
 export async function requireIdentityForApi(user: Pick<User, "id">): Promise<NextResponse | null> {
   if (await hasIdentityInfo(user.id)) return null;
   return NextResponse.json(
-    { error: "게시글 등록과 채팅을 하려면 실명·학과 정보를 먼저 등록해주세요.", code: IDENTITY_REQUIRED_CODE },
+    { error: "게시글 등록과 채팅을 하려면 이름·소속 정보가 필요해요.", code: IDENTITY_REQUIRED_CODE },
     { status: 403 },
   );
 }

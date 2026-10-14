@@ -21,16 +21,17 @@ export const CURRENT_TERMS_VERSION = "2026-10-04";
 // report/sanction records 1 year, ...) added.
 // 2026-10-05: collected items corrected (Google sign-in returns id, e-mail
 // and e-mail-verified only; IP/User-Agent/cookies listed). Terms unchanged.
-// 2026-10-15: the notice now covers Google sign-in's "profile" name and the
-// optional 실명·소속 collection from it (asked on the same screen), so every
-// existing member sees the consent screen once more.
-export const CURRENT_PRIVACY_VERSION = "2026-10-15";
+// 2026-10-16: 이름·소속 are now required items of this consent (collected
+// from the school Google display name), so every existing member -- with or
+// without the earlier optional 실명·소속 consent -- sees the screen once more.
+export const CURRENT_PRIVACY_VERSION = "2026-10-16";
 
 // 실명·학과 수집·이용 동의: a separate consent given on the 실명·학과 form
 // (UserIdentityInfo.consentVersion). Bumping it only asks members who
 // entered their details again when they next update them -- it does not
 // touch CURRENT_PRIVACY_VERSION, so nobody is sent back through the
 // general consent screen because of it.
-// 2026-10-15: automatic collection from the Google display name, kept in
-// sync at sign-in (the earlier version covered values typed by the member).
-export const CURRENT_IDENTITY_CONSENT_VERSION = "2026-10-15";
+// 2026-10-16: part of the required 개인정보 동의 (stamped together with it by
+// recordRequiredConsents). Earlier versions were a separate, optional consent;
+// a member on any of them consents again before 이름·소속 are collected.
+export const CURRENT_IDENTITY_CONSENT_VERSION = "2026-10-16";

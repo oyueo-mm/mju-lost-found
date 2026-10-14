@@ -40,29 +40,12 @@ export function hasCurrentIdentityConsent(user: { identityConsentVersion: string
   return user.identityConsentVersion === CURRENT_IDENTITY_CONSENT_VERSION;
 }
 
-// The optional 실명·소속 수집·이용 동의 (가입 동의 screen or /me/identity).
-export async function recordIdentityConsent(userId: number, now = new Date()): Promise<void> {
-  await prisma.user.update({
-    where: { id: userId },
-    data: { identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION, identityConsentAt: now },
-  });
-}
-
-// 실명·소속 동의 철회: the values are deleted and the consent cleared in one
-// transaction, so sign-in stops syncing them. Posting and chatting ask for
-// the consent again.
-export async function withdrawIdentityConsent(userId: number): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    await tx.userIdentityInfo.deleteMany({ where: { userId } });
-    await tx.user.update({ where: { id: userId }, data: { identityConsentVersion: null, identityConsentAt: null } });
-  });
-}
-
 export type IdentitySyncResult = "created" | "updated" | "unchanged" | "skipped";
 
-// 실명·소속 자동 수집: stores (or brings up to date) the name and affiliation
+// 이름·소속 자동 수집: stores (or brings up to date) the name and affiliation
 // split from the member's Google display name -- only with the current
-// consent, and only when both came from an "이름/신분/소속" name of a
+// consent (part of the required 개인정보 동의; a member without it -- never
+// given, or an earlier optional one -- is never collected), and only when both came from an "이름/신분/소속" name of a
 // Workspace account (the jwt callback checks hd). Anything else is
 // "skipped": nothing invented, nothing overwritten. A value the member had
 // to type (source "self", no usable Google name before) is replaced once

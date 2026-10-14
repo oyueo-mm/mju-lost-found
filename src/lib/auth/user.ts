@@ -151,7 +151,15 @@ export type RequiredConsentUser = Awaited<ReturnType<typeof prisma.user.findUniq
 // then both privacyConsentAt (the moment of this agreement) and
 // privacyConsentVersion are stamped. An account already on the current
 // version is left untouched.
-export async function recordRequiredConsents(userId: number, termsVersion: string, privacyVersion: string): Promise<RequiredConsentUser> {
+// 이름·소속 필수 수집: the 이름·소속 consent is stamped in the same
+// transaction (same "only if missing or on another version" rule) -- it is
+// part of the 개인정보 동의 the member just gave.
+export async function recordRequiredConsents(
+  userId: number,
+  termsVersion: string,
+  privacyVersion: string,
+  identityVersion: string,
+): Promise<RequiredConsentUser> {
   return prisma.$transaction(async (tx) => {
     await tx.user.updateMany({
       where: {
@@ -163,6 +171,10 @@ export async function recordRequiredConsents(userId: number, termsVersion: strin
     await tx.user.updateMany({
       where: { id: userId, OR: [{ termsAcceptedAt: null }, { termsVersion: { not: termsVersion } }] },
       data: { termsAcceptedAt: new Date(), termsVersion },
+    });
+    await tx.user.updateMany({
+      where: { id: userId, OR: [{ identityConsentVersion: null }, { identityConsentVersion: { not: identityVersion } }] },
+      data: { identityConsentAt: new Date(), identityConsentVersion: identityVersion },
     });
     return tx.user.findUniqueOrThrow({ where: { id: userId } });
   });

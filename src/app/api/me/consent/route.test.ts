@@ -1,13 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
-import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CURRENT_IDENTITY_CONSENT_VERSION, CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 
 const getCurrentUser = vi.fn();
 const recordRequiredConsents = vi.fn();
 
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser }));
 vi.mock("@/lib/auth/user", () => ({ recordRequiredConsents }));
-const consentAndCollectIdentity = vi.fn();
-vi.mock("@/lib/identity/collect", () => ({ consentAndCollectIdentity }));
+const collectIdentityAfterConsent = vi.fn();
+vi.mock("@/lib/identity/collect", () => ({ collectIdentityAfterConsent }));
 // Same reason as src/app/api/me/withdraw/route.test.ts: avoid pulling in
 // the real @/lib/posts/http.ts's next-auth import chain.
 vi.mock("@/lib/posts/http", async () => {
@@ -16,6 +16,10 @@ vi.mock("@/lib/posts/http", async () => {
 });
 
 const { POST } = await import("./route");
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe("POST /api/me/consent", () => {
   it("rejects an unauthenticated request", async () => {
@@ -46,7 +50,7 @@ describe("POST /api/me/consent", () => {
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    expect(recordRequiredConsents).toHaveBeenCalledWith(7, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION);
+    expect(recordRequiredConsents).toHaveBeenCalledWith(7, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION, CURRENT_IDENTITY_CONSENT_VERSION);
     expect(json.data.privacyConsentAt).toBe(consentedAt.toISOString());
     expect(json.data.termsAcceptedAt).toBe(consentedAt.toISOString());
     expect(json.data.termsVersion).toBe(CURRENT_TERMS_VERSION);
@@ -72,19 +76,22 @@ describe("POST /api/me/consent", () => {
     expect(res.status).toBe(200);
   });
 
-  // 실명·소속 (optional, same screen).
-  it("records the optional 실명·소속 consent and collects at once only when it was checked", async () => {
-    getCurrentUser.mockResolvedValue({ id: 5 });
-    recordRequiredConsents.mockResolvedValue({ id: 5 });
-    consentAndCollectIdentity.mockResolvedValueOnce("created");
+  // 이름·소속 필수 수집: the 이름·소속 consent is stamped with the required
+  // ones, and the values are collected right after -- never before.
+  it("records the 이름·소속 consent with the required ones, then collects", async () => {
+    getCurrentUser.mockResolvedValueOnce({ id: 5 });
+    recordRequiredConsents.mockResolvedValueOnce({ id: 5 });
+    collectIdentityAfterConsent.mockResolvedValueOnce("created");
 
-    const res = await POST(new Request("http://localhost/api/me/consent", { method: "POST", body: JSON.stringify({ identityConsent: true }) }));
+    const res = await POST();
     expect((await res.json()).data.identity).toBe("created");
-    expect(consentAndCollectIdentity).toHaveBeenCalledWith(5);
+    expect(recordRequiredConsents).toHaveBeenCalledWith(5, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION, CURRENT_IDENTITY_CONSENT_VERSION);
+    expect(recordRequiredConsents.mock.invocationCallOrder[0]).toBeLessThan(collectIdentityAfterConsent.mock.invocationCallOrder[0]);
+  });
 
-    consentAndCollectIdentity.mockClear();
-    const res2 = await POST(new Request("http://localhost/api/me/consent", { method: "POST", body: JSON.stringify({}) }));
-    expect((await res2.json()).data.identity).toBeNull();
-    expect(consentAndCollectIdentity).not.toHaveBeenCalled();
+  it("collects nothing for a signed-out request", async () => {
+    getCurrentUser.mockResolvedValueOnce(null);
+    expect((await POST()).status).toBe(401);
+    expect(collectIdentityAfterConsent).not.toHaveBeenCalled();
   });
 });
