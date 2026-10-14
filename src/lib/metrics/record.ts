@@ -19,6 +19,26 @@ export type DailyMetric =
   | "search.image"
   | "recommend.shown";
 
+// Daily capacity snapshot (set, not added), written by the daily retention
+// cron: database and Storage size in MB, to watch against the free limits.
+export async function recordCapacity(): Promise<{ dbMb: number; storageMb: number } | null> {
+  try {
+    const [{ db_bytes, storage_bytes }] = await prisma.$queryRaw<{ db_bytes: bigint; storage_bytes: bigint | null }[]>`
+      SELECT pg_database_size(current_database()) AS db_bytes,
+             (SELECT sum((metadata->>'size')::bigint) FROM storage.objects) AS storage_bytes`;
+    const dbMb = Math.round(Number(db_bytes) / 1048576);
+    const storageMb = Math.round(Number(storage_bytes ?? 0) / 1048576);
+    const day = kstDay();
+    await prisma.$executeRaw`INSERT INTO "MetricDaily" ("day", "metric", "value") VALUES
+      (${day}::date, 'capacity.db_mb', ${dbMb}), (${day}::date, 'capacity.storage_mb', ${storageMb})
+      ON CONFLICT ("day", "metric") DO UPDATE SET "value" = EXCLUDED."value"`;
+    return { dbMb, storageMb };
+  } catch (error) {
+    swallow(error);
+    return null;
+  }
+}
+
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 // "YYYY-MM-DD" of the KST calendar day.
@@ -65,13 +85,14 @@ function signatureOf(parts: unknown[]): string {
   return createHmac("sha256", "metrics-dedupe").update(JSON.stringify(parts)).digest("base64url");
 }
 
+// Counted in this instance's memory and written with the timings (at most
+// once a minute), so a busy page never costs a DB write per view.
+const pendingDaily = new Map<string, number>();
 export function recordDaily(metric: DailyMetric, dedupeParts?: unknown[]): void {
   if (dedupeParts && !firstSeen(signatureOf([metric, ...dedupeParts]))) return;
-  const day = kstDay();
-  later(() =>
-    prisma.$executeRaw`INSERT INTO "MetricDaily" ("day", "metric", "value") VALUES (${day}::date, ${metric}, 1)
-      ON CONFLICT ("day", "metric") DO UPDATE SET "value" = "MetricDaily"."value" + 1`,
-  );
+  const key = `${kstDay()}|${metric}`;
+  pendingDaily.set(key, (pendingDaily.get(key) ?? 0) + 1);
+  noteObservation();
 }
 
 // Active member: one row per member per KST day, keyed by an HMAC of the id.
@@ -144,6 +165,10 @@ export function observeTiming(route: string, ms: number, failed = false, at = ne
   if (failed) agg.errors += 1;
   agg.totalMs += Math.max(0, Math.round(ms));
   agg.buckets[bucketOf(ms)] += 1;
+  noteObservation();
+}
+
+function noteObservation() {
   observedSinceFlush += 1;
   if (Date.now() - lastFlush >= FLUSH_EVERY_MS || observedSinceFlush >= FLUSH_AT_OBSERVATIONS) {
     later(flushTimings);
@@ -151,9 +176,11 @@ export function observeTiming(route: string, ms: number, failed = false, at = ne
 }
 
 export async function flushTimings(): Promise<void> {
-  if (pending.size === 0) return;
+  if (pending.size === 0 && pendingDaily.size === 0) return;
   const rows = [...pending.values()];
   pending.clear();
+  const daily = [...pendingDaily.entries()];
+  pendingDaily.clear();
   observedSinceFlush = 0;
   lastFlush = Date.now();
   // DB latency, sampled once per flush (not per request).
@@ -165,6 +192,11 @@ export async function flushTimings(): Promise<void> {
     rows.push(ping);
   } catch {
     // The upsert below will fail the same way; nothing else to do.
+  }
+  for (const [key, n] of daily) {
+    const [day, metric] = key.split("|");
+    await prisma.$executeRaw`INSERT INTO "MetricDaily" ("day", "metric", "value") VALUES (${day}::date, ${metric}, ${n})
+      ON CONFLICT ("day", "metric") DO UPDATE SET "value" = "MetricDaily"."value" + EXCLUDED."value"`;
   }
   for (const r of rows) {
     await prisma.$executeRaw`INSERT INTO "ApiMetricHourly" ("hour", "route", "count", "errors", "total_ms", "buckets")

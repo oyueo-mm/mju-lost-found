@@ -4,6 +4,7 @@ import { z } from "zod";
 import { jsonError, jsonOk, requireAdminForApi, withErrorHandling } from "@/lib/moderation/http";
 import { setGoogleTestMode } from "@/lib/settings/service";
 import { runRetention } from "@/lib/retention/service";
+import { recordCapacity } from "@/lib/metrics/record";
 
 const patchSettingsSchema = z.object({
   googleTestModeEnabled: z.boolean(),
@@ -50,6 +51,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   if (request.headers.get("authorization") !== `Bearer ${secret}`) return jsonError(401, "Unauthorized");
 
   const result = await runRetention();
-  console.log("retention run", JSON.stringify(result));
+  // 운영 통계: the daily DB/Storage size snapshot rides on this same cron.
+  const capacity = await recordCapacity();
+  console.log("retention run", JSON.stringify({ ...result, capacity }));
   return jsonOk(result);
 });

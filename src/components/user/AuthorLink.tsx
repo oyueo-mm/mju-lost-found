@@ -37,7 +37,8 @@ function AuthorName({ nickname, publicId, className }: Omit<AuthorLinkProps, "us
   const label = nickname ?? "알 수 없음";
   if (!publicId) return <span className={className}>{label}</span>;
   return (
-    <Link href={`/profile/${publicId}`} className={className}>
+    // No prefetch: author links repeat on every card (see PostCard).
+    <Link href={`/profile/${publicId}`} prefetch={false} className={className}>
       {label}
     </Link>
   );

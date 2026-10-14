@@ -187,3 +187,16 @@ export async function loadTimings(hours: number): Promise<TimingRow[]> {
     };
   });
 }
+
+// Free-plan limits this service runs on (Supabase Free).
+export const FREE_LIMITS_MB = { db: 500, storage: 1024 } as const;
+
+export async function loadCapacity(): Promise<{ day: string; dbMb: number; storageMb: number } | null> {
+  const rows = await prisma.$queryRaw<{ day: Date; metric: string; value: number }[]>`
+    SELECT "day", "metric", "value" FROM "MetricDaily"
+    WHERE "metric" IN ('capacity.db_mb', 'capacity.storage_mb')
+      AND "day" = (SELECT max("day") FROM "MetricDaily" WHERE "metric" = 'capacity.db_mb')`.catch(() => []);
+  if (rows.length === 0) return null;
+  const pick = (m: string) => rows.find((r) => r.metric === m)?.value ?? 0;
+  return { day: asDay(rows[0].day), dbMb: pick("capacity.db_mb"), storageMb: pick("capacity.storage_mb") };
+}

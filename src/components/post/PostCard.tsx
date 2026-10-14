@@ -216,7 +216,10 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage" }: Post
         ) : null
       )}
 
-      <Link href={`/post/${post.id}?type=${post.type}`} aria-label={post.title} className="absolute inset-0" />
+      {/* 운영 비용: no viewport/hover prefetch -- a board page shows dozens of
+          cards, and each dynamic-route prefetch is a server function call
+          (measured: ~54 per list view). The post loads on click instead. */}
+      <Link href={`/post/${post.id}?type=${post.type}`} prefetch={false} aria-label={post.title} className="absolute inset-0" />
     </div>
   );
 }

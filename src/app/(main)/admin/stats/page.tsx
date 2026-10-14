@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import { requireAdmin } from "@/lib/auth/session";
 import {
+  FREE_LIMITS_MB,
+  loadCapacity,
   loadComparison,
   loadSeries,
   loadTimings,
@@ -87,11 +89,12 @@ export default async function AdminStatsPage({
   const pivot = /^\d{4}-\d{2}-\d{2}$/.test(params.pivot ?? "") && !Number.isNaN(Date.parse(params.pivot!)) ? params.pivot! : null;
   const windowDays = WINDOWS.includes(Number(params.window) as (typeof WINDOWS)[number]) ? Number(params.window) : 14;
 
-  const [series, comparison, timings24h, timings7d] = await Promise.all([
+  const [series, comparison, timings24h, timings7d, capacity] = await Promise.all([
     loadSeries(unit),
     pivot ? loadComparison(pivot, windowDays) : Promise.resolve(null),
     loadTimings(24),
     loadTimings(24 * 7),
+    loadCapacity(),
   ]);
   const isInternal = (r: TimingRow) => r.route.startsWith("ai:") || r.route.startsWith("db:");
 
@@ -245,6 +248,38 @@ export default async function AdminStatsPage({
         <TimingTable rows={timings24h.filter((r) => !isInternal(r))} empty="아직 기록이 없습니다." />
         <h3 className="text-xs font-semibold text-foreground">최근 7일</h3>
         <TimingTable rows={timings7d.filter((r) => !isInternal(r))} empty="아직 기록이 없습니다." />
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-card border border-border bg-card p-4">
+        <h2 className="text-sm font-semibold text-foreground">저장 용량 (Supabase Free 한도 대비)</h2>
+        {capacity ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {(
+              [
+                ["데이터베이스", capacity.dbMb, FREE_LIMITS_MB.db],
+                ["Storage (사진)", capacity.storageMb, FREE_LIMITS_MB.storage],
+              ] as const
+            ).map(([label, used, limit]) => {
+              const pct = Math.round((used / limit) * 100);
+              return (
+                <div key={label} className="flex flex-col gap-1.5 text-xs">
+                  <span className="text-muted-foreground">
+                    {label}: {used.toLocaleString("ko-KR")}MB / {limit.toLocaleString("ko-KR")}MB ({pct}%)
+                  </span>
+                  <div className="h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={`h-full ${pct >= 80 ? "bg-destructive" : pct >= 60 ? "bg-amber-500" : "bg-primary"}`}
+                      style={{ width: `${Math.min(100, pct)}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+            <p className="text-[11px] text-muted-foreground sm:col-span-2">{capacity.day} 기준(매일 새벽 정리 작업 때 기록). 60%부터 주의, 80%부터 정리나 요금제 검토가 필요합니다.</p>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">아직 기록이 없습니다(매일 새벽 정리 작업 때 기록).</p>
+        )}
       </section>
 
       <section className="flex flex-col gap-3 rounded-card border border-border bg-card p-4">

@@ -33,7 +33,7 @@ export function FooterSections({ sections, legalLinks }: { sections: FooterSecti
               </button>
               <div id={panelId} hidden={!isOpen} className="pb-3">
                 <nav aria-label={section.title} className="flex flex-col gap-2 text-xs">
-                  {section.links.map((link) => <Link key={link.href} href={link.href} className={LINK_CLASS}>{link.label}</Link>)}
+                  {section.links.map((link) => <Link key={link.href} href={link.href} prefetch={false} className={LINK_CLASS}>{link.label}</Link>)}
                 </nav>
               </div>
             </section>
@@ -49,7 +49,7 @@ export function FooterSections({ sections, legalLinks }: { sections: FooterSecti
           md:hidden을 없앴다 -- 새 영역을 만들지 않고 기존 구조를
           재사용한다는 요구에 따른 것. */}
       <nav className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
-        {legalLinks.map((link) => <Link key={link.href} href={link.href} className={LINK_CLASS}>{link.label}</Link>)}
+        {legalLinks.map((link) => <Link key={link.href} href={link.href} prefetch={false} className={LINK_CLASS}>{link.label}</Link>)}
       </nav>
     </>
   );

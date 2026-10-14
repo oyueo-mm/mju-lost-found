@@ -160,7 +160,7 @@ export async function Footer() {
               <h3 className="text-xs font-semibold text-foreground">{t(section.titleKey)}</h3>
               <nav aria-label={t(section.titleKey)} className="flex flex-col gap-1.5 text-xs">
                 {section.links.map((link) => (
-                  <Link key={link.href} href={link.href} className={FOOTER_LINK_CLASS}>
+                  <Link key={link.href} href={link.href} prefetch={false} className={FOOTER_LINK_CLASS}>
                     {t(link.labelKey)}
                   </Link>
                 ))}

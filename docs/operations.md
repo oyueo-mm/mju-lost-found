@@ -64,14 +64,28 @@ Preview에서 실패하면 Production에 배포하지 않는다. 문제가 생�
 
 ## 5. 백업과 복원
 
-- 백업 파일은 **저장소 밖**에 보관한다(개인정보 포함). 저장소, 이슈, 채팅 등에 올리지 않는다.
-- 2026-10-03 운영 전환 직전 Production 백업이 운영자 로컬에 있다(DB 전체 행 + Storage 원본 + 복원 SQL + README).
-- 기본 절차
-  1. 파괴적 작업 전에 DB 전체 테이블과 `post-images` Storage 파일을 백업한다(행 수·파일 checksum 기록).
-  2. 백업에 비밀값이 섞이지 않았는지 검사한다.
-  3. 복원 SQL은 실제 데이터에 commit하지 말고 트랜잭션 안에서 실행 후 ROLLBACK 하는 방식으로 먼저 검증한다.
-  4. 복원이 필요하면: 앱 데이터가 빈 상태에서 복원 SQL → 시퀀스 보정 SQL 순서로 실행하고, Storage 파일을 같은 경로로 다시 올린다.
-- Supabase 대시보드의 자체 백업 기능(요금제에 따라 다름)도 함께 확인한다.
+Supabase Free에는 **자동 백업이 없다.** 백업은 운영자가 직접 만든다.
+
+- 백업 파일은 **저장소 밖**, 암호화된 디스크에 보관한다(개인정보 포함). 저장소·이슈·채팅·클라우드 공유 폴더에 올리지 않는다.
+- 주기: **매주 1회** + **migration·대량 작업 직전 1회**. 보관은 최근 4주분과 migration 직전본(다음 migration까지)만 남기고
+  나머지는 삭제한다(개인정보 최소 보관).
+- 필요한 도구: PostgreSQL 클라이언트(`pg_dump`, `pg_restore`, `psql`, 17 이상)와, 복원 검증용으로 pgvector가 설치된 로컬
+  PostgreSQL. Windows는 MSYS2 `mingw-w64-ucrt-x86_64-postgresql` + pgvector 소스 빌드로 준비했다.
+- 백업 (원본은 읽기만 한다. `--expect`에 Supabase 프로젝트 ref를 주면 다른 DB를 가리킬 때 실행을 거부한다):
+  ```
+  PG_BIN=<pg_dump 폴더> node --env-file=.env scripts/backup/backup.mjs <저장소 밖 폴더> --expect <Production ref>
+  ```
+  결과: DB 전체/앱 스키마 덤프, 테이블별 행 수와 적용된 migration 목록, Storage 전체 파일과 SHA-256, `SHA256SUMS`.
+- 복원 검증 (빈 로컬 DB에만 동작한다. migration 리허설도 함께 할 수 있다):
+  ```
+  PG_BIN=<폴더> VERIFY_DATABASE_URL=postgresql://postgres@127.0.0.1:<port>/<빈 DB> \
+    node scripts/backup/verify-restore.mjs <백업 폴더> [--migrations prisma/migrations/<새 migration> ...]
+  ```
+  `RESTORE VERIFIED`가 나와야 그 백업을 믿는다(행 수 일치, DB가 참조하는 사진이 모두 백업에 있음). 검증 후 로컬 DB는 지운다.
+- 실제 복원: 새(빈) Supabase 프로젝트에 같은 migration을 적용하지 말고, `extensions` 스키마와 `vector` 확장을 만든 뒤
+  `pg_restore --no-owner --no-privileges db/public.dump`, Storage 파일을 같은 경로·MIME으로 다시 올린다. **운영 중인 DB 위에
+  덮어쓰지 않는다.**
+- 2026-10-14 이름·소속 배포 직전 백업: `production-2026-10-14-pre-identity` (복원 검증 완료).
 
 ## 6. 관리자
 
@@ -180,3 +194,71 @@ MJU Find의 이용약관, 운영정책과 게시글 작성 화면의 안내 문�
 
 자세한 내용은 이용약관(/policy/terms)과 운영정책(/policy/community)에서 확인할 수 있습니다.
 ```
+
+## 12. 운영 통계와 모니터링
+
+- 관리자 화면 `/admin/stats`(관리자만): 일·주·월 단위 신규 가입, 활성 이용자, 분실/습득 등록, 키워드·자연어·이미지 검색,
+  AI 추천 노출, 채팅방·메시지, 반환 완료, 홍보 전후 비교, API 응답 시간(p50/p95)·오류율, AI 추론·DB 지연, DB·Storage 용량.
+- 기존 테이블로 셀 수 있는 지표는 그 테이블에서 센다. 나머지만 `MetricDaily`(검색·추천 일별 카운터, 검색어 원문 없음),
+  `ActivityDay`(회원 id의 HMAC으로 하루 1행), `ApiMetricHourly`(시간대·경로별 요청 수·오류 수·지연 분포)에 기록한다.
+  기록은 응답 뒤에 하고 실패해도 요청에 영향이 없다. API 지연은 인스턴스 메모리에 모았다가 최대 1분에 한 번 쓴다.
+- 보관: 활성 기록 400일, API 지연 90일(매일 정리 cron). 일별 카운터는 하루 몇 행이라 유지한다.
+- 용량: 매일 정리 cron이 DB·Storage 크기를 기록하고 대시보드가 무료 한도 대비 %로 보여 준다(60% 주의, 80% 조치).
+- 매월 1회 확인: Vercel 대시보드 → Usage(함수 호출, Active CPU, 이미지 변환, 데이터 전송)와 Supabase 대시보드 → Usage.
+  Hobby에서는 CLI·API로 사용량을 조회할 수 없다(Observability Plus 필요). 한도 근접 알림 메일도 함께 확인한다.
+- 런타임 로그는 Hobby에서 1시간만 남는다. 오류 추이는 대시보드의 오류율로 보고, 원인은 재현 직후 `vercel logs`로 본다.
+  이름·소속 수집 진단은 `node scripts/identity-signin-log.mjs <배포 URL> 1h`(값 없음).
+
+## 13. 무료 한도와 확장 시점
+
+현재 요금제: Vercel Hobby, Supabase Free (2026-10 기준 공식 문서).
+
+| 자원 | 무료 한도 | 2026-10-15 사용량 | 먼저 닿는 조건 |
+|---|---|---|---|
+| Vercel 함수 호출 | 월 100만 | 대시보드 확인 | 페이지 조회·prefetch |
+| Vercel Active CPU | 월 4시간 | 대시보드 확인 | 페이지 렌더링, AI 추론 |
+| Vercel 이미지 변환 | 월 5,000 | 대시보드 확인 | 새 사진 × 화면 크기, 캐시 만료(기본 4시간) |
+| Vercel 함수 수 | 배포당 12개에 걸린 이력(next.config.ts 주석) | 한도 근접 | 새 API 라우트·라우트별 설정 대신 서버 액션·기존 라우트 사용 |
+| Supabase DB | 500MB | 16MB | 게시글·임베딩·채팅 누적 |
+| Supabase Storage | 1GB | 13MB(사진 84장, 장당 약 160KB) | **사진 약 6,000장** |
+| Supabase Realtime | 동시 200 연결, 월 200만 메시지 | 소량 | 채팅방을 연 사람 수 |
+| Supabase 비활성 | 1주 비활성 시 일시정지 | 매일 cron이 접근 | Preview는 cron이 없어 멈출 수 있음 |
+
+측정값(로컬 프로덕션 빌드, 2026-10-15): 비로그인 목록 화면 1회 조회 시 서버 요청이 prefetch 정리 전 65개 → 정리 후 25개
+(문서 1 + 메뉴 prefetch 약 13 + 사진 변환 요청 11, 사진 변환은 캐시 후 재사용). 게시글 상세 29 → 17.
+
+확장 판단(근거는 위 측정과 대시보드 Usage):
+- Vercel Pro(개발자 1인 월 $20): 월 함수 호출·Active CPU·이미지 변환 중 하나가 70%를 넘는 달이 생길 때, 로그 보관(1일)과
+  관측 지표가 필요할 때, 또는 광고·후원 등 상업적 성격이 생길 때(Hobby는 비상업 개인 용도만 허용).
+- Supabase Pro(월 $25부터): Storage 70%(약 700MB) 또는 DB 70%(350MB)에 닿을 때, 자동 일일 백업이 필요할 때, 일시정지를
+  피해야 할 때. 사진 용량이 가장 먼저 닿을 가능성이 크다.
+- 비용 없이 먼저 할 일: 이미지 변환 캐시 기간 결정(4시간 → 7일 등, 삭제된 사진이 변환 캐시에 남는 기간과의 균형), 업로드 시
+  목록용 작은 사진 생성 검토, 반환 완료 후 오래된 사진 보관 기준 결정, 쓰지 않는 `imageEmbeddingDino` 컬럼·인덱스 제거.
+
+## 14. 장애 체크리스트
+
+| 증상 | 먼저 볼 곳 | 조치 |
+|---|---|---|
+| 사이트 전체 5xx / 느림 | `/admin/stats` 오류율·p95, Vercel Logs | 직전 배포가 있으면 Instant Rollback, 아니면 DB 상태 확인 |
+| DB 연결 실패 | `db:ping` 지연·기록 중단, Supabase 대시보드(상태, 일시정지, 연결 수) | 일시정지면 대시보드에서 Restore, 연결 초과면 장시간 트랜잭션 확인 |
+| 무료 한도 초과 | Vercel·Supabase Usage, 안내 메일 | Vercel Hobby는 초과 기능이 최대 30일 멈춘다 → 즉시 원인(급증 경로) 확인 후 요금제 결정 |
+| 로그인 실패 | Vercel Logs `AccessDenied`·`Configuration`, `Identity sign-in check` | OAuth redirect URI, `AUTH_SECRET`/`GOOGLE_*` 값, 테스트 모드 설정 |
+| 사진 업로드 실패 | 화면의 업로드 오류·429, 로그 `Failed to clean up orphaned` | Storage 용량·bucket 설정 확인, 고아 파일 점검 스크립트 |
+| 채팅 실시간 미반영 | 로그 `Failed to broadcast chat realtime event`, Realtime 연결 수 | 새로고침으로는 동작(서버 저장), Realtime 한도 확인 |
+| AI 검색·추천 없음 | `ai:*` 지연·오류, 로그 `Failed to generate embedding` | 모델 파일 배포 여부(`models/`), 함수 메모리 확인 |
+
+복구 후 기록: 시각·원인·영향 범위·조치를 이 문서 끝 "장애 기록"에 짧게 남긴다(개인정보 없이).
+
+## 15. 인수인계
+
+담당자가 졸업·입대 등으로 바뀌어도 서비스가 멈추지 않도록 한다.
+
+- 계정·권한: Vercel 팀 `oyueo`, Supabase 프로젝트(Production·Preview), Google Cloud OAuth 클라이언트, GitHub 저장소,
+  운영 메일함. 각각 **최소 2명**이 소유자·관리자 권한을 갖는다. 개인 계정 하나에만 묶인 자원을 만들지 않는다.
+- 비밀값: Vercel Environment Variables가 원본이다. 로컬 `.env` 사본은 개인 기기에만 두고, 넘길 때는 암호 관리자 공유로 넘긴다.
+  인계 후 `AUTH_SECRET`(전원 재로그인), `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`, Google client secret을 교체한다.
+  `WITHDRAWN_IDENTITY_SECRET`는 바꾸면 기존 탈퇴 보류 대조가 불가능하므로 교체하지 않고 그대로 넘긴다.
+- 서비스 관리자: 앱의 관리자 권한도 최소 2명. 추가는 관리자 화면의 권한 부여 제안·승인(6장)으로 한다.
+- 인계 체크리스트: ① 위 계정 권한 이전 ② 이 문서와 `README` 정독 ③ 로컬 환경 구성 후 `npx vitest run`·Preview 배포 1회
+  ④ 백업 1회와 복원 검증 1회 직접 수행 ⑤ `/admin/stats`·Usage 확인 방법 숙지 ⑥ 이전 담당자 계정 권한 회수, 비밀값 교체.
+- 정기 일정: 매주 백업, 매월 Usage·용량 확인, 학기 시작·축제 전 한도 점검과 공지(접속 집중 대비), 연 1회 정책·약관 점검.

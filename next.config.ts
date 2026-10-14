@@ -74,6 +74,14 @@ const nextConfig: NextConfig = {
     ],
   },
   images: {
+    // 운영 비용 (Hobby: 5,000 image transformations a month): fewer width
+    // buckets, so phones of slightly different sizes share one cached
+    // variant instead of each triggering their own transformation. Covers
+    // every size this app asks for (cards 50vw/33vw/25vw, gallery up to
+    // 768px, 64px thumbnails) at 1x-3x pixel density. Defaults were
+    // [640, 750, 828, 1080, 1200, 1920, 2048, 3840] / [32 ... 384].
+    deviceSizes: [640, 828, 1080, 1920],
+    imageSizes: [64, 128, 256, 384],
     remotePatterns: [
       // Scoped to Vercel Blob's own domain suffix only -- not a blanket
       // `domains`/wildcard-everything allowance. Kept even after Phase 4's
