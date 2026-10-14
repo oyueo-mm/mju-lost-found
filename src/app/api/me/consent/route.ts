@@ -27,7 +27,18 @@ export const POST = withErrorHandling(async () => {
   // comment for why). The current terms/privacy versions are this
   // server's own constants, never something the client could influence.
   const updated = await recordRequiredConsents(user.id, CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION, CURRENT_IDENTITY_CONSENT_VERSION);
-  const identity = await collectIdentityAfterConsent(user.id);
+  // The consent above is already committed: a collection failure must not
+  // turn into a consent error. Nothing is stored, the hints stay in the
+  // session, and /me/identity offers the retry (signing in again, which
+  // syncs). Prisma errors can quote the values -- log only the kind.
+  let identity: Awaited<ReturnType<typeof collectIdentityAfterConsent>> | "failed";
+  try {
+    identity = await collectIdentityAfterConsent(user.id);
+  } catch (error) {
+    const code = (error as { code?: unknown })?.code;
+    console.error("Identity collection after consent failed:", error instanceof Error ? error.name : "unknown", typeof code === "string" ? code : "");
+    identity = "failed";
+  }
   return jsonOk({
     identity,
     privacyConsentAt: updated.privacyConsentAt,

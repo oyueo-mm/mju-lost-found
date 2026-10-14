@@ -89,6 +89,21 @@ describe("POST /api/me/consent", () => {
     expect(recordRequiredConsents.mock.invocationCallOrder[0]).toBeLessThan(collectIdentityAfterConsent.mock.invocationCallOrder[0]);
   });
 
+  // Consent recorded, collection failed: the consent still succeeds (the
+  // member is not stuck on the consent screen) and no value is logged.
+  it("keeps the recorded consent when the collection fails, logging no values", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    getCurrentUser.mockResolvedValueOnce({ id: 5 });
+    recordRequiredConsents.mockResolvedValueOnce({ id: 5 });
+    collectIdentityAfterConsent.mockRejectedValueOnce(Object.assign(new Error("홍길동 컴퓨터공학과 ..."), { code: "P2002" }));
+
+    const res = await POST();
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.identity).toBe("failed");
+    expect(JSON.stringify(consoleError.mock.calls)).not.toMatch(/홍길동|컴퓨터공학과/);
+    consoleError.mockRestore();
+  });
+
   it("collects nothing for a signed-out request", async () => {
     getCurrentUser.mockResolvedValueOnce(null);
     expect((await POST()).status).toBe(401);

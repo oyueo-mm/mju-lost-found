@@ -25,7 +25,7 @@ vi.mock("@/lib/auth/access", () => ({ decideSignIn }));
 const resolveSignIn = vi.fn();
 vi.mock("@/lib/auth/user", () => ({ resolveSignIn }));
 const fetchDepartmentHint = vi.fn();
-const syncIdentityFromHints = vi.fn();
+const syncIdentityFromHints = vi.fn().mockResolvedValue("skipped");
 vi.mock("@/lib/identity/service", () => ({ syncIdentityFromHints }));
 vi.mock("@/lib/identity/googleHints", async () => {
   const actual = await vi.importActual<typeof import("@/lib/identity/googleHints")>("@/lib/identity/googleHints");
@@ -157,12 +157,30 @@ describe("실명·학과 자동 입력 in the session", () => {
     expect(syncIdentityFromHints).toHaveBeenLastCalledWith(account, expect.objectContaining({ name: "홍길동", department: "컴퓨터공학과" }));
   });
 
+  // Once stored, the hints leave the session; they stay while nothing could be stored.
+  it("drops the hints from the session once the sign-in sync stored them", async () => {
+    const account = { id: 7, nickname: "닉", identityConsentVersion: "2026-10-16" };
+    resolveSignIn.mockResolvedValueOnce({ kind: "user", user: account });
+    syncIdentityFromHints.mockResolvedValueOnce("updated");
+    expect(await signIn({ name: "홍길동/학생/컴퓨터공학과", hd: "mju.ac.kr" })).not.toHaveProperty("identityHints");
+
+    resolveSignIn.mockResolvedValueOnce({ kind: "user", user: account });
+    syncIdentityFromHints.mockResolvedValueOnce("unchanged");
+    expect(await signIn({ name: "홍길동/학생/컴퓨터공학과", hd: "mju.ac.kr" })).not.toHaveProperty("identityHints");
+
+    resolveSignIn.mockResolvedValueOnce({ kind: "user", user: { ...account, identityConsentVersion: null } });
+    syncIdentityFromHints.mockResolvedValueOnce("skipped");
+    expect((await signIn({ name: "홍길동/학생/컴퓨터공학과", hd: "mju.ac.kr" })).identityHints).toMatchObject({ name: "홍길동" });
+  });
+
   it("a failed sync never blocks sign-in and logs no values", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     resolveSignIn.mockResolvedValueOnce({ kind: "user", user: { id: 7, nickname: "닉" } });
     syncIdentityFromHints.mockRejectedValueOnce(new Error("홍길동 컴퓨터공학과 db down"));
     const token = await signIn({ name: "홍길동/학생/컴퓨터공학과", hd: "mju.ac.kr" });
     expect(token.userId).toBe(7);
+    // …and the hints stay, so /me/identity can offer the retry.
+    expect(token.identityHints).toMatchObject({ name: "홍길동" });
     expect(JSON.stringify(consoleError.mock.calls)).not.toMatch(/홍길동|컴퓨터공학과/);
     consoleError.mockRestore();
   });

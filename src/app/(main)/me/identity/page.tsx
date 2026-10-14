@@ -32,6 +32,11 @@ export default async function IdentityPage({
   const onboarding = params.onboarding === "1";
   const fromGoogle = own?.realNameSource === "google_display_name";
   const hints = session?.identityHints;
+  // Usable display-name hints but nothing stored: the collection right after
+  // the consent failed. Signing in again retries it (the sign-in sync) --
+  // never the "can't be read from Google" manual form.
+  const retryable =
+    !own && hints?.nameSource === "google_display_name" && hints.departmentSource === "google_display_name" && Boolean(hints.name && hints.department);
 
   return (
     <div className="flex flex-col gap-6">
@@ -64,8 +69,8 @@ export default async function IdentityPage({
             <CorrectionRequestForm />
           </section>
         </>
-      ) : !own && hints === undefined ? (
-        // 3. a session from before the Google hints
+      ) : (!own && hints === undefined) || retryable ? (
+        // 3. a session from before the Google hints, or a failed collection
         <section className="flex flex-col gap-3 rounded-card border border-border bg-card p-5 text-sm">
           <p className="text-muted-foreground">{t("identity.relogin.description")}</p>
           <form action={reloginForIdentityAction}>

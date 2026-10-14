@@ -125,8 +125,10 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           // 실명·소속 자동 수집: with the member's consent on file, store or
           // refresh the values from this sign-in's Google name. A failure
           // never blocks sign-in, and logs no values.
+          // Once stored, the hints leave the session (as the 개인정보처리방침
+          // says); they stay only while nothing could be stored.
           try {
-            await syncIdentityFromHints(resolved.user, token.identityHints);
+            if ((await syncIdentityFromHints(resolved.user, token.identityHints)) !== "skipped") delete token.identityHints;
           } catch (error) {
             console.error("Identity sync at sign-in failed:", error instanceof Error ? error.name : "unknown");
           }
