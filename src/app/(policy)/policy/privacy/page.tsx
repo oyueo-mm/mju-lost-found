@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { formatEffectiveDate, PRIVACY_POLICY_EFFECTIVE_DATE } from "@/lib/auth/terms";
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 
 // Phase 9: mirrors the exact items/purposes shown at consent time
@@ -33,6 +34,8 @@ import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 // actually does (rateLimit/index.ts, posts/views.ts, i18n locale cookie,
 // Auth.js session cookie), §10 the privacy contact.
 //
+// §11 shows the 시행일 from auth/terms.ts's PRIVACY_POLICY_EFFECTIVE_DATE,
+// the same value the consent versions follow.
 // 이름·소속 필수 수집 (2026-10-16): 이름·소속 are required items of the
 // 개인정보 동의; §1, §3, §4, §6, §7, §9 describe it. Consent withdrawal of a
 // required item is 회원탈퇴 (§6), as for the rest of this consent.
@@ -282,6 +285,16 @@ const SECTIONS: Section[] = [
           신고 기능
         </Link>
         을 이용해주세요.
+      </>
+    ),
+  },
+  {
+    title: "11. 시행일 및 변경",
+    body: (
+      <>
+        이 개인정보처리방침은 {formatEffectiveDate(PRIVACY_POLICY_EFFECTIVE_DATE)}부터 시행합니다. 이번 변경으로 이름,
+        소속(학과·단과대학)이 필수 수집 항목에 추가되었으며(위 1조), 기존 회원은 시행일 이후 처음 로그인할 때 변경된
+        내용을 확인하고 다시 동의해야 회원 기능을 이용할 수 있습니다.
       </>
     ),
   },

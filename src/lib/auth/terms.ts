@@ -14,6 +14,19 @@
 // 2026-10-04: terms art. 8 (계정 비활성화 및 회원탈퇴) changed.
 export const CURRENT_TERMS_VERSION = "2026-10-04";
 
+// 시행일 of the current 개인정보처리방침 (shown in its last article). The
+// privacy and 이름·소속 consent versions below follow it, so once the real
+// Production release day is fixed, changing this one line is the whole
+// switch: the policy shows that day, and every member re-consents once on
+// it. A day not yet reached is fine -- it is only compared for equality.
+export const PRIVACY_POLICY_EFFECTIVE_DATE = "2026-10-16";
+
+// "2026-10-16" -> "2026년 10월 16일" (a plain calendar day, no time zone).
+export function formatEffectiveDate(isoDay: string): string {
+  const [year, month, day] = isoDay.split("-").map(Number);
+  return `${year}년 ${month}월 ${day}일`;
+}
+
 // 개인정보 수집·이용 동의 version -- compared with User.privacyConsentVersion
 // the same way (plain string equality). Bump it when what the consent
 // screen asks people to agree to changes (items, purposes, retention).
@@ -24,7 +37,7 @@ export const CURRENT_TERMS_VERSION = "2026-10-04";
 // 2026-10-16: 이름·소속 are now required items of this consent (collected
 // from the school Google display name), so every existing member -- with or
 // without the earlier optional 실명·소속 consent -- sees the screen once more.
-export const CURRENT_PRIVACY_VERSION = "2026-10-16";
+export const CURRENT_PRIVACY_VERSION = PRIVACY_POLICY_EFFECTIVE_DATE;
 
 // 실명·학과 수집·이용 동의: a separate consent given on the 실명·학과 form
 // (UserIdentityInfo.consentVersion). Bumping it only asks members who
@@ -34,4 +47,4 @@ export const CURRENT_PRIVACY_VERSION = "2026-10-16";
 // 2026-10-16: part of the required 개인정보 동의 (stamped together with it by
 // recordRequiredConsents). Earlier versions were a separate, optional consent;
 // a member on any of them consents again before 이름·소속 are collected.
-export const CURRENT_IDENTITY_CONSENT_VERSION = "2026-10-16";
+export const CURRENT_IDENTITY_CONSENT_VERSION = PRIVACY_POLICY_EFFECTIVE_DATE;
