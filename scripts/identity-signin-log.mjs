@@ -9,7 +9,9 @@ const deployment = process.argv[2] ?? "mju-lost-found-preview.vercel.app";
 const since = process.argv[3] ?? "2h";
 const out = execFileSync(
   process.platform === "win32" ? "vercel.cmd" : "vercel",
-  ["logs", "--deployment", deployment, "--since", since, "--json", "-n", "1000"],
+  // --query is required: without it `vercel logs` returns only a recent
+  // slice of requests and can miss the sign-in callback entirely.
+  ["logs", "--deployment", deployment, "--since", since, "--query", "Identity", "--json", "-n", "100"],
   { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], shell: process.platform === "win32" },
 );
 const rows = [];
