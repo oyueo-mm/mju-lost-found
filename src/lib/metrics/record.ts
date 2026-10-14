@@ -10,8 +10,11 @@ import { prisma } from "@/lib/db/prisma";
 // - Never on the request's critical path, never able to fail a request:
 //   writes run after the response (next/server after()) and swallow errors
 //   (a missing table -- e.g. before the migration -- just means no data).
-// - Cheap: API timings are aggregated in this instance's memory and written
-//   at most once a minute in one statement.
+// - Cheap: counters and API timings are aggregated in this instance's
+//   memory; the first one schedules a single write after the response that
+//   waits until FLUSH_EVERY_MS after the previous write (at least
+//   FLUSH_MIN_DELAY_MS), so a quiet instance writes within seconds -- before
+//   Vercel can recycle it -- and a busy one at most every 20 seconds.
 
 export type DailyMetric =
   | "search.keyword"
@@ -59,7 +62,9 @@ function later(task: () => Promise<unknown>) {
   try {
     after(run);
   } catch {
-    void run();
+    // Outside a request (scripts, tests): nothing keeps the process for a
+    // deferred write, so the observation simply stays in memory.
+    flushScheduled = false;
   }
 }
 
@@ -123,10 +128,10 @@ export function bucketOf(ms: number): number {
 
 type Agg = { hour: string; route: string; count: number; errors: number; totalMs: number; buckets: number[] };
 const pending = new Map<string, Agg>();
-let lastFlush = Date.now();
-const FLUSH_EVERY_MS = 60_000;
-const FLUSH_AT_OBSERVATIONS = 500;
-let observedSinceFlush = 0;
+let lastFlush = 0;
+const FLUSH_EVERY_MS = 20_000;
+const FLUSH_MIN_DELAY_MS = 2_000;
+let flushScheduled = false;
 
 // UTC hour start, as the timestamp(3) column stores it.
 function hourOf(at: Date): string {
@@ -169,10 +174,17 @@ export function observeTiming(route: string, ms: number, failed = false, at = ne
 }
 
 function noteObservation() {
-  observedSinceFlush += 1;
-  if (Date.now() - lastFlush >= FLUSH_EVERY_MS || observedSinceFlush >= FLUSH_AT_OBSERVATIONS) {
-    later(flushTimings);
-  }
+  if (flushScheduled) return;
+  flushScheduled = true;
+  const wait = Math.max(FLUSH_MIN_DELAY_MS, lastFlush + FLUSH_EVERY_MS - Date.now());
+  later(async () => {
+    try {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      await flushTimings();
+    } finally {
+      flushScheduled = false;
+    }
+  });
 }
 
 export async function flushTimings(): Promise<void> {
@@ -181,7 +193,6 @@ export async function flushTimings(): Promise<void> {
   pending.clear();
   const daily = [...pendingDaily.entries()];
   pendingDaily.clear();
-  observedSinceFlush = 0;
   lastFlush = Date.now();
   // DB latency, sampled once per flush (not per request).
   const t0 = performance.now();
