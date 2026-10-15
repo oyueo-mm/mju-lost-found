@@ -27,13 +27,14 @@ const TONE_CLASSES = {
 // 받는다(색상 결정도 그 값으로 한다) -- 눈에 보이는 글자만 번역한다.
 // 목록에 없는 값은 기존처럼 원문을 그대로 보여준다(중립 색상과 같은
 // 방어적 처리).
-export function StatusBadge({ status, className = "" }: { status: string; className?: string }) {
+// compact: the smaller pill the post cards use (board lists, photo overlay).
+export function StatusBadge({ status, className = "", compact = false }: { status: string; className?: string; compact?: boolean }) {
   const { t } = useI18n();
   const tone = STATUS_TONE[status] ?? "neutral";
   const labelKey = statusLabelKeyOrNull(status);
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-medium ${TONE_CLASSES[tone]} ${className}`}
+      className={`inline-flex shrink-0 items-center rounded-full font-medium ${compact ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs"} ${TONE_CLASSES[tone]} ${className}`}
     >
       {labelKey ? t(labelKey) : status}
     </span>

@@ -64,7 +64,7 @@ export default async function SearchPage({
           (ImageSearchPanel owns the results area then instead) -- see that
           component's own comment. Harmless for every other mode: rendered
           exactly as before, just one level deeper in the tree. */}
-      <SearchFilterBar basePath="/search" showTypeFilter imageSearchEnabled>
+      <SearchFilterBar basePath="/search" showTypeFilter imageSearchEnabled resultCount={results.total}>
         <SemanticSearchNotice mode={mode} />
         {results.items.length === 0 ? (
           <div className="flex flex-col gap-4">

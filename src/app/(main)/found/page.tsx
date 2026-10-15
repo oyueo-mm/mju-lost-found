@@ -5,6 +5,8 @@ import { PostCard } from "@/components/post/PostCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Lost112Notice } from "@/components/search/Lost112Notice";
 import { LinkButton } from "@/components/ui/Button";
+import { BoardHeader } from "@/components/search/BoardHeader";
+import { BOARD_RESULTS_GRID_CLASS } from "@/components/search/resultsLayout";
 import { searchPosts } from "@/lib/posts/service";
 import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, FOUND_STATUSES, listQuerySchema } from "@/lib/posts/schema";
@@ -20,16 +22,22 @@ export default async function FoundListPage({
   searchParams: Promise<SearchParams>;
 }) {
   const raw = normalizeSearchParams(await searchParams);
+  // 게시판 리디자인 Phase: `status=` (empty) is the filter's "상태 전체" --
+  // every status. listQuerySchema rejects an empty status (and a rejected
+  // parse drops every other filter too), so it is taken out before parsing
+  // and applied below as "no status filter".
+  const { status: rawStatus, ...rawWithoutStatus } = raw;
+  const parseInput = rawStatus ? raw : rawWithoutStatus;
   const t = await getTranslator();
   // 다국어(i18n) Phase: lost/page.tsx의 같은 주석 참고 -- value는 DB의
   // 한국어 원문, label만 번역된다.
   const statusOptions = FOUND_STATUSES.map((s) => ({ value: s, label: t(statusLabelKey(s)) }));
-  const parsed = listQuerySchema.safeParse({ ...raw, type: "found" });
+  const parsed = listQuerySchema.safeParse({ ...parseInput, type: "found" });
   const baseQuery = parsed.success ? parsed.data : { type: "found" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
   // Phase 31: see the matching comment in lost/page.tsx -- no explicit
   // status filter defaults to "보관 중" (still in-progress) rather than
   // every status ever recorded.
-  const query = { ...baseQuery, status: raw.status ?? FOUND_STATUSES[0] };
+  const query = { ...baseQuery, status: rawStatus === "" ? undefined : (rawStatus ?? FOUND_STATUSES[0]) };
   // Phase 13-2: see the matching comment in lost/page.tsx -- previously
   // listFoundPosts() ignored `mode=semantic` entirely.
   const mode = parsed.success ? parsed.data.mode : "keyword";
@@ -38,7 +46,7 @@ export default async function FoundListPage({
   try {
     posts =
       mode === "semantic"
-        ? await fetchPostsFromApi({ ...raw, type: "found" })
+        ? await fetchPostsFromApi({ ...parseInput, type: "found" })
         : await searchPosts(query);
   } catch (error) {
     console.error("Failed to load found posts", error);
@@ -53,17 +61,13 @@ export default async function FoundListPage({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between gap-3">
-        {/* 게시판 의미 구분: one line saying whose posts these are. */}
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold text-foreground">{t("board.found.title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("board.found.description")}</p>
-        </div>
-        <LinkButton href="/found/new" size="sm">
-          {t("board.found.new")}
-        </LinkButton>
-      </div>
+    <div className="flex flex-col gap-5 sm:gap-6">
+      <BoardHeader
+        title={t("board.found.title")}
+        description={t("board.found.description")}
+        newHref="/found/new"
+        newLabel={t("board.found.new")}
+      />
       <SearchFilterBar
         basePath="/found"
         statusOptions={statusOptions}
@@ -74,23 +78,28 @@ export default async function FoundListPage({
         // 서버가 불러온 게시글 목록(children)이 바로 보여야 한다 -- AI
         // 검색은 여전히 토글로 켤 수 있지만 기본은 키워드다.
         defaultMode="keyword"
+        resultCount={posts.total}
       >
         <SemanticSearchNotice mode={mode} />
         {posts.items.length === 0 ? (
           <div className="flex flex-col gap-4">
             <EmptyState
               title={
-                raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status
+                raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status || raw.period
                   ? t("search.empty.title")
                   : t("board.found.empty.title")
               }
               description={
-                raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status
+                raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status || raw.period
                   ? t("search.empty.description")
                   : t("board.found.empty.description")
               }
               action={
-                !(raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status) && (
+                raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status || raw.period ? (
+                  <LinkButton href="/found" variant="secondary">
+                    {t("search.resetFilters")}
+                  </LinkButton>
+                ) : (
                   <LinkButton href="/found/new">{t("board.found.newCta")}</LinkButton>
                 )
               }
@@ -98,9 +107,9 @@ export default async function FoundListPage({
             <Lost112Notice />
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className={BOARD_RESULTS_GRID_CLASS}>
             {posts.items.map((post) => (
-              <PostCard key={post.id} post={post} />
+              <PostCard key={post.id} post={post} variant="board" />
             ))}
           </div>
         )}

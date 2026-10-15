@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { CAMPUSES } from "@/lib/posts/schema";
@@ -13,13 +13,13 @@ import {
   withCategoryFilterParams,
   type CategoryFilterState,
 } from "./categoryFilterParams";
-import { EventPeriodFilter } from "./EventPeriodFilter";
-import { isPeriodRangeInvalid, periodStateToEntries, readPeriodState, withPeriodParams, type PeriodState } from "./periodParams";
+import { EventPeriodFilter, PERIOD_LABEL_KEY, PERIOD_OPTION_KEY } from "./EventPeriodFilter";
+import { isPeriodRangeInvalid, PERIOD_PARAM_KEYS, periodStateToEntries, readPeriodState, withPeriodParams, type PeriodState } from "./periodParams";
 import { resolveSearchUiMode, SEARCH_MODE_PARAM, withSearchMode } from "./searchModeParams";
 import { SearchModeToggle, type SearchUiMode } from "./SearchModeToggle";
-import { SearchIcon } from "@/components/icons";
+import { ChevronDownIcon, SearchIcon, XIcon } from "@/components/icons";
 import { useI18n } from "@/lib/i18n/client";
-import { campusLabelKey } from "@/lib/i18n/labels";
+import { campusLabelKey, taxonomyCategoryLabelKey, taxonomySubcategoryLabelKey } from "@/lib/i18n/labels";
 import type { TranslationKey } from "@/lib/i18n/translate";
 
 type StatusOption = { value: string; label: string };
@@ -69,6 +69,9 @@ type SearchFilterBarProps = {
   // 기본값과 클라이언트 초기 상태를 일치시키는 것뿐, 두 모드의 실제
   // 검색 로직/우선순위(URL의 명시적 mode가 항상 최우선)는 그대로다.
   defaultMode?: SearchUiMode;
+  // 게시판 리디자인 Phase: total matching posts, shown next to the sort
+  // order above the results (keyword mode). Omitted -> no count.
+  resultCount?: number;
 };
 
 // 검색 대상 및 게시글 목록 UX 개선 Phase: 습득물이 먼저 나오는 순서로
@@ -111,6 +114,7 @@ export function SearchFilterBar({
   fixedType,
   children,
   defaultMode = "ai",
+  resultCount,
 }: SearchFilterBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -213,6 +217,11 @@ export function SearchFilterBar({
         params.set(key, value.trim());
       }
     }
+    // "상태 전체" on a board is an explicit `status=` -- dropping the empty
+    // value would fall back to the board's default (in-progress) status,
+    // so choosing 전체 used to change nothing. The pages already read an
+    // empty status as "every status".
+    if (statusOptions && formData.get("status") === "") params.set("status", "");
     for (const [key, value] of categoryFilterToEntries(categoryFilter)) params.set(key, value);
     // An inverted custom range is shown inline by EventPeriodFilter; don't
     // navigate to a URL the server would reject.
@@ -229,90 +238,106 @@ export function SearchFilterBar({
   const currentStatus = searchParams.get("status") ?? defaultStatus ?? "";
   const currentCampus = searchParams.get("campus") ?? "";
 
+  // ---------- 게시판 리디자인 Phase: applied filters, chips, auto-apply ----------
+  // The URL is the applied state. Filters are applied as soon as a select
+  // changes (the search text still needs Enter / 검색), so what the chips
+  // and the results show never drifts from what is selected.
+  const urlKey = searchParams.toString();
+  const formId = `search-filter-${useId().replace(/:/g, "")}`;
+  const formRef = useRef<HTMLFormElement>(null);
+  const [applyTick, setApplyTick] = useState(0);
+  useEffect(() => {
+    if (applyTick > 0) formRef.current?.requestSubmit();
+  }, [applyTick]);
+  const applySoon = () => setApplyTick((n) => n + 1);
+
+  // After a navigation (chip removed, 필터 초기화, back/forward) the
+  // state-backed filters follow the URL again -- they used to keep the old
+  // selection until a full reload.
+  const [syncedUrlKey, setSyncedUrlKey] = useState(urlKey);
+  if (syncedUrlKey !== urlKey) {
+    setSyncedUrlKey(urlKey);
+    setPeriodState(readPeriodState(searchParams));
+    setCategoryFilter(readCategoryFilterState(searchParams));
+    if (showTypeFilter) setType((searchParams.get("type") as PostListType | null) ?? "found");
+  }
+
+  function navigateWithout(keys: readonly string[]) {
+    const params = new URLSearchParams(window.location.search);
+    for (const key of [...keys, "page"]) params.delete(key);
+    const query = params.toString();
+    router.push(query ? `${basePath}?${query}` : basePath);
+  }
+
+  const appliedCategory = readCategoryFilterState(searchParams);
+  const appliedPeriod = readPeriodState(searchParams);
+  const statusParam = searchParams.get("status");
+  const chips: { key: string; label: string; remove: readonly string[] }[] = [];
+  const q = searchParams.get("q");
+  if (q) chips.push({ key: "q", label: `“${q}”`, remove: ["q"] });
+  if (appliedCategory.categoryCode) {
+    chips.push({ key: "category", label: t(taxonomyCategoryLabelKey(appliedCategory.categoryCode)), remove: ["categoryCode", "subcategory", "category"] });
+    if (appliedCategory.subcategory) {
+      chips.push({ key: "subcategory", label: t(taxonomySubcategoryLabelKey(appliedCategory.subcategory)), remove: ["subcategory"] });
+    }
+  } else if (appliedCategory.legacyCategory) {
+    chips.push({ key: "category", label: appliedCategory.legacyCategory, remove: ["category"] });
+  }
+  // A status chip only when it differs from the board's default (the
+  // default is part of what the board is, not a filter the user added).
+  if (statusOptions && statusParam !== null && statusParam !== defaultStatus) {
+    const label = statusParam === "" ? t("search.filter.statusAll") : (statusOptions.find((o) => o.value === statusParam)?.label ?? statusParam);
+    chips.push({ key: "status", label, remove: ["status"] });
+  }
+  const campusParam = searchParams.get("campus");
+  if (campusParam) {
+    const key = campusLabelKey(campusParam);
+    chips.push({ key: "campus", label: key ? t(key) : campusParam, remove: ["campus"] });
+  }
+  if (appliedPeriod.period) {
+    const label =
+      appliedPeriod.period === "custom"
+        ? `${t(PERIOD_LABEL_KEY[keywordBoardType])}: ${appliedPeriod.from || "…"} ~ ${appliedPeriod.to || "…"}`
+        : `${t(PERIOD_LABEL_KEY[keywordBoardType])}: ${t(PERIOD_OPTION_KEY[appliedPeriod.period])}`;
+    chips.push({ key: "period", label, remove: PERIOD_PARAM_KEYS });
+  }
+
+  // 자주 쓰는 필터(카테고리, 기간, /search의 게시판)는 늘 보이고, 상태·캠퍼스는
+  // "필터" 버튼 뒤에 접는다 -- 하나라도 걸려 있으면 처음부터 펼친다.
+  const foldedActive = (statusOptions && statusParam !== null && statusParam !== defaultStatus ? 1 : 0) + (campusParam ? 1 : 0);
+  const [moreOpen, setMoreOpen] = useState(foldedActive > 0);
+  const morePanelId = `${formId}-more`;
+
+  const chipBase =
+    "h-9 max-w-full rounded-full border px-3.5 text-sm text-foreground transition-colors hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40";
+  const chipClass = (active: boolean) =>
+    `${chipBase} ${active ? "border-primary/50 bg-primary-muted font-medium text-primary" : "border-border bg-card"}`;
+
+  function handlePeriodChipChange(next: PeriodState) {
+    setPeriodState(next);
+    // A custom range waits until both ends are picked and in order.
+    if (next.period !== "custom" || (next.from && next.to && !isPeriodRangeInvalid(next))) applySoon();
+  }
+
+  const searchInputClass =
+    "flex items-center gap-2 rounded-full border border-border bg-card py-1.5 pr-1.5 pl-4 shadow-sm transition focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10";
+
   return (
     <>
-    {/* AI 검색 UI 시안 개선 Phase: 바깥 컨테이너를 <form>에서 <div>로 바꿨다
-        -- AISearchPanel이 이제 자기 자신의 <form>(엔터로 검색 가능)을
-        가지므로, 예전처럼 그 전체를 다시 <form>으로 감싸면 <form> 중첩이
-        된다(유효하지 않은 HTML). 키워드 모드에서만 실제 제출이 필요한
-        필드들을 안쪽의 별도 <form>으로 묶었다 -- handleSubmit이 읽는
-        FormData의 모양은 그대로다. */}
-    <div className="flex flex-col gap-3 rounded-card border border-border bg-card p-4">
-      {/* Home의 검색창과 똑같은 SearchModeToggle -- 화면마다 검색 UI가
-          다른 제품처럼 보이지 않도록 라벨/모양을 한 곳에서만 정의한다.
-          imageSearchEnabled=false인 호출자는 없지만(현재 /search, /lost,
-          /found 모두 항상 켜서 부른다), 그 값을 존중하는 기존 계약은
-          그대로 유지한다 -- AI 검색을 쓸 수 없는 곳이라면 토글 자체를
-          숨기고 조용히 키워드 검색만 보여준다.
-          검색 UX 최종 리뷰 Phase: AI 모드의 게시판 select를 토글과 같은
-          줄에 둔다 -- Home(HomeSearchBar)이 토글+대상 select를 한 줄에
-          두는 것과 똑같은 배치라, 화면마다 "토글 따로, select 따로 아래
-          줄"처럼 다르게 보이던 것을 통일했다(리뷰에서 발견된 유일한 UI
-          불일치, §6). 키워드 모드의 게시판 select는 원래도 category/
-          campus/sort와 한 줄에 묶여 있던 기존 필터 그룹이라 그대로 둔다
-          -- 그 자체는 이번 Phase의 지적 대상이 아니었다. */}
-      {imageSearchEnabled && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <SearchModeToggle mode={mode} onChange={changeMode} />
-          {mode === "ai" && showTypeFilter && (
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value as PostListType)}
-              className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-foreground shadow-sm"
-            >
-              {TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {t(option.labelKey)}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-      )}
-
-      {mode === "ai" && imageSearchEnabled ? (
-        <>
-          <EventPeriodFilter value={periodState} onChange={handleAiPeriodChange} boardType={aiSearchType} size="sm" />
-          <div className="flex flex-wrap items-center gap-1.5">
-            <CategoryFilterSelects
-              value={categoryFilter}
-              onChange={handleAiCategoryChange}
-              selectClassName="max-w-full rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-foreground shadow-sm"
-            />
-          </div>
-          <AISearchPanel type={aiSearchType} extraQuery={aiFilterQuery} />
-        </>
-      ) : (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          {/* AI 검색 입력창(AISearchPanel)과 같은 pill 모양 -- 모드를
-              바꿔도 "검색창"이라는 형태 자체는 그대로 유지되고, 그 안의
-              보조 입력(사진 첨부 vs 없음)만 달라진다는 걸 시각적으로
-              보여준다. */}
-          <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-2 shadow-sm transition-colors focus-within:border-primary">
-            <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
-            <input
-              name="q"
-              type="text"
-              placeholder={t("search.placeholder")}
-              defaultValue={searchParams.get("q") ?? ""}
-              maxLength={100}
-              className="w-full min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
-            />
-            <button
-              type="submit"
-              className="shrink-0 rounded-full bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
-            >
-              {t("common.search")}
-            </button>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            {showTypeFilter && (
+      {/* 게시판 리디자인 Phase: no outer card box any more -- the search
+          input is the one strong element (taller, with a focus ring), the
+          AI/키워드 switch is a single segmented control above it, and the
+          filters sit under it as light chips. */}
+      <section className="flex flex-col gap-3" aria-label={t("search.mode.label")}>
+        {imageSearchEnabled && (
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchModeToggle mode={mode} onChange={changeMode} />
+            {mode === "ai" && showTypeFilter && (
               <select
-                name="type"
+                aria-label={t("home.searchTargetLabel")}
                 value={type}
                 onChange={(e) => setType(e.target.value as PostListType)}
-                className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
+                className={chipClass(false)}
               >
                 {TYPE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -321,53 +346,193 @@ export function SearchFilterBar({
                 ))}
               </select>
             )}
+          </div>
+        )}
 
-            {/* 카테고리 대분류-소분류: value는 언어와 무관한 taxonomy code이고
-                라벨만 번역한다. 예전 ?category= 링크는 대응하는 대분류로
-                읽힌다(categoryFilterParams.ts). */}
-            <CategoryFilterSelects
-              value={categoryFilter}
-              onChange={setCategoryFilter}
-              selectClassName="max-w-full rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
-            />
-
-            {statusOptions && (
-              <select
-                name="status"
-                defaultValue={currentStatus}
-                className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
+        {mode === "ai" && imageSearchEnabled ? (
+          <AISearchPanel
+            type={aiSearchType}
+            extraQuery={aiFilterQuery}
+            cardVariant={fixedType ? "board" : "default"}
+            belowInput={
+              <div className="flex flex-wrap items-center gap-2">
+                <CategoryFilterSelects
+                  value={categoryFilter}
+                  onChange={handleAiCategoryChange}
+                  selectClassName={chipClass(Boolean(categoryFilter.categoryCode || categoryFilter.legacyCategory))}
+                />
+                <EventPeriodFilter
+                  value={periodState}
+                  onChange={handleAiPeriodChange}
+                  boardType={aiSearchType}
+                  controlClassName={chipClass(Boolean(periodState.period))}
+                />
+              </div>
+            }
+          />
+        ) : (
+          <form key={urlKey} id={formId} ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <div className={searchInputClass}>
+              <SearchIcon aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
+              <input
+                name="q"
+                type="search"
+                aria-label={t("search.placeholder")}
+                placeholder={t("search.placeholder")}
+                defaultValue={searchParams.get("q") ?? ""}
+                maxLength={100}
+                className="h-10 w-full min-w-0 bg-transparent text-base text-foreground placeholder:text-muted-foreground focus:outline-none [&::-webkit-search-cancel-button]:hidden"
+              />
+              <button
+                type="submit"
+                className="h-10 shrink-0 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
               >
-                <option value="">{t("search.filter.statusAll")}</option>
-                {statusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
+                {t("common.search")}
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {showTypeFilter && (
+                <select
+                  name="type"
+                  aria-label={t("home.searchTargetLabel")}
+                  value={type}
+                  onChange={(e) => {
+                    setType(e.target.value as PostListType);
+                    applySoon();
+                  }}
+                  className={chipClass(false)}
+                >
+                  {TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {t(option.labelKey)}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {/* 카테고리 대분류-소분류: value는 언어와 무관한 taxonomy code이고
+                  라벨만 번역한다. 예전 ?category= 링크는 대응하는 대분류로
+                  읽힌다(categoryFilterParams.ts). */}
+              <CategoryFilterSelects
+                value={categoryFilter}
+                onChange={(next) => {
+                  setCategoryFilter(next);
+                  applySoon();
+                }}
+                selectClassName={chipClass(Boolean(categoryFilter.categoryCode || categoryFilter.legacyCategory))}
+              />
+
+              <EventPeriodFilter
+                value={periodState}
+                onChange={handlePeriodChipChange}
+                boardType={keywordBoardType}
+                controlClassName={chipClass(Boolean(periodState.period))}
+              />
+
+              <button
+                type="button"
+                aria-expanded={moreOpen}
+                aria-controls={morePanelId}
+                onClick={() => setMoreOpen((open) => !open)}
+                className={`${chipClass(foldedActive > 0)} inline-flex items-center gap-1.5`}
+              >
+                {t("search.filter.toggle")}
+                {foldedActive > 0 && (
+                  <span className="flex size-5 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+                    {foldedActive}
+                  </span>
+                )}
+                <ChevronDownIcon aria-hidden="true" className={`size-4 transition-transform motion-reduce:transition-none ${moreOpen ? "rotate-180" : ""}`} />
+              </button>
+            </div>
+
+            <div id={morePanelId} hidden={!moreOpen} className="flex flex-wrap items-center gap-2 rounded-card bg-muted/60 p-3">
+              {statusOptions && (
+                <select
+                  name="status"
+                  aria-label={t("search.filter.status")}
+                  defaultValue={currentStatus}
+                  onChange={applySoon}
+                  className={chipClass(statusParam !== null && statusParam !== defaultStatus)}
+                >
+                  <option value="">{t("search.filter.statusAll")}</option>
+                  {statusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <select
+                name="campus"
+                aria-label={t("search.filter.campus")}
+                defaultValue={currentCampus}
+                onChange={applySoon}
+                className={chipClass(Boolean(campusParam))}
+              >
+                <option value="">{t("search.filter.campusAll")}</option>
+                {CAMPUSES.map((c) => {
+                  const key = campusLabelKey(c);
+                  return (
+                    <option key={c} value={c}>
+                      {key ? t(key) : c}
+                    </option>
+                  );
+                })}
               </select>
-            )}
+            </div>
+          </form>
+        )}
 
-            <select
-              name="campus"
-              aria-label={t("search.filter.campus")}
-              defaultValue={currentCampus}
-              className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
+        {mode !== "ai" && (chips.length > 0 || hasActiveFilters) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {chips.map((chip) => (
+              <span
+                key={chip.key}
+                className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary-muted py-1 pr-1 pl-3 text-xs font-medium text-primary"
+              >
+                <span className="truncate">{chip.label}</span>
+                <button
+                  type="button"
+                  onClick={() => navigateWithout(chip.remove)}
+                  aria-label={t("search.filter.remove", { label: chip.label })}
+                  className="flex size-5 shrink-0 items-center justify-center rounded-full hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                >
+                  <XIcon aria-hidden="true" className="size-3" strokeWidth={2.5} />
+                </button>
+              </span>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                const query = keepModeParam(new URLSearchParams()).toString();
+                router.push(query ? `${basePath}?${query}` : basePath);
+              }}
+              className="px-1 text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
             >
-              <option value="">{t("search.filter.campusAll")}</option>
-              {CAMPUSES.map((c) => {
-                const key = campusLabelKey(c);
-                return (
-                  <option key={c} value={c}>
-                    {key ? t(key) : c}
-                  </option>
-                );
-              })}
-            </select>
+              {t("search.resetFilters")}
+            </button>
+          </div>
+        )}
+      </section>
 
+      {mode !== "ai" && (
+        <>
+          {/* Results toolbar: how many posts, and the sort order (still a
+              field of the filter form above, through form=). */}
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground" aria-live="polite">
+              {typeof resultCount === "number" && t("search.results.count", { count: resultCount })}
+            </p>
             <select
+              key={urlKey}
+              form={formId}
               name="sort"
               aria-label={t("search.filter.sort")}
               defaultValue={searchParams.get("sort") ?? "latest"}
-              className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
+              onChange={applySoon}
+              className="h-9 rounded-full bg-transparent px-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               {SORT_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -375,26 +540,10 @@ export function SearchFilterBar({
                 </option>
               ))}
             </select>
-
-            <EventPeriodFilter value={periodState} onChange={setPeriodState} boardType={keywordBoardType} />
-
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={() => {
-                  const query = keepModeParam(new URLSearchParams()).toString();
-                  router.push(query ? `${basePath}?${query}` : basePath);
-                }}
-                className="self-center text-xs text-muted-foreground underline hover:text-foreground"
-              >
-                {t("search.resetFilters")}
-              </button>
-            )}
           </div>
-        </form>
+          {children}
+        </>
       )}
-    </div>
-    {mode !== "ai" && children}
     </>
   );
 }

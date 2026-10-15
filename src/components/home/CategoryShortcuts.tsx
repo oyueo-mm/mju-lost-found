@@ -1,25 +1,10 @@
 import Link from "next/link";
-import type { ComponentType, SVGProps } from "react";
 
 import { CATEGORY_CODES, type CategoryCode } from "@/lib/posts/categoryTaxonomy";
 import { getTranslator } from "@/lib/i18n/server";
 import { taxonomyCategoryLabelKey } from "@/lib/i18n/labels";
-import {
-  BagIcon,
-  BookIcon,
-  CardIcon,
-  GridIcon,
-  EarbudsIcon,
-  HeadphonesIcon,
-  LipstickIcon,
-  MoreIcon,
-  PenIcon,
-  PhoneIcon,
-  RingIcon,
-  ShirtIcon,
-  WalletIcon,
-  WatchIcon,
-} from "@/components/icons";
+import { CATEGORY_ICONS } from "@/components/post/categoryIcons";
+import { GridIcon } from "@/components/icons";
 
 // Phase 17: real CATEGORIES (posts/schema.ts) only -- never a hardcoded
 // list that could drift from what search/filter forms actually accept.
@@ -34,22 +19,8 @@ import {
 // 자동으로 맞는다.
 // 카테고리 대분류-소분류: 바로가기는 새 대분류 code 9개를 쓴다(기존 9개
 // 한국어 값과 1:1 -- 생활용품만 예전 "기타" 자리).
-const CATEGORY_ICONS: Record<CategoryCode, ComponentType<SVGProps<SVGSVGElement>>> = {
-  electronics: HeadphonesIcon,
-  phone: PhoneIcon,
-  earphones: EarbudsIcon,
-  watch: WatchIcon,
-  wallet: WalletIcon,
-  card_id: CardIcon,
-  bag: BagIcon,
-  clothing: ShirtIcon,
-  accessory: RingIcon,
-  book_document: BookIcon,
-  stationery: PenIcon,
-  living: GridIcon,
-  cosmetics: LipstickIcon,
-  etc: MoreIcon,
-};
+// CATEGORY_ICONS now lives in components/post/categoryIcons.ts (shared
+// with the post card's no-photo tile).
 
 // 홈 카테고리 버튼 동작 수정 Phase: 이 바로가기는 "AI 검색을 실행하는
 // 버튼"이 아니라 "이 카테고리 게시글을 보여달라"는 필터 버튼이다.

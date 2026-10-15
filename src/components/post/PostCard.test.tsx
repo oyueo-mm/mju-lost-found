@@ -56,56 +56,88 @@ describe("PostCard score badge", () => {
   });
 });
 
-describe("PostCard desktop layout", () => {
-  it("renders a no-image description directly below the body on the card surface", () => {
+describe("PostCard layout (게시판 리디자인)", () => {
+  it("gives a no-photo post a small category icon and its description -- no picture-sized placeholder or stand-in image", () => {
     const markup = renderCard(basePost);
 
-    expect(markup).toContain("h-full");
-    expect(markup).not.toContain("md:min-h-");
-    expect(markup).toContain("border-t border-border px-3.5 py-3 text-xs leading-relaxed text-muted-foreground");
-    expect(markup).toContain("line-clamp-4");
-    expect(markup).not.toContain("bg-muted p-3 text-xs leading-relaxed");
+    expect(markup).toContain("data-no-photo");
     expect(markup).toContain(basePost.description);
+    expect(markup).not.toContain("aspect-4/3");
+    expect(markup).not.toContain("<img");
   });
 
-  it("does not add an empty media placeholder without a description", () => {
+  it("keeps the no-photo tile to the icon when there is no description", () => {
     const markup = renderCard({ ...basePost, description: "" });
 
-    expect(markup).not.toContain("border-t border-border px-3.5 py-3 text-xs leading-relaxed text-muted-foreground");
-    expect(markup).not.toContain("aspect-3/2 w-full shrink-0 border-t border-border");
+    expect(markup).toContain("data-no-photo");
+    expect(markup).not.toContain("line-clamp-3");
   });
 
-  it("uses the shared larger desktop media ratio for image cards", () => {
+  it("fills the same media area with the photo when there is one", () => {
     const markup = renderCard({ ...basePost, imageUrl: "https://example.com/item.webp" });
 
-    expect(markup).toContain("aspect-3/2");
-    expect(markup).toContain("md:aspect-4/3");
+    expect(markup).toContain("aspect-4/3");
     expect(markup).toContain("object-cover");
+    expect(markup).not.toContain("data-no-photo");
   });
 
-  it("wraps unbroken title and preview tokens while retaining the existing clamps", () => {
+  it("wraps unbroken title and description tokens inside their clamps", () => {
     const longToken = "1234567890".repeat(40);
     const markup = renderCard({ ...basePost, title: longToken, description: longToken });
 
-    expect(markup).toContain("line-clamp-2 text-base font-bold text-foreground [overflow-wrap:anywhere]");
-    expect(markup).toContain("line-clamp-4 [overflow-wrap:anywhere]");
+    expect(markup).toContain("line-clamp-2 text-[15px] leading-snug font-semibold text-foreground [overflow-wrap:anywhere]");
+    expect(markup).toContain("[overflow-wrap:anywhere]");
     expect(markup).toContain(longToken);
-    expect(markup).toContain("min-w-0 self-start");
+  });
+
+  it("shows category, location and date, but not the author or view count", () => {
+    const markup = renderCard(basePost);
+
+    expect(markup).toContain("data-post-category");
+    expect(markup).toContain(basePost.location!);
+    expect(markup).toContain("<time");
+    expect(markup).not.toContain(basePost.author.nickname!);
+    expect(markup).not.toContain(">3<");
   });
 });
 
-describe("PostCard author badge (external access)", () => {
-  it("shows '인증된 외부 관계자' next to an approved external author", () => {
+describe("PostCard board variant", () => {
+  it("drops the 분실물/습득물 label and the in-progress status the board already implies", () => {
+    const markup = renderCard(basePost, { variant: "board" });
+
+    expect(markup).not.toContain(ko["search.type.found"]);
+    expect(markup).not.toContain("보관 중");
+  });
+
+  it("still shows a resolved status", () => {
+    const markup = renderCard({ ...basePost, status: "완료" }, { variant: "board" });
+
+    expect(markup).toContain(">완료<");
+  });
+
+  it("keeps the type label and status everywhere else (mixed lists)", () => {
+    const markup = renderCard(basePost);
+
+    expect(markup).toContain(ko["search.type.found"]);
+    expect(markup).toContain("보관 중");
+  });
+
+  it("is a list row on a phone and a vertical card from sm", () => {
+    const markup = renderCard(basePost, { variant: "board" });
+
+    expect(markup).toContain("size-24");
+    expect(markup).toContain("sm:flex-col");
+  });
+});
+
+describe("PostCard attribution", () => {
+  it("leaves the personal author (and the external-access badge) to the detail page", () => {
     const markup = renderCard({ ...basePost, author: { ...basePost.author, userType: "EXTERNAL_VERIFIED" } });
-    expect(markup).toContain("인증된 외부 관계자");
+    expect(markup).not.toContain("인증된 외부 관계자");
+    expect(markup).not.toContain(basePost.author.nickname!);
   });
 
-  it("shows no badge for a student or a test-mode account", () => {
-    expect(renderCard(basePost)).not.toContain("인증된 외부 관계자");
-    expect(renderCard({ ...basePost, author: { ...basePost.author, userType: "EXTERNAL_TEST" } })).not.toContain("인증된 외부 관계자");
-  });
-
-  it("shows only the organization (no personal badge) on an organization-attributed post", () => {
+  it("names the organization on an organization-attributed post", () => {
     const markup = renderCard({
       ...basePost,
       organizationId: 3,
@@ -113,6 +145,7 @@ describe("PostCard author badge (external access)", () => {
       author: { ...basePost.author, userType: "EXTERNAL_VERIFIED" },
     });
     expect(markup).toContain("종합관 경비실");
+    expect(markup).toContain('href="/organizations/3"');
     expect(markup).not.toContain("인증된 외부 관계자");
   });
 });

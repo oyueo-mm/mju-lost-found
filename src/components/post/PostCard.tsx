@@ -1,22 +1,31 @@
 "use client";
 
+import { createElement } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
 import type { PostDTO } from "@/lib/posts/service";
+import { FOUND_STATUSES, LOST_STATUSES } from "@/lib/posts/schema";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { AttributionLink } from "@/components/user/AttributionLink";
-import { PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
+import { PinIcon } from "@/components/icons";
 import { useI18n } from "@/lib/i18n/client";
 import { LOCALE_INTL_TAG } from "@/lib/i18n/config";
 import { postCategoryLabel, postTypeLabelKey } from "@/lib/i18n/labels";
 import type { Locale } from "@/lib/i18n/config";
+import { categoryIconFor } from "./categoryIcons";
 
 function formatDate(date: Date, locale: Locale): string {
   return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], {
     dateStyle: "medium",
     timeZone: "Asia/Seoul",
   }).format(date);
+}
+
+// "찾는 중" / "보관 중": the state every post starts in, and the board's
+// default status filter.
+function isInProgress(post: PostDTO): boolean {
+  return post.status === (post.type === "lost" ? LOST_STATUSES[0] : FOUND_STATUSES[0]);
 }
 
 type PostCardProps = {
@@ -30,164 +39,161 @@ type PostCardProps = {
   // scoreDisplay below). Defaulting to the original Phase 12 wording keeps
   // every existing call site (keyword-era search results) unchanged.
   scoreLabel?: string;
-  // AI 검색 고도화 Phase: replaces the old boolean `showPercentage` with a
-  // three-way choice, since this project settled on two genuinely
-  // different display *shapes* for `score`, not just "percentage or not":
-  //
+  // AI 검색 고도화 Phase: three display shapes for `score`:
   // - "percentage": search/image search's `score` is a direct, stable
   //   rescale of raw cosine similarity (vectorSearch.ts's normalizeScore,
-  //   `(cosine+1)/2`) -- comparable across different searches, so "XX%"
-  //   is meaningful there. This is the default (every pre-existing caller
-  //   using the old default is unaffected).
-  // - "decimal": AI 검색 고도화 Phase's own requirement -- AI 검색 결과와
-  //   게시글 상세 AI 추천은 이제 "AI 유사도 0.87"처럼 소수 두 자리로
-  //   표시한다("87%"/"87점"/확률 표현 금지, see this phase's spec). Now
-  //   used only by the post-detail AI recommendation (SimilarPostsSection),
-  //   whose score is rankFusion.ts's absolute D3 "AI 유사도" (a calibrated
-  //   similarity, not a probability). AI 검색(AISearchPanel) used this too
-  //   until the AI 검색 점수 숨김 Phase, which switched it to "hidden" --
-  //   see that component's own comment.
-  // - "hidden": no badge at all, even though `post.score` is present --
-  //   the "분실물 작성 직후" auto-recommendation view (see
-  //   PendingRecommendations/SimilarPostsSection's own `showScore`), so a
-  //   just-created post's recommendations read as pure suggestions
-  //   ("AI가 찾아본 비슷한 습득물"), never a numeric claim; and every AI
-  //   검색 result (AISearchPanel).
+  //   `(cosine+1)/2`), so "XX%" is meaningful there. The default.
+  // - "decimal": the post-detail AI 추천 (SimilarPostsSection) shows
+  //   "AI 유사도 0.87" -- rankFusion.ts's calibrated similarity, never a
+  //   percentage or probability.
+  // - "hidden": no badge even though `post.score` is present -- every AI
+  //   검색 result (AISearchPanel) and the just-created-post recommendations.
   scoreDisplay?: "percentage" | "decimal" | "hidden";
+  // 게시판 리디자인 Phase: "board" is the /lost and /found list (and the AI
+  // 검색 results shown on those boards). The board already says which kind
+  // of post this is and filters to the in-progress status by default, so
+  // the card drops the 분실물/습득물 label and shows the status only once a
+  // post is resolved (찾음/완료). Below `sm` it becomes a one-column list
+  // row (thumbnail left, text right) instead of a narrow vertical card.
+  // "default" (every other list: /search, profile, home rails, AI 추천)
+  // stays a vertical card and keeps the type label and status.
+  variant?: "default" | "board";
 };
 
-// Phase 17 redesign history (image-forward vertical card) and Phase H-3/H-6
-// (aspect ratio tuned to 4:5 mobile / 4:3 desktop, then later reduced --
-// see the PostCard 이미지 영역 UX 개선 Phase note below) shaped the fixed
-// aspect-ratio + object-cover thumbnail this card still uses whenever a
-// post has an image; see post/[id]/page.tsx's own comment for why the
-// *detail* page deliberately does NOT crop the same way (a grid card and a
-// single full-size detail view have different needs).
+// 게시판 리디자인 Phase: one skeleton for every post, photo or not --
+// media on top (row thumbnail on a phone board), then category, title and
+// location · date. The old card stacked text first and appended the photo
+// (or a description box) at the bottom, so cards with and without photos
+// had different shapes and every row ended at a different height.
 //
-// PostCard 레이아웃 순서 개선 Phase: 카드가 항상 "이미지 -> 텍스트" 순서로
-// 쌓이던 이전 구조는 이미지 유무에 따라 제목/배지가 시작되는 세로 위치
-// 자체가 카드마다 달라지는 문제가 있었다(사진이 있으면 텍스트가 이미지
-// 높이만큼 아래에서 시작, 없으면 맨 위에서 시작). 이번 수정으로 순서를
-// "텍스트 -> 이미지(있을 때만)"로 뒤집었다:
-// - 유형/상태 배지, 작성자/단체, 제목, 위치/시간/조회수, 유사도 배지 등
-//   기존 게시글 정보는 이제 항상 카드 맨 위의 텍스트 영역에 먼저
-//   배치되고, 이미지 유무와 무관하게 시작 위치가 완전히 동일하다.
-// - 이미지가 있으면 텍스트 영역 아래에 썸네일이, 없으면 같은 크기의 muted
-//   영역이 이어진다. 데스크톱 목록에서는 카드의 본문과 하단 위치를
-//   일관되게 유지하면서도 별도 placeholder 문구는 노출하지 않는다.
-// - 유형/상태 배지가 이제 이미지 유무와 상관없이 항상 텍스트 영역의 같은
-//   자리에 있으므로, 예전에 이미지 위에 얹혀 있던 절대 위치 배지
-//   (bg-card/90 backdrop-blur 스타일)는 더 이상 필요 없어 제거했다 --
-//   같은 정보를 두 군데에 중복 표시하지 않는다.
-// - 모바일에서는 정보량에 맞는 자연 높이를 유지한다. 데스크톱에서는 본문
-//   최소 높이와 공통 미디어 영역을 사용해 이미지 유무에 따른 행 높이 차이를
-//   없앤다.
-// Phase H-7: the card is no longer one giant <Link> -- adding a clickable
-// author nickname (this phase's own spec) inside it would otherwise nest
-// an <a> inside an <a>, which is invalid HTML and makes the inner link's
-// click target browser-dependent/unreliable. Instead this uses the
-// standard "stretched link" technique: the outer element is a plain
-// `relative` div, the post-navigation Link is an absolutely-positioned
-// `inset-0` overlay as the LAST child (so it paints on top of everything
-// in normal stacking order), and the one interactive element that should
-// win over it -- AuthorLink -- gets `relative z-10` so it stays on top of
-// the overlay specifically. Clicking anywhere else on the card still
-// navigates to the post exactly as before; clicking the author name goes
-// to their profile instead. `group`/`group-hover` (image zoom on hover)
-// still work unchanged -- :hover is based on the pointer being over the
-// element's box, independent of which descendant is topmost for clicks.
-export function PostCard({ post, scoreLabel, scoreDisplay = "percentage" }: PostCardProps) {
+// - With a photo: the photo fills the media area and the status (when
+//   shown) sits on it.
+// - Without one: the media area holds the category's line icon and the
+//   post's own description on a tinted surface -- real content, never a
+//   stand-in picture that could pass for the item, so a no-photo post gets
+//   the same space and weight. A phone list row shows the icon tile and a
+//   one-line description under the title instead.
+// - Author and view count are left to the detail page. An organization
+//   post still names the organization (where the item is kept).
+//
+// Phase H-7: the card is not one giant <Link> -- the organization link
+// inside it would nest an <a> in an <a>. The post link is an absolutely
+// positioned `inset-0` overlay painted last, and the organization link
+// gets `relative z-10` to stay clickable above it.
+export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", variant = "default" }: PostCardProps) {
   const { locale, t } = useI18n();
-  // 기본 라벨("검색 유사도")은 이제 호출자가 문자열을 넘기지 않았을 때
-  // 여기서 번역해 채운다 -- 기존 기본값의 의미는 그대로다.
   const resolvedScoreLabel = scoreLabel ?? t("post.score.search");
+  const board = variant === "board";
+  const showStatus = !board || !isInProgress(post);
+  const description = post.description.trim();
+  const category = postCategoryLabel(post, t);
+
+  const icon = createElement(categoryIconFor(post), { "aria-hidden": true, className: "size-5" });
 
   return (
-    // Phase P-4: `transition` (not `transition-colors`) so border-color,
-    // box-shadow, and the small hover lift below all animate off the same
-    // single transition-property list -- stacking two transition-*
-    // utilities on one element is unreliable in Tailwind (whichever rule
-    // lands last in the generated stylesheet wins, not necessarily the
-    // one written last in this className), so this uses the one utility
-    // that already covers all three instead. Kept short (existing
-    // duration-150 default) and subtle -- a hint of depth, not a jump.
-    <div className="group relative flex min-w-0 self-start flex-col overflow-hidden rounded-card border border-border bg-card transition duration-150 hover:border-foreground/30 hover:shadow-md motion-safe:hover:-translate-y-0.5 md:self-auto md:h-full">
-      <div className="flex min-w-0 flex-col gap-1 p-3">
-        {/* 유형/상태 배지 -- 이미지 유무와 상관없이 항상 텍스트 영역
-            맨 위에 있다. Phase G-2: on /search (mixed 분실물+습득물
-            results), the status badge alone ("찾는 중"/"보관 중") only
-            implies which board a card belongs to -- the type label makes
-            it explicit. Harmless on /lost and /found too (board is
-            already fixed there by the page itself), so it's shown
-            unconditionally rather than threading a new prop through every
-            PostCard call site just to hide it there. */}
-        <div className="flex items-center justify-between gap-2">
-          <span className="inline-flex shrink-0 items-center rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-foreground">
-            {t(postTypeLabelKey(post.type))}
-          </span>
-          <StatusBadge status={post.status} />
+    // Phase P-4: one `transition` covers border-color, box-shadow and the
+    // small hover lift together.
+    <div
+      className={`group relative flex h-full min-w-0 overflow-hidden rounded-card border border-border bg-card transition duration-150 hover:border-primary/40 hover:shadow-md ${
+        board
+          ? "gap-3 p-3 sm:flex-col sm:gap-0 sm:p-0 motion-safe:sm:hover:-translate-y-0.5"
+          : "flex-col motion-safe:hover:-translate-y-0.5"
+      }`}
+    >
+      {post.imageUrl ? (
+        <div
+          className={`relative shrink-0 overflow-hidden bg-muted ${
+            board ? "size-24 rounded-lg sm:aspect-4/3 sm:h-auto sm:w-full sm:rounded-none" : "aspect-4/3 w-full"
+          }`}
+        >
+          <Image
+            src={post.imageUrl}
+            alt={post.title}
+            fill
+            sizes={board ? "(min-width: 1024px) 300px, (min-width: 640px) 45vw, 96px" : "(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"}
+            loading="lazy"
+            className="object-cover transition-transform motion-safe:group-hover:scale-[1.03]"
+          />
+          {showStatus && (
+            <span className={`absolute top-2 left-2 rounded-full bg-card shadow-sm ${board ? "hidden sm:inline-flex" : "inline-flex"}`}>
+              <StatusBadge status={post.status} compact />
+            </span>
+          )}
         </div>
-        {/* Phase 12-8 §2/§3: organization-attributed posts show ONLY the
-            organization here -- the real author's nickname/publicId is
-            never rendered for those (AttributionLink's own comment). A
-            personal post renders exactly like the old plain AuthorLink. */}
-        <AttributionLink
-          organizationId={post.organizationId}
-          organizationName={post.organizationName}
-          author={post.author}
-          className={
-            post.organizationId != null
-              ? "relative z-10 text-xs font-medium text-primary hover:underline"
-              : "relative z-10 w-fit truncate text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
-          }
-        />
-        {/* 제목 시각적 위계 강화 Phase: 카드에서 제목이 가장 먼저 눈에
-            들어오도록 text-sm/font-semibold/1줄(truncate)에서 text-base/
-            font-bold/최대 2줄(line-clamp-2)로 강화했다 -- 색상은 이미
-            이 컴포넌트의 다른 모든 텍스트(text-muted-foreground)보다
-            진한 text-foreground를 쓰고 있어 그대로 유지(디자인
-            시스템에 이보다 더 강한 텍스트 색 토큰이 없다). 제목과 바로
-            아래 위치/시간/조회수 메타 블록 사이만 mb-1을 더해 간격을
-            넓혔다(다른 요소 간 gap-1.5는 그대로). 사진 유무 분기와
-            무관하게 이 h3 하나만 쓰이므로 두 카드 형태 모두 자동으로
-            같은 제목 스타일을 공유한다. */}
-        <h3 className="mb-1 line-clamp-2 text-base font-bold text-foreground [overflow-wrap:anywhere]">
+      ) : (
+        // No photo: a small category icon (and the status) above the text,
+        // no picture-sized placeholder. On a phone board row it is the
+        // thumbnail-sized tile instead, so rows stay the same height.
+        <div
+          data-no-photo
+          className={`flex shrink-0 items-center ${
+            board
+              ? "size-24 justify-center rounded-lg bg-primary-muted/70 sm:h-auto sm:w-auto sm:justify-between sm:rounded-none sm:bg-transparent sm:px-3.5 sm:pt-3.5"
+              : "justify-between px-3 pt-3 sm:px-3.5 sm:pt-3.5"
+          }`}
+        >
+          <span
+            className={`flex items-center justify-center text-primary ${
+              board ? "size-11 rounded-full bg-card shadow-sm sm:size-10 sm:rounded-xl sm:bg-primary-muted sm:shadow-none" : "size-10 rounded-xl bg-primary-muted"
+            }`}
+          >
+            {icon}
+          </span>
+          {showStatus && <StatusBadge status={post.status} compact className={board ? "hidden sm:inline-flex" : ""} />}
+        </div>
+      )}
+
+      <div className={`flex min-w-0 flex-1 flex-col gap-1 ${board ? "py-0.5 sm:p-3.5" : "p-3 sm:p-3.5"}`}>
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <p className="min-w-0 truncate text-xs font-medium text-muted-foreground" data-post-category>
+            {/* Phase G-2: lists that mix 분실물 and 습득물 (/search, a
+                profile) still say which board each card belongs to. */}
+            {!board && (
+              <>
+                <span className="text-primary">{t(postTypeLabelKey(post.type))}</span>
+                <span aria-hidden="true"> · </span>
+              </>
+            )}
+            {category}
+          </p>
+          {board && showStatus && <StatusBadge status={post.status} compact className="sm:hidden" />}
+        </div>
+        <h3 className="line-clamp-2 text-[15px] leading-snug font-semibold text-foreground [overflow-wrap:anywhere]">
           {post.title}
         </h3>
-        <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
-          {/* 카테고리 대분류-소분류: "전자기기 · 이어폰", legacy category로 fallback. */}
-          <span className="truncate font-medium text-foreground/80" data-post-category>
-            {postCategoryLabel(post, t)}
+        {!post.imageUrl && description && (
+          <p
+            className={`text-muted-foreground [overflow-wrap:anywhere] ${
+              board ? "line-clamp-1 text-xs sm:mt-0.5 sm:line-clamp-3 sm:text-sm sm:leading-relaxed" : "mt-0.5 line-clamp-3 text-sm leading-relaxed"
+            }`}
+          >
+            {description}
+          </p>
+        )}
+        {/* Phase 12-8 §2/§3: an organization post names only the
+            organization, never the real author. */}
+        {post.organizationId != null && (
+          <AttributionLink
+            organizationId={post.organizationId}
+            organizationName={post.organizationName}
+            author={post.author}
+            className="relative z-10 text-xs font-medium text-primary hover:underline"
+          />
+        )}
+        <div className="mt-auto flex min-w-0 items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+          <PinIcon aria-hidden="true" className="size-3.5 shrink-0" />
+          <span className="min-w-0 truncate">{post.location ?? t("post.locationUnknown")}</span>
+          <span aria-hidden="true" className="shrink-0 text-border">
+            |
           </span>
-          <span className="flex items-center gap-1 truncate">
-            <PinIcon className="size-3.5 shrink-0" />
-            <span className="truncate">{post.location ?? t("post.locationUnknown")}</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <ClockIcon className="size-3.5 shrink-0" />
+          <time className="shrink-0" dateTime={post.createdAt.toISOString()}>
             {formatDate(post.createdAt, locale)}
-          </span>
-          {/* Phase 31: same EyeIcon+count pattern as post/[id]/page.tsx's
-              own view-count display -- reuses the existing viewCount DTO
-              field, no new data source. */}
-          <span className="flex items-center gap-1">
-            <EyeIcon className="size-3.5 shrink-0" />
-            {post.viewCount}
-          </span>
+          </time>
         </div>
-        {/* Phase 12/15-2/AI 검색 고도화: only present on a similarity-ranked
-            result (search results, or the post detail page's AI
-            recommendations) -- a plain keyword-search/list result never
-            carries `score`, so this never shows up outside those contexts.
-            Always labeled by the caller ("검색 유사도"/"이미지 유사도"/
-            "AI 유사도", see scoreLabel above). scoreDisplay picks the
-            *shape*: "percentage" (search/image search's stable cosine
-            rescale), "decimal" (AI 검색/AI 추천's "AI 유사도 0.87" -- see
-            scoreDisplay's own comment above for why this is never ×100),
-            or "hidden" (no badge at all, regardless of scoreLabel --
-            the just-created-post auto-recommendation view). */}
+        {/* Phase 12/15-2/AI 검색 고도화: only on a similarity-ranked result;
+            labeled by the caller, shaped by scoreDisplay (see above). */}
         {typeof post.score === "number" && scoreDisplay !== "hidden" && (
-          <span className="mt-0.5 w-fit rounded-full bg-primary-muted px-2 py-0.5 text-[11px] font-medium text-primary">
+          <span className="mt-1 w-fit rounded-full bg-primary-muted px-2 py-0.5 text-[11px] font-medium text-primary">
             {scoreDisplay === "decimal"
               ? `${resolvedScoreLabel} ${post.score.toFixed(2)}`
               : `${resolvedScoreLabel} ${Math.round(post.score * 100)}%`}
@@ -195,31 +201,10 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage" }: Post
         )}
       </div>
 
-      {/* The preview follows the body at its natural height: an image when
-          present, otherwise the existing text preview on the card surface. */}
-      {post.imageUrl ? (
-        <div className="relative aspect-3/2 w-full shrink-0 overflow-hidden bg-muted md:aspect-4/3">
-          <Image
-            src={post.imageUrl}
-            alt={post.title}
-            fill
-            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
-            loading="lazy"
-            className="object-cover transition-transform motion-safe:group-hover:scale-[1.03]"
-          />
-        </div>
-      ) : (
-        post.description.trim() ? (
-          <div className="border-t border-border px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
-            <p className="line-clamp-4 [overflow-wrap:anywhere]">{post.description}</p>
-          </div>
-        ) : null
-      )}
-
       {/* 운영 비용: no viewport/hover prefetch -- a board page shows dozens of
           cards, and each dynamic-route prefetch is a server function call
           (measured: ~54 per list view). The post loads on click instead. */}
-      <Link href={`/post/${post.id}?type=${post.type}`} prefetch={false} aria-label={post.title} className="absolute inset-0" />
+      <Link href={`/post/${post.id}?type=${post.type}`} prefetch={false} aria-label={post.title} className="absolute inset-0 rounded-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" />
     </div>
   );
 }

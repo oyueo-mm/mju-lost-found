@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { validateImageFile } from "@/lib/images/client";
 import { reviveDates } from "@/lib/posts/reviveDates";
@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Lost112Notice } from "@/components/search/Lost112Notice";
 import { CameraIcon, SearchIcon, XIcon } from "@/components/icons";
 import { useI18n } from "@/lib/i18n/client";
-import { SEARCH_RESULTS_GRID_CLASS } from "@/components/search/resultsLayout";
+import { BOARD_RESULTS_GRID_CLASS, SEARCH_RESULTS_GRID_CLASS } from "@/components/search/resultsLayout";
 
 type AISearchPanelProps = {
   // AI 검색 고도화 Phase: replaces the old ImageSearchPanel (이미지 전용)
@@ -37,6 +37,11 @@ type AISearchPanelProps = {
   quickSearchLabel?: string;
   quickSearchItems?: readonly { label: string; query: string }[];
   controlsClassName?: string;
+  // 게시판 리디자인 Phase: rendered right under the search input (the
+  // boards' category/period filters), and the card layout for results --
+  // "board" on /lost and /found (see PostCard's `variant`).
+  belowInput?: ReactNode;
+  cardVariant?: "default" | "board";
   animatedPlaceholders?: readonly string[];
   mobileAnimatedPlaceholders?: readonly string[];
   // 기간 검색 필터: extra query-string parameters (period / from / to /
@@ -64,6 +69,8 @@ export function AISearchPanel({
   quickSearchLabel,
   quickSearchItems,
   controlsClassName,
+  belowInput,
+  cardVariant = "default",
   animatedPlaceholders,
   mobileAnimatedPlaceholders,
   extraQuery,
@@ -313,6 +320,7 @@ export function AISearchPanel({
           <span className="hidden sm:inline">{pending ? t("common.searching") : t("common.search")}</span>
         </button>
         </form>
+        {belowInput}
 
         {showOptionalHint && (
           <p className="px-1 text-xs text-muted-foreground">
@@ -362,7 +370,7 @@ export function AISearchPanel({
               <Lost112Notice />
             </div>
           ) : (
-            <div className={SEARCH_RESULTS_GRID_CLASS}>
+            <div className={cardVariant === "board" ? BOARD_RESULTS_GRID_CLASS : SEARCH_RESULTS_GRID_CLASS}>
               {/* AI 검색 점수 숨김 Phase: search results no longer show the
                   "AI 유사도 0.xx" badge. A query <-> post AI 유사도 sits on a
                   lower range than the post <-> post one the detail-page AI
@@ -372,7 +380,7 @@ export function AISearchPanel({
                   search-calibration-2026-09-29.json). The ranking itself --
                   and `post.score` in the API response -- are unchanged. */}
               {results.map((post) => (
-                <PostCard key={`${post.type}-${post.id}`} post={post} scoreDisplay="hidden" />
+                <PostCard key={`${post.type}-${post.id}`} post={post} scoreDisplay="hidden" variant={cardVariant} />
               ))}
             </div>
           )}

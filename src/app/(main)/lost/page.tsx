@@ -5,6 +5,8 @@ import { PostCard } from "@/components/post/PostCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Lost112Notice } from "@/components/search/Lost112Notice";
 import { LinkButton } from "@/components/ui/Button";
+import { BoardHeader } from "@/components/search/BoardHeader";
+import { BOARD_RESULTS_GRID_CLASS } from "@/components/search/resultsLayout";
 import { searchPosts } from "@/lib/posts/service";
 import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, LOST_STATUSES, listQuerySchema } from "@/lib/posts/schema";
@@ -20,6 +22,12 @@ export default async function LostListPage({
   searchParams: Promise<SearchParams>;
 }) {
   const raw = normalizeSearchParams(await searchParams);
+  // 게시판 리디자인 Phase: `status=` (empty) is the filter's "상태 전체" --
+  // every status. listQuerySchema rejects an empty status (and a rejected
+  // parse drops every other filter too), so it is taken out before parsing
+  // and applied below as "no status filter".
+  const { status: rawStatus, ...rawWithoutStatus } = raw;
+  const parseInput = rawStatus ? raw : rawWithoutStatus;
   const t = await getTranslator();
   // 다국어(i18n) Phase: `value`는 언제나 DB에 저장된 한국어 원문 그대로다
   // (listQuerySchema가 검증하는 값이므로 절대 번역하지 않는다) -- 화면에
@@ -27,7 +35,7 @@ export default async function LostListPage({
   const statusOptions = LOST_STATUSES.map((s) => ({ value: s, label: t(statusLabelKey(s)) }));
   // `type` is always "lost" here regardless of the URL -- this board's
   // identity isn't user-controlled the way it is on /search.
-  const parsed = listQuerySchema.safeParse({ ...raw, type: "lost" });
+  const parsed = listQuerySchema.safeParse({ ...parseInput, type: "lost" });
   const baseQuery = parsed.success ? parsed.data : { type: "lost" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
   // Phase 31: no explicit status filter defaults to "찾는 중" (still
   // in-progress) rather than every status ever recorded -- browsing this
@@ -35,7 +43,7 @@ export default async function LostListPage({
   // posts. LOST_STATUSES[0] is that in-progress status by construction
   // (see its own definition). Only applied when `status` is absent from
   // the URL -- an explicit ?status=찾음 still works exactly as before.
-  const query = { ...baseQuery, status: raw.status ?? LOST_STATUSES[0] };
+  const query = { ...baseQuery, status: rawStatus === "" ? undefined : (rawStatus ?? LOST_STATUSES[0]) };
   // Phase 13-2: previously called listLostPosts() directly, which silently
   // ignored `mode=semantic` (the SearchFilterBar toggle had no effect on
   // this page -- see Phase 13-1's finding). Keyword mode reuses the same
@@ -49,7 +57,7 @@ export default async function LostListPage({
   try {
     posts =
       mode === "semantic"
-        ? await fetchPostsFromApi({ ...raw, type: "lost" })
+        ? await fetchPostsFromApi({ ...parseInput, type: "lost" })
         : await searchPosts(query);
   } catch (error) {
     console.error("Failed to load lost posts", error);
@@ -64,17 +72,13 @@ export default async function LostListPage({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between gap-3">
-        {/* 게시판 의미 구분: one line saying whose posts these are. */}
-        <div className="flex flex-col gap-1">
-          <h1 className="text-xl font-semibold text-foreground">{t("board.lost.title")}</h1>
-          <p className="text-sm text-muted-foreground">{t("board.lost.description")}</p>
-        </div>
-        <LinkButton href="/lost/new" size="sm">
-          {t("board.lost.new")}
-        </LinkButton>
-      </div>
+    <div className="flex flex-col gap-5 sm:gap-6">
+      <BoardHeader
+        title={t("board.lost.title")}
+        description={t("board.lost.description")}
+        newHref="/lost/new"
+        newLabel={t("board.lost.new")}
+      />
       <SearchFilterBar
         basePath="/lost"
         statusOptions={statusOptions}
@@ -85,23 +89,28 @@ export default async function LostListPage({
         // 서버가 불러온 게시글 목록(children)이 바로 보여야 한다 -- AI
         // 검색은 여전히 토글로 켤 수 있지만 기본은 키워드다.
         defaultMode="keyword"
+        resultCount={posts.total}
       >
         <SemanticSearchNotice mode={mode} />
         {posts.items.length === 0 ? (
           <div className="flex flex-col gap-4">
             <EmptyState
               title={
-                raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status
+                raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status || raw.period
                   ? t("search.empty.title")
                   : t("board.lost.empty.title")
               }
               description={
-                raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status
+                raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status || raw.period
                   ? t("search.empty.description")
                   : t("board.lost.empty.description")
               }
               action={
-                !(raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status) && (
+                raw.q || raw.category || raw.categoryCode || raw.subcategory || raw.campus || raw.status || raw.period ? (
+                  <LinkButton href="/lost" variant="secondary">
+                    {t("search.resetFilters")}
+                  </LinkButton>
+                ) : (
                   <LinkButton href="/lost/new">{t("board.lost.newCta")}</LinkButton>
                 )
               }
@@ -109,9 +118,9 @@ export default async function LostListPage({
             <Lost112Notice />
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className={BOARD_RESULTS_GRID_CLASS}>
             {posts.items.map((post) => (
-              <PostCard key={post.id} post={post} />
+              <PostCard key={post.id} post={post} variant="board" />
             ))}
           </div>
         )}

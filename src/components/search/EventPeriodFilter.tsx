@@ -8,13 +8,13 @@ import type { PostListType } from "@/lib/posts/schema";
 import { EVENT_PERIODS } from "@/lib/posts/eventPeriod";
 import { isPeriodRangeInvalid, type PeriodState } from "./periodParams";
 
-const LABEL_KEY: Record<PostListType, TranslationKey> = {
+export const PERIOD_LABEL_KEY: Record<PostListType, TranslationKey> = {
   lost: "search.period.label.lost",
   found: "search.period.label.found",
   all: "search.period.label.all",
 };
 
-const OPTION_KEY: Record<(typeof EVENT_PERIODS)[number], TranslationKey> = {
+export const PERIOD_OPTION_KEY: Record<(typeof EVENT_PERIODS)[number], TranslationKey> = {
   today: "search.period.today",
   "3d": "search.period.3d",
   "1w": "search.period.1w",
@@ -32,28 +32,32 @@ export function EventPeriodFilter({
   onChange,
   boardType,
   size = "md",
+  controlClassName,
 }: {
   value: PeriodState;
   onChange: (next: PeriodState) => void;
   boardType: PostListType;
   size?: "md" | "sm";
+  // Overrides the select/date-input styling (SearchFilterBar's filter chips).
+  controlClassName?: string;
 }) {
   const { t } = useI18n();
   const id = useId();
   const control =
-    size === "sm"
+    controlClassName ??
+    (size === "sm"
       ? "rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-foreground shadow-sm"
-      : "rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground";
+      : "rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground");
   const invalid = isPeriodRangeInvalid(value);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
       <label htmlFor={`${id}-period`} className={size === "sm" ? "text-xs text-muted-foreground" : "sr-only"}>
-        {t(LABEL_KEY[boardType])}
+        {t(PERIOD_LABEL_KEY[boardType])}
       </label>
       <select
         id={`${id}-period`}
-        aria-label={t(LABEL_KEY[boardType])}
+        aria-label={t(PERIOD_LABEL_KEY[boardType])}
         value={value.period}
         onChange={(e) =>
           onChange({ ...value, period: e.target.value as PeriodState["period"], ...(e.target.value !== "custom" && { from: "", to: "" }) })
@@ -61,11 +65,11 @@ export function EventPeriodFilter({
         className={control}
       >
         <option value="">
-          {size === "sm" ? t("search.period.any") : `${t(LABEL_KEY[boardType])}: ${t("search.period.any")}`}
+          {size === "sm" ? t("search.period.any") : `${t(PERIOD_LABEL_KEY[boardType])}: ${t("search.period.any")}`}
         </option>
         {EVENT_PERIODS.map((p) => (
           <option key={p} value={p}>
-            {size === "sm" ? t(OPTION_KEY[p]) : `${t(LABEL_KEY[boardType])}: ${t(OPTION_KEY[p])}`}
+            {size === "sm" ? t(PERIOD_OPTION_KEY[p]) : `${t(PERIOD_LABEL_KEY[boardType])}: ${t(PERIOD_OPTION_KEY[p])}`}
           </option>
         ))}
       </select>

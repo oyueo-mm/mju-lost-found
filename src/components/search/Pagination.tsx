@@ -21,7 +21,8 @@ export async function Pagination({ basePath, currentSearchParams, page, totalPag
   function hrefFor(targetPage: number): string {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(currentSearchParams)) {
-      if (value) params.set(key, value);
+      // An empty `status` is the boards' "상태 전체" and must survive paging.
+      if (value || (key === "status" && value === "")) params.set(key, value ?? "");
     }
     params.set("page", String(targetPage));
     return `${basePath}?${params.toString()}`;

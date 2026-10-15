@@ -37,7 +37,10 @@ export function SearchModeToggle({ mode, onChange }: SearchModeToggleProps) {
   const { t } = useI18n();
 
   return (
-    <div className="flex w-fit flex-wrap gap-1.5" role="radiogroup" aria-label={t("search.mode.label")}>
+    // 게시판 리디자인 Phase: one segmented control (the selected half is a
+    // raised card-colored pill) instead of two separate outlined chips, so
+    // it reads as "one switch, two settings" at a glance.
+    <div className="inline-flex w-fit rounded-full bg-muted p-1" role="radiogroup" aria-label={t("search.mode.label")}>
       {OPTIONS.map((option) => (
         <button
           key={option.value}
@@ -45,10 +48,10 @@ export function SearchModeToggle({ mode, onChange }: SearchModeToggleProps) {
           role="radio"
           aria-checked={mode === option.value}
           onClick={() => onChange(option.value)}
-          className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+          className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:text-sm ${
             mode === option.value
-              ? "border-primary bg-primary-muted text-primary"
-              : "border-border text-muted-foreground hover:border-foreground/30"
+              ? "bg-card text-primary shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
           }`}
         >
           {t(option.labelKey)}
