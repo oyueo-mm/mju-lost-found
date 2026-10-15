@@ -23,6 +23,7 @@ import { PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } fr
 import { ApiStatsTable, type ApiStatRow } from "@/components/admin/ApiStatsTable";
 import { BarList, Meter, Sparkline, StackedBarChart } from "@/components/admin/StatsCharts";
 import { StatsExportPanel } from "@/components/admin/StatsExportPanel";
+import { StatsPeriodPicker } from "@/components/admin/StatsPeriodPicker";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
 import { ChevronRightIcon, InfoIcon } from "@/components/icons";
 
@@ -56,7 +57,7 @@ function Section({ title, description, children }: { title: string; description?
 function More({ label = "자세히 보기", children }: { label?: string; children: ReactNode }) {
   return (
     <details className="group text-[11px] leading-relaxed text-muted-foreground">
-      <summary className="flex cursor-pointer list-none items-center gap-1 font-medium text-primary">
+      <summary className="inline-flex w-fit cursor-pointer list-none items-center gap-1 rounded-md font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
         {label}
         <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
       </summary>
@@ -208,8 +209,6 @@ export default async function AdminStatsPage({
     };
   });
   const latest = trend ? `최근 ${labels[last]}: ` : null;
-  const chip = (active: boolean) =>
-    `rounded-full border px-3 py-1.5 text-xs font-medium ${active ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground"}`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -224,48 +223,13 @@ export default async function AdminStatsPage({
           </p>
         </div>
         <div className="flex flex-col gap-2">
-          <nav className="flex flex-wrap gap-2" aria-label="조회 기간">
-            {PERIOD_PRESETS.filter((p) => p.key !== "custom").map((p) => (
-              <Link key={p.key} href={`/admin/stats?period=${p.key}`} aria-current={period.selection.preset === p.key ? "page" : undefined} className={chip(period.selection.preset === p.key)}>
-                {p.label}
-              </Link>
-            ))}
-          </nav>
-          <details className="group" open={period.selection.preset === "custom" || !!periodError}>
-            <summary className={`${chip(period.selection.preset === "custom")} inline-flex cursor-pointer list-none items-center gap-1`}>
-              사용자 지정
-              <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
-            </summary>
-            <form action="/admin/stats" className="mt-2 flex flex-wrap items-end gap-2 text-xs text-muted-foreground">
-              <input type="hidden" name="period" value="custom" />
-              <label className="flex flex-col gap-1">
-                시작일
-                <input
-                  type="date"
-                  name="from"
-                  required
-                  max={today}
-                  defaultValue={period.selection.from ?? period.range.from}
-                  className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-foreground"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                종료일
-                <input
-                  type="date"
-                  name="to"
-                  required
-                  max={today}
-                  defaultValue={period.selection.to ?? today}
-                  className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-foreground"
-                />
-              </label>
-              <button type="submit" className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground">
-                조회
-              </button>
-              <span className="basis-full">최대 366일. 31일까지는 일별, 26주까지는 주별, 그보다 길면 월별로 묶어 보여 줍니다.</span>
-            </form>
-          </details>
+          <StatsPeriodPicker
+            active={period.selection.preset}
+            from={period.selection.from ?? period.range.from}
+            to={period.selection.to ?? today}
+            today={today}
+            openByDefault={period.selection.preset === "custom" || !!periodError}
+          />
           {periodError && (
             <p role="alert" className="text-xs text-destructive">
               {periodError} 이번 달 기준으로 보여 줍니다.
@@ -273,7 +237,7 @@ export default async function AdminStatsPage({
           )}
         </div>
         <details className="group rounded-card border border-border bg-card">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-medium text-foreground">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-card px-4 py-3 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
             운영 통계 내보내기 (Excel · CSV)
             <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
           </summary>
@@ -394,21 +358,39 @@ export default async function AdminStatsPage({
             </span>
           </div>
           <div className="flex flex-col gap-2">
-            <h3 className="text-xs font-semibold text-foreground">유입 경로 (방문 세션)</h3>
+            <h3 className="text-xs font-semibold text-foreground">유입 경로 (방문 세션, 비율은 전체 방문 세션 대비)</h3>
             <BarList
               rows={report.breakdown.refs.map((r) => ({ label: REF_SOURCE_LABELS[r.source as RefSource] ?? r.source, value: r.sessions }))}
               empty={cov.sessionAnon === "none" ? "미측정 기간입니다." : "아직 기록이 없습니다."}
             />
           </div>
           <div className="flex flex-col gap-2">
-            <h3 className="text-xs font-semibold text-foreground">UTM 캠페인 (방문 세션)</h3>
-            <BarList
-              rows={[
-                ...report.breakdown.utmCampaigns.map((r) => ({ label: `campaign: ${r.value}`, value: r.sessions })),
-                ...report.breakdown.utmSources.map((r) => ({ label: `source: ${r.value}`, value: r.sessions })),
-              ]}
-              empty="아직 기록이 없습니다. 홍보 링크에 ?utm_source=everytime&utm_campaign=launch 처럼 붙이면 캠페인별로 집계됩니다."
-            />
+            <h3 className="text-xs font-semibold text-foreground">UTM (홍보 링크 태그, 방문 세션)</h3>
+            {report.breakdown.utmSources.length === 0 && report.breakdown.utmCampaigns.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {cov.sessionAnon === "none"
+                  ? "미측정 기간입니다."
+                  : "아직 기록이 없습니다. 홍보 링크에 ?utm_source=everytime&utm_campaign=launch 처럼 붙이면 캠페인별로 집계됩니다."}
+              </p>
+            ) : (
+              (
+                [
+                  ["utm_source별 (어디서 왔나)", report.breakdown.utmSources, "utm_source가 붙은"],
+                  ["utm_campaign별 (어떤 홍보였나)", report.breakdown.utmCampaigns, "utm_campaign이 붙은"],
+                ] as const
+              ).map(([title, list, base]) => {
+                const tagged = list.reduce((a, r) => a + r.sessions, 0);
+                return (
+                  <div key={title} className="flex flex-col gap-1.5">
+                    <p className="text-[11px] text-muted-foreground">
+                      <span className="font-medium text-foreground">{title}</span> · 비율 분모: {base} 방문 세션 {fmt(tagged)}회
+                      {sessionsTotal ? ` (전체 방문 세션 ${fmt(sessionsTotal)}회 중)` : ""}
+                    </p>
+                    <BarList rows={list.map((r) => ({ label: r.value, value: r.sessions }))} empty="이 태그가 붙은 방문이 없습니다." />
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
         <div className="flex flex-col gap-2">

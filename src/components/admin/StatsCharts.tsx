@@ -1,7 +1,9 @@
 // 운영 통계 charts: plain SVG / CSS drawn on the server -- no chart library,
 // no client JS. Bars stretch with the card; every label is HTML so it stays
 // readable at any width. A period before a count began (미측정) is drawn as
-// a hatched column, never as a zero bar.
+// one faint band per run of such periods (labelled, never a zero bar); a
+// measured 0 is a thin tick on the baseline, so the two stay apart while
+// the real bars stand out.
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -42,7 +44,15 @@ export function StackedBarChart({ labels, series, title }: { labels: string[]; s
   const W = 100 * n;
   const H = 100;
   const tickEvery = Math.max(1, Math.ceil(n / 6));
-  const hasUnmeasured = totals.some((t) => t === null);
+  // runs of consecutive 미측정 periods: [first, last + 1)
+  const runs: [number, number][] = [];
+  totals.forEach((t, i) => {
+    if (t !== null) return;
+    const lastRun = runs[runs.length - 1];
+    if (lastRun && lastRun[1] === i) lastRun[1] = i + 1;
+    else runs.push([i, i + 1]);
+  });
+  const hasUnmeasured = runs.length > 0;
   return (
     <figure className="flex flex-col gap-1.5">
       <figcaption className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
@@ -55,8 +65,8 @@ export function StackedBarChart({ labels, series, title }: { labels: string[]; s
         ))}
         {hasUnmeasured && (
           <span className="flex items-center gap-1">
-            <span className="inline-block size-2.5 rounded-sm border border-border bg-muted" aria-hidden />
-            미측정
+            <span className="inline-block size-2.5 rounded-sm bg-muted" aria-hidden />
+            미측정(수집 전)
           </span>
         )}
       </figcaption>
@@ -65,27 +75,21 @@ export function StackedBarChart({ labels, series, title }: { labels: string[]; s
           최대 {fmt(max)}
         </span>
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-28 w-full" role="img" aria-label={`${title} 그래프`}>
-          <defs>
-            <pattern id="unmeasured-hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <rect width="8" height="8" className="fill-muted" />
-              <line x1="0" y1="0" x2="0" y2="8" className="stroke-border" strokeWidth="3" />
-            </pattern>
-          </defs>
+          {runs.map(([a, b]) => (
+            <rect key={`u${a}`} x={a * 100} y={0} width={(b - a) * 100} height={H} className="fill-muted" opacity={0.55}>
+              <title>{`${labels[a]}${b - a > 1 ? ` ~ ${labels[b - 1]}` : ""}: 미측정(수집 전)`}</title>
+            </rect>
+          ))}
           <line x1="0" y1={H / 2} x2={W} y2={H / 2} className="stroke-border" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
           <line x1="0" y1={H} x2={W} y2={H} className="stroke-border" vectorEffect="non-scaling-stroke" />
           {labels.map((label, i) => {
             const x = i * 100 + 15;
-            if (totals[i] === null) {
-              return (
-                <rect key={label} x={x} y={0} width={70} height={H} fill="url(#unmeasured-hatch)">
-                  <title>{`${label}: 미측정`}</title>
-                </rect>
-              );
-            }
+            if (totals[i] === null) return null;
             let y = H;
             return (
               <g key={label}>
                 <title>{`${label}: ${series.map((s) => `${s.label} ${fmt(s.values[i] ?? 0)}`).join(", ")}`}</title>
+                {totals[i] === 0 && <rect x={x} y={H - 2} width={70} height={2} className="fill-border" />}
                 {series.map((s) => {
                   const h = ((s.values[i] ?? 0) / max) * (H - 4);
                   y -= h;
@@ -95,6 +99,18 @@ export function StackedBarChart({ labels, series, title }: { labels: string[]; s
             );
           })}
         </svg>
+        {runs
+          .filter(([a, b]) => (b - a) / n >= 0.15)
+          .map(([a, b]) => (
+            <span
+              key={`l${a}`}
+              aria-hidden
+              className="absolute top-1/2 -translate-y-1/2 text-center text-[10px] text-muted-foreground"
+              style={{ left: `${(a / n) * 100}%`, width: `${((b - a) / n) * 100}%` }}
+            >
+              미측정
+            </span>
+          ))}
       </div>
       <div className="flex text-[10px] tabular-nums text-muted-foreground">
         {labels.map((label, i) => (
