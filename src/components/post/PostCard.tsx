@@ -55,11 +55,12 @@ type PostCardProps = {
   // the card drops the 분실물/습득물 label and shows the status only once a
   // post is resolved (찾음/완료). Its layout follows the screen (CSS
   // variants in globals.css):
-  // - desktop: a vertical card, photo on top;
   // - phone, 격자형 (default; `board-tile`): a compact vertical card for a
-  //   two-column grid;
-  // - phone 목록형 and every tablet (`board-row`): a list row -- thumbnail
-  //   or category tile left, text right.
+  //   two-column grid, photo on top;
+  // - phone 목록형, tablet and desktop (`board-row`): a list row -- square
+  //   thumbnail or category tile left, text right -- so a photo post and a
+  //   text-only post are the same shape and (stretched by the grid row) the
+  //   same height, with no gaps between rows.
   // "default" (every other list: /search, profile, home rails, AI 추천)
   // stays a vertical card and keeps the type label and status.
   variant?: "default" | "board";
@@ -96,12 +97,17 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
   const hasPhoto = Boolean(post.imageUrl);
   const icon = (className: string) => createElement(categoryIconFor(post), { "aria-hidden": true, className });
   const sizes = board
-    ? "(min-width: 1440px) 270px, (min-width: 1024px) 290px, (min-width: 640px) 112px, 50vw"
+    ? "(min-width: 1280px) 128px, (min-width: 640px) 112px, 50vw"
     : "(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw";
-  // cover when cropping to the media area would remove at most ~20% of
-  // the photo, contain otherwise; contain until the photo has loaded.
-  const mediaRatio = board ? 3 / 2 : 4 / 3;
-  const [fill, setFill] = useState<"cover" | "contain">("contain");
+  // Fill (cover) the media area when that crops little of the photo, show
+  // it whole (contain, over a blurred copy) otherwise; contain until the
+  // photo has loaded. Judged per shape: a 4:3 card area (<= 20% cropped)
+  // and a square list-row thumbnail (<= 25% cropped).
+  const [photoRatio, setPhotoRatio] = useState<number | null>(null);
+  const keeps = (area: number, limit: number) =>
+    photoRatio !== null && Math.min(photoRatio / area, area / photoRatio) >= limit;
+  const cardCover = keeps(4 / 3, 0.8);
+  const rowCover = keeps(1, 0.75);
 
   // Class sets per part. `board-row:` = list row (tablet / phone 목록형),
   // `board-tile:` = phone 격자형 card; unprefixed = the desktop card.
@@ -109,9 +115,9 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
     ? {
         root: "flex-col motion-safe:hover:-translate-y-0.5 board-row:flex-row board-row:gap-3 board-row:p-3 board-row:hover:translate-y-0",
         media:
-          "aspect-3/2 w-full board-tile:aspect-4/3 board-row:size-20 board-row:shrink-0 board-row:rounded-lg board-row:min-[375px]:size-24 board-row:sm:size-28",
-        backdrop: "board-row:hidden",
-        photo: fill === "cover" ? "object-cover" : "object-contain board-row:object-cover",
+          "aspect-4/3 w-full board-row:size-20 board-row:shrink-0 board-row:rounded-lg board-row:min-[375px]:size-24 board-row:sm:size-28 board-row:xl:size-32",
+        backdrop: `${cardCover ? "hidden" : ""} ${rowCover ? "board-row:hidden" : "board-row:block"}`,
+        photo: `${cardCover ? "object-cover" : "object-contain"} ${rowCover ? "board-row:object-cover" : "board-row:object-contain"}`,
         overlay: "inline-flex board-tile:top-1.5 board-tile:left-1.5 board-row:hidden",
         rowTile: "hidden board-row:flex",
         lineIcon: "flex board-row:hidden",
@@ -127,8 +133,8 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
     : {
         root: "h-full flex-col motion-safe:hover:-translate-y-0.5",
         media: "aspect-4/3 w-full shrink-0",
-        backdrop: "",
-        photo: fill === "cover" ? "object-cover" : "object-contain",
+        backdrop: cardCover ? "hidden" : "",
+        photo: cardCover ? "object-cover" : "object-contain",
         overlay: "inline-flex",
         rowTile: "hidden",
         lineIcon: "flex",
@@ -158,7 +164,7 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
             fill
             sizes={sizes}
             loading="lazy"
-            className={`scale-110 object-cover opacity-50 blur-xl ${fill === "cover" ? "hidden" : c.backdrop}`}
+            className={`scale-110 object-cover opacity-50 blur-xl ${c.backdrop}`}
           />
           <Image
             src={post.imageUrl}
@@ -168,10 +174,7 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
             loading="lazy"
             onLoad={(event) => {
               const { naturalWidth: w, naturalHeight: h } = event.currentTarget;
-              if (!w || !h) return;
-              const ratio = w / h;
-              const kept = Math.min(ratio / mediaRatio, mediaRatio / ratio);
-              setFill(kept >= 0.8 ? "cover" : "contain");
+              if (w && h) setPhotoRatio(w / h);
             }}
             className={`transition-transform motion-safe:group-hover:scale-[1.03] ${c.photo}`}
           />
@@ -185,7 +188,7 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
         board && (
           // List row only: the category tile where the thumbnail would be.
           <div
-            className={`size-20 shrink-0 items-center justify-center rounded-lg bg-primary-muted/70 min-[375px]:size-24 sm:size-28 ${c.rowTile}`}
+            className={`size-20 shrink-0 items-center justify-center rounded-lg bg-primary-muted/70 min-[375px]:size-24 sm:size-28 xl:size-32 ${c.rowTile}`}
           >
             <span className="flex size-10 items-center justify-center rounded-full bg-card text-primary shadow-sm">{icon("size-5")}</span>
           </div>

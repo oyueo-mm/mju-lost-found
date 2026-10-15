@@ -93,13 +93,14 @@ describe("PostCard layout (게시판 리디자인)", () => {
     expect(markup).not.toContain("3.webp");
   });
 
-  it("on the board: 3:2 desktop photo, 4:3 phone grid photo, cropped square list-row thumbnail", () => {
+  it("on the board: 4:3 phone grid photo, square list-row thumbnail (128px from 1280px), whole photo until it is known to fit", () => {
     const markup = renderCard({ ...basePost, imageUrl: "https://example.com/item.webp" }, { variant: "board" });
 
-    expect(markup).toContain("aspect-3/2");
-    expect(markup).toContain("board-tile:aspect-4/3");
-    expect(markup).toContain("object-contain board-row:object-cover");
+    expect(markup).toContain("aspect-4/3");
     expect(markup).toContain("board-row:size-20");
+    expect(markup).toContain("board-row:xl:size-32");
+    // before the photo's shape is known: shown whole in both layouts
+    expect(markup).toContain("object-contain board-row:object-contain");
   });
 
   it("wraps unbroken title and description tokens inside their clamps", () => {

@@ -56,13 +56,13 @@
 
 /* 게시판 반응형 배치 (PostCard variant="board", BOARD_RESULTS_GRID_CLASS).
    Phones choose 격자형 (default) or 목록형 -- <html data-board-view>, set
-   before first paint from localStorage (lib/boardView.ts). Tablets always
-   show list rows (2 columns), desktops vertical cards (3 columns, 4 on a
-   wide screen for a page marked data-wide-board).
+   before first paint from localStorage (lib/boardView.ts). From sm up
+   every screen shows list rows: 2 columns on a tablet / small laptop, 3
+   from 1280px, where a page marked data-wide-board widens its shell.
    - board-tile: a phone in 격자형 -- compact vertical cards, 2 columns.
    - board-list: a phone in 목록형 -- the grid becomes one column.
-   - board-row:  a list row -- a tablet, or a phone in 목록형.
-   - wide-board: >= 1440px on a board page -- the page shell widens. */
+   - board-row:  a list row -- tablet and desktop, or a phone in 목록형.
+   - wide-board: >= 1280px on a board page -- the page shell widens. */
 @custom-variant board-tile {
   @media (width < 40rem) {
     :root:not([data-board-view="list"]) & {
@@ -78,7 +78,7 @@
   }
 }
 @custom-variant board-row {
-  @media (width >= 40rem) and (width < 64rem) {
+  @media (width >= 40rem) {
     @slot;
   }
   @media (width < 40rem) {
@@ -88,7 +88,7 @@
   }
 }
 @custom-variant wide-board {
-  @media (width >= 90rem) {
+  @media (width >= 80rem) {
     :root:has([data-wide-board]) & {
       @slot;
     }

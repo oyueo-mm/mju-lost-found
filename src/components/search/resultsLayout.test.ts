@@ -12,12 +12,14 @@ describe("search results grid", () => {
 });
 
 describe("board results grid", () => {
-  it("is a 2-column grid on a phone (1 column in 목록형), 2 on a tablet, 3 on a desktop and 4 on a wide one", () => {
+  it("is a 2-column grid on a phone (1 column in 목록형), 2 columns of rows on a tablet/laptop, 3 from 1280px", () => {
     expect(BOARD_RESULTS_GRID_CLASS).toMatch(/(^| )grid-cols-2( |$)/);
     expect(BOARD_RESULTS_GRID_CLASS).toContain("board-list:grid-cols-1");
     expect(BOARD_RESULTS_GRID_CLASS).toContain("sm:grid-cols-2");
-    expect(BOARD_RESULTS_GRID_CLASS).toContain("lg:grid-cols-3");
-    expect(BOARD_RESULTS_GRID_CLASS).toContain("min-[90rem]:grid-cols-4");
+    expect(BOARD_RESULTS_GRID_CLASS).toContain("xl:grid-cols-3");
+    expect(BOARD_RESULTS_GRID_CLASS).not.toContain("grid-cols-4");
+    // rows of equal-height cards from sm
+    expect(BOARD_RESULTS_GRID_CLASS).toContain("sm:items-stretch");
     // natural card heights from sm, but a plain row-by-row grid (sort order kept)
     expect(BOARD_RESULTS_GRID_CLASS).toContain("items-start");
     expect(BOARD_RESULTS_GRID_CLASS).not.toMatch(/columns-|masonry/);
