@@ -33,6 +33,7 @@ export function EventPeriodFilter({
   boardType,
   size = "md",
   controlClassName,
+  compactEmptyLabel = false,
 }: {
   value: PeriodState;
   onChange: (next: PeriodState) => void;
@@ -40,6 +41,12 @@ export function EventPeriodFilter({
   size?: "md" | "sm";
   // Overrides the select/date-input styling (SearchFilterBar's filter chips).
   controlClassName?: string;
+  // Filter chips: the "no filter" option reads just "습득 시점" (the field
+  // name) instead of "습득 시점: 전체 기간", so the chip stays short; and
+  // the select, the date range and the "날짜 모름 포함" box flow as items
+  // of the surrounding chip row (display: contents) instead of one block
+  // that takes a whole line once a period is picked.
+  compactEmptyLabel?: boolean;
 }) {
   const { t } = useI18n();
   const id = useId();
@@ -51,7 +58,7 @@ export function EventPeriodFilter({
   const invalid = isPeriodRangeInvalid(value);
 
   return (
-    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+    <div className={compactEmptyLabel ? "contents" : "flex min-w-0 max-w-full flex-wrap items-center gap-2"}>
       <label htmlFor={`${id}-period`} className={size === "sm" ? "text-xs text-muted-foreground" : "sr-only"}>
         {t(PERIOD_LABEL_KEY[boardType])}
       </label>
@@ -65,7 +72,11 @@ export function EventPeriodFilter({
         className={control}
       >
         <option value="">
-          {size === "sm" ? t("search.period.any") : `${t(PERIOD_LABEL_KEY[boardType])}: ${t("search.period.any")}`}
+          {compactEmptyLabel
+            ? t(PERIOD_LABEL_KEY[boardType])
+            : size === "sm"
+              ? t("search.period.any")
+              : `${t(PERIOD_LABEL_KEY[boardType])}: ${t("search.period.any")}`}
         </option>
         {EVENT_PERIODS.map((p) => (
           <option key={p} value={p}>
@@ -81,7 +92,7 @@ export function EventPeriodFilter({
           full-width and the "~" is hidden, so it can never be left alone at
           the end of a line; from sm up the row is unchanged. */}
       {value.period === "custom" && (
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
           <input
             type="date"
             aria-label={t("search.period.from")}
@@ -103,7 +114,7 @@ export function EventPeriodFilter({
       )}
 
       {value.period && (
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <label className="flex min-h-9 items-center gap-1.5 text-xs text-muted-foreground sm:min-h-0">
           <input
             type="checkbox"
             checked={value.includeUnknown}

@@ -61,7 +61,7 @@ export default async function FoundListPage({
   }
 
   return (
-    <div className="flex flex-col gap-5 sm:gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <BoardHeader
         title={t("board.found.title")}
         description={t("board.found.description")}

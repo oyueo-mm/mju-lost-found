@@ -16,6 +16,8 @@ describe("board results grid", () => {
     expect(BOARD_RESULTS_GRID_CLASS).toContain("grid-cols-1");
     expect(BOARD_RESULTS_GRID_CLASS).toContain("sm:grid-cols-2");
     expect(BOARD_RESULTS_GRID_CLASS).toContain("lg:grid-cols-3");
-    expect(BOARD_RESULTS_GRID_CLASS).not.toContain("items-start");
+    // natural card heights from sm, but a plain row-by-row grid (sort order kept)
+    expect(BOARD_RESULTS_GRID_CLASS).toContain("lg:items-start");
+    expect(BOARD_RESULTS_GRID_CLASS).not.toMatch(/columns-|masonry/);
   });
 });

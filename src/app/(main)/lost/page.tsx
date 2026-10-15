@@ -72,7 +72,7 @@ export default async function LostListPage({
   }
 
   return (
-    <div className="flex flex-col gap-5 sm:gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <BoardHeader
         title={t("board.lost.title")}
         description={t("board.lost.description")}

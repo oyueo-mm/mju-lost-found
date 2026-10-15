@@ -13,13 +13,13 @@ import {
   withCategoryFilterParams,
   type CategoryFilterState,
 } from "./categoryFilterParams";
-import { EventPeriodFilter, PERIOD_LABEL_KEY, PERIOD_OPTION_KEY } from "./EventPeriodFilter";
-import { isPeriodRangeInvalid, PERIOD_PARAM_KEYS, periodStateToEntries, readPeriodState, withPeriodParams, type PeriodState } from "./periodParams";
+import { EventPeriodFilter } from "./EventPeriodFilter";
+import { isPeriodRangeInvalid, periodStateToEntries, readPeriodState, withPeriodParams, type PeriodState } from "./periodParams";
 import { resolveSearchUiMode, SEARCH_MODE_PARAM, withSearchMode } from "./searchModeParams";
 import { SearchModeToggle, type SearchUiMode } from "./SearchModeToggle";
 import { ChevronDownIcon, SearchIcon, XIcon } from "@/components/icons";
 import { useI18n } from "@/lib/i18n/client";
-import { campusLabelKey, taxonomyCategoryLabelKey, taxonomySubcategoryLabelKey } from "@/lib/i18n/labels";
+import { campusLabelKey } from "@/lib/i18n/labels";
 import type { TranslationKey } from "@/lib/i18n/translate";
 
 type StatusOption = { value: string; label: string };
@@ -269,20 +269,14 @@ export function SearchFilterBar({
     router.push(query ? `${basePath}?${query}` : basePath);
   }
 
-  const appliedCategory = readCategoryFilterState(searchParams);
-  const appliedPeriod = readPeriodState(searchParams);
   const statusParam = searchParams.get("status");
+  // Removable chips only for what the visible controls don't already show:
+  // the search words and the folded 상태/캠퍼스 filters. Category,
+  // subcategory and period are their own highlighted chips right above,
+  // and repeating them made the search area twice as tall on a phone.
   const chips: { key: string; label: string; remove: readonly string[] }[] = [];
   const q = searchParams.get("q");
   if (q) chips.push({ key: "q", label: `“${q}”`, remove: ["q"] });
-  if (appliedCategory.categoryCode) {
-    chips.push({ key: "category", label: t(taxonomyCategoryLabelKey(appliedCategory.categoryCode)), remove: ["categoryCode", "subcategory", "category"] });
-    if (appliedCategory.subcategory) {
-      chips.push({ key: "subcategory", label: t(taxonomySubcategoryLabelKey(appliedCategory.subcategory)), remove: ["subcategory"] });
-    }
-  } else if (appliedCategory.legacyCategory) {
-    chips.push({ key: "category", label: appliedCategory.legacyCategory, remove: ["category"] });
-  }
   // A status chip only when it differs from the board's default (the
   // default is part of what the board is, not a filter the user added).
   if (statusOptions && statusParam !== null && statusParam !== defaultStatus) {
@@ -294,22 +288,20 @@ export function SearchFilterBar({
     const key = campusLabelKey(campusParam);
     chips.push({ key: "campus", label: key ? t(key) : campusParam, remove: ["campus"] });
   }
-  if (appliedPeriod.period) {
-    const label =
-      appliedPeriod.period === "custom"
-        ? `${t(PERIOD_LABEL_KEY[keywordBoardType])}: ${appliedPeriod.from || "…"} ~ ${appliedPeriod.to || "…"}`
-        : `${t(PERIOD_LABEL_KEY[keywordBoardType])}: ${t(PERIOD_OPTION_KEY[appliedPeriod.period])}`;
-    chips.push({ key: "period", label, remove: PERIOD_PARAM_KEYS });
-  }
 
   // 자주 쓰는 필터(카테고리, 기간, /search의 게시판)는 늘 보이고, 상태·캠퍼스는
   // "필터" 버튼 뒤에 접는다 -- 하나라도 걸려 있으면 처음부터 펼친다.
   const foldedActive = (statusOptions && statusParam !== null && statusParam !== defaultStatus ? 1 : 0) + (campusParam ? 1 : 0);
-  const [moreOpen, setMoreOpen] = useState(foldedActive > 0);
+  // Starts closed even when one of them is set: the count on the button
+  // and the chips below already say what is applied, and an open panel
+  // made the search area much taller on a phone.
+  const [moreOpen, setMoreOpen] = useState(false);
   const morePanelId = `${formId}-more`;
 
+  // 40px tall on a phone (touch), 36px from sm. field-sizing: a select is
+  // as wide as its current value, not its longest option (where supported).
   const chipBase =
-    "h-9 max-w-full rounded-full border px-3.5 text-sm text-foreground transition-colors hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40";
+    "h-10 max-w-full rounded-full border px-3 text-[13px] text-foreground field-sizing-content transition-colors hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:h-9 sm:px-3.5 sm:text-sm";
   const chipClass = (active: boolean) =>
     `${chipBase} ${active ? "border-primary/50 bg-primary-muted font-medium text-primary" : "border-border bg-card"}`;
 
@@ -328,7 +320,7 @@ export function SearchFilterBar({
           input is the one strong element (taller, with a focus ring), the
           AI/키워드 switch is a single segmented control above it, and the
           filters sit under it as light chips. */}
-      <section className="flex flex-col gap-3" aria-label={t("search.mode.label")}>
+      <section className="flex flex-col gap-2.5 sm:gap-3" aria-label={t("search.mode.label")}>
         {imageSearchEnabled && (
           <div className="flex flex-wrap items-center gap-2">
             <SearchModeToggle mode={mode} onChange={changeMode} />
@@ -360,12 +352,15 @@ export function SearchFilterBar({
                   value={categoryFilter}
                   onChange={handleAiCategoryChange}
                   selectClassName={chipClass(Boolean(categoryFilter.categoryCode || categoryFilter.legacyCategory))}
+                  emptyLabel={t("search.filter.category")}
+                  subcategoryEmptyLabel={t("search.filter.subcategory")}
                 />
                 <EventPeriodFilter
                   value={periodState}
                   onChange={handleAiPeriodChange}
                   boardType={aiSearchType}
                   controlClassName={chipClass(Boolean(periodState.period))}
+                  compactEmptyLabel
                 />
               </div>
             }
@@ -421,6 +416,8 @@ export function SearchFilterBar({
                   applySoon();
                 }}
                 selectClassName={chipClass(Boolean(categoryFilter.categoryCode || categoryFilter.legacyCategory))}
+                emptyLabel={t("search.filter.category")}
+                subcategoryEmptyLabel={t("search.filter.subcategory")}
               />
 
               <EventPeriodFilter
@@ -428,6 +425,7 @@ export function SearchFilterBar({
                 onChange={handlePeriodChipChange}
                 boardType={keywordBoardType}
                 controlClassName={chipClass(Boolean(periodState.period))}
+                compactEmptyLabel
               />
 
               <button
@@ -490,16 +488,16 @@ export function SearchFilterBar({
             {chips.map((chip) => (
               <span
                 key={chip.key}
-                className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary-muted py-1 pr-1 pl-3 text-xs font-medium text-primary"
+                className="inline-flex min-h-9 max-w-full items-center gap-0.5 rounded-full bg-primary-muted pr-1 pl-3 text-xs font-medium text-primary sm:min-h-8"
               >
                 <span className="truncate">{chip.label}</span>
                 <button
                   type="button"
                   onClick={() => navigateWithout(chip.remove)}
                   aria-label={t("search.filter.remove", { label: chip.label })}
-                  className="flex size-5 shrink-0 items-center justify-center rounded-full hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  className="flex size-7 shrink-0 items-center justify-center rounded-full hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:size-6"
                 >
-                  <XIcon aria-hidden="true" className="size-3" strokeWidth={2.5} />
+                  <XIcon aria-hidden="true" className="size-3.5" strokeWidth={2.5} />
                 </button>
               </span>
             ))}
@@ -509,7 +507,7 @@ export function SearchFilterBar({
                 const query = keepModeParam(new URLSearchParams()).toString();
                 router.push(query ? `${basePath}?${query}` : basePath);
               }}
-              className="px-1 text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              className="inline-flex min-h-9 items-center px-2 text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline sm:min-h-8"
             >
               {t("search.resetFilters")}
             </button>

@@ -48,7 +48,7 @@ export function SearchModeToggle({ mode, onChange }: SearchModeToggleProps) {
           role="radio"
           aria-checked={mode === option.value}
           onClick={() => onChange(option.value)}
-          className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:text-sm ${
+          className={`h-9 rounded-full px-3.5 text-xs font-semibold transition-colors sm:h-auto sm:py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:text-sm ${
             mode === option.value
               ? "bg-card text-primary shadow-sm"
               : "text-muted-foreground hover:text-foreground"

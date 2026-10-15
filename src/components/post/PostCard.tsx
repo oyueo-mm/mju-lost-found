@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -53,26 +53,29 @@ type PostCardProps = {
   // 검색 results shown on those boards). The board already says which kind
   // of post this is and filters to the in-progress status by default, so
   // the card drops the 분실물/습득물 label and shows the status only once a
-  // post is resolved (찾음/완료). Below `sm` it becomes a one-column list
-  // row (thumbnail left, text right) instead of a narrow vertical card.
+  // post is resolved (찾음/완료). Below `lg` (phones and tablets) it is a
+  // list row -- thumbnail or category tile left, text right -- so a photo
+  // post and a text-only post are the same height; from `lg` it is a
+  // vertical card with the photo on top.
   // "default" (every other list: /search, profile, home rails, AI 추천)
   // stays a vertical card and keeps the type label and status.
   variant?: "default" | "board";
 };
 
-// 게시판 리디자인 Phase: one skeleton for every post, photo or not --
-// media on top (row thumbnail on a phone board), then category, title and
-// location · date. The old card stacked text first and appended the photo
-// (or a description box) at the bottom, so cards with and without photos
-// had different shapes and every row ended at a different height.
+/// 게시판 리디자인 Phase: one skeleton for every post, photo or not --
+// category, title, location | date, with the photo (when there is one)
+// on top. On a phone board the card is a list row: thumbnail or category
+// tile on the left, text on the right.
 //
-// - With a photo: the photo fills the media area and the status (when
-//   shown) sits on it.
-// - Without one: the media area holds the category's line icon and the
-//   post's own description on a tinted surface -- real content, never a
-//   stand-in picture that could pass for the item, so a no-photo post gets
-//   the same space and weight. A phone list row shows the icon tile and a
-//   one-line description under the title instead.
+// - With a photo: a photo close to the area's shape fills it (cover, at
+//   most ~20% cropped); any other -- typically a portrait phone photo --
+//   is shown whole (contain) so the item is never cut off, over a blurred
+//   copy of itself. A phone row thumbnail stays a cropped square, which
+//   reads better at 80-96px.
+// - Without one: no picture-sized area at all. A small category icon sits
+//   in the category line and the description (up to 3 lines) follows the
+//   title, so the card is compact but carries as much information as a
+//   photo card. Never a stand-in picture that could pass for the item.
 // - Author and view count are left to the detail page. An organization
 //   post still names the organization (where the item is kept).
 //
@@ -87,65 +90,85 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
   const showStatus = !board || !isInProgress(post);
   const description = post.description.trim();
   const category = postCategoryLabel(post, t);
-
-  const icon = createElement(categoryIconFor(post), { "aria-hidden": true, className: "size-5" });
+  const hasPhoto = Boolean(post.imageUrl);
+  const icon = (className: string) => createElement(categoryIconFor(post), { "aria-hidden": true, className });
+  const sizes = board ? "(min-width: 1024px) 300px, (min-width: 640px) 112px, 96px" : "(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw";
+  // Row thumbnail: a little smaller on the narrowest phones so the text
+  // column keeps enough room, a little larger in a tablet's two columns.
+  const rowThumb = "size-20 shrink-0 rounded-lg min-[375px]:size-24 sm:size-28";
+  // The status sits on the photo of a vertical photo card, otherwise in the
+  // category line (always in the line on a phone row).
+  const statusInLine = showStatus && (!hasPhoto || board);
+  // cover when cropping to the media area would remove at most ~20% of
+  // the photo, contain otherwise; contain until the photo has loaded.
+  const mediaRatio = board ? 3 / 2 : 4 / 3;
+  const [fill, setFill] = useState<"cover" | "contain">("contain");
 
   return (
     // Phase P-4: one `transition` covers border-color, box-shadow and the
     // small hover lift together.
     <div
-      className={`group relative flex h-full min-w-0 overflow-hidden rounded-card border border-border bg-card transition duration-150 hover:border-primary/40 hover:shadow-md ${
+      {...(!hasPhoto && { "data-no-photo": "" })}
+      className={`group relative flex min-w-0 overflow-hidden rounded-card border border-border bg-card transition duration-150 hover:border-primary/40 hover:shadow-md ${
         board
-          ? "gap-3 p-3 sm:flex-col sm:gap-0 sm:p-0 motion-safe:sm:hover:-translate-y-0.5"
-          : "flex-col motion-safe:hover:-translate-y-0.5"
+          ? "gap-3 p-3 lg:flex-col lg:gap-0 lg:p-0 motion-safe:lg:hover:-translate-y-0.5"
+          : "h-full flex-col motion-safe:hover:-translate-y-0.5"
       }`}
     >
       {post.imageUrl ? (
         <div
-          className={`relative shrink-0 overflow-hidden bg-muted ${
-            board ? "size-24 rounded-lg sm:aspect-4/3 sm:h-auto sm:w-full sm:rounded-none" : "aspect-4/3 w-full"
+          className={`relative overflow-hidden bg-muted ${
+            board ? `${rowThumb} lg:aspect-3/2 lg:h-auto lg:w-full lg:rounded-none` : "aspect-4/3 w-full shrink-0"
           }`}
         >
           <Image
             src={post.imageUrl}
+            alt=""
+            aria-hidden="true"
+            fill
+            sizes={sizes}
+            loading="lazy"
+            className={`scale-110 object-cover opacity-50 blur-xl ${fill === "cover" ? "hidden" : board ? "hidden lg:block" : ""}`}
+          />
+          <Image
+            src={post.imageUrl}
             alt={post.title}
             fill
-            sizes={board ? "(min-width: 1024px) 300px, (min-width: 640px) 45vw, 96px" : "(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"}
+            sizes={sizes}
             loading="lazy"
-            className="object-cover transition-transform motion-safe:group-hover:scale-[1.03]"
+            onLoad={(event) => {
+              const { naturalWidth: w, naturalHeight: h } = event.currentTarget;
+              if (!w || !h) return;
+              const ratio = w / h;
+              const kept = Math.min(ratio / mediaRatio, mediaRatio / ratio);
+              setFill(kept >= 0.8 ? "cover" : "contain");
+            }}
+            className={`transition-transform motion-safe:group-hover:scale-[1.03] ${
+              fill === "cover" ? "object-cover" : board ? "object-cover lg:object-contain" : "object-contain"
+            }`}
           />
           {showStatus && (
-            <span className={`absolute top-2 left-2 rounded-full bg-card shadow-sm ${board ? "hidden sm:inline-flex" : "inline-flex"}`}>
+            <span className={`absolute top-2 left-2 rounded-full bg-card shadow-sm ${board ? "hidden lg:inline-flex" : "inline-flex"}`}>
               <StatusBadge status={post.status} compact />
             </span>
           )}
         </div>
       ) : (
-        // No photo: a small category icon (and the status) above the text,
-        // no picture-sized placeholder. On a phone board row it is the
-        // thumbnail-sized tile instead, so rows stay the same height.
-        <div
-          data-no-photo
-          className={`flex shrink-0 items-center ${
-            board
-              ? "size-24 justify-center rounded-lg bg-primary-muted/70 sm:h-auto sm:w-auto sm:justify-between sm:rounded-none sm:bg-transparent sm:px-3.5 sm:pt-3.5"
-              : "justify-between px-3 pt-3 sm:px-3.5 sm:pt-3.5"
-          }`}
-        >
-          <span
-            className={`flex items-center justify-center text-primary ${
-              board ? "size-11 rounded-full bg-card shadow-sm sm:size-10 sm:rounded-xl sm:bg-primary-muted sm:shadow-none" : "size-10 rounded-xl bg-primary-muted"
-            }`}
-          >
-            {icon}
-          </span>
-          {showStatus && <StatusBadge status={post.status} compact className={board ? "hidden sm:inline-flex" : ""} />}
-        </div>
+        board && (
+          <div className={`${rowThumb} flex items-center justify-center bg-primary-muted/70 lg:hidden`}>
+            <span className="flex size-10 items-center justify-center rounded-full bg-card text-primary shadow-sm">{icon("size-5")}</span>
+          </div>
+        )
       )}
 
-      <div className={`flex min-w-0 flex-1 flex-col gap-1 ${board ? "py-0.5 sm:p-3.5" : "p-3 sm:p-3.5"}`}>
-        <div className="flex min-w-0 items-center justify-between gap-2">
-          <p className="min-w-0 truncate text-xs font-medium text-muted-foreground" data-post-category>
+      <div className={`flex min-w-0 flex-1 flex-col ${board ? "gap-0.5 py-0.5 lg:gap-1 lg:p-4" : "gap-1 p-3 sm:p-3.5"}`}>
+        <div className="flex min-w-0 items-center gap-2">
+          {!hasPhoto && (
+            <span className={`size-7 shrink-0 items-center justify-center rounded-lg bg-primary-muted text-primary ${board ? "hidden lg:flex" : "flex"}`}>
+              {icon("size-4")}
+            </span>
+          )}
+          <p className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground" data-post-category>
             {/* Phase G-2: lists that mix 분실물 and 습득물 (/search, a
                 profile) still say which board each card belongs to. */}
             {!board && (
@@ -156,15 +179,21 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
             )}
             {category}
           </p>
-          {board && showStatus && <StatusBadge status={post.status} compact className="sm:hidden" />}
+          {statusInLine && <StatusBadge status={post.status} compact className={hasPhoto ? "lg:hidden" : ""} />}
         </div>
-        <h3 className="line-clamp-2 text-[15px] leading-snug font-semibold text-foreground [overflow-wrap:anywhere]">
+        <h3
+          className={`line-clamp-2 text-[15px] leading-snug font-semibold text-foreground [overflow-wrap:anywhere] ${
+            board && hasPhoto ? "lg:min-h-[2lh]" : ""
+          }`}
+        >
           {post.title}
         </h3>
-        {!post.imageUrl && description && (
+        {!hasPhoto && description && (
           <p
             className={`text-muted-foreground [overflow-wrap:anywhere] ${
-              board ? "line-clamp-1 text-xs sm:mt-0.5 sm:line-clamp-3 sm:text-sm sm:leading-relaxed" : "mt-0.5 line-clamp-3 text-sm leading-relaxed"
+              board
+                ? "line-clamp-1 text-xs sm:line-clamp-2 lg:line-clamp-3 lg:text-sm lg:leading-relaxed"
+                : "line-clamp-3 text-sm leading-relaxed"
             }`}
           >
             {description}
@@ -180,7 +209,7 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
             className="relative z-10 text-xs font-medium text-primary hover:underline"
           />
         )}
-        <div className="mt-auto flex min-w-0 items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+        <div className={`mt-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground ${board ? "pt-1 lg:pt-1.5" : "pt-1.5"}`}>
           <PinIcon aria-hidden="true" className="size-3.5 shrink-0" />
           <span className="min-w-0 truncate">{post.location ?? t("post.locationUnknown")}</span>
           <span aria-hidden="true" className="shrink-0 text-border">

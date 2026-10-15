@@ -73,12 +73,31 @@ describe("PostCard layout (게시판 리디자인)", () => {
     expect(markup).not.toContain("line-clamp-3");
   });
 
-  it("fills the same media area with the photo when there is one", () => {
+  it("shows the whole photo (contained, never cropped) over a blurred copy of itself", () => {
     const markup = renderCard({ ...basePost, imageUrl: "https://example.com/item.webp" });
 
     expect(markup).toContain("aspect-4/3");
-    expect(markup).toContain("object-cover");
+    expect(markup).toContain("object-contain");
+    // the backdrop copy is decorative
+    expect(markup).toMatch(/<img[^>]*alt=""[^>]*aria-hidden="true"[^>]*blur-xl/);
+    expect(markup).toContain(`alt="${basePost.title}"`);
     expect(markup).not.toContain("data-no-photo");
+  });
+
+  it("uses only the primary photo for a post with several photos", () => {
+    const images = [1, 2, 3].map((n) => ({ id: n, imageUrl: `https://example.com/${n}.webp`, displayOrder: n, isPrimary: n === 1 }));
+    const markup = renderCard({ ...basePost, imageUrl: "https://example.com/1.webp", images });
+
+    expect(markup).toContain("1.webp");
+    expect(markup).not.toContain("2.webp");
+    expect(markup).not.toContain("3.webp");
+  });
+
+  it("on the board, crops a square row thumbnail below lg and contains the photo in a 3:2 area from lg", () => {
+    const markup = renderCard({ ...basePost, imageUrl: "https://example.com/item.webp" }, { variant: "board" });
+
+    expect(markup).toContain("object-cover lg:object-contain");
+    expect(markup).toContain("lg:aspect-3/2");
   });
 
   it("wraps unbroken title and description tokens inside their clamps", () => {
@@ -109,10 +128,10 @@ describe("PostCard board variant", () => {
     expect(markup).not.toContain("보관 중");
   });
 
-  it("still shows a resolved status", () => {
-    const markup = renderCard({ ...basePost, status: "완료" }, { variant: "board" });
-
-    expect(markup).toContain(">완료<");
+  it("still shows a resolved status, with and without a photo", () => {
+    expect(renderCard({ ...basePost, status: "완료" }, { variant: "board" })).toContain(">완료<");
+    expect(renderCard({ ...basePost, status: "완료", imageUrl: "https://example.com/item.webp" }, { variant: "board" })).toContain(">완료<");
+    expect(renderCard({ ...basePost, type: "lost", status: "찾음" } as unknown as PostDTO, { variant: "board" })).toContain(">찾음<");
   });
 
   it("keeps the type label and status everywhere else (mixed lists)", () => {
@@ -122,11 +141,11 @@ describe("PostCard board variant", () => {
     expect(markup).toContain("보관 중");
   });
 
-  it("is a list row on a phone and a vertical card from sm", () => {
+  it("is a list row on phones and tablets and a vertical card from lg", () => {
     const markup = renderCard(basePost, { variant: "board" });
 
     expect(markup).toContain("size-24");
-    expect(markup).toContain("sm:flex-col");
+    expect(markup).toContain("lg:flex-col");
   });
 });
 

@@ -38,9 +38,9 @@ describe("EventPeriodFilter", () => {
     expect(render(custom("2026-09-20", "2026-09-25"))).not.toContain('role="alert"');
   });
 
-  it("stacks the dates and hides the ~ below sm, keeping the desktop row", () => {
+  it("puts the two dates side by side in two columns below sm (no ~), keeping the desktop row", () => {
     const markup = render(custom("2026-09-20", "2026-09-25"));
-    expect(markup).toContain("flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center");
+    expect(markup).toContain("grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center");
     expect(markup).toMatch(/<span aria-hidden="true" class="hidden [^"]*sm:inline">~<\/span>/);
   });
 
