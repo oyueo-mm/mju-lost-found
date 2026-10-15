@@ -65,29 +65,18 @@ export function percentileLabel(buckets: number[], q: number): string {
   return "-";
 }
 
-export async function loadTimings(hours: number): Promise<TimingRow[]> {
-  const rows = await prisma.$queryRaw<{ route: string; count: bigint; errors: bigint; total_ms: bigint; buckets: number[] }[]>`
-    SELECT "route", sum("count") AS count, sum("errors") AS errors, sum("total_ms") AS total_ms,
-      ARRAY(SELECT sum(b)::int FROM "ApiMetricHourly" h2, unnest(h2."buckets") WITH ORDINALITY AS u(b, i)
-            WHERE h2."route" = h."route" AND h2."hour" >= now() AT TIME ZONE 'UTC' - make_interval(hours => ${hours})
-            GROUP BY i ORDER BY i) AS buckets
-    FROM "ApiMetricHourly" h
-    WHERE "hour" >= now() AT TIME ZONE 'UTC' - make_interval(hours => ${hours})
-    GROUP BY "route"
-    ORDER BY sum("count") DESC`.catch(() => []);
-  return rows.map((r) => {
-    const count = Number(r.count);
-    return {
-      route: r.route,
-      count,
-      errors: Number(r.errors),
-      avgMs: count ? Math.round(Number(r.total_ms) / count) : 0,
-      p50: percentileLabel(r.buckets, 0.5),
-      p95: percentileLabel(r.buckets, 0.95),
-      totalMs: Number(r.total_ms),
-      buckets: r.buckets,
-    };
-  });
+// Upper bound (ms) of the bucket holding the q-quantile, for sorting
+// (open-ended last bucket: Infinity); null without requests.
+export function percentileMs(buckets: number[], q: number): number | null {
+  const total = buckets.reduce((a, b) => a + b, 0);
+  if (total === 0) return null;
+  const target = Math.ceil(total * q);
+  let seen = 0;
+  for (let i = 0; i < buckets.length; i++) {
+    seen += buckets[i];
+    if (seen >= target) return i < LATENCY_BUCKETS_MS.length ? LATENCY_BUCKETS_MS[i] : Number.POSITIVE_INFINITY;
+  }
+  return null;
 }
 
 // Free-plan limits this service runs on (Supabase Free).

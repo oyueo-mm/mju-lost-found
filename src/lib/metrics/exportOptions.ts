@@ -10,3 +10,14 @@ export const DATASETS = [
   { key: "server", name: "서버 운영" },
 ] as const;
 export type DatasetKey = (typeof DATASETS)[number]["key"];
+
+// 조회 기간 presets (KST) -- shared by the page, the export panel and the
+// export action; resolved by lib/metrics/report.ts resolvePeriod().
+export const PERIOD_PRESETS = [
+  { key: "today", label: "오늘" },
+  { key: "week", label: "이번 주" },
+  { key: "month", label: "이번 달" },
+  { key: "year", label: "올해" },
+  { key: "custom", label: "사용자 지정" },
+] as const;
+export type PeriodPreset = (typeof PERIOD_PRESETS)[number]["key"];

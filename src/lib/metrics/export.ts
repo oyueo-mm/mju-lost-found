@@ -1,5 +1,7 @@
 import { FREE_LIMITS_MB, type MetricKey, type VisitSeriesKey } from "./dashboard";
 import {
+  apiCoverage,
+  bucketSpan,
   KEYWORD_BASIS_CHANGED_AT,
   isInternalRoute,
   SOURCE_OF,
@@ -9,6 +11,7 @@ import {
   type Coverage,
   type Report,
 } from "./report";
+import { describeRoute } from "./apiRoutes";
 import { PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "./visits";
 import { buildCsv, buildXlsx, columnName, type Cell, type Sheet } from "./xlsx";
 
@@ -52,7 +55,9 @@ export function datasetsOf(report: Report): Dataset[] {
   const { totals, totalCoverage: cov, buckets } = report;
   const at = (key: MetricKey, i: number) => report.core[key][i];
   const vat = (key: VisitSeriesKey, i: number) => report.visit[key][i];
-  const period = { label: report.range.unit === "day" ? "날짜" : report.range.unit === "week" ? "주 시작일" : "월", kind: "period" as const };
+  const period = { label: report.range.unit === "day" ? "날짜" : report.range.unit === "week" ? "주(시작일)" : "월", kind: "period" as const };
+  // A week cut by the range starts at the range start, not the Monday before.
+  const startOf = (b: string) => bucketSpan(report.range, b).from;
   const refs = report.breakdown.refs;
   const sessions = sumOf(totals.sessionAnon, totals.sessionMember);
   const everytime = cov.sessionAnon === "none" ? null : (refs.find((r) => r.source === "everytime")?.sessions ?? 0);
@@ -83,9 +88,10 @@ export function datasetsOf(report: Report): Dataset[] {
   ];
 
   const visitRows = buckets.map((b, i) => {
+    const start = startOf(b);
     const anon = vat("pvAnon", i);
     const all = sumOf(anon, vat("pvMember", i));
-    return [b, anon, vat("pvMember", i), all, vat("sessionAnon", i), vat("sessionMember", i), sumOf(vat("sessionAnon", i), vat("sessionMember", i)), ratio(anon, all), at("active", i), vat("internalPv", i)];
+    return [start, anon, vat("pvMember", i), all, vat("sessionAnon", i), vat("sessionMember", i), sumOf(vat("sessionAnon", i), vat("sessionMember", i)), ratio(anon, all), at("active", i), vat("internalPv", i)];
   });
   const visitTotal = [
     "합계",
@@ -106,7 +112,7 @@ export function datasetsOf(report: Report): Dataset[] {
   const utmRows = (list: { value: string; sessions: number }[]): Value[][] => list.map((r) => [r.value, r.sessions]);
 
   const usageRows = buckets.map((b, i) => [
-    b,
+    startOf(b),
     at("lost", i),
     at("found", i),
     at("searchKeyword", i),
@@ -134,14 +140,15 @@ export function datasetsOf(report: Report): Dataset[] {
     totals.messages,
   ];
 
-  const completedRows = buckets.map((b, i) => [b, report.completedByType.lost[i], report.completedByType.found[i], at("completed", i)]);
+  const completedRows = buckets.map((b, i) => [startOf(b), report.completedByType.lost[i], report.completedByType.found[i], at("completed", i)]);
   const completedTotal = (list: (number | null)[]) => (cov.completed === "none" ? null : list.reduce<number>((a, v) => a + (v ?? 0), 0));
 
   const api = report.timings.filter((r) => !isInternalRoute(r.route));
   const internal = report.timings.filter((r) => isInternalRoute(r.route));
   const apiSummary = summarizeTimings(api);
-  const serverMeasured = cov.searchKeyword !== "none";
-  const routeRow = (r: Report["timings"][number]): Value[] => [r.route, r.count, r.errors, r.count ? r.errors / r.count : null, r.avgMs, r.p50, r.p95];
+  const apiCov = apiCoverage(report.range, report.today);
+  const serverMeasured = apiCov.coverage !== "none";
+  const routeRow = (r: Report["timings"][number]): Value[] => [r.route, describeRoute(r.route), r.count, r.errors, r.count ? r.errors / r.count : null, r.avgMs, r.p50, r.p95];
   const capacity = report.capacity;
 
   return [
@@ -249,7 +256,7 @@ export function datasetsOf(report: Report): Dataset[] {
     {
       key: "server",
       name: "서버 운영",
-      widths: [40, 12, 10, 10, 13, 12, 12],
+      widths: [36, 40, 10, 10, 10, 12, 12, 12],
       tables: [
         {
           title: "API 요약(기간 전체, AI·DB 내부 항목 제외)",
@@ -266,6 +273,7 @@ export function datasetsOf(report: Report): Dataset[] {
           title: "API 경로별 응답 시간·오류율",
           columns: [
             { label: "경로", kind: "text" },
+            { label: "비고(기능)", kind: "text" },
             { label: "요청", kind: "int" },
             { label: "오류(5xx)", kind: "int" },
             { label: "오류율", kind: "pct" },
@@ -279,6 +287,7 @@ export function datasetsOf(report: Report): Dataset[] {
           title: "AI 추론·DB 지연",
           columns: [
             { label: "항목", kind: "text" },
+            { label: "비고(기능)", kind: "text" },
             { label: "횟수", kind: "int" },
             { label: "실패", kind: "int" },
             { label: "실패율", kind: "pct" },
@@ -300,7 +309,9 @@ export function datasetsOf(report: Report): Dataset[] {
         },
       ],
       notes: [
-        `응답 시간은 ${sinceLabel("ops")}부터 집계되며 그 전은 미측정입니다. 서버 인스턴스마다 모아 기록하므로 인스턴스 종료 직전 값은 빠질 수 있습니다.`,
+        ...(apiCov.note ? [apiCov.note] : []),
+        `응답 시간은 ${sinceLabel("ops")}부터 집계되며 그 전은 미측정입니다. 시간 단위로 저장되고 최근 90일만 보관합니다. 서버 인스턴스마다 모아 기록하므로 인스턴스 종료 직전 값은 빠질 수 있습니다.`,
+        "비고(기능)는 각 API 코드에서 확인한 역할입니다.",
         "p50/p95는 구간 상한값입니다(예: ≤ 400ms). 오류율은 5xx 응답 비율입니다.",
         "ai:*-load는 인스턴스당 한 번의 모델 로딩, ai:*-embed는 1건 추론, db:ping은 기록할 때마다 잰 DB 왕복 시간입니다.",
         "저장 용량은 가장 최근 기록(매일 새벽 정리 작업 때 기록)이며 선택한 기간과 관계없습니다.",
@@ -309,9 +320,9 @@ export function datasetsOf(report: Report): Dataset[] {
   ];
 }
 
-const periodLabel = (report: Report) => {
+const periodLabel = (report: Report, label?: string) => {
   const last = new Date(Date.parse(`${report.range.until}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
-  return `${report.range.from} ~ ${last} (${UNIT_LABEL[report.range.unit]})`;
+  return `${label ?? `${report.range.from} ~ ${last}`} · 집계 단위 ${UNIT_LABEL[report.range.unit]}`;
 };
 
 function cellOf(value: Value, kind: Kind, unit: Report["range"]["unit"]): Cell {
@@ -321,7 +332,7 @@ function cellOf(value: Value, kind: Kind, unit: Report["range"]["unit"]): Cell {
   return { v: value, s: "text" };
 }
 
-export function toSheets(report: Report, datasets = datasetsOf(report)): Sheet[] {
+export function toSheets(report: Report, label?: string, datasets = datasetsOf(report)): Sheet[] {
   return datasets.map((ds) => {
     const width = Math.max(4, ds.widths.length);
     const rows: Cell[][] = [];
@@ -331,7 +342,7 @@ export function toSheets(report: Report, datasets = datasetsOf(report)): Sheet[]
       merges.push(`A${rows.length}:${columnName(width - 1)}${rows.length}`);
     };
     wide(`MJU Find 운영 통계 — ${ds.name}`, "title");
-    wide(`통계 기간: ${periodLabel(report)}`, "meta");
+    wide(`통계 기간: ${periodLabel(report, label)}`, "meta");
     wide(`생성 일시: ${report.generatedAt} (KST) · 출처: MJU Find 관리자 운영 통계`, "meta");
     rows.push([]);
     let freezeRows: number | undefined;
@@ -358,19 +369,19 @@ export function toSheets(report: Report, datasets = datasetsOf(report)): Sheet[]
   });
 }
 
-export function toXlsx(report: Report): Buffer {
-  return buildXlsx(toSheets(report), { title: "MJU Find 운영 통계", createdAt: new Date() });
+export function toXlsx(report: Report, label?: string): Buffer {
+  return buildXlsx(toSheets(report, label), { title: "MJU Find 운영 통계", createdAt: new Date() });
 }
 
 // One CSV per data kind: "#" lines (service, period, time, caveats) on top
 // -- skipped by most tools with a comment option -- then plain tables.
-export function toCsv(report: Report, key: DatasetKey): string {
+export function toCsv(report: Report, key: DatasetKey, label?: string): string {
   const ds = datasetsOf(report).find((d) => d.key === key)!;
   // "#" lines are written as they are (never quoted), so a reader's comment
   // option skips each one whole even when it holds a comma.
   const meta = [
     `# MJU Find 운영 통계 - ${ds.name}`,
-    `# 통계 기간: ${periodLabel(report)}`,
+    `# 통계 기간: ${periodLabel(report, label)}`,
     `# 생성 일시: ${report.generatedAt} (KST)`,
     ...ds.notes.map((n) => `# 주의: ${n}`),
     "# 빈 칸은 미측정(통계 수집 시작 이전)이며 0과 다릅니다.",

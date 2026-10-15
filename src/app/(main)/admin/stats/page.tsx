@@ -2,21 +2,25 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { requireAdmin } from "@/lib/auth/session";
-import { addPeriods, FREE_LIMITS_MB, loadTimings, METRICS, PERIODS, VISIT_SERIES, type Granularity, type TimingRow } from "@/lib/metrics/dashboard";
+import { FREE_LIMITS_MB, METRICS, percentileMs, VISIT_SERIES, type Granularity, type TimingRow } from "@/lib/metrics/dashboard";
+import { describeRoute, methodOf } from "@/lib/metrics/apiRoutes";
+import { PERIOD_PRESETS, type PeriodPreset } from "@/lib/metrics/exportOptions";
 import { kstDay } from "@/lib/metrics/record";
 import {
-  dashboardRange,
+  apiCoverage,
+  bucketSpan,
   isInternalRoute,
   KEYWORD_BASIS_CHANGED_AT,
   loadReport,
+  resolvePeriod,
   sinceLabel,
-  SOURCE_OF,
   summarizeTimings,
   unsplitSearches,
   type Coverage,
   type Report,
 } from "@/lib/metrics/report";
 import { PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "@/lib/metrics/visits";
+import { ApiStatsTable, type ApiStatRow } from "@/components/admin/ApiStatsTable";
 import { BarList, Meter, Sparkline, StackedBarChart } from "@/components/admin/StatsCharts";
 import { StatsExportPanel } from "@/components/admin/StatsExportPanel";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
@@ -26,27 +30,16 @@ import { ChevronRightIcon, InfoIcon } from "@/components/icons";
 // names -- 활성 회원 are counted from HMAC'd daily marks. Every number on
 // this page comes from one loadReport() call, the same one the Excel/CSV
 // export uses, so the screen and the files always agree.
-const UNITS: { unit: Granularity; label: string }[] = [
-  { unit: "day", label: `일별 (${PERIODS.day}일)` },
-  { unit: "week", label: `주별 (${PERIODS.week}주)` },
-  { unit: "month", label: `월별 (${PERIODS.month}개월)` },
-];
-const WINDOWS = [7, 14, 30] as const;
-
 const fmt = (n: number) => n.toLocaleString("ko-KR");
-const bucketLabel = (bucket: string, unit: Granularity) => {
-  const [, m, d] = bucket.split("-").map(Number);
-  return unit === "month" ? `${bucket.slice(2, 4)}.${m}` : unit === "week" ? `${m}/${d}주` : `${m}/${d}`;
+// A period's label from its first day inside the range (a week cut by the
+// range starts there, not on the Monday before).
+const bucketLabel = (start: string, unit: Granularity) => {
+  const [, m, d] = start.split("-").map(Number);
+  return unit === "month" ? `${start.slice(2, 4)}.${m}` : unit === "week" ? `${m}/${d}~` : `${m}/${d}`;
 };
+const UNIT_TEXT: Record<Granularity, string> = { day: "일별", week: "주별", month: "월별" };
 const sum = (...values: (number | null)[]) => (values.every((v) => v === null) ? null : values.reduce<number>((a, v) => a + (v ?? 0), 0));
 const addSeries = (a: (number | null)[], b: (number | null)[]) => a.map((v, i) => sum(v, b[i]));
-
-function change(before: number | null, after: number | null): string {
-  if (before === null || after === null) return "비교 불가";
-  if (before === 0) return after === 0 ? "-" : "신규";
-  const pct = Math.round(((after - before) / before) * 100);
-  return `${pct > 0 ? "+" : ""}${pct}%`;
-}
 
 function Section({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
   return (
@@ -110,37 +103,23 @@ function StatCard({
   );
 }
 
-function TimingTable({ rows }: { rows: TimingRow[] }) {
-  if (rows.length === 0) return <p className="text-xs text-muted-foreground">아직 기록이 없습니다.</p>;
+function InternalTimingTable({ rows }: { rows: TimingRow[] }) {
+  if (rows.length === 0) return <p className="text-xs text-muted-foreground">이 기간에는 기록이 없습니다.</p>;
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[520px] text-left text-xs">
-        <thead className="text-muted-foreground">
-          <tr>
-            <th className="py-1.5 pr-3 font-medium">경로</th>
-            <th className="py-1.5 pr-3 text-right font-medium">요청</th>
-            <th className="py-1.5 pr-3 text-right font-medium">오류율</th>
-            <th className="py-1.5 pr-3 text-right font-medium">평균</th>
-            <th className="py-1.5 pr-3 text-right font-medium">p50</th>
-            <th className="py-1.5 text-right font-medium">p95</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.route} className="border-t border-border">
-              <td className="py-1.5 pr-3 font-mono text-[11px] break-all text-foreground">{r.route}</td>
-              <td className="py-1.5 pr-3 text-right tabular-nums">{fmt(r.count)}</td>
-              <td className={`py-1.5 pr-3 text-right tabular-nums ${r.errors > 0 ? "text-destructive" : ""}`}>
-                {r.count ? `${((r.errors / r.count) * 100).toFixed(1)}%` : "-"}
-              </td>
-              <td className="py-1.5 pr-3 text-right tabular-nums">{fmt(r.avgMs)}ms</td>
-              <td className="py-1.5 pr-3 text-right tabular-nums">{r.p50}</td>
-              <td className="py-1.5 text-right tabular-nums">{r.p95}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <ul className="flex flex-col gap-2">
+      {rows.map((r) => (
+        <li key={r.route} className="flex flex-col gap-0.5 rounded-card border border-border p-3 text-xs sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+          <div className="min-w-0">
+            <p className="font-medium text-foreground">{describeRoute(r.route)}</p>
+            <p className="font-mono text-[11px] text-muted-foreground">{r.route}</p>
+          </div>
+          <p className="shrink-0 tabular-nums text-muted-foreground">
+            {fmt(r.count)}회 · 평균 <b className="font-semibold text-foreground">{fmt(r.avgMs)}ms</b> · p95 {r.p95}
+            {r.errors > 0 && <span className="text-destructive"> · 실패 {fmt(r.errors)}</span>}
+          </p>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -167,7 +146,7 @@ function SeriesTable({ report, columns }: { report: Report; columns: { label: st
             .reverse()
             .map(({ bucket, i }) => (
               <tr key={bucket} className="border-t border-border">
-                <td className="py-1.5 pr-2 text-left text-foreground">{bucketLabel(bucket, report.range.unit)}</td>
+                <td className="py-1.5 pr-2 text-left text-foreground">{bucketLabel(bucketSpan(report.range, bucket).from, report.range.unit)}</td>
                 {columns.map((c) => (
                   <td key={c.label} className="py-1.5 pr-2">
                     <Num v={c.values[i]} />
@@ -184,37 +163,53 @@ function SeriesTable({ report, columns }: { report: Report; columns: { label: st
 export default async function AdminStatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ unit?: string; pivot?: string; window?: string }>;
+  searchParams: Promise<{ period?: string; from?: string; to?: string }>;
 }) {
   await requireAdmin();
   const params = await searchParams;
-  const unit: Granularity = params.unit === "week" || params.unit === "month" ? params.unit : "day";
-  const pivot = /^\d{4}-\d{2}-\d{2}$/.test(params.pivot ?? "") && !Number.isNaN(Date.parse(params.pivot!)) ? params.pivot! : null;
-  const windowDays = WINDOWS.includes(Number(params.window) as (typeof WINDOWS)[number]) ? Number(params.window) : 14;
   const today = kstDay();
+  const preset = (PERIOD_PRESETS.some((p) => p.key === params.period) ? params.period : "month") as PeriodPreset;
+  const asked = resolvePeriod({ preset, from: params.from, to: params.to }, today);
+  // A bad custom range falls back to 이번 달, with the reason shown.
+  const period = "error" in asked ? (resolvePeriod({ preset: "month" }, today) as Exclude<typeof asked, { error: string }>) : asked;
+  const periodError = "error" in asked ? asked.error : null;
+  const unit = period.range.unit;
 
-  const [report, timings24h, timings7d, before, after] = await Promise.all([
-    loadReport(dashboardRange(unit, today)),
-    loadTimings(24),
-    loadTimings(24 * 7),
-    pivot ? loadReport({ from: addPeriods(pivot, "day", -windowDays), until: pivot, unit: "day" }, { withServer: false }) : null,
-    pivot ? loadReport({ from: pivot, until: addPeriods(pivot, "day", windowDays), unit: "day" }, { withServer: false }) : null,
-  ]);
+  const report = await loadReport(period.range);
   const { core, visit, totals, totalCoverage: cov } = report;
-  const labels = report.buckets.map((b) => bucketLabel(b, unit));
+  const labels = report.buckets.map((b) => bucketLabel(bucketSpan(report.range, b).from, unit));
   const last = report.buckets.length - 1;
-  const latestLabel = labels[last];
+  const trend = report.buckets.length > 1;
   const pvAll = addSeries(visit.pvAnon, visit.pvMember);
   const sessionsAll = addSeries(visit.sessionAnon, visit.sessionMember);
   const searchAll = core.searchKeyword.map((v, i) => sum(v, core.searchSemantic[i], core.searchImage[i]));
   const sessionsTotal = sum(totals.sessionAnon, totals.sessionMember);
   const everytime = cov.sessionAnon === "none" ? null : (report.breakdown.refs.find((r) => r.source === "everytime")?.sessions ?? 0);
   const hasUnmeasured = Object.values(report.totalCoverage).some((c) => c !== "full");
-  const api24 = summarizeTimings(timings24h.filter((r) => !isInternalRoute(r.route)));
-  const embed7 = summarizeTimings(timings7d.filter((r) => r.route.startsWith("ai:") && r.route.endsWith("-embed")));
-  const ping7 = summarizeTimings(timings7d.filter((r) => r.route === "db:ping"));
   const unsplit = unsplitSearches(report);
-  const basisDay = KEYWORD_BASIS_CHANGED_AT.slice(0, 10);
+  const api = apiCoverage(report.range, today);
+  const apiRows = report.timings.filter((r) => !isInternalRoute(r.route));
+  const apiSummary = summarizeTimings(apiRows);
+  const embed = summarizeTimings(report.timings.filter((r) => r.route.startsWith("ai:") && r.route.endsWith("-embed")));
+  const ping = summarizeTimings(report.timings.filter((r) => r.route === "db:ping"));
+  const apiTable: ApiStatRow[] = apiRows.map((r) => {
+    const p95 = percentileMs(r.buckets ?? [], 0.95);
+    return {
+      route: r.route,
+      method: methodOf(r.route),
+      path: r.route.replace(/^[A-Z]+ /, ""),
+      note: describeRoute(r.route),
+      count: r.count,
+      errors: r.errors,
+      avgMs: r.avgMs,
+      p50: r.p50,
+      p95: r.p95,
+      p95Ms: p95 === null ? null : Number.isFinite(p95) ? p95 : 1e9,
+    };
+  });
+  const latest = trend ? `최근 ${labels[last]}: ` : null;
+  const chip = (active: boolean) =>
+    `rounded-full border px-3 py-1.5 text-xs font-medium ${active ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground"}`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -225,24 +220,57 @@ export default async function AdminStatsPage({
           </Link>
           <h1 className="text-xl font-semibold text-foreground">운영 통계</h1>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            한국 시간 기준 · 표시 기간 {report.range.from} ~ {addPeriods(report.range.until, "day", -1)} · 개인정보와 검색어 원문은 수집하지 않습니다.
+            {period.label} · {UNIT_TEXT[unit]} 집계 · 한국 시간 기준(진행 중인 기간은 오늘 현재까지) · 개인정보와 검색어 원문은 수집하지 않습니다.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <nav className="flex flex-wrap gap-2" aria-label="집계 단위">
-            {UNITS.map((u) => (
-              <Link
-                key={u.unit}
-                href={`/admin/stats?unit=${u.unit}${pivot ? `&pivot=${pivot}&window=${windowDays}` : ""}`}
-                aria-current={u.unit === unit ? "page" : undefined}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium ${
-                  u.unit === unit ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {u.label}
+        <div className="flex flex-col gap-2">
+          <nav className="flex flex-wrap gap-2" aria-label="조회 기간">
+            {PERIOD_PRESETS.filter((p) => p.key !== "custom").map((p) => (
+              <Link key={p.key} href={`/admin/stats?period=${p.key}`} aria-current={period.selection.preset === p.key ? "page" : undefined} className={chip(period.selection.preset === p.key)}>
+                {p.label}
               </Link>
             ))}
           </nav>
+          <details className="group" open={period.selection.preset === "custom" || !!periodError}>
+            <summary className={`${chip(period.selection.preset === "custom")} inline-flex cursor-pointer list-none items-center gap-1`}>
+              사용자 지정
+              <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
+            </summary>
+            <form action="/admin/stats" className="mt-2 flex flex-wrap items-end gap-2 text-xs text-muted-foreground">
+              <input type="hidden" name="period" value="custom" />
+              <label className="flex flex-col gap-1">
+                시작일
+                <input
+                  type="date"
+                  name="from"
+                  required
+                  max={today}
+                  defaultValue={period.selection.from ?? period.range.from}
+                  className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                종료일
+                <input
+                  type="date"
+                  name="to"
+                  required
+                  max={today}
+                  defaultValue={period.selection.to ?? today}
+                  className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+                />
+              </label>
+              <button type="submit" className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground">
+                조회
+              </button>
+              <span className="basis-full">최대 366일. 31일까지는 일별, 26주까지는 주별, 그보다 길면 월별로 묶어 보여 줍니다.</span>
+            </form>
+          </details>
+          {periodError && (
+            <p role="alert" className="text-xs text-destructive">
+              {periodError} 이번 달 기준으로 보여 줍니다.
+            </p>
+          )}
         </div>
         <details className="group rounded-card border border-border bg-card">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-medium text-foreground">
@@ -250,7 +278,7 @@ export default async function AdminStatsPage({
             <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
           </summary>
           <div className="border-t border-border px-4 py-3">
-            <StatsExportPanel unit={unit} today={today} />
+            <StatsExportPanel preset={period.selection.preset} from={period.selection.from} to={period.selection.to} periodLabel={period.label} />
           </div>
         </details>
         {hasUnmeasured && (
@@ -270,24 +298,24 @@ export default async function AdminStatsPage({
           핵심 지표 <span className="text-xs font-normal text-muted-foreground">표시 기간 합계</span>
         </h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 max-md:[&>*:last-child]:col-span-2">
-          <StatCard label="신규 가입" value={totals.signups} sub={`최근 ${latestLabel}: ${fmt(core.signups[last] ?? 0)}`} values={core.signups} />
+          <StatCard label="신규 가입" value={totals.signups} sub={latest ? `${latest}${fmt(core.signups[last] ?? 0)}` : undefined} values={trend ? core.signups : undefined} />
           <StatCard
             label="활성 회원"
             value={totals.active}
             coverage={cov.active}
             since={sinceLabel("ops")}
             sub="기간 내 서로 다른 로그인 회원"
-            values={core.active}
+            values={trend ? core.active : undefined}
           />
-          <StatCard label="방문 세션" value={sessionsTotal} coverage={cov.sessionAnon} since={sinceLabel("visit")} sub="고유 방문자 수 아님" values={sessionsAll} />
-          <StatCard label="페이지뷰" value={sum(totals.pvAnon, totals.pvMember)} coverage={cov.pvAnon} since={sinceLabel("visit")} values={pvAll} />
+          <StatCard label="방문 세션" value={sessionsTotal} coverage={cov.sessionAnon} since={sinceLabel("visit")} sub="고유 방문자 수 아님" values={trend ? sessionsAll : undefined} />
+          <StatCard label="페이지뷰" value={sum(totals.pvAnon, totals.pvMember)} coverage={cov.pvAnon} since={sinceLabel("visit")} values={trend ? pvAll : undefined} />
           <StatCard
             label="검색 이용량"
             value={sum(totals.searchKeyword, totals.searchSemantic, totals.searchImage)}
             coverage={cov.searchKeyword}
             since={sinceLabel("ops")}
             sub="키워드·AI·이미지"
-            values={searchAll}
+            values={trend ? searchAll : undefined}
           />
         </div>
       </section>
@@ -328,24 +356,31 @@ export default async function AdminStatsPage({
           </>
         }
       >
-        <div className="grid gap-5 md:grid-cols-2">
-          <StackedBarChart
-            title="페이지뷰"
-            labels={labels}
-            series={[
-              { label: "비로그인", values: visit.pvAnon, className: "fill-primary/35", swatch: "bg-primary/35" },
-              { label: "로그인", values: visit.pvMember, className: "fill-primary", swatch: "bg-primary" },
-            ]}
-          />
-          <StackedBarChart
-            title="방문 세션"
-            labels={labels}
-            series={[
-              { label: "비로그인으로 시작", values: visit.sessionAnon, className: "fill-primary/35", swatch: "bg-primary/35" },
-              { label: "로그인 상태로 시작", values: visit.sessionMember, className: "fill-primary", swatch: "bg-primary" },
-            ]}
-          />
-        </div>
+        {!trend && (
+          <p className="rounded-card border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            하루만 고른 경우 추이 그래프 없이 합계만 보여 줍니다. 방문·검색 통계는 하루 단위로만 저장되어 시간별 그래프는 만들지 않습니다.
+          </p>
+        )}
+        {trend && (
+          <div className="grid gap-5 md:grid-cols-2">
+            <StackedBarChart
+              title="페이지뷰"
+              labels={labels}
+              series={[
+                { label: "비로그인", values: visit.pvAnon, className: "fill-primary/35", swatch: "bg-primary/35" },
+                { label: "로그인", values: visit.pvMember, className: "fill-primary", swatch: "bg-primary" },
+              ]}
+            />
+            <StackedBarChart
+              title="방문 세션"
+              labels={labels}
+              series={[
+                { label: "비로그인으로 시작", values: visit.sessionAnon, className: "fill-primary/35", swatch: "bg-primary/35" },
+                { label: "로그인 상태로 시작", values: visit.sessionMember, className: "fill-primary", swatch: "bg-primary" },
+              ]}
+            />
+          </div>
+        )}
         <div className="grid gap-5 md:grid-cols-3">
           <div className="flex flex-col gap-1 rounded-card border border-primary/30 bg-primary-muted/40 p-3">
             <span className="text-xs text-muted-foreground">에브리타임 유입 (방문 세션)</span>
@@ -399,14 +434,16 @@ export default async function AdminStatsPage({
           <StatCard label="완료 처리" value={totals.completed} coverage={cov.completed} since={sinceLabel("completed")} sub="작성자 표시 기준" />
         </div>
         <div className="grid gap-5 md:grid-cols-2">
-          <StackedBarChart
-            title="게시글 등록"
-            labels={labels}
-            series={[
-              { label: "분실물", values: core.lost, className: "fill-primary/35", swatch: "bg-primary/35" },
-              { label: "습득물", values: core.found, className: "fill-primary", swatch: "bg-primary" },
-            ]}
-          />
+          {trend && (
+            <StackedBarChart
+              title="게시글 등록"
+              labels={labels}
+              series={[
+                { label: "분실물", values: core.lost, className: "fill-primary/35", swatch: "bg-primary/35" },
+                { label: "습득물", values: core.found, className: "fill-primary", swatch: "bg-primary" },
+              ]}
+            />
+          )}
           <div className="flex flex-col gap-3">
             <h3 className="text-xs font-semibold text-foreground">검색 유형</h3>
             {cov.searchKeyword === "none" ? (
@@ -453,116 +490,56 @@ export default async function AdminStatsPage({
         </More>
       </Section>
 
-      <Section title="서버 상태" description="API 응답 시간과 오류율(최근 24시간), AI 추론·DB 지연(최근 7일), 저장 용량입니다.">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-          <StatCard label="API 요청 (24시간)" value={api24.count} />
-          <StatCard
-            label="오류율 (5xx, 24시간)"
-            value={null}
-            display={api24.errorRate === null ? "-" : `${(api24.errorRate * 100).toFixed(1)}%`}
-            sub={`오류 ${fmt(api24.errors)}건`}
-          />
-          <StatCard label="평균 응답 (24시간)" value={null} display={api24.avgMs === null ? "-" : `${fmt(api24.avgMs)}ms`} />
-          <StatCard label="p95 응답 (24시간)" value={null} display={api24.p95} sub="구간 상한값" />
-          <StatCard label="AI 추론 평균 (7일)" value={null} display={embed7.avgMs === null ? "-" : `${fmt(embed7.avgMs)}ms`} sub={`${fmt(embed7.count)}건 · 모델 로딩 제외`} />
-          <StatCard label="DB 왕복 평균 (7일)" value={null} display={ping7.avgMs === null ? "-" : `${fmt(ping7.avgMs)}ms`} />
-        </div>
+      <Section
+        title="서버 상태"
+        description={
+          <>
+            <p>조회 기간의 API 응답 시간·오류율과 AI 추론·DB 지연, 현재 저장 용량입니다.</p>
+            {api.note && <p className="mt-1 text-warning">{api.note}</p>}
+          </>
+        }
+      >
+        {api.coverage === "none" ? (
+          <p className="text-xs text-muted-foreground">이 기간은 미측정입니다.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+            <StatCard label="API 요청" value={apiSummary.count} />
+            <StatCard
+              label="오류율 (5xx)"
+              value={null}
+              display={apiSummary.errorRate === null ? "-" : `${(apiSummary.errorRate * 100).toFixed(1)}%`}
+              sub={`오류 ${fmt(apiSummary.errors)}건`}
+            />
+            <StatCard label="평균 응답" value={null} display={apiSummary.avgMs === null ? "-" : `${fmt(apiSummary.avgMs)}ms`} />
+            <StatCard label="p95 응답" value={null} display={apiSummary.p95} sub="구간 상한값" />
+            <StatCard label="AI 추론 평균" value={null} display={embed.avgMs === null ? "-" : `${fmt(embed.avgMs)}ms`} sub={`${fmt(embed.count)}건 · 모델 로딩 제외`} />
+            <StatCard label="DB 왕복 평균" value={null} display={ping.avgMs === null ? "-" : `${fmt(ping.avgMs)}ms`} />
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           {report.capacity ? (
             <>
               <Meter label="데이터베이스 (Supabase Free)" used={report.capacity.dbMb} limit={FREE_LIMITS_MB.db} unit="MB" />
               <Meter label="Storage 사진 (Supabase Free)" used={report.capacity.storageMb} limit={FREE_LIMITS_MB.storage} unit="MB" />
               <p className="text-[11px] text-muted-foreground sm:col-span-2">
-                {report.capacity.day} 기준(매일 새벽 정리 작업 때 기록). 60%부터 주의, 80%부터 정리나 요금제 검토가 필요합니다.
+                {report.capacity.day} 기준(매일 새벽 정리 작업 때 기록, 조회 기간과 관계없음). 60%부터 주의, 80%부터 정리나 요금제 검토가 필요합니다.
               </p>
             </>
           ) : (
             <p className="text-xs text-muted-foreground">아직 기록이 없습니다(매일 새벽 정리 작업 때 기록).</p>
           )}
         </div>
-        <More label="경로별 응답 시간 보기">
-          <div className="flex flex-col gap-3">
-            <p>서버 인스턴스마다 모아 기록합니다(인스턴스 종료 직전 값은 빠질 수 있음). p50/p95는 구간 상한값, 오류율은 5xx 응답 비율입니다.</p>
-            <h3 className="text-xs font-semibold text-foreground">API · 최근 24시간</h3>
-            <TimingTable rows={timings24h.filter((r) => !isInternalRoute(r.route))} />
-            <h3 className="text-xs font-semibold text-foreground">API · 최근 7일</h3>
-            <TimingTable rows={timings7d.filter((r) => !isInternalRoute(r.route))} />
-            <h3 className="text-xs font-semibold text-foreground">AI 추론·DB 지연 · 최근 7일</h3>
-            <p>ai:*-load는 인스턴스당 한 번의 모델 로딩(콜드 스타트), ai:*-embed는 1건 추론, db:ping은 기록할 때마다 잰 DB 왕복 시간입니다.</p>
-            <TimingTable rows={timings7d.filter((r) => isInternalRoute(r.route))} />
-          </div>
+        <div className="flex flex-col gap-2">
+          <h3 className="text-sm font-semibold text-foreground">API 응답 시간·오류율</h3>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            시간 단위로 저장된 기록을 조회 기간(KST)만큼 합산합니다(최근 90일 보관). 서버 인스턴스마다 모아 기록하므로 인스턴스 종료 직전 값은 빠질 수
+            있습니다. p50/p95는 구간 상한값, 오류율은 5xx 응답 비율이며, 비고는 각 API 코드에서 확인한 역할입니다.
+          </p>
+          <ApiStatsTable rows={apiTable} empty={api.coverage === "none" ? "이 기간은 미측정입니다." : "이 기간에는 기록이 없습니다."} />
+        </div>
+        <More label="AI 추론·DB 지연 보기">
+          <InternalTimingTable rows={report.timings.filter((r) => isInternalRoute(r.route))} />
         </More>
-      </Section>
-
-      <Section title="홍보 전후 비교" description="기준일(홍보 시작일) 앞뒤 같은 길이의 기간을 비교합니다.">
-        <form action="/admin/stats" className="flex flex-wrap items-end gap-2 text-sm">
-          <input type="hidden" name="unit" value={unit} />
-          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-            기준일(홍보 시작일)
-            <input type="date" name="pivot" defaultValue={pivot ?? today} className="rounded-lg border border-border bg-transparent px-2 py-1.5 text-sm text-foreground" />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-            비교 기간
-            <select name="window" defaultValue={String(windowDays)} className="rounded-lg border border-border bg-transparent px-2 py-1.5 text-sm text-foreground">
-              {WINDOWS.map((w) => (
-                <option key={w} value={w}>
-                  앞뒤 {w}일
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit" className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground">
-            비교하기
-          </button>
-        </form>
-        {before && after && pivot && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[460px] text-right text-xs tabular-nums">
-              <thead className="text-muted-foreground">
-                <tr>
-                  <th className="py-1.5 pr-3 text-left font-medium">지표</th>
-                  <th className="py-1.5 pr-3 font-medium">이전 {windowDays}일</th>
-                  <th className="py-1.5 pr-3 font-medium">이후 {windowDays}일</th>
-                  <th className="py-1.5 font-medium">변화</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...METRICS.map((m) => ({ key: m.key, label: m.label })), ...VISIT_SERIES.filter((s) => s.key !== "internalPv").map((s) => ({ key: s.key, label: s.label }))].map(
-                  ({ key, label }) => {
-                    const b = before.totals[key];
-                    const a = after.totals[key];
-                    const partial = before.totalCoverage[key] === "partial" || after.totalCoverage[key] === "partial";
-                    const basisChanged = key === "searchKeyword" && before.range.from < basisDay && basisDay < after.range.until;
-                    const source = SOURCE_OF[key];
-                    return (
-                      <tr key={key} className="border-t border-border">
-                        <td className="py-1.5 pr-3 text-left text-foreground">
-                          {label}
-                          {(partial || basisChanged) && (
-                            <span className="ml-1 text-[10px] text-warning">
-                              ※ {basisChanged ? "집계 기준 변경" : `${source ? sinceLabel(source) : ""}부터 집계`}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-1.5 pr-3">
-                          <Num v={b} />
-                        </td>
-                        <td className="py-1.5 pr-3">
-                          <Num v={a} />
-                        </td>
-                        <td className="py-1.5">{change(b, a)}</td>
-                      </tr>
-                    );
-                  },
-                )}
-              </tbody>
-            </table>
-            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-              이전: 기준일 전 {windowDays}일, 이후: 기준일 포함 {windowDays}일. 활성 회원은 각 기간의 서로 다른 회원 수입니다. 미측정 기간이 섞인
-              지표(※)는 실제보다 적게 보이며, &lsquo;집계 기준 변경&rsquo; 지표는 직접 비교하지 마세요.
-            </p>
-          </div>
-        )}
       </Section>
 
       <Section title="상세 데이터" description="기간별 수치 표입니다. 그래프와 같은 값이며, 내보내기 파일에도 같은 값이 들어갑니다.">

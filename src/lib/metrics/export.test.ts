@@ -44,6 +44,7 @@ function fakeReport(): Report {
     range,
     buckets: ["2026-10-14", "2026-10-15", "2026-10-16"],
     generatedAt: "2026-10-16 09:30",
+    today: "2026-10-16",
     core,
     visit,
     completedByType: { lost: n(1, 0, 0), found: n(0, 0, 1) },
@@ -135,14 +136,22 @@ describe("운영 통계 내보내기", () => {
     expect(files.get("xl/worksheets/sheet3.xml")).toContain("&apos;-launch".replace("&apos;", "'"));
   });
 
+  it("lists each API with its role in the 서버 운영 sheet", () => {
+    const server = datasetsOf(fakeReport()).find((d) => d.key === "server")!;
+    expect(server.tables[1].columns.map((c) => c.label)).toContain("비고(기능)");
+    expect(server.tables[1].rows[0].slice(0, 3)).toEqual(["GET /api/posts", "분실물·습득물 게시글 목록·키워드 검색", 10]);
+    expect(server.tables[2].rows[0].slice(0, 2)).toEqual(["ai:text-embed", "AI 문장 임베딩 1건 계산 (검색어·게시글)"]);
+  });
+
   it("writes one CSV per data kind, with notes on top and blanks for 미측정", () => {
     const csv = toCsv(fakeReport(), "visits");
     expect(csv.startsWith("﻿# MJU Find 운영 통계 - 방문 통계")).toBe(true);
-    expect(csv).toContain("# 통계 기간: 2026-10-14 ~ 2026-10-16 (일별)");
+    expect(csv).toContain("# 통계 기간: 2026-10-14 ~ 2026-10-16 · 집계 단위 일별");
     expect(csv).toContain("# 빈 칸은 미측정");
     expect(csv).toContain("\r\n2026-10-14,,,,,,,,,\r\n");
     expect(csv).toContain("2026-10-15,71,38,109,21,0,21,65.1,9,58");
     expect(toCsv(fakeReport(), "referrals")).toContain("'-launch,2");
+    expect(toCsv(fakeReport(), "visits", "이번 주 (2026-10-12 ~ 2026-10-16)")).toContain("# 통계 기간: 이번 주 (2026-10-12 ~ 2026-10-16) · 집계 단위 일별");
   });
 
   it("neutralizes spreadsheet formulas in CSV and quotes separators", () => {

@@ -14,6 +14,8 @@ import {
   type VisitBreakdown,
   type VisitSeriesKey,
 } from "./dashboard";
+import { API_METRIC_RETENTION_DAYS } from "@/lib/retention/policy";
+import { PERIOD_PRESETS, type PeriodPreset } from "./exportOptions";
 import { kstDay } from "./record";
 
 // 운영 통계 for any KST date range -- the one loader behind both the
@@ -87,16 +89,66 @@ export function daysBetween(from: string, until: string): number {
   return Math.round((Date.parse(`${until}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 }
 
-// The dashboard's range for a unit: the last 30 days / 12 weeks / 12 months.
-export function dashboardRange(unit: Granularity, today = kstDay()): ReportRange {
-  const count = unit === "day" ? 30 : 12;
-  const last = periodStart(today, unit);
-  return { from: addPeriods(last, unit, -(count - 1)), until: addPeriods(last, unit, 1), unit };
+// 조회 기간 (KST): 오늘 / 이번 주 (월요일 시작) / 이번 달 / 올해 run up to
+// today, inclusive; 사용자 지정 is any [from, to] up to today. The chart unit
+// follows the length: up to 31 days by day, up to 26 weeks by week, longer
+// by month. Daily counts are the finest the stores hold (MetricDaily is per
+// day), so nothing is ever shown by hour.
+export { PERIOD_PRESETS, type PeriodPreset };
+export type PeriodSelection = { preset: PeriodPreset; from?: string; to?: string };
+export const MAX_CUSTOM_DAYS = 366;
+export const EARLIEST_DAY = "2024-01-01";
+
+export function autoUnit(from: string, until: string): Granularity {
+  const days = daysBetween(from, until);
+  return days <= 31 ? "day" : days <= 183 ? "week" : "month";
 }
 
-// The last `days` days including today, by day.
-export function recentRange(days: number, today = kstDay()): ReportRange {
-  return { from: addPeriods(today, "day", -(days - 1)), until: addPeriods(today, "day", 1), unit: "day" };
+const isDay = (v: string | undefined): v is string =>
+  !!v && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`)) && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v;
+
+const md = (day: string) => `${Number(day.slice(5, 7))}/${Number(day.slice(8, 10))}`;
+
+export type ResolvedPeriod = { range: ReportRange; selection: PeriodSelection; label: string };
+
+export function resolvePeriod(selection: PeriodSelection, today = kstDay()): ResolvedPeriod | { error: string } {
+  const until = addPeriods(today, "day", 1);
+  let from: string;
+  let to = today;
+  switch (selection.preset) {
+    case "today":
+      from = today;
+      break;
+    case "week":
+      from = periodStart(today, "week");
+      break;
+    case "month":
+      from = periodStart(today, "month");
+      break;
+    case "year":
+      from = `${today.slice(0, 4)}-01-01`;
+      break;
+    case "custom": {
+      if (!isDay(selection.from) || !isDay(selection.to)) return { error: "시작일과 종료일을 모두 골라 주세요." };
+      if (selection.from > selection.to) return { error: "시작일이 종료일보다 늦습니다." };
+      if (selection.to > today) return { error: "종료일은 오늘 이후로 고를 수 없습니다." };
+      if (selection.from < EARLIEST_DAY) return { error: `${EARLIEST_DAY} 이후로 골라 주세요.` };
+      if (daysBetween(selection.from, addPeriods(selection.to, "day", 1)) > MAX_CUSTOM_DAYS) return { error: `기간은 최대 ${MAX_CUSTOM_DAYS}일까지 고를 수 있습니다.` };
+      from = selection.from;
+      to = selection.to;
+      break;
+    }
+    default:
+      return { error: "조회 기간을 확인해 주세요." };
+  }
+  const end = addPeriods(to, "day", 1);
+  const preset = PERIOD_PRESETS.find((p) => p.key === selection.preset)!.label;
+  const span = from === to ? `${from}` : `${from} ~ ${to}`;
+  return {
+    range: { from, until: selection.preset === "custom" ? end : until, unit: autoUnit(from, end) },
+    selection: selection.preset === "custom" ? { preset: "custom", from, to } : { preset: selection.preset },
+    label: selection.preset === "custom" ? `${md(from)} ~ ${md(to)} (${span})` : `${preset} (${span})`,
+  };
 }
 
 export function bucketsOf(range: ReportRange): string[] {
@@ -117,6 +169,7 @@ export type Report = {
   range: ReportRange;
   buckets: string[];
   generatedAt: string; // KST "YYYY-MM-DD HH:mm"
+  today: string; // KST day the report was made
   // null = 미측정 (that period is before the count began)
   core: Values<MetricKey>;
   visit: Values<VisitSeriesKey>;
@@ -160,7 +213,7 @@ export function kstNow(at = new Date()): string {
   return new Date(at.getTime() + 9 * 3600_000).toISOString().slice(0, 16).replace("T", " ");
 }
 
-export async function loadReport(range: ReportRange, { now = new Date(), withServer = true } = {}): Promise<Report> {
+export async function loadReport(range: ReportRange, { now = new Date() } = {}): Promise<Report> {
   const buckets = bucketsOf(range);
   const { from, until } = range;
   const trunc = Prisma.raw(`'${range.unit}'`);
@@ -233,7 +286,7 @@ export async function loadReport(range: ReportRange, { now = new Date(), withSer
     })(),
   ]);
 
-  const [timings, capacity] = withServer ? await Promise.all([loadTimingsBetween(from, until), loadCapacity()]) : [[], null];
+  const [timings, capacity] = await Promise.all([loadTimingsBetween(from, until), loadCapacity()]);
 
   // Periods before a count began are 미측정 (null), whatever the table holds.
   const coverage = {} as Report["coverage"];
@@ -261,6 +314,7 @@ export async function loadReport(range: ReportRange, { now = new Date(), withSer
     range,
     buckets,
     generatedAt: kstNow(now),
+    today: kstDay(now),
     core,
     visit,
     completedByType,
@@ -316,6 +370,20 @@ export function summarizeTimings(rows: TimingRow[]): TimingSummary {
     avgMs: count ? Math.round(totalMs / count) : null,
     p95: percentileLabel(merged, 0.95),
   };
+}
+
+// API 성능 통계 (ApiMetricHourly) is kept per hour, so any KST day range can
+// be summed exactly -- but only for the last API_METRIC_RETENTION_DAYS days
+// (older hours are deleted by the nightly clean-up) and only since the
+// 운영 지표 release. Says which part of the range the numbers cover.
+export function apiCoverage(range: ReportRange, today = kstDay()): { coverage: Coverage; note: string | null } {
+  const kept = addPeriods(today, "day", -(API_METRIC_RETENTION_DAYS - 1));
+  const since = coverageOf("ops", range.from, range.until);
+  if (since === "none" || range.until <= kept) return { coverage: "none", note: `이 기간은 API 성능 기록이 없습니다(${sinceLabel("ops")}부터 집계, 최근 ${API_METRIC_RETENTION_DAYS}일만 보관).` };
+  const notes: string[] = [];
+  if (since === "partial") notes.push(`${sinceLabel("ops")}부터 집계`);
+  if (range.from < kept) notes.push(`최근 ${API_METRIC_RETENTION_DAYS}일만 보관되어 ${kept} 이후 값만 포함`);
+  return { coverage: notes.length ? "partial" : "full", note: notes.length ? `API 성능 통계는 ${notes.join(", ")}합니다.` : null };
 }
 
 export const isInternalRoute = (route: string) => route.startsWith("ai:") || route.startsWith("db:");
