@@ -7,6 +7,9 @@ import { UserActionButtons } from "@/components/admin/UserActionButtons";
 import { AuthorLink } from "@/components/user/AuthorLink";
 import { MyCommentList } from "@/components/comment/MyCommentList";
 import { ShieldIcon } from "@/components/icons";
+import { UserIdentityPanel } from "@/components/admin/UserIdentityPanel";
+import { reportsInvolvingUser } from "@/lib/identity/service";
+import { REPORT_STATUS_LABELS, REPORT_TARGET_TYPE_LABELS } from "@/lib/report/schema";
 
 // Vercel's Node runtime defaults to UTC (no TZ env var set), so formatting
 // without an explicit timeZone renders 9 hours behind actual KST -- same
@@ -70,6 +73,16 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
     reportsAgainstCount,
     comments,
   } = result.data;
+
+  // 이름·소속 열람: only through a report this member is a party of (see
+  // UserIdentityPanel). Only the reports are listed here -- the values
+  // themselves load through the logged view.
+  const identityReports = (await reportsInvolvingUser(admin, user.id)).map((r) => ({
+    id: r.id,
+    // Prisma's enum values are upper case (POST, PENDING); the labels are
+    // keyed by the stored lower-case values.
+    label: `#${r.id} · ${r.role} · ${REPORT_TARGET_TYPE_LABELS[r.targetType.toLowerCase() as keyof typeof REPORT_TARGET_TYPE_LABELS]} · ${REPORT_STATUS_LABELS[r.status.toLowerCase() as keyof typeof REPORT_STATUS_LABELS]} · ${formatDateTime(r.createdAt)}`,
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -171,6 +184,11 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
           <Field label="신고당한 횟수 (본인 계정 대상)" value={`${reportsAgainstCount}건`} />
           <Field label="신고 접수한 횟수" value={`${reportsFiledCount}건`} />
         </Section>
+
+        <section className="rounded-card border border-border bg-card p-4">
+          <h2 className="mb-3 text-sm font-semibold text-foreground">이름·소속 (신고 처리용 열람)</h2>
+          <UserIdentityPanel userId={user.id} reports={identityReports} />
+        </section>
 
         {/* Phase P-1 follow-up: reuses MyCommentList unchanged (same
             component /me/comments renders) -- its delete button already

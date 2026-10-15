@@ -2,22 +2,31 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const userIdentityInfo = { findUnique: vi.fn(), count: vi.fn(), upsert: vi.fn(), create: vi.fn(), update: vi.fn(), deleteMany: vi.fn() };
 const user = { update: vi.fn() };
-const report = { findUnique: vi.fn() };
-const comment = { findUnique: vi.fn() };
+const report = { findUnique: vi.fn(), findMany: vi.fn() };
+const comment = { findUnique: vi.fn(), findMany: vi.fn() };
+const lostPost = { findMany: vi.fn() };
+const foundPost = { findMany: vi.fn() };
+const message = { findMany: vi.fn() };
 const txUser = { findUnique: vi.fn(), update: vi.fn() };
 const identityAccessLog = { create: vi.fn() };
 const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn({ user: txUser, identityAccessLog, userIdentityInfo }));
-vi.mock("@/lib/db/prisma", () => ({ prisma: { userIdentityInfo, user, report, comment, $transaction } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { userIdentityInfo, user, report, comment, lostPost, foundPost, message, $transaction } }));
 
 const resolvePostTarget = vi.fn();
 const resolveMessageTarget = vi.fn();
 const resolveUserTarget = vi.fn();
-vi.mock("@/lib/report/targets", () => ({ resolvePostTarget, resolveMessageTarget, resolveUserTarget }));
+vi.mock("@/lib/report/targets", () => ({
+  resolvePostTarget,
+  resolveMessageTarget,
+  resolveUserTarget,
+  encodePostTargetId: (kind: "lost" | "found", id: number) => (kind === "lost" ? id : -id),
+}));
 
 const {
   getOwnIdentityInfo,
   hasIdentityInfo,
   reportPartyUserIds,
+  reportsInvolvingUser,
   saveOwnIdentityInfo,
   syncIdentityFromHints,
   viewIdentityForReport,
@@ -146,6 +155,44 @@ describe("admin view of 실명·학과", () => {
 });
 
 // 이름·소속 자동 수집
+describe("admin user detail: reports a member is a party of", () => {
+  it("returns nothing and reads nothing for a non-admin", async () => {
+    expect(await reportsInvolvingUser({ isAdmin: false }, 7)).toEqual([]);
+    expect(report.findMany).not.toHaveBeenCalled();
+    expect(lostPost.findMany).not.toHaveBeenCalled();
+  });
+
+  it("finds reports the member filed or that target the member, their posts, comments or messages", async () => {
+    lostPost.findMany.mockResolvedValueOnce([{ id: 3 }]);
+    foundPost.findMany.mockResolvedValueOnce([{ id: 4 }]);
+    comment.findMany.mockResolvedValueOnce([{ id: 11 }]);
+    message.findMany.mockResolvedValueOnce([{ id: 21 }]);
+    const createdAt = new Date("2026-10-10T00:00:00Z");
+    report.findMany.mockResolvedValueOnce([
+      { id: 2, reporterUserId: 7, targetType: "POST", status: "PENDING", createdAt },
+      { id: 1, reporterUserId: 9, targetType: "USER", status: "ACTIONED", createdAt },
+    ]);
+
+    const rows = await reportsInvolvingUser(admin, 7);
+
+    const where = report.findMany.mock.calls[0][0].where;
+    expect(where.OR).toEqual([
+      { reporterUserId: 7 },
+      { targetType: "USER", targetId: 7 },
+      { targetType: "POST", targetId: { in: [3, -4] } },
+      { targetType: "COMMENT", targetId: { in: [11] } },
+      { targetType: "MESSAGE", targetId: { in: [21] } },
+    ]);
+    expect(rows).toEqual([
+      { id: 2, role: "신고자", targetType: "POST", status: "PENDING", createdAt },
+      { id: 1, role: "피신고자", targetType: "USER", status: "ACTIONED", createdAt },
+    ]);
+    // only the report list -- no identity values are read here
+    expect(userIdentityInfo.findUnique).not.toHaveBeenCalled();
+    expect(txUser.findUnique).not.toHaveBeenCalled();
+  });
+});
+
 describe("automatic collection", () => {
   const consented = { id: 5, identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION };
   const fromDisplayName = { name: "홍길동", department: "컴퓨터공학과", nameSource: "google_display_name" as const, departmentSource: "google_display_name" as const };

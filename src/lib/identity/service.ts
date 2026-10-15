@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { CURRENT_IDENTITY_CONSENT_VERSION } from "@/lib/auth/terms";
-import { resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "@/lib/report/targets";
+import { encodePostTargetId, resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "@/lib/report/targets";
 import type { User } from "@/generated/prisma/client";
 import type { IdentityHints, IdentityValueSource } from "./googleHints";
 import type { IdentityInput } from "./validation";
@@ -160,6 +160,59 @@ export type AdminIdentityViewResult =
 // for that report's reporter or reported member, and only with a written
 // reason. The log row is written in the same transaction as the read, so
 // there is never a view without its record.
+// 관리자 사용자 상세의 이름·소속 열람: the reports in which this member is
+// the reporter or the reported party -- the only cases the privacy policy
+// (§5) and the 이름·소속 consent let an admin view them. Each one is a
+// choice for viewIdentityForReport (which re-checks the party, needs the
+// reason and logs the view); nothing about the member's identity is read
+// here. Newest first, at most `limit`.
+export type UserReportForIdentity = {
+  id: number;
+  role: "신고자" | "피신고자";
+  targetType: "POST" | "MESSAGE" | "USER" | "COMMENT";
+  status: string;
+  createdAt: Date;
+};
+
+export async function reportsInvolvingUser(
+  admin: Pick<User, "isAdmin">,
+  userId: number,
+  limit = 30,
+): Promise<UserReportForIdentity[]> {
+  if (!admin.isAdmin) return [];
+  const [lostPosts, foundPosts, comments, messages] = await Promise.all([
+    prisma.lostPost.findMany({ where: { userId }, select: { id: true } }),
+    prisma.foundPost.findMany({ where: { userId }, select: { id: true } }),
+    prisma.comment.findMany({ where: { authorUserId: userId }, select: { id: true } }),
+    prisma.message.findMany({ where: { senderUserId: userId }, select: { id: true } }),
+  ]);
+  const postTargetIds = [
+    ...lostPosts.map((p) => encodePostTargetId("lost", p.id)),
+    ...foundPosts.map((p) => encodePostTargetId("found", p.id)),
+  ];
+  const reports = await prisma.report.findMany({
+    where: {
+      OR: [
+        { reporterUserId: userId },
+        { targetType: "USER", targetId: userId },
+        { targetType: "POST", targetId: { in: postTargetIds } },
+        { targetType: "COMMENT", targetId: { in: comments.map((c) => c.id) } },
+        { targetType: "MESSAGE", targetId: { in: messages.map((m) => m.id) } },
+      ],
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    select: { id: true, reporterUserId: true, targetType: true, status: true, createdAt: true },
+  });
+  return reports.map((r) => ({
+    id: r.id,
+    role: r.reporterUserId === userId ? "신고자" : "피신고자",
+    targetType: r.targetType,
+    status: r.status,
+    createdAt: r.createdAt,
+  }));
+}
+
 export async function viewIdentityForReport(
   admin: Pick<User, "id" | "isAdmin">,
   { reportId, targetUserId, reason }: { reportId: number; targetUserId: number; reason: unknown },

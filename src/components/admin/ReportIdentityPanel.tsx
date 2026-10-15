@@ -17,7 +17,7 @@ const SOURCE_LABELS: Record<string, string> = {
   google_display_name: "Google 표시 이름(이름/신분/소속)에서 자동 수집 · 로그인 시 갱신 · 학적 검증 아님 · 소속은 단과대학일 수 있음",
   google_people: "Google 프로필 소속을 본인이 확인",
 };
-const sourceLabel = (source: string | null) => (source ? (SOURCE_LABELS[source] ?? source) : null);
+export const sourceLabel = (source: string | null) => (source ? (SOURCE_LABELS[source] ?? source) : null);
 
 // 신고 당사자 실명·학과 열람 (관리자). Nothing is loaded until the admin
 // picks one of this report's two parties and writes a reason; each view is
@@ -60,32 +60,38 @@ export function ReportIdentityPanel({ reportId, parties }: { reportId: number; p
         </Button>
       </form>
       {state && !state.ok && <p className="text-sm text-destructive">{state.error}</p>}
-      {state?.ok && (
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-lg border border-border bg-muted p-3">
-          <dt className="text-muted-foreground">닉네임</dt>
-          <dd className="text-foreground">{state.nickname ?? "-"}</dd>
-          <dt className="text-muted-foreground">이름</dt>
-          <dd className="text-foreground">
-            {state.realName ?? "미등록"}
-            {state.realName && <span className="ml-1.5 text-xs text-muted-foreground">({sourceLabel(state.realNameSource)})</span>}
-          </dd>
-          <dt className="text-muted-foreground">소속(학과·단과대학)</dt>
-          <dd className="text-foreground">
-            {state.department ?? "미등록"}
-            {state.department && <span className="ml-1.5 text-xs text-muted-foreground">({sourceLabel(state.departmentSource)})</span>}
-          </dd>
-          {state.updatedAt && (
-            <>
-              <dt className="text-muted-foreground">최종 수정</dt>
-              <dd className="text-foreground">
-                {new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(
-                  new Date(state.updatedAt),
-                )}
-              </dd>
-            </>
-          )}
-        </dl>
-      )}
+      {state?.ok && <IdentityResult state={state} />}
     </div>
+  );
+}
+
+// The viewed values, with where each came from ("미등록" when nothing is on
+// file). Shared by the report screen and the admin user detail screen.
+export function IdentityResult({ state }: { state: Extract<IdentityViewState, { ok: true }> }) {
+  return (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-lg border border-border bg-muted p-3">
+      <dt className="text-muted-foreground">닉네임</dt>
+      <dd className="text-foreground">{state.nickname ?? "-"}</dd>
+      <dt className="text-muted-foreground">이름</dt>
+      <dd className="text-foreground">
+        {state.realName ?? "미등록"}
+        {state.realName && <span className="ml-1.5 text-xs text-muted-foreground">({sourceLabel(state.realNameSource)})</span>}
+      </dd>
+      <dt className="text-muted-foreground">소속(학과·단과대학)</dt>
+      <dd className="text-foreground">
+        {state.department ?? "미등록"}
+        {state.department && <span className="ml-1.5 text-xs text-muted-foreground">({sourceLabel(state.departmentSource)})</span>}
+      </dd>
+      {state.updatedAt && (
+        <>
+          <dt className="text-muted-foreground">최종 수정</dt>
+          <dd className="text-foreground">
+            {new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(
+              new Date(state.updatedAt),
+            )}
+          </dd>
+        </>
+      )}
+    </dl>
   );
 }
