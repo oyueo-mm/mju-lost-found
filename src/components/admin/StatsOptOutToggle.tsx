@@ -1,10 +1,9 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
-import { STATS_OPT_OUT_KEY } from "@/components/layout/VisitBeacon";
+import { defaultOptOutForAdmin, STATS_OPT_OUT_EVENT as EVENT, STATS_OPT_OUT_KEY, STATS_OPT_OUT_SET_KEY } from "@/components/layout/VisitBeacon";
 
-const EVENT = "mju-find:stats-opt-out";
 const read = () => {
   try {
     return window.localStorage.getItem(STATS_OPT_OUT_KEY) === "1";
@@ -21,11 +20,14 @@ const subscribe = (onChange: () => void) => {
   };
 };
 
-// 방문 통계에서 이 브라우저 제외 (개발·테스트용). Admin accounts are already
-// counted apart on the server; this covers a developer or tester browsing
-// signed out or with a member test account. Stored only in this browser.
+// 내 방문 통계에서 제외 (this browser). Admin accounts are already counted
+// apart on the server while signed in; this keeps the same browser out after
+// sign-out too. Shown only to admins (/admin/stats), so the first visit here
+// turns it on by default; unticking it is remembered. Stored only in this
+// browser.
 export function StatsOptOutToggle() {
   const optedOut = useSyncExternalStore(subscribe, read, () => false);
+  useEffect(() => defaultOptOutForAdmin(), []);
   return (
     <label className="flex items-center gap-2 text-xs text-muted-foreground">
       <input
@@ -35,13 +37,14 @@ export function StatsOptOutToggle() {
           try {
             if (e.target.checked) window.localStorage.setItem(STATS_OPT_OUT_KEY, "1");
             else window.localStorage.removeItem(STATS_OPT_OUT_KEY);
+            window.localStorage.setItem(STATS_OPT_OUT_SET_KEY, "manual");
           } catch {
             // no storage: nothing to remember
           }
           window.dispatchEvent(new Event(EVENT));
         }}
       />
-      이 브라우저의 방문을 통계에서 제외(개발·테스트용, 로그아웃 상태 포함)
+      내 방문 통계에서 제외(이 브라우저, 로그아웃한 뒤에도 유지)
     </label>
   );
 }

@@ -21,9 +21,36 @@ import { pageKindOf, refSourceOf, sanitizeUtm, SESSION_IDLE_MS, MAX_EVENTS_PER_C
 // starts a session, and for that first view the referrer category and the
 // UTM tags.
 //
-// Not counted: browsers driven by automation (navigator.webdriver), admin
-// pages, and a browser opted out on /admin/stats (internal testing).
+// Not counted: browsers driven by automation (navigator.webdriver) and admin
+// pages. An opted-out browser ("내 방문 통계에서 제외" on /admin/stats) still
+// sends its views, flagged: the server counts them as internal while an admin
+// is signed in and drops them otherwise. The opt-out turns on by itself the
+// first time an admin is seen in this browser (the server's reply), and stays
+// after sign-out; once someone sets it by hand, that choice is kept.
 export const STATS_OPT_OUT_KEY = "mju-find:stats-opt-out";
+export const STATS_OPT_OUT_SET_KEY = "mju-find:stats-opt-out-set";
+export const STATS_OPT_OUT_EVENT = "mju-find:stats-opt-out";
+
+// First time an admin uses this browser: exclude it by default (not if a
+// choice was already made here).
+export function defaultOptOutForAdmin() {
+  try {
+    if (window.localStorage.getItem(STATS_OPT_OUT_SET_KEY)) return;
+    window.localStorage.setItem(STATS_OPT_OUT_KEY, "1");
+    window.localStorage.setItem(STATS_OPT_OUT_SET_KEY, "admin-default");
+  } catch {
+    return; // no storage: nothing to remember
+  }
+  window.dispatchEvent(new Event(STATS_OPT_OUT_EVENT));
+}
+
+function optedOut(): boolean {
+  try {
+    return window.localStorage.getItem(STATS_OPT_OUT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 const SESSION_KEY = "mju-find:visit";
 const QUEUE_KEY = "mju-find:visit-queue";
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
@@ -63,7 +90,11 @@ function send() {
   if (queue.length === 0) return;
   const batch = queue.slice(0, MAX_EVENTS_PER_CALL);
   writeQueue(queue.slice(MAX_EVENTS_PER_CALL));
-  recordVisitsAction(batch).catch(() => {});
+  recordVisitsAction(batch, { optedOut: optedOut() })
+    .then((reply) => {
+      if (reply?.admin) defaultOptOutForAdmin();
+    })
+    .catch(() => {});
   if (queue.length > MAX_EVENTS_PER_CALL) timer = setTimeout(send, SEND_DELAY_MS);
 }
 
@@ -90,11 +121,6 @@ export function VisitBeacon() {
 
   useEffect(() => {
     if (!pathname) return;
-    try {
-      if (window.localStorage.getItem(STATS_OPT_OUT_KEY) === "1") return;
-    } catch {
-      // no storage: count normally
-    }
     if (navigator.webdriver) return;
     const kind = pageKindOf(pathname);
     if (!kind) return;

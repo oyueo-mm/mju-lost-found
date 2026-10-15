@@ -84,6 +84,23 @@ describe("방문 통계 server action", () => {
     expect(counts.size).toBe(0);
   });
 
+  it("an opted-out browser: admin views stay internal, anyone else's are dropped", async () => {
+    audience = "internal";
+    expect(await recordVisitsAction([{ kind: "home", sessionStart: true, ref: "direct" }], { optedOut: true })).toEqual({ admin: true });
+    expect(Object.fromEntries(counts)).toEqual({ "visit.internal.pv": 1 });
+
+    counts.clear();
+    for (const who of ["anon", "member"] as const) {
+      audience = who;
+      expect(await recordVisitsAction([{ kind: "home", sessionStart: true, ref: "direct" }], { optedOut: true })).toEqual({ admin: false });
+    }
+    expect(counts.size).toBe(0);
+
+    // not opted out: counted as usual, and the reply says "not an admin"
+    expect(await recordVisitsAction([{ kind: "home", sessionStart: false }])).toEqual({ admin: false });
+    expect(Object.fromEntries(counts)).toEqual({ "visit.pv.member": 1, "visit.page.home.member": 1 });
+  });
+
   it("caps one client at 60 events a minute, without affecting another client", async () => {
     for (let i = 0; i < 5; i++) await recordVisitsAction(Array.from({ length: 20 }, () => ({ kind: "home", sessionStart: false })));
     expect(counts.get("visit.pv.anon")).toBe(60);

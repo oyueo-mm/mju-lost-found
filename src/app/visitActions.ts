@@ -22,6 +22,12 @@ import { isBotUserAgent, isPageKind, isRefSource, MAX_EVENTS_PER_CALL, sanitizeU
 //   utm_source.<v>, utm_campaign.<v>   sessions with UTM tags
 //   internal.pv                 admins' page views (kept out of the above)
 //
+// A browser opted out ("내 방문 통계에서 제외", on by default once an admin
+// has signed in there) still sends its views with `optedOut`: signed in as
+// an admin they count as internal.pv as before; otherwise (signed out, or a
+// member account on that browser) they are dropped. The reply tells the
+// beacon when the viewer is an admin, so it can turn the opt-out on.
+//
 // Abuse limits (per server instance, memory only): at most
 // MAX_EVENTS_PER_MINUTE events per client per minute (the client is a
 // truncated hash of the forwarded IP, never stored), and at most
@@ -63,7 +69,7 @@ function cappedUtm(kind: "source" | "campaign", value: string, day: string): str
   return value;
 }
 
-export async function recordVisitsAction(events: unknown): Promise<void> {
+export async function recordVisitsAction(events: unknown, options?: { optedOut?: boolean }): Promise<{ admin: boolean } | void> {
   try {
     if (!Array.isArray(events) || events.length === 0) return;
     const requestHeaders = await headers();
@@ -73,6 +79,7 @@ export async function recordVisitsAction(events: unknown): Promise<void> {
     const admitted = admit(client, Math.min(events.length, MAX_EVENTS_PER_CALL));
     if (admitted === 0) return;
     const audience = await currentAudience();
+    if (audience !== "internal" && options?.optedOut === true) return { admin: false };
     const day = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
     for (const raw of events.slice(0, admitted)) {
@@ -93,6 +100,7 @@ export async function recordVisitsAction(events: unknown): Promise<void> {
       if (utmSource) addDailyCount(`visit.utm_source.${cappedUtm("source", utmSource, day)}`);
       if (utmCampaign) addDailyCount(`visit.utm_campaign.${cappedUtm("campaign", utmCampaign, day)}`);
     }
+    return { admin: audience === "internal" };
   } catch {
     // Statistics never fail a visit.
   }

@@ -18,6 +18,7 @@ import {
 import { kstDay } from "@/lib/metrics/record";
 import { PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "@/lib/metrics/visits";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
+import { ChevronRightIcon } from "@/components/icons";
 
 // 운영 통계 (admin only). Read-only aggregates: no search text, no member
 // names -- 활성 이용자 are counted from HMAC'd daily marks.
@@ -158,13 +159,34 @@ export default async function AdminStatsPage({
       <section className="flex flex-col gap-3 rounded-card border border-border bg-card p-4">
         <div className="flex flex-col gap-1">
           <h2 className="text-sm font-semibold text-foreground">방문 통계 (로그인·비로그인)</h2>
-          <p className="text-[11px] leading-relaxed text-muted-foreground">
-            브라우저가 실제로 화면을 연 경우만 셉니다(링크 미리 불러오기·크롤러·자동화 브라우저 제외, 같은 화면 안의 필터·페이지
-            이동은 새 조회로 세지 않음). 방문 세션은 같은 브라우저에서 30분 넘게 조회가 없거나 날짜가 바뀌면 새로 셉니다 —
-            사람 수가 아니며, 한 사람이 기기 두 대로 들어오면 두 번 셉니다. 관리자 계정의 조회는 따로 셉니다. IP·검색어·전체
-            URL·회원 정보는 저장하지 않고, 유입 경로는 정해진 분류로만, UTM은 영문·숫자 값만 셉니다. 방문 통계 도입 이후부터
-            집계됩니다.
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            사이트 화면이 몇 번 열렸는지(조회 수)와 몇 번 방문했는지(방문 수)를 로그인 여부별로 보여 줍니다. 방문 수는 사람
+            수가 아니라 방문 횟수입니다. 관리자의 방문은 포함되지 않습니다.
           </p>
+          <details className="group text-[11px] leading-relaxed text-muted-foreground">
+            <summary className="flex cursor-pointer list-none items-center gap-1 font-medium text-primary">
+              자세히 보기
+              <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
+            </summary>
+            <ul className="mt-1.5 flex list-disc flex-col gap-1 pl-4">
+              <li>
+                브라우저가 실제로 화면을 연 경우만 셉니다(링크 미리 불러오기·크롤러·자동화 브라우저 제외, 같은 화면 안의 필터·페이지
+                이동은 새 조회로 세지 않음).
+              </li>
+              <li>
+                방문 세션은 같은 브라우저에서 30분 넘게 조회가 없거나 날짜가 바뀌면 새로 셉니다. 한 사람이 기기 두 대로 들어오면
+                두 번 셉니다.
+              </li>
+              <li>
+                관리자 계정으로 로그인한 동안의 조회는 일반 통계에서 빼고 따로 셉니다. 관리자가 로그인한 적 있는 브라우저는
+                기본으로 &lsquo;내 방문 통계에서 제외&rsquo;가 켜져, 로그아웃한 뒤의 방문도 세지 않습니다.
+              </li>
+              <li>
+                IP·검색어·전체 URL·회원 정보는 저장하지 않고, 유입 경로는 정해진 분류로만, UTM은 영문·숫자 값만 셉니다. 방문 통계
+                도입 이후부터 집계됩니다.
+              </li>
+            </ul>
+          </details>
           <StatsOptOutToggle />
         </div>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
