@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let userAgent: string | null = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1";
-vi.mock("next/headers", () => ({ headers: async () => ({ get: (name: string) => (name === "user-agent" ? userAgent : null) }) }));
+let ip = "203.0.113.1";
+vi.mock("next/headers", () => ({
+  headers: async () => ({ get: (name: string) => (name === "user-agent" ? userAgent : name === "x-forwarded-for" ? `${ip}, 10.0.0.1` : null) }),
+}));
+let ipCounter = 0;
 
 const counts = new Map<string, number>();
 let audience: "anon" | "member" | "internal" = "anon";
@@ -16,6 +20,7 @@ beforeEach(() => {
   counts.clear();
   audience = "anon";
   userAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1";
+  ip = `203.0.113.${++ipCounter}`; // a fresh client per test (the per-minute limit is per client)
 });
 
 describe("방문 통계 server action", () => {
@@ -77,5 +82,27 @@ describe("방문 통계 server action", () => {
     await recordVisitsAction("nonsense");
     await recordVisitsAction([]);
     expect(counts.size).toBe(0);
+  });
+
+  it("caps one client at 60 events a minute, without affecting another client", async () => {
+    for (let i = 0; i < 5; i++) await recordVisitsAction(Array.from({ length: 20 }, () => ({ kind: "home", sessionStart: false })));
+    expect(counts.get("visit.pv.anon")).toBe(60);
+    ip = "198.51.100.77";
+    await recordVisitsAction([{ kind: "home", sessionStart: false }]);
+    expect(counts.get("visit.pv.anon")).toBe(61);
+  });
+
+  it("counts at most 30 distinct UTM campaigns a day; later new ones as etc", async () => {
+    for (let i = 0; i < 40; i++) {
+      ip = `192.0.2.${i}`;
+      await recordVisitsAction([{ kind: "home", sessionStart: true, ref: "direct", utmCampaign: `spam${i}` }]);
+    }
+    const campaigns = [...counts.keys()].filter((k) => k.startsWith("visit.utm_campaign."));
+    expect(campaigns.length).toBeLessThanOrEqual(31);
+    expect(counts.get("visit.utm_campaign.etc")).toBeGreaterThanOrEqual(10);
+    // an already-seen campaign keeps its own name
+    ip = "192.0.2.250";
+    await recordVisitsAction([{ kind: "home", sessionStart: true, ref: "direct", utmCampaign: "spam0" }]);
+    expect(counts.get("visit.utm_campaign.spam0")).toBe(2);
   });
 });

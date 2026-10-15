@@ -1,5 +1,6 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { headers } from "next/headers";
 
 import { addDailyCount, currentAudience } from "@/lib/metrics/record";
@@ -20,13 +21,61 @@ import { isBotUserAgent, isPageKind, isRefSource, MAX_EVENTS_PER_CALL, sanitizeU
 //   ref.<source>                sessions by referrer category
 //   utm_source.<v>, utm_campaign.<v>   sessions with UTM tags
 //   internal.pv                 admins' page views (kept out of the above)
+//
+// Abuse limits (per server instance, memory only): at most
+// MAX_EVENTS_PER_MINUTE events per client per minute (the client is a
+// truncated hash of the forwarded IP, never stored), and at most
+// MAX_UTM_VALUES distinct UTM sources / campaigns a day -- later new values
+// are counted as "etc". Every counter name is from a fixed list or one of
+// those capped values, and all writes go through the existing batched
+// write (one statement every 20 s at most), so no request pattern can
+// multiply DB writes or grow the table without bound.
+const MAX_EVENTS_PER_MINUTE = 60;
+const MAX_UTM_VALUES = 30;
+const recentByClient = new Map<string, { start: number; count: number }>();
+const utmSeen = new Map<string, Set<string>>();
+
+function admit(client: string, wanted: number, now = Date.now()): number {
+  let entry = recentByClient.get(client);
+  if (!entry || now - entry.start > 60_000) {
+    entry = { start: now, count: 0 };
+    recentByClient.set(client, entry);
+    if (recentByClient.size > 5000) {
+      for (const [key, value] of recentByClient) if (now - value.start > 60_000) recentByClient.delete(key);
+    }
+  }
+  const allowed = Math.max(0, Math.min(wanted, MAX_EVENTS_PER_MINUTE - entry.count));
+  entry.count += allowed;
+  return allowed;
+}
+
+function cappedUtm(kind: "source" | "campaign", value: string, day: string): string {
+  const key = `${day}|${kind}`;
+  let seen = utmSeen.get(key);
+  if (!seen) {
+    for (const k of utmSeen.keys()) if (!k.startsWith(day)) utmSeen.delete(k);
+    seen = new Set();
+    utmSeen.set(key, seen);
+  }
+  if (seen.has(value)) return value;
+  if (seen.size >= MAX_UTM_VALUES) return "etc";
+  seen.add(value);
+  return value;
+}
+
 export async function recordVisitsAction(events: unknown): Promise<void> {
   try {
     if (!Array.isArray(events) || events.length === 0) return;
-    if (isBotUserAgent((await headers()).get("user-agent"))) return;
+    const requestHeaders = await headers();
+    if (isBotUserAgent(requestHeaders.get("user-agent"))) return;
+    const ip = (requestHeaders.get("x-forwarded-for") ?? requestHeaders.get("x-real-ip") ?? "").split(",")[0].trim();
+    const client = createHash("sha256").update(`visit-limit:${ip}`).digest("base64url").slice(0, 16);
+    const admitted = admit(client, Math.min(events.length, MAX_EVENTS_PER_CALL));
+    if (admitted === 0) return;
     const audience = await currentAudience();
+    const day = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    for (const raw of events.slice(0, MAX_EVENTS_PER_CALL)) {
+    for (const raw of events.slice(0, admitted)) {
       if (typeof raw !== "object" || raw === null) continue;
       const event = raw as Record<string, unknown>;
       if (!isPageKind(event.kind)) continue;
@@ -41,8 +90,8 @@ export async function recordVisitsAction(events: unknown): Promise<void> {
       addDailyCount(`visit.ref.${isRefSource(event.ref) ? event.ref : "other"}`);
       const utmSource = sanitizeUtm(typeof event.utmSource === "string" ? event.utmSource : null);
       const utmCampaign = sanitizeUtm(typeof event.utmCampaign === "string" ? event.utmCampaign : null);
-      if (utmSource) addDailyCount(`visit.utm_source.${utmSource}`);
-      if (utmCampaign) addDailyCount(`visit.utm_campaign.${utmCampaign}`);
+      if (utmSource) addDailyCount(`visit.utm_source.${cappedUtm("source", utmSource, day)}`);
+      if (utmCampaign) addDailyCount(`visit.utm_campaign.${cappedUtm("campaign", utmCampaign, day)}`);
     }
   } catch {
     // Statistics never fail a visit.
