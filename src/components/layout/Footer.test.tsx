@@ -38,14 +38,13 @@ describe("Footer contact", () => {
     expect(html).toContain('href="mailto:mjusmartlostfound@gmail.com"');
   });
 
-  it("links the public GitHub repository and says it is a student-run, unofficial service", async () => {
+  it("lists the team and developer mailboxes (no GitHub link) and says it is a student-run, unofficial service", async () => {
     locale = "ko";
     const html = await render();
 
-    expect(html).toContain('href="https://github.com/oyueo-mm/mju-lost-found"');
-    expect(html).toContain('rel="noopener noreferrer"');
-    expect(html).toContain(ko["footer.github"]);
-    // 운영팀, 개발자, GitHub: three separate contacts.
+    expect(html).not.toContain("github.com");
+    expect(html).not.toContain("GitHub");
+    // 운영팀, 개발자: two separate contacts.
     expect(html).toContain(ko["footer.developerContact"]);
     expect(html).toContain('href="mailto:oyueo.mm@mju.ac.kr"');
     expect(html).not.toContain("oyeo.mm@");
@@ -68,15 +67,13 @@ describe("Footer layout", () => {
     const menus = at(`aria-label="${ko["footer.section.service"]}"`);
     const contacts = at("mailto:mjusmartlostfound@gmail.com");
     const developer = at("mailto:oyueo.mm@mju.ac.kr");
-    const github = at("https://github.com/oyueo-mm/mju-lost-found");
     const terms = at('href="/policy/terms"');
     const copyright = at("특정 게시물·메시지");
 
     expect(brand).toBeLessThan(menus);
     expect(menus).toBeLessThan(contacts);
     expect(contacts).toBeLessThan(developer);
-    expect(developer).toBeLessThan(github);
-    expect(github).toBeLessThan(terms);
+    expect(developer).toBeLessThan(terms);
     expect(terms).toBeLessThan(copyright);
   });
 

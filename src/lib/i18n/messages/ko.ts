@@ -58,7 +58,6 @@ export const ko = {
   "footer.tagline": "명지대학교 학생을 위한 분실물 등록·검색·연락 서비스입니다.",
   "footer.disclaimer": "본 서비스는 명지대학교의 공식 서비스가 아닌, 학생이 개발·운영하는 서비스입니다.",
   "footer.contact": "운영팀 문의",
-  "footer.github": "GitHub 소스 코드",
   "footer.developerContact": "개발자 문의",
   "footer.copyright":
     "© {year} MJU Find. 특정 게시물·메시지·사용자에 대한 문의는 해당 화면의 신고 기능을 이용해주세요.",

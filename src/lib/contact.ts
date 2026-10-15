@@ -7,6 +7,3 @@ export const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}`;
 // 개발자 문의: the developer's school address (Footer only).
 export const DEVELOPER_EMAIL = "oyueo.mm@mju.ac.kr";
 export const DEVELOPER_MAILTO = `mailto:${DEVELOPER_EMAIL}`;
-
-// The public source repository (Footer).
-export const REPOSITORY_URL = "https://github.com/oyueo-mm/mju-lost-found";

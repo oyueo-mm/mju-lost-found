@@ -128,7 +128,6 @@ export const ja: Dictionary = {
   "nav.primary": "メインメニュー", "nav.admin": "管理", "nav.unreadChat": "未読のチャット {count} 件", "nav.notifications": "通知", "nav.unreadNotifications": "未読の通知 {count} 件",
   "brand.shortName": "MJU Find",
   "footer.tagline": "明知大学の学生のための、落とし物の登録・検索・連絡サービスです。", "footer.disclaimer": "本サービスは明知大学の公式サービスではなく、学生が開発・運営するサービスです。", "footer.contact": "運営チームへのお問い合わせ", "footer.copyright": "© {year} MJU Find。特定の投稿、メッセージ、利用者についての問題は、その画面の通報機能をご利用ください。",
-  "footer.github": "GitHub のソースコード",
   "footer.developerContact": "開発者への問い合わせ",
   "footer.link.home": "ホーム", "footer.link.lost": "落とし物を見る", "footer.link.found": "拾得物を見る", "footer.link.aiSearch": "AI検索", "footer.link.organizations": "団体", "footer.link.chat": "チャット", "footer.link.notifications": "通知", "footer.link.terms": "利用規約", "footer.link.privacy": "プライバシーポリシー", "footer.link.community": "運営方針", "footer.link.accountGuide": "アカウント案内", "footer.link.feedback": "サービス改善の提案", "footer.link.organizationGuide": "団体利用ガイド",
   "category.전자기기": "電子機器", "category.필기구": "文房具", "category.책": "本", "category.지갑": "財布", "category.카드": "カード", "category.의류": "衣類", "category.가방": "かばん", "category.액세서리": "アクセサリー", "category.기타": "その他",

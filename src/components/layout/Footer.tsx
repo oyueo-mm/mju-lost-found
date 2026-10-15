@@ -5,7 +5,7 @@ import { LocaleSwitcher } from "@/components/layout/LocaleSwitcher";
 import { FooterSections } from "@/components/layout/FooterSections";
 import { getTranslator } from "@/lib/i18n/server";
 import type { TranslationKey } from "@/lib/i18n/translate";
-import { DEVELOPER_EMAIL, DEVELOPER_MAILTO, REPOSITORY_URL, SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
+import { DEVELOPER_EMAIL, DEVELOPER_MAILTO, SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 
 // Phase 9: this app's first Footer -- there was none before (checked
 // before writing this). Placed in (main)/layout.tsx, after <main> and
@@ -105,7 +105,7 @@ export async function Footer() {
       <div className="mx-auto flex w-full max-w-4xl wide-board:max-w-6xl flex-col gap-6 px-4 pt-8 pb-20 md:px-6 md:pb-8">
         {/* Footer 레이아웃 정리 Phase: 위에서부터 세 줄 -- (1) 브랜드 소개 +
             서비스/커뮤니티/안내 메뉴, (2) 연락처 3개, (3) 정책 링크·언어
-            선택·저작권. 예전에는 연락처/GitHub/약관까지 브랜드 칸 하나에
+            선택·저작권. 예전에는 연락처/약관까지 브랜드 칸 하나에
             몰려 왼쪽만 길고 오른쪽은 비어 있었다. 데스크톱에서는 브랜드 칸을
             조금 넓게 두고 메뉴 3개를 나란히, 모바일에서는 브랜드 블록 아래로
             메뉴(FooterSections 아코디언)가 이어진다. */}
@@ -147,23 +147,22 @@ export async function Footer() {
 
         <FooterSections sections={localizedSections} />
 
-        {/* 연락처: 운영팀 (the privacy policy's contact address, lib/contact.ts),
-            개발자, and the public repository -- 데스크톱에서는 세 칸이 한 줄로,
-            모바일에서는 세로로 쌓인다. 로그인하지 않은 방문자도 연락할 수 있게
-            모든 화면 크기에서 보인다. 모바일에서는 바로 위 아코디언의 마지막
-            구분선이 경계 역할을 하므로 상단 선은 데스크톱에서만 긋는다. */}
-        <dl className="grid gap-3 text-xs text-muted-foreground md:grid-cols-3 md:gap-8 md:border-t md:border-border md:pt-6">
+        {/* 연락처: 운영팀 (the privacy policy's contact address, lib/contact.ts)
+            and 개발자 -- 데스크톱에서는 두 칸이 한 줄로 나란히, 모바일에서는
+            세로로 쌓인다. 로그인하지 않은 방문자도 연락할 수 있게 모든 화면
+            크기에서 보인다. 모바일에서는 바로 위 아코디언의 마지막 구분선이
+            경계 역할을 하므로 상단 선은 데스크톱에서만 긋는다. (GitHub 저장소
+            링크는 운영 결정으로 뺐다.) */}
+        <dl className="flex flex-col gap-3 text-xs text-muted-foreground md:flex-row md:gap-16 md:border-t md:border-border md:pt-6">
           {[
             { label: t("footer.contact"), href: SUPPORT_MAILTO, text: SUPPORT_EMAIL },
             { label: t("footer.developerContact"), href: DEVELOPER_MAILTO, text: DEVELOPER_EMAIL },
-            { label: "GitHub", href: REPOSITORY_URL, text: "oyueo-mm/mju-lost-found", external: true },
           ].map((c) => (
             <div key={c.href} className="flex min-w-0 flex-col gap-0.5">
               <dt className="text-[11px]">{c.label}</dt>
               <dd className="min-w-0 [overflow-wrap:anywhere]">
                 <a
                   href={c.href}
-                  {...(c.external ? { target: "_blank", rel: "noopener noreferrer", "aria-label": t("footer.github") } : {})}
                   className="text-primary transition-colors hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
                   {c.text}
