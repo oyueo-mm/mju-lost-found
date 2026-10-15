@@ -102,7 +102,7 @@ export async function Footer() {
 
   return (
     <footer className="border-t border-border bg-background">
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 pt-8 pb-20 md:px-6 md:pb-8">
+      <div className="mx-auto flex w-full max-w-4xl wide-board:max-w-6xl flex-col gap-6 px-4 pt-8 pb-20 md:px-6 md:pb-8">
         {/* Footer 레이아웃 정리 Phase: 위에서부터 세 줄 -- (1) 브랜드 소개 +
             서비스/커뮤니티/안내 메뉴, (2) 연락처 3개, (3) 정책 링크·언어
             선택·저작권. 예전에는 연락처/GitHub/약관까지 브랜드 칸 하나에

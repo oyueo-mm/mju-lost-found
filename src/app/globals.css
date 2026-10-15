@@ -54,6 +54,47 @@
   --radius: 0.875rem;
 }
 
+/* 게시판 반응형 배치 (PostCard variant="board", BOARD_RESULTS_GRID_CLASS).
+   Phones choose 격자형 (default) or 목록형 -- <html data-board-view>, set
+   before first paint from localStorage (lib/boardView.ts). Tablets always
+   show list rows (2 columns), desktops vertical cards (3 columns, 4 on a
+   wide screen for a page marked data-wide-board).
+   - board-tile: a phone in 격자형 -- compact vertical cards, 2 columns.
+   - board-list: a phone in 목록형 -- the grid becomes one column.
+   - board-row:  a list row -- a tablet, or a phone in 목록형.
+   - wide-board: >= 1440px on a board page -- the page shell widens. */
+@custom-variant board-tile {
+  @media (width < 40rem) {
+    :root:not([data-board-view="list"]) & {
+      @slot;
+    }
+  }
+}
+@custom-variant board-list {
+  @media (width < 40rem) {
+    :root[data-board-view="list"] & {
+      @slot;
+    }
+  }
+}
+@custom-variant board-row {
+  @media (width >= 40rem) and (width < 64rem) {
+    @slot;
+  }
+  @media (width < 40rem) {
+    :root[data-board-view="list"] & {
+      @slot;
+    }
+  }
+}
+@custom-variant wide-board {
+  @media (width >= 90rem) {
+    :root:has([data-wide-board]) & {
+      @slot;
+    }
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

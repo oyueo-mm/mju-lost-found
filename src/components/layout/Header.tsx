@@ -66,7 +66,7 @@ export async function Header() {
           트랙이 자기 콘텐츠보다 작아지는 일 자체가 없고, 남는 공간만
           1fr 비율로 나눠 가진다. 모바일은 기존 그대로 flex
           justify-between. */}
-      <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-2 px-4 py-3 sm:gap-3 md:grid md:grid-cols-[minmax(min-content,1fr)_auto_minmax(min-content,1fr)] md:gap-2 md:px-6">
+      <div className="mx-auto flex w-full max-w-4xl wide-board:max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:gap-3 md:grid md:grid-cols-[minmax(min-content,1fr)_auto_minmax(min-content,1fr)] md:gap-2 md:px-6">
         <Link href="/" className="flex min-w-0 shrink-0 items-center gap-1.5 font-semibold text-foreground sm:gap-2 md:min-w-0 md:justify-self-start">
           <LogoMark size={32} />
           {/* 브랜드명 통일 Phase: "MJU Find"는 짧아 모바일(320px)부터

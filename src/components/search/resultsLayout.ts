@@ -7,4 +7,5 @@ export const SEARCH_RESULTS_GRID_CLASS = "grid grid-cols-2 gap-3 sm:grid-cols-3 
 // photo or not); from lg they are vertical cards that keep their own
 // height (items-start) instead of stretching a compact no-photo card to
 // its photo neighbour's. The reading order is the sort order (no masonry).
-export const BOARD_RESULTS_GRID_CLASS = "grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 lg:items-start lg:gap-4";
+export const BOARD_RESULTS_GRID_CLASS =
+  "grid grid-cols-2 items-start gap-2.5 board-list:grid-cols-1 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 lg:gap-4 min-[90rem]:grid-cols-4";

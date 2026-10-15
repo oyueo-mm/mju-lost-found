@@ -61,7 +61,9 @@ export default async function FoundListPage({
   }
 
   return (
-    <div className="flex flex-col gap-4 sm:gap-6">
+    // data-wide-board: on a wide screen the page shell widens for a
+    // fourth column (the wide-board variant, globals.css).
+    <div data-wide-board className="flex flex-col gap-4 sm:gap-6">
       <BoardHeader
         title={t("board.found.title")}
         description={t("board.found.description")}

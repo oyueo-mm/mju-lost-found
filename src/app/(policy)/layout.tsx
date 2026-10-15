@@ -40,7 +40,7 @@ export default async function PolicyLayout({ children }: { children: React.React
   return (
     <div className="flex flex-1 flex-col">
       <Header />
-      <main className="mx-auto w-full max-w-4xl min-h-[calc(100dvh-var(--header-height))] flex-1 px-4 py-6 md:min-h-0 md:px-6 md:py-10">
+      <main className="mx-auto w-full max-w-4xl wide-board:max-w-6xl min-h-[calc(100dvh-var(--header-height))] flex-1 px-4 py-6 md:min-h-0 md:px-6 md:py-10">
         {children}
       </main>
       <Footer />

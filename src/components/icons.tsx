@@ -424,6 +424,17 @@ export function LipstickIcon(props: IconProps) {
 }
 
 // 기타 -- 2x2 격자("그 외 분류")
+// 게시판 목록형 보기 (three rows: a thumbnail square and a text line each).
+export function ListIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3.5" y="4" width="5" height="5" rx="1.25" />
+      <rect x="3.5" y="15" width="5" height="5" rx="1.25" />
+      <path d="M12 6.5h8.5M12 17.5h8.5" />
+    </svg>
+  );
+}
+
 export function GridIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

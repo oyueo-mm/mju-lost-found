@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { themeInitScript } from "@/lib/theme/constants";
+import { boardViewInitScript } from "@/lib/boardView";
 import { LOCALE_HTML_LANG } from "@/lib/i18n/config";
 import { getLocale, getTranslator } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/messages";
@@ -97,6 +98,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             shared source of this logic (also used, non-serialized, by
             ThemeSettings for a live change). */}
         <script dangerouslySetInnerHTML={{ __html: themeInitScript() }} />
+        {/* 게시판 보기 방식(목록형/격자형): same reason -- the saved phone
+            board layout applies before first paint (lib/boardView.ts). */}
+        <script dangerouslySetInnerHTML={{ __html: boardViewInitScript() }} />
       </head>
       <body className="min-h-full flex flex-col">
         <I18nProvider locale={locale} messages={getDictionary(locale)}>

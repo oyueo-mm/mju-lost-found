@@ -17,6 +17,7 @@ import { EventPeriodFilter } from "./EventPeriodFilter";
 import { isPeriodRangeInvalid, periodStateToEntries, readPeriodState, withPeriodParams, type PeriodState } from "./periodParams";
 import { resolveSearchUiMode, SEARCH_MODE_PARAM, withSearchMode } from "./searchModeParams";
 import { SearchModeToggle, type SearchUiMode } from "./SearchModeToggle";
+import { BoardViewToggle } from "./BoardViewToggle";
 import { ChevronDownIcon, SearchIcon, XIcon } from "@/components/icons";
 import { useI18n } from "@/lib/i18n/client";
 import { campusLabelKey } from "@/lib/i18n/labels";
@@ -346,6 +347,7 @@ export function SearchFilterBar({
             type={aiSearchType}
             extraQuery={aiFilterQuery}
             cardVariant={fixedType ? "board" : "default"}
+            resultsAccessory={fixedType ? <BoardViewToggle /> : undefined}
             belowInput={
               <div className="flex flex-wrap items-center gap-2">
                 <CategoryFilterSelects
@@ -519,10 +521,12 @@ export function SearchFilterBar({
         <>
           {/* Results toolbar: how many posts, and the sort order (still a
               field of the filter form above, through form=). */}
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground" aria-live="polite">
+          <div className="flex items-center gap-2">
+            <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground" aria-live="polite">
               {typeof resultCount === "number" && t("search.results.count", { count: resultCount })}
             </p>
+            {/* 목록형/격자형 (boards, phone only) */}
+            {fixedType && <BoardViewToggle />}
             <select
               key={urlKey}
               form={formId}

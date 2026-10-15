@@ -93,18 +93,20 @@ describe("PostCard layout (게시판 리디자인)", () => {
     expect(markup).not.toContain("3.webp");
   });
 
-  it("on the board, crops a square row thumbnail below lg and contains the photo in a 3:2 area from lg", () => {
+  it("on the board: 3:2 desktop photo, 4:3 phone grid photo, cropped square list-row thumbnail", () => {
     const markup = renderCard({ ...basePost, imageUrl: "https://example.com/item.webp" }, { variant: "board" });
 
-    expect(markup).toContain("object-cover lg:object-contain");
-    expect(markup).toContain("lg:aspect-3/2");
+    expect(markup).toContain("aspect-3/2");
+    expect(markup).toContain("board-tile:aspect-4/3");
+    expect(markup).toContain("object-contain board-row:object-cover");
+    expect(markup).toContain("board-row:size-20");
   });
 
   it("wraps unbroken title and description tokens inside their clamps", () => {
     const longToken = "1234567890".repeat(40);
     const markup = renderCard({ ...basePost, title: longToken, description: longToken });
 
-    expect(markup).toContain("line-clamp-2 text-[15px] leading-snug font-semibold text-foreground [overflow-wrap:anywhere]");
+    expect(markup).toContain("line-clamp-2 leading-snug font-semibold text-foreground [overflow-wrap:anywhere] text-[15px]");
     expect(markup).toContain("[overflow-wrap:anywhere]");
     expect(markup).toContain(longToken);
   });
@@ -141,11 +143,14 @@ describe("PostCard board variant", () => {
     expect(markup).toContain("보관 중");
   });
 
-  it("is a list row on phones and tablets and a vertical card from lg", () => {
+  it("is a vertical card by default, a compact card in the phone grid and a list row (tablet / phone list)", () => {
     const markup = renderCard(basePost, { variant: "board" });
 
-    expect(markup).toContain("size-24");
-    expect(markup).toContain("lg:flex-col");
+    expect(markup).toContain("flex-col");
+    expect(markup).toContain("board-tile:p-2.5");
+    expect(markup).toContain("board-row:flex-row");
+    // a no-photo list row gets a category tile; the grid/desktop card does not
+    expect(markup).toContain("hidden board-row:flex");
   });
 });
 

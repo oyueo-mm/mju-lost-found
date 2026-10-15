@@ -137,7 +137,7 @@ export default async function MainLayout({ children }: { children: React.ReactNo
           유지한다 -- 그쪽은 원래도 Footer가 뷰포트 맨 아래에 정확히
           붙고 있었고, 거기에까지 이 최소 높이를 적용하면 멀쩡하던
           Footer를 굳이 첫 화면 밖으로 밀어내게 된다. */}
-      <main className="mx-auto w-full max-w-4xl min-h-[calc(100dvh-var(--header-height))] flex-1 px-4 py-6 md:min-h-0 md:px-6 md:py-10">
+      <main className="mx-auto w-full max-w-4xl wide-board:max-w-6xl min-h-[calc(100dvh-var(--header-height))] flex-1 px-4 py-6 md:min-h-0 md:px-6 md:py-10">
         {children}
       </main>
       <Footer />

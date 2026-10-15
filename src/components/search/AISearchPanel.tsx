@@ -42,6 +42,8 @@ type AISearchPanelProps = {
   // "board" on /lost and /found (see PostCard's `variant`).
   belowInput?: ReactNode;
   cardVariant?: "default" | "board";
+  // Shown at the top of the results (the boards' 목록형/격자형 switch).
+  resultsAccessory?: ReactNode;
   animatedPlaceholders?: readonly string[];
   mobileAnimatedPlaceholders?: readonly string[];
   // 기간 검색 필터: extra query-string parameters (period / from / to /
@@ -71,6 +73,7 @@ export function AISearchPanel({
   controlsClassName,
   belowInput,
   cardVariant = "default",
+  resultsAccessory,
   animatedPlaceholders,
   mobileAnimatedPlaceholders,
   extraQuery,
@@ -360,9 +363,12 @@ export function AISearchPanel({
       {results !== null && (
         <div className="flex flex-col gap-3">
           {results.length > 0 && (
-            <p className="rounded-lg bg-primary-muted px-3 py-2 text-xs text-primary">
-              {t("aiSearch.resultNotice")}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="min-w-0 flex-1 rounded-lg bg-primary-muted px-3 py-2 text-xs text-primary">
+                {t("aiSearch.resultNotice")}
+              </p>
+              {resultsAccessory}
+            </div>
           )}
           {results.length === 0 ? (
             <div className="flex flex-col gap-4">
