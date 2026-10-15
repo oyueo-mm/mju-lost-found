@@ -206,3 +206,102 @@ export async function loadCapacity(): Promise<{ day: string; dbMb: number; stora
   const pick = (m: string) => rows.find((r) => r.metric === m)?.value ?? 0;
   return { day: asDay(rows[0].day), dbMb: pick("capacity.db_mb"), storageMb: pick("capacity.storage_mb") };
 }
+
+// ---------- 방문 통계 (visit.* and search.*.<audience> in MetricDaily) ----------
+// Page views and visit sessions from the browser beacon (see
+// lib/metrics/visits.ts and app/visitActions.ts), and the searches split by
+// who made them. A visit session is not a person: the same person on two
+// devices, or after clearing site data, is two sessions.
+export const VISIT_SERIES = [
+  { key: "pvAnon", label: "페이지뷰(비로그인)", metrics: ["visit.pv.anon"] },
+  { key: "pvMember", label: "페이지뷰(로그인)", metrics: ["visit.pv.member"] },
+  { key: "sessionAnon", label: "방문 세션(비로그인)", metrics: ["visit.session.anon"] },
+  { key: "sessionMember", label: "방문 세션(로그인)", metrics: ["visit.session.member"] },
+  { key: "searchAnon", label: "검색(비로그인)", metrics: ["search.keyword.anon", "search.semantic.anon", "search.image.anon"] },
+  { key: "searchMember", label: "검색(로그인)", metrics: ["search.keyword.member", "search.semantic.member", "search.image.member"] },
+  { key: "internalPv", label: "관리자 페이지뷰(제외분)", metrics: ["visit.internal.pv"] },
+] as const;
+export type VisitSeriesKey = (typeof VISIT_SERIES)[number]["key"];
+
+export type VisitBreakdown = {
+  pages: { kind: string; anon: number; member: number }[];
+  refs: { source: string; sessions: number }[];
+  utmSources: { value: string; sessions: number }[];
+  utmCampaigns: { value: string; sessions: number }[];
+};
+export type VisitStats = { buckets: string[]; values: Record<VisitSeriesKey, number[]>; breakdown: VisitBreakdown };
+
+type MetricRow = { bucket: Date | string; metric: string; n: bigint | number };
+
+function breakdownOf(totals: Map<string, number>): VisitBreakdown {
+  const pages = new Map<string, { anon: number; member: number }>();
+  const refs: VisitBreakdown["refs"] = [];
+  const utmSources: VisitBreakdown["utmSources"] = [];
+  const utmCampaigns: VisitBreakdown["utmCampaigns"] = [];
+  for (const [metric, n] of totals) {
+    const page = /^visit\.page\.([a-z_]+)\.(anon|member)$/.exec(metric);
+    if (page) {
+      const row = pages.get(page[1]) ?? { anon: 0, member: 0 };
+      row[page[2] as "anon" | "member"] += n;
+      pages.set(page[1], row);
+    } else if (metric.startsWith("visit.ref.")) refs.push({ source: metric.slice(10), sessions: n });
+    else if (metric.startsWith("visit.utm_source.")) utmSources.push({ value: metric.slice(17), sessions: n });
+    else if (metric.startsWith("visit.utm_campaign.")) utmCampaigns.push({ value: metric.slice(19), sessions: n });
+  }
+  const bySize = <T extends { sessions: number }>(a: T, b: T) => b.sessions - a.sessions;
+  return {
+    pages: [...pages.entries()].map(([kind, v]) => ({ kind, ...v })).sort((a, b) => b.anon + b.member - (a.anon + a.member)),
+    refs: refs.sort(bySize),
+    utmSources: utmSources.sort(bySize).slice(0, 20),
+    utmCampaigns: utmCampaigns.sort(bySize).slice(0, 20),
+  };
+}
+
+// One query for the whole range: per-period series plus the range's
+// breakdown by page kind, referrer and UTM tag.
+export async function loadVisitStats(unit: Granularity, today = kstDay()): Promise<VisitStats> {
+  const buckets = bucketList(unit, today);
+  const from = buckets[0];
+  const until = addPeriods(buckets[buckets.length - 1], unit, 1);
+  const trunc = Prisma.raw(`'${unit}'`);
+  const rows = await prisma.$queryRaw<MetricRow[]>`
+    SELECT date_trunc(${trunc}, "day")::date AS bucket, "metric", sum("value") AS n
+    FROM "MetricDaily"
+    WHERE ("metric" LIKE 'visit.%' OR "metric" LIKE 'search.%.%') AND "day" >= ${from}::date AND "day" < ${until}::date
+    GROUP BY 1, 2`.catch(() => [] as MetricRow[]);
+
+  const values = Object.fromEntries(VISIT_SERIES.map((s) => [s.key, buckets.map(() => 0)])) as Record<VisitSeriesKey, number[]>;
+  const seriesOf = new Map<string, VisitSeriesKey>(VISIT_SERIES.flatMap((s) => s.metrics.map((m) => [m, s.key] as const)));
+  const totals = new Map<string, number>();
+  for (const r of rows) {
+    const n = Number(r.n);
+    totals.set(r.metric, (totals.get(r.metric) ?? 0) + n);
+    const key = seriesOf.get(r.metric);
+    const i = buckets.indexOf(asDay(r.bucket));
+    if (key && i >= 0) values[key][i] += n;
+  }
+  return { buckets, values, breakdown: breakdownOf(totals) };
+}
+
+// 홍보 전후 비교 for the visit series: `days` days before `pivot` vs `pivot`
+// and the `days` days after it.
+export async function loadVisitComparison(
+  pivot: string,
+  days: number,
+): Promise<{ before: Record<VisitSeriesKey, number>; after: Record<VisitSeriesKey, number> }> {
+  const sum = async (from: string, until: string) => {
+    const rows = await prisma.$queryRaw<{ metric: string; n: bigint | number }[]>`
+      SELECT "metric", sum("value") AS n FROM "MetricDaily"
+      WHERE ("metric" LIKE 'visit.%' OR "metric" LIKE 'search.%.%') AND "day" >= ${from}::date AND "day" < ${until}::date
+      GROUP BY 1`.catch(() => []);
+    const byMetric = new Map(rows.map((r) => [r.metric, Number(r.n)]));
+    return Object.fromEntries(
+      VISIT_SERIES.map((s) => [s.key, s.metrics.reduce((acc, m) => acc + (byMetric.get(m) ?? 0), 0)]),
+    ) as Record<VisitSeriesKey, number>;
+  };
+  const [before, after] = await Promise.all([
+    sum(addPeriods(pivot, "day", -days), pivot),
+    sum(pivot, addPeriods(pivot, "day", days)),
+  ]);
+  return { before, after };
+}

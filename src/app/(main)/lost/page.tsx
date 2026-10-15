@@ -8,6 +8,7 @@ import { LinkButton } from "@/components/ui/Button";
 import { BoardHeader } from "@/components/search/BoardHeader";
 import { BOARD_RESULTS_GRID_CLASS } from "@/components/search/resultsLayout";
 import { searchPosts } from "@/lib/posts/service";
+import { recordDaily } from "@/lib/metrics/record";
 import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, LOST_STATUSES, listQuerySchema } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
@@ -52,6 +53,16 @@ export default async function LostListPage({
   // searchApiClient.ts's comment for why (Vercel Hobby-plan function-count
   // limit).
   const mode = parsed.success ? parsed.data.mode : "keyword";
+
+  // 운영 통계: a keyword search made on this page (search words, first page)
+  // -- the same rule /api/posts' searchPosts applies to its own requests.
+  // That path and this one never overlap (this page calls the keyword-only
+  // searchPosts directly; semantic mode goes through /api/posts and is
+  // counted there), so nothing is counted twice.
+  const searchWords = parsed.success ? parsed.data.q?.trim() : undefined;
+  if (mode !== "semantic" && searchWords && (query.page ?? 1) === 1) {
+    recordDaily("search.keyword", ["lost", searchWords, { ...query, q: undefined }]);
+  }
 
   let posts;
   try {

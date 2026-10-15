@@ -7,12 +7,17 @@ import {
   loadComparison,
   loadSeries,
   loadTimings,
+  loadVisitComparison,
+  loadVisitStats,
   METRICS,
   PERIODS,
+  VISIT_SERIES,
   type Granularity,
   type TimingRow,
 } from "@/lib/metrics/dashboard";
 import { kstDay } from "@/lib/metrics/record";
+import { PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "@/lib/metrics/visits";
+import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
 
 // 운영 통계 (admin only). Read-only aggregates: no search text, no member
 // names -- 활성 이용자 are counted from HMAC'd daily marks.
@@ -89,12 +94,14 @@ export default async function AdminStatsPage({
   const pivot = /^\d{4}-\d{2}-\d{2}$/.test(params.pivot ?? "") && !Number.isNaN(Date.parse(params.pivot!)) ? params.pivot! : null;
   const windowDays = WINDOWS.includes(Number(params.window) as (typeof WINDOWS)[number]) ? Number(params.window) : 14;
 
-  const [series, comparison, timings24h, timings7d, capacity] = await Promise.all([
+  const [series, comparison, timings24h, timings7d, capacity, visits, visitComparison] = await Promise.all([
     loadSeries(unit),
     pivot ? loadComparison(pivot, windowDays) : Promise.resolve(null),
     loadTimings(24),
     loadTimings(24 * 7),
     loadCapacity(),
+    loadVisitStats(unit),
+    pivot ? loadVisitComparison(pivot, windowDays) : Promise.resolve(null),
   ]);
   const isInternal = (r: TimingRow) => r.route.startsWith("ai:") || r.route.startsWith("db:");
 
@@ -146,6 +153,145 @@ export default async function AdminStatsPage({
             </div>
           );
         })}
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-card border border-border bg-card p-4">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-sm font-semibold text-foreground">방문 통계 (로그인·비로그인)</h2>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            브라우저가 실제로 화면을 연 경우만 셉니다(링크 미리 불러오기·크롤러·자동화 브라우저 제외, 같은 화면 안의 필터·페이지
+            이동은 새 조회로 세지 않음). 방문 세션은 같은 브라우저에서 30분 넘게 조회가 없거나 날짜가 바뀌면 새로 셉니다 —
+            사람 수가 아니며, 한 사람이 기기 두 대로 들어오면 두 번 셉니다. 관리자 계정의 조회는 따로 셉니다. IP·검색어·전체
+            URL·회원 정보는 저장하지 않고, 유입 경로는 정해진 분류로만, UTM은 영문·숫자 값만 셉니다. 방문 통계 도입 이후부터
+            집계됩니다.
+          </p>
+          <StatsOptOutToggle />
+        </div>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {[
+            ...VISIT_SERIES.filter((s) => s.key !== "internalPv").map((s) => ({ label: s.label, values: visits.values[s.key], total: true })),
+            { label: "활성 회원(로그인)", values: series.values.active, total: false },
+          ].map((card) => {
+            const sum = card.values.reduce((a, b) => a + b, 0);
+            return (
+              <div key={card.label} className="flex flex-col gap-1 rounded-card border border-border p-3">
+                <span className="text-xs text-muted-foreground">{card.label}</span>
+                <span className="text-lg font-bold tabular-nums text-foreground">
+                  {(card.total ? sum : card.values[card.values.length - 1]).toLocaleString("ko-KR")}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  {card.total ? "기간 합계" : "이번 기간"} · 최근 {card.values[card.values.length - 1].toLocaleString("ko-KR")}
+                </span>
+                <Sparkline values={card.values} />
+              </div>
+            );
+          })}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] text-right text-xs tabular-nums">
+            <thead className="text-muted-foreground">
+              <tr>
+                <th className="py-1.5 pr-2 text-left font-medium">기간</th>
+                {VISIT_SERIES.map((s) => (
+                  <th key={s.key} className="py-1.5 pr-2 font-medium">
+                    {s.label}
+                  </th>
+                ))}
+                <th className="py-1.5 pr-2 font-medium">활성 회원</th>
+                <th className="py-1.5 font-medium">비로그인 비율(PV)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visits.buckets
+                .map((bucket, i) => ({ bucket, i }))
+                .reverse()
+                .map(({ bucket, i }) => {
+                  const anon = visits.values.pvAnon[i];
+                  const all = anon + visits.values.pvMember[i];
+                  return (
+                    <tr key={bucket} className="border-t border-border">
+                      <td className="py-1.5 pr-2 text-left text-foreground">{bucketLabel(bucket, unit)}</td>
+                      {VISIT_SERIES.map((s) => (
+                        <td key={s.key} className="py-1.5 pr-2">
+                          {visits.values[s.key][i] || <span className="text-muted-foreground/60">0</span>}
+                        </td>
+                      ))}
+                      <td className="py-1.5 pr-2">{series.values.active[i] || <span className="text-muted-foreground/60">0</span>}</td>
+                      <td className="py-1.5">{all ? `${Math.round((anon / all) * 100)}%` : "-"}</td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="flex flex-col gap-1.5">
+            <h3 className="text-xs font-semibold text-foreground">화면별 페이지뷰 (표시 기간 전체)</h3>
+            {visits.breakdown.pages.length === 0 ? (
+              <p className="text-xs text-muted-foreground">아직 기록이 없습니다.</p>
+            ) : (
+              <table className="w-full text-right text-xs tabular-nums">
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th className="py-1 pr-2 text-left font-medium">화면</th>
+                    <th className="py-1 pr-2 font-medium">비로그인</th>
+                    <th className="py-1 font-medium">로그인</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visits.breakdown.pages.map((p) => (
+                    <tr key={p.kind} className="border-t border-border">
+                      <td className="py-1 pr-2 text-left text-foreground">{PAGE_KIND_LABELS[p.kind as PageKind] ?? p.kind}</td>
+                      <td className="py-1 pr-2">{p.anon.toLocaleString("ko-KR")}</td>
+                      <td className="py-1">{p.member.toLocaleString("ko-KR")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <h3 className="text-xs font-semibold text-foreground">유입 경로 (방문 세션, 표시 기간 전체)</h3>
+            {visits.breakdown.refs.length === 0 ? (
+              <p className="text-xs text-muted-foreground">아직 기록이 없습니다.</p>
+            ) : (
+              <table className="w-full text-right text-xs tabular-nums">
+                <tbody>
+                  {visits.breakdown.refs.map((r) => (
+                    <tr key={r.source} className="border-t border-border first:border-t-0">
+                      <td className="py-1 pr-2 text-left text-foreground">{REF_SOURCE_LABELS[r.source as RefSource] ?? r.source}</td>
+                      <td className="py-1">{r.sessions.toLocaleString("ko-KR")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <h3 className="mt-2 text-xs font-semibold text-foreground">UTM 캠페인 (방문 세션)</h3>
+            {visits.breakdown.utmCampaigns.length === 0 && visits.breakdown.utmSources.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                아직 기록이 없습니다. 홍보 링크에 예: <code className="font-mono">?utm_source=everytime&amp;utm_campaign=launch</code>
+                를 붙이면 캠페인별로 집계됩니다.
+              </p>
+            ) : (
+              <table className="w-full text-right text-xs tabular-nums">
+                <tbody>
+                  {visits.breakdown.utmSources.map((r) => (
+                    <tr key={`s-${r.value}`} className="border-t border-border first:border-t-0">
+                      <td className="py-1 pr-2 text-left text-foreground">source: {r.value}</td>
+                      <td className="py-1">{r.sessions.toLocaleString("ko-KR")}</td>
+                    </tr>
+                  ))}
+                  {visits.breakdown.utmCampaigns.map((r) => (
+                    <tr key={`c-${r.value}`} className="border-t border-border">
+                      <td className="py-1 pr-2 text-left text-foreground">campaign: {r.value}</td>
+                      <td className="py-1">{r.sessions.toLocaleString("ko-KR")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
       </section>
 
       <section className="flex flex-col gap-2 rounded-card border border-border bg-card p-4">
@@ -232,6 +378,15 @@ export default async function AdminStatsPage({
                     <td className="py-1.5">{change(comparison.before[m.key], comparison.after[m.key])}</td>
                   </tr>
                 ))}
+                {visitComparison &&
+                  VISIT_SERIES.filter((s) => s.key !== "internalPv").map((s) => (
+                    <tr key={s.key} className="border-t border-border">
+                      <td className="py-1.5 pr-3 text-left text-foreground">{s.label}</td>
+                      <td className="py-1.5 pr-3">{visitComparison.before[s.key].toLocaleString("ko-KR")}</td>
+                      <td className="py-1.5 pr-3">{visitComparison.after[s.key].toLocaleString("ko-KR")}</td>
+                      <td className="py-1.5">{change(visitComparison.before[s.key], visitComparison.after[s.key])}</td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
             <p className="mt-2 text-[11px] text-muted-foreground">

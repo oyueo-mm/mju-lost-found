@@ -5,6 +5,7 @@ import { PostCard } from "@/components/post/PostCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Lost112Notice } from "@/components/search/Lost112Notice";
 import { searchPosts } from "@/lib/posts/service";
+import { recordDaily } from "@/lib/metrics/record";
 import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, listQuerySchema } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
@@ -41,6 +42,16 @@ export default async function SearchPage({
   // (Phase 11-2) "all" -- aiService.ts's searchPosts() merges both
   // boards' semantic results itself when it's "all", so this page doesn't
   // need to know or care which case it is.
+  // 운영 통계: a keyword search made on this page (search words, first page)
+  // -- the same rule /api/posts' searchPosts applies to its own requests.
+  // That path and this one never overlap (this page calls the keyword-only
+  // searchPosts directly; semantic mode goes through /api/posts and is
+  // counted there), so nothing is counted twice.
+  const searchWords = parsed.success ? parsed.data.q?.trim() : undefined;
+  if (mode !== "semantic" && searchWords && (query.page ?? 1) === 1) {
+    recordDaily("search.keyword", [query.type, searchWords, { ...query, q: undefined }]);
+  }
+
   let results;
   try {
     results = mode === "semantic" ? await fetchPostsFromApi(raw) : await searchPosts(query);

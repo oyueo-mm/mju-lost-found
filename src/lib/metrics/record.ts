@@ -93,11 +93,40 @@ function signatureOf(parts: unknown[]): string {
 // Counted in this instance's memory and written with the timings (at most
 // once a minute), so a busy page never costs a DB write per view.
 const pendingDaily = new Map<string, number>();
-export function recordDaily(metric: DailyMetric, dedupeParts?: unknown[]): void {
-  if (dedupeParts && !firstSeen(signatureOf([metric, ...dedupeParts]))) return;
+export function recordDaily(metric: DailyMetric, dedupeParts?: unknown[]): boolean {
+  if (dedupeParts && !firstSeen(signatureOf([metric, ...dedupeParts]))) return false;
+  addDailyCount(metric);
+  // 방문 통계: a search is also counted by who made it -- "search.keyword"
+  // stays the total, "search.keyword.anon|member|internal" splits the same
+  // events (never added to the total). Resolved after this call, still
+  // before the deferred write.
+  if (metric.startsWith("search.")) void countByAudience(metric);
+  return true;
+}
+
+// Adds to a per-day counter in the same batched write (방문 통계 uses its
+// own "visit.*" names -- see lib/metrics/visits.ts and app/visitActions.ts).
+export function addDailyCount(metric: string, n = 1): void {
   const key = `${kstDay()}|${metric}`;
-  pendingDaily.set(key, (pendingDaily.get(key) ?? 0) + 1);
+  pendingDaily.set(key, (pendingDaily.get(key) ?? 0) + n);
   noteObservation();
+}
+
+// anon (signed out), member, or internal (an admin -- kept apart so staff
+// testing never reads as visitor traffic).
+export type Audience = "anon" | "member" | "internal";
+export async function currentAudience(): Promise<Audience> {
+  const { getCurrentUser } = await import("@/lib/auth/session");
+  const user = await getCurrentUser();
+  return !user ? "anon" : user.isAdmin ? "internal" : "member";
+}
+
+async function countByAudience(metric: string): Promise<void> {
+  try {
+    addDailyCount(`${metric}.${await currentAudience()}`);
+  } catch {
+    // Outside a request (scripts, tests) there is no session to read.
+  }
 }
 
 // Active member: one row per member per KST day, keyed by an HMAC of the id.

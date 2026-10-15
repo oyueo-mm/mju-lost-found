@@ -7,6 +7,7 @@ import { LOCALE_HTML_LANG } from "@/lib/i18n/config";
 import { getLocale, getTranslator } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/messages";
 import { I18nProvider } from "@/lib/i18n/client";
+import { VisitBeacon } from "@/components/layout/VisitBeacon";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -106,6 +107,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <I18nProvider locale={locale} messages={getDictionary(locale)}>
           {children}
         </I18nProvider>
+        {/* 방문 통계 (운영 통계): page views, counted without identifying anyone. */}
+        <VisitBeacon />
       </body>
     </html>
   );
