@@ -5,11 +5,12 @@
 // `board-tile` / `board-row` / `board-list` CSS variants (globals.css) key
 // on. Being an attribute set before first paint (boardViewInitScript in
 // the root layout), the server-rendered list already has the right
-// layout; there is no flash from the default to a saved "list".
+// layout; there is no flash from the default (목록형) to a saved "grid".
 
 export const BOARD_VIEWS = ["grid", "list"] as const;
 export type BoardView = (typeof BOARD_VIEWS)[number];
-export const DEFAULT_BOARD_VIEW: BoardView = "grid";
+// 목록형 is the default; a saved "grid" (or "list") is always respected.
+export const DEFAULT_BOARD_VIEW: BoardView = "list";
 export const BOARD_VIEW_STORAGE_KEY = "mju-find:board-view";
 export const BOARD_VIEW_EVENT = "mju-find:board-view";
 

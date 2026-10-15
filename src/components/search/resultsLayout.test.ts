@@ -18,10 +18,8 @@ describe("board results grid", () => {
     expect(BOARD_RESULTS_GRID_CLASS).toContain("sm:grid-cols-2");
     expect(BOARD_RESULTS_GRID_CLASS).toContain("xl:grid-cols-3");
     expect(BOARD_RESULTS_GRID_CLASS).not.toContain("grid-cols-4");
-    // rows of equal-height cards from sm
-    expect(BOARD_RESULTS_GRID_CLASS).toContain("sm:items-stretch");
-    // natural card heights from sm, but a plain row-by-row grid (sort order kept)
-    expect(BOARD_RESULTS_GRID_CLASS).toContain("items-start");
+    // rows of equal-height cards at every width (grid default: stretch)
+    expect(BOARD_RESULTS_GRID_CLASS).not.toContain("items-start");
     expect(BOARD_RESULTS_GRID_CLASS).not.toMatch(/columns-|masonry/);
   });
 });

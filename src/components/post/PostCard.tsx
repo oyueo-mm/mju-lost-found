@@ -125,7 +125,10 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
         body: "gap-1 p-4 board-tile:gap-0.5 board-tile:p-2.5 board-row:gap-0.5 board-row:p-0 board-row:py-0.5",
         categoryText: "text-xs board-tile:text-[11px]",
         title: `text-[15px] board-tile:text-sm ${hasPhoto ? "min-h-[2lh] board-tile:min-h-0 board-row:min-h-0" : ""}`,
-        desc: "line-clamp-3 text-sm leading-relaxed board-tile:text-xs board-tile:leading-snug board-row:line-clamp-1 board-row:text-xs board-row:sm:line-clamp-2",
+        // Phone grid: the description takes whatever height the row leaves
+        // (at least 3 lines, without making the row taller), fading out if
+        // it is cut -- no empty block above the location next to a photo card.
+        desc: "line-clamp-3 text-sm leading-relaxed board-tile:line-clamp-[12] board-tile:min-h-[3lh] board-tile:flex-1 board-tile:basis-0 board-tile:text-xs board-tile:leading-snug board-tile:[mask-image:linear-gradient(to_bottom,#000_calc(100%-1lh),transparent)] board-row:line-clamp-1 board-row:text-xs board-row:sm:line-clamp-2",
         meta: "gap-x-1.5 pt-1.5 text-xs board-tile:flex-wrap board-tile:gap-y-0.5 board-tile:pt-1 board-tile:text-[11px] board-row:pt-1",
         location: "board-tile:basis-full",
         separator: "board-tile:hidden",

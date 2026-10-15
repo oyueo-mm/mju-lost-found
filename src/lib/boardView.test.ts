@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BOARD_VIEW_STORAGE_KEY, boardViewInitScript, isBoardView } from "./boardView";
+import { BOARD_VIEW_STORAGE_KEY, boardViewInitScript, DEFAULT_BOARD_VIEW, isBoardView } from "./boardView";
 
 // Runs the pre-paint script against a fake document/localStorage.
 function runInit(stored: string | null, throws = false): string | null {
@@ -17,6 +17,10 @@ function runInit(stored: string | null, throws = false): string | null {
 }
 
 describe("board view", () => {
+  it("defaults to 목록형 on a phone", () => {
+    expect(DEFAULT_BOARD_VIEW).toBe("list");
+  });
+
   it("accepts only grid and list", () => {
     expect(isBoardView("grid")).toBe(true);
     expect(isBoardView("list")).toBe(true);
