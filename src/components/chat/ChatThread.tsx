@@ -763,12 +763,15 @@ export function ChatThread({
               placeholder={t("chatThread.placeholder")}
               maxLength={2000}
               disabled={sending}
-              className="flex-1 rounded-full border border-border bg-transparent px-4 py-2 text-sm text-foreground disabled:opacity-60"
+              // min-w-0: a text input's default min-width is its intrinsic
+              // width (size=20, ~226px), so flex-1 alone could not shrink it
+              // and on a 320px screen it pushed 전송 past the edge (page 352px).
+              className="min-w-0 flex-1 rounded-full border border-border bg-transparent px-4 py-2 text-sm text-foreground disabled:opacity-60"
             />
             <button
               type="submit"
               disabled={sending || (!content.trim() && !selectedFile)}
-              className="rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
+              className="shrink-0 whitespace-nowrap rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-60"
             >
               {sending ? t("chatThread.sending") : t("chatThread.send")}
             </button>
