@@ -19,7 +19,13 @@ export const CURRENT_TERMS_VERSION = "2026-10-04";
 // Production release day is fixed, changing this one line is the whole
 // switch: the policy shows that day, and every member re-consents once on
 // it. A day not yet reached is fine -- it is only compared for equality.
-export const PRIVACY_POLICY_EFFECTIVE_DATE = "2026-10-14";
+// 2026-10-22: admins may view 이름·소속 for 분실물 인계 문의 / 소유권 분쟁 /
+// 사칭 의심 as well as for a report (policy §3, §5) -- a new purpose for
+// data already collected, so every member re-consents once; a member who
+// has not is still viewable only through a report (viewIdentityForPurpose).
+// The day leaves a week between publishing the revised policy and its
+// 시행일; set the real one when the release day is fixed.
+export const PRIVACY_POLICY_EFFECTIVE_DATE = "2026-10-22";
 
 // "2026-10-16" -> "2026년 10월 16일" (a plain calendar day, no time zone).
 export function formatEffectiveDate(isoDay: string): string {

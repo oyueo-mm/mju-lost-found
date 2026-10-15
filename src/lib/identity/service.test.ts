@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const userIdentityInfo = { findUnique: vi.fn(), count: vi.fn(), upsert: vi.fn(), create: vi.fn(), update: vi.fn(), deleteMany: vi.fn() };
-const user = { update: vi.fn() };
+const user = { update: vi.fn(), findUnique: vi.fn() };
 const report = { findUnique: vi.fn(), findMany: vi.fn() };
 const comment = { findUnique: vi.fn(), findMany: vi.fn() };
 const lostPost = { findMany: vi.fn() };
@@ -30,6 +30,7 @@ const {
   saveOwnIdentityInfo,
   syncIdentityFromHints,
   viewIdentityForReport,
+  viewIdentityForPurpose,
 } = await import("./service");
 const { CURRENT_IDENTITY_CONSENT_VERSION } = await import("@/lib/auth/terms");
 
@@ -111,7 +112,7 @@ describe("admin view of 실명·학과", () => {
       data: { nickname: "습득자", realName: "홍길동", department: "학생지원팀", realNameSource: "google_profile", departmentSource: "self", updatedAt },
     });
     expect(identityAccessLog.create).toHaveBeenCalledWith({
-      data: { adminUserId: 9, targetUserId: 2, reportId: 10, reason: REASON },
+      data: { adminUserId: 9, targetUserId: 2, purpose: "report", reportId: 10, reason: REASON },
     });
     expect($transaction).toHaveBeenCalledTimes(1);
   });
@@ -155,6 +156,76 @@ describe("admin view of 실명·학과", () => {
 });
 
 // 이름·소속 자동 수집
+describe("admin view of 이름·소속 for an operating purpose (no report)", () => {
+  const consented = { identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION };
+
+  it("shows the values and logs admin, member, purpose, no report and the reason -- in one transaction", async () => {
+    user.findUnique.mockResolvedValueOnce(consented);
+    const updatedAt = new Date("2026-10-20T01:00:00Z");
+    txUser.findUnique.mockResolvedValueOnce({
+      nickname: "습득자",
+      identityInfo: { realName: "홍길동", department: "공과대학", realNameSource: "google_display_name", departmentSource: "google_display_name", updatedAt },
+    });
+
+    const result = await viewIdentityForPurpose(admin, { targetUserId: 2, purpose: "handover", reason: `  ${REASON}  ` });
+
+    expect(result).toMatchObject({ kind: "ok", data: { realName: "홍길동", realNameSource: "google_display_name" } });
+    expect(identityAccessLog.create).toHaveBeenCalledWith({
+      data: { adminUserId: 9, targetUserId: 2, purpose: "handover", reportId: null, reason: REASON },
+    });
+    expect($transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts each purpose the policy names, and nothing else (report views go through their report)", async () => {
+    for (const purpose of ["handover", "ownership_dispute", "impersonation"]) {
+      user.findUnique.mockResolvedValueOnce(consented);
+      txUser.findUnique.mockResolvedValueOnce({ nickname: "x", identityInfo: null });
+      expect((await viewIdentityForPurpose(admin, { targetUserId: 2, purpose, reason: REASON })).kind).toBe("ok");
+    }
+    for (const purpose of ["report", "curiosity", "", null]) {
+      expect(await viewIdentityForPurpose(admin, { targetUserId: 2, purpose, reason: REASON })).toEqual({ kind: "invalid_purpose" });
+    }
+  });
+
+  it("refuses a non-admin before reading or logging anything", async () => {
+    expect(await viewIdentityForPurpose({ id: 3, isAdmin: false }, { targetUserId: 2, purpose: "handover", reason: REASON })).toEqual({
+      kind: "forbidden",
+    });
+    expect(user.findUnique).not.toHaveBeenCalled();
+    expect(identityAccessLog.create).not.toHaveBeenCalled();
+  });
+
+  it("requires a reason", async () => {
+    expect(await viewIdentityForPurpose(admin, { targetUserId: 2, purpose: "impersonation", reason: "짧음" })).toEqual({
+      kind: "invalid_reason",
+    });
+    expect(identityAccessLog.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a member who has not agreed to the consent naming these purposes -- nothing read or logged", async () => {
+    user.findUnique.mockResolvedValueOnce({ identityConsentVersion: "2026-10-14" });
+    expect(await viewIdentityForPurpose(admin, { targetUserId: 2, purpose: "ownership_dispute", reason: REASON })).toEqual({
+      kind: "not_consented",
+    });
+    user.findUnique.mockResolvedValueOnce({ identityConsentVersion: null });
+    expect((await viewIdentityForPurpose(admin, { targetUserId: 2, purpose: "ownership_dispute", reason: REASON })).kind).toBe(
+      "not_consented",
+    );
+    expect(txUser.findUnique).not.toHaveBeenCalled();
+    expect(identityAccessLog.create).not.toHaveBeenCalled();
+  });
+
+  it("logs the view and shows nothing on file as empty values when the member never entered anything", async () => {
+    user.findUnique.mockResolvedValueOnce(consented);
+    txUser.findUnique.mockResolvedValueOnce({ nickname: "새벽세시", identityInfo: null });
+    expect(await viewIdentityForPurpose(admin, { targetUserId: 2, purpose: "impersonation", reason: REASON })).toMatchObject({
+      kind: "ok",
+      data: { realName: null, department: null },
+    });
+    expect(identityAccessLog.create).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("admin user detail: reports a member is a party of", () => {
   it("returns nothing and reads nothing for a non-admin", async () => {
     expect(await reportsInvolvingUser({ isAdmin: false }, 7)).toEqual([]);

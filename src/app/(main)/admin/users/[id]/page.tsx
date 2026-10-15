@@ -8,7 +8,8 @@ import { AuthorLink } from "@/components/user/AuthorLink";
 import { MyCommentList } from "@/components/comment/MyCommentList";
 import { ShieldIcon } from "@/components/icons";
 import { UserIdentityPanel } from "@/components/admin/UserIdentityPanel";
-import { reportsInvolvingUser } from "@/lib/identity/service";
+import { identityConsentCoversOperatingPurposes, recentIdentityViews, reportsInvolvingUser } from "@/lib/identity/service";
+import { IDENTITY_PURPOSE_LABELS, type IdentityViewPurpose } from "@/lib/identity/purposes";
 import { REPORT_STATUS_LABELS, REPORT_TARGET_TYPE_LABELS } from "@/lib/report/schema";
 
 // Vercel's Node runtime defaults to UTC (no TZ env var set), so formatting
@@ -74,10 +75,16 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
     comments,
   } = result.data;
 
-  // 이름·소속 열람: only through a report this member is a party of (see
-  // UserIdentityPanel). Only the reports are listed here -- the values
-  // themselves load through the logged view.
-  const identityReports = (await reportsInvolvingUser(admin, user.id)).map((r) => ({
+  // 이름·소속 열람 (see UserIdentityPanel): the reports this member is a
+  // party of, whether their consent covers the operating purposes, and the
+  // past views (who/why/when). The values themselves load only through the
+  // logged view.
+  const [involvedReports, consentCoversOperatingPurposes, identityViews] = await Promise.all([
+    reportsInvolvingUser(admin, user.id),
+    identityConsentCoversOperatingPurposes(admin, user.id),
+    recentIdentityViews(admin, user.id),
+  ]);
+  const identityReports = involvedReports.map((r) => ({
     id: r.id,
     // Prisma's enum values are upper case (POST, PENDING); the labels are
     // keyed by the stored lower-case values.
@@ -186,8 +193,28 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
         </Section>
 
         <section className="rounded-card border border-border bg-card p-4">
-          <h2 className="mb-3 text-sm font-semibold text-foreground">이름·소속 (신고 처리용 열람)</h2>
-          <UserIdentityPanel userId={user.id} reports={identityReports} />
+          <h2 className="mb-3 text-sm font-semibold text-foreground">이름·소속 열람</h2>
+          <UserIdentityPanel
+            userId={user.id}
+            reports={identityReports}
+            consentCoversOperatingPurposes={consentCoversOperatingPurposes}
+          />
+          <div className="mt-4 border-t border-border pt-3">
+            <h3 className="mb-2 text-xs font-semibold text-foreground">최근 열람 기록 ({identityViews.length}건)</h3>
+            {identityViews.length === 0 ? (
+              <p className="text-xs text-muted-foreground">열람 기록이 없습니다.</p>
+            ) : (
+              <ul className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+                {identityViews.map((v) => (
+                  <li key={v.id} className="[overflow-wrap:anywhere]">
+                    {formatDateTime(v.accessedAt)} · {v.adminNickname ?? "알 수 없음"} ·{" "}
+                    {IDENTITY_PURPOSE_LABELS[v.purpose as IdentityViewPurpose] ?? v.purpose}
+                    {v.reportId !== null && ` (신고 #${v.reportId})`} · {v.reason}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </section>
 
         {/* Phase P-1 follow-up: reuses MyCommentList unchanged (same

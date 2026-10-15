@@ -5,6 +5,7 @@ import type { User } from "@/generated/prisma/client";
 import type { IdentityHints, IdentityValueSource } from "./googleHints";
 import type { IdentityInput } from "./validation";
 import { normalizeViewReason } from "./validation";
+import { isOperatingIdentityPurpose, type IdentityViewPurpose } from "./purposes";
 
 // 실명·학과 (UserIdentityInfo). Every read of these values goes through
 // this file: the member's own (내 정보, the form) and an admin's, for a
@@ -225,9 +226,45 @@ export async function viewIdentityForReport(
   if (!parties) return { kind: "not_found" };
   if (targetUserId !== parties.reporterUserId && targetUserId !== parties.targetUserId) return { kind: "forbidden" };
 
+  return readIdentityAndLog({ adminUserId: admin.id, targetUserId, purpose: "report", reportId, reason: normalizedReason });
+}
+
+// 이름·소속 열람 목적 확대: a view for a stated operating purpose (분실물
+// 인계 문의, 소유권 분쟁, 사칭 의심), not tied to a report. Allowed only
+// for a member who agreed to the 이름·소속 consent that names these
+// purposes -- CURRENT_IDENTITY_CONSENT_VERSION, which follows the policy's
+// 시행일 -- so a member who has not re-consented since the change can still
+// only be viewed through a report (viewIdentityForReport). Admin, purpose
+// and reason are checked here, server side, and every view is logged.
+export async function viewIdentityForPurpose(
+  admin: Pick<User, "id" | "isAdmin">,
+  { targetUserId, purpose, reason }: { targetUserId: number; purpose: unknown; reason: unknown },
+): Promise<AdminIdentityViewResult | { kind: "invalid_purpose" } | { kind: "not_consented" }> {
+  if (!admin.isAdmin) return { kind: "forbidden" };
+  if (!isOperatingIdentityPurpose(purpose)) return { kind: "invalid_purpose" };
+  const normalizedReason = normalizeViewReason(reason);
+  if (!normalizedReason) return { kind: "invalid_reason" };
+
+  const member = await prisma.user.findUnique({ where: { id: targetUserId }, select: { identityConsentVersion: true } });
+  if (!member) return { kind: "not_found" };
+  if (!hasCurrentIdentityConsent(member)) return { kind: "not_consented" };
+
+  return readIdentityAndLog({ adminUserId: admin.id, targetUserId, purpose, reportId: null, reason: normalizedReason });
+}
+
+// One transaction: read the member's values and write the IdentityAccessLog
+// row (admin, member, purpose, report if any, reason; the time is the row's
+// own default) -- a view is never shown without its log entry.
+async function readIdentityAndLog(log: {
+  adminUserId: number;
+  targetUserId: number;
+  purpose: IdentityViewPurpose;
+  reportId: number | null;
+  reason: string;
+}): Promise<AdminIdentityViewResult> {
   return prisma.$transaction(async (tx) => {
     const member = await tx.user.findUnique({
-      where: { id: targetUserId },
+      where: { id: log.targetUserId },
       select: {
         nickname: true,
         identityInfo: {
@@ -236,9 +273,7 @@ export async function viewIdentityForReport(
       },
     });
     if (!member) return { kind: "not_found" as const };
-    await tx.identityAccessLog.create({
-      data: { adminUserId: admin.id, targetUserId, reportId, reason: normalizedReason },
-    });
+    await tx.identityAccessLog.create({ data: log });
     return {
       kind: "ok" as const,
       data: {
@@ -251,4 +286,46 @@ export async function viewIdentityForReport(
       },
     };
   });
+}
+
+// Whether the member agreed to the consent that names the operating
+// purposes (the admin user detail page greys them out otherwise; the
+// server check is viewIdentityForPurpose's).
+export async function identityConsentCoversOperatingPurposes(admin: Pick<User, "isAdmin">, userId: number): Promise<boolean> {
+  if (!admin.isAdmin) return false;
+  const member = await prisma.user.findUnique({ where: { id: userId }, select: { identityConsentVersion: true } });
+  return member ? hasCurrentIdentityConsent(member) : false;
+}
+
+// The member's most recent 이름·소속 views (who, why, when) for the admin
+// user detail page -- the log itself, never the values.
+export type IdentityViewLogEntry = {
+  id: number;
+  adminNickname: string | null;
+  purpose: string;
+  reportId: number | null;
+  reason: string;
+  accessedAt: Date;
+};
+
+export async function recentIdentityViews(
+  admin: Pick<User, "isAdmin">,
+  targetUserId: number,
+  limit = 10,
+): Promise<IdentityViewLogEntry[]> {
+  if (!admin.isAdmin) return [];
+  const rows = await prisma.identityAccessLog.findMany({
+    where: { targetUserId },
+    orderBy: { accessedAt: "desc" },
+    take: limit,
+    select: { id: true, purpose: true, reportId: true, reason: true, accessedAt: true, admin: { select: { nickname: true } } },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    adminNickname: r.admin.nickname,
+    purpose: r.purpose,
+    reportId: r.reportId,
+    reason: r.reason,
+    accessedAt: r.accessedAt,
+  }));
 }

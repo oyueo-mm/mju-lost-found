@@ -1882,8 +1882,13 @@ model IdentityAccessLog {
   adminUserId  Int      @map("admin_user_id")
   admin        User     @relation("IdentityAccessLogAdmin", fields: [adminUserId], references: [id], onDelete: Restrict)
   targetUserId Int      @map("target_user_id")
-  reportId     Int      @map("report_id")
-  report       Report   @relation(fields: [reportId], references: [id], onDelete: Restrict)
+  // 이름·소속 열람 목적 확대 (migration 20261102000000): "report" (a report's
+  // reporter or reported party -- reportId set) or an operating purpose
+  // "handover" | "ownership_dispute" | "impersonation" (no report). CHECK
+  // constraints in the migration enforce both; see lib/identity/purposes.ts.
+  purpose      String   @default("report")
+  reportId     Int?     @map("report_id")
+  report       Report?  @relation(fields: [reportId], references: [id], onDelete: Restrict)
   reason       String   @db.Text
   accessedAt   DateTime @default(now()) @map("accessed_at")
 
