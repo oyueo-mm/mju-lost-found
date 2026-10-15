@@ -1,4 +1,3 @@
-import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { LATENCY_BUCKETS_MS, kstDay } from "./record";
 
@@ -25,34 +24,9 @@ export const METRICS = [
 ] as const;
 export type MetricKey = (typeof METRICS)[number]["key"];
 
-// created_at columns store UTC wall time without a zone.
-const kst = (column: string) => Prisma.raw(`(("${column}" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul')`);
+const asDay = (b: Date | string) => (typeof b === "string" ? b.slice(0, 10) : b.toISOString().slice(0, 10));
 
-// Fixed sources only -- nothing here comes from the request.
-const TIMESTAMP_SOURCES: Partial<Record<MetricKey, { table: string; where?: string }>> = {
-  signups: { table: "User" },
-  lost: { table: "LostPost" },
-  found: { table: "FoundPost" },
-  chatRooms: { table: "ChatRoom" },
-  messages: { table: "Message" },
-  // A poster marking the post 찾음/완료 and not putting it back since: the
-  // latest status change of that post. Not a confirmed hand-over -- the app
-  // records no such confirmation -- so it is never shown as one.
-  completed: {
-    table: "PostStatusChange",
-    where: `"to_status" IN ('찾음', '완료') AND NOT EXISTS (SELECT 1 FROM "PostStatusChange" l WHERE l."post_type" = "PostStatusChange"."post_type" AND l."post_id" = "PostStatusChange"."post_id" AND l."created_at" > "PostStatusChange"."created_at")`,
-  },
-};
-const DAILY_SOURCES: Partial<Record<MetricKey, string>> = {
-  searchKeyword: "search.keyword",
-  searchSemantic: "search.semantic",
-  searchImage: "search.image",
-  recommend: "recommend.shown",
-};
-
-export type Series = { buckets: string[]; values: Record<MetricKey, number[]> };
-
-function addPeriods(day: string, unit: Granularity, n: number): string {
+export function addPeriods(day: string, unit: Granularity, n: number): string {
   const d = new Date(`${day}T00:00:00Z`);
   if (unit === "day") d.setUTCDate(d.getUTCDate() + n);
   else if (unit === "week") d.setUTCDate(d.getUTCDate() + 7 * n);
@@ -72,89 +46,9 @@ export function bucketList(unit: Granularity, today = kstDay()): string[] {
   return Array.from({ length: PERIODS[unit] }, (_, i) => addPeriods(last, unit, i - (PERIODS[unit] - 1)));
 }
 
-type Row = { bucket: Date | string; n: bigint | number };
-const asDay = (b: Date | string) => (typeof b === "string" ? b.slice(0, 10) : b.toISOString().slice(0, 10));
-
-export async function loadSeries(unit: Granularity, today = kstDay()): Promise<Series> {
-  const buckets = bucketList(unit, today);
-  const from = buckets[0];
-  const until = addPeriods(buckets[buckets.length - 1], unit, 1);
-  const trunc = Prisma.raw(`'${unit}'`);
-  const values = Object.fromEntries(METRICS.map((m) => [m.key, buckets.map(() => 0)])) as Record<MetricKey, number[]>;
-  const put = (key: MetricKey, rows: Row[]) => {
-    for (const r of rows) {
-      const i = buckets.indexOf(asDay(r.bucket));
-      if (i >= 0) values[key][i] = Number(r.n);
-    }
-  };
-
-  await Promise.all([
-    ...Object.entries(TIMESTAMP_SOURCES).map(async ([key, src]) => {
-      const where = src!.where ? Prisma.sql`AND ${Prisma.raw(src!.where)}` : Prisma.empty;
-      const rows = await prisma.$queryRaw<Row[]>`
-        SELECT date_trunc(${trunc}, ${kst("created_at")})::date AS bucket, count(*) AS n
-        FROM ${Prisma.raw(`"${src!.table}"`)}
-        WHERE ${kst("created_at")} >= ${from}::date AND ${kst("created_at")} < ${until}::date ${where}
-        GROUP BY 1`;
-      put(key as MetricKey, rows);
-    }),
-    ...Object.entries(DAILY_SOURCES).map(async ([key, metric]) => {
-      const rows = await prisma.$queryRaw<Row[]>`
-        SELECT date_trunc(${trunc}, "day")::date AS bucket, sum("value") AS n
-        FROM "MetricDaily" WHERE "metric" = ${metric} AND "day" >= ${from}::date AND "day" < ${until}::date
-        GROUP BY 1`.catch(() => [] as Row[]);
-      put(key as MetricKey, rows);
-    }),
-    (async () => {
-      // Distinct members per period (a member active on 5 days of a week is
-      // one weekly active member).
-      const rows = await prisma.$queryRaw<Row[]>`
-        SELECT date_trunc(${trunc}, "day")::date AS bucket, count(DISTINCT "actor") AS n
-        FROM "ActivityDay" WHERE "day" >= ${from}::date AND "day" < ${until}::date
-        GROUP BY 1`.catch(() => [] as Row[]);
-      put("active", rows);
-    })(),
-  ]);
-  return { buckets, values };
-}
-
-// 홍보 전후 비교: the `days` days before `pivot` vs `pivot` and the `days`
-// days after it (pivot day included in "after").
-export async function loadComparison(pivot: string, days: number): Promise<{ before: Record<MetricKey, number>; after: Record<MetricKey, number> }> {
-  const ranges = { before: [addPeriods(pivot, "day", -days), pivot], after: [pivot, addPeriods(pivot, "day", days)] } as const;
-  const out = { before: {}, after: {} } as { before: Record<MetricKey, number>; after: Record<MetricKey, number> };
-  await Promise.all(
-    (["before", "after"] as const).map(async (side) => {
-      const [from, until] = ranges[side];
-      const result = {} as Record<MetricKey, number>;
-      await Promise.all([
-        ...Object.entries(TIMESTAMP_SOURCES).map(async ([key, src]) => {
-          const where = src!.where ? Prisma.sql`AND ${Prisma.raw(src!.where)}` : Prisma.empty;
-          const [r] = await prisma.$queryRaw<{ n: bigint }[]>`
-            SELECT count(*) AS n FROM ${Prisma.raw(`"${src!.table}"`)}
-            WHERE ${kst("created_at")} >= ${from}::date AND ${kst("created_at")} < ${until}::date ${where}`;
-          result[key as MetricKey] = Number(r.n);
-        }),
-        ...Object.entries(DAILY_SOURCES).map(async ([key, metric]) => {
-          const rows = await prisma.$queryRaw<{ n: bigint | null }[]>`
-            SELECT sum("value") AS n FROM "MetricDaily" WHERE "metric" = ${metric} AND "day" >= ${from}::date AND "day" < ${until}::date`.catch(() => []);
-          result[key as MetricKey] = Number(rows[0]?.n ?? 0);
-        }),
-        (async () => {
-          const rows = await prisma.$queryRaw<{ n: bigint }[]>`
-            SELECT count(DISTINCT "actor") AS n FROM "ActivityDay" WHERE "day" >= ${from}::date AND "day" < ${until}::date`.catch(() => []);
-          result.active = Number(rows[0]?.n ?? 0);
-        })(),
-      ]);
-      out[side] = result;
-    }),
-  );
-  return out;
-}
-
 // ---------- API / AI / DB timings ----------
 
-export type TimingRow = { route: string; count: number; errors: number; avgMs: number; p50: string; p95: string };
+export type TimingRow = { route: string; count: number; errors: number; avgMs: number; p50: string; p95: string; totalMs?: number; buckets?: number[] };
 
 // Upper bound of the bucket holding the q-quantile ("≤ 400ms"), or "> 6400ms".
 export function percentileLabel(buckets: number[], q: number): string {
@@ -190,6 +84,8 @@ export async function loadTimings(hours: number): Promise<TimingRow[]> {
       avgMs: count ? Math.round(Number(r.total_ms) / count) : 0,
       p50: percentileLabel(r.buckets, 0.5),
       p95: percentileLabel(r.buckets, 0.95),
+      totalMs: Number(r.total_ms),
+      buckets: r.buckets,
     };
   });
 }
@@ -215,8 +111,8 @@ export async function loadCapacity(): Promise<{ day: string; dbMb: number; stora
 export const VISIT_SERIES = [
   { key: "pvAnon", label: "페이지뷰(비로그인)", metrics: ["visit.pv.anon"] },
   { key: "pvMember", label: "페이지뷰(로그인)", metrics: ["visit.pv.member"] },
-  { key: "sessionAnon", label: "방문 세션(비로그인)", metrics: ["visit.session.anon"] },
-  { key: "sessionMember", label: "방문 세션(로그인)", metrics: ["visit.session.member"] },
+  { key: "sessionAnon", label: "방문 세션(비로그인으로 시작)", metrics: ["visit.session.anon"] },
+  { key: "sessionMember", label: "방문 세션(로그인 상태로 시작)", metrics: ["visit.session.member"] },
   { key: "searchAnon", label: "검색(비로그인)", metrics: ["search.keyword.anon", "search.semantic.anon", "search.image.anon"] },
   { key: "searchMember", label: "검색(로그인)", metrics: ["search.keyword.member", "search.semantic.member", "search.image.member"] },
   { key: "internalPv", label: "관리자 페이지뷰(제외분)", metrics: ["visit.internal.pv"] },
@@ -229,11 +125,7 @@ export type VisitBreakdown = {
   utmSources: { value: string; sessions: number }[];
   utmCampaigns: { value: string; sessions: number }[];
 };
-export type VisitStats = { buckets: string[]; values: Record<VisitSeriesKey, number[]>; breakdown: VisitBreakdown };
-
-type MetricRow = { bucket: Date | string; metric: string; n: bigint | number };
-
-function breakdownOf(totals: Map<string, number>): VisitBreakdown {
+export function breakdownOf(totals: Map<string, number>): VisitBreakdown {
   const pages = new Map<string, { anon: number; member: number }>();
   const refs: VisitBreakdown["refs"] = [];
   const utmSources: VisitBreakdown["utmSources"] = [];
@@ -255,53 +147,4 @@ function breakdownOf(totals: Map<string, number>): VisitBreakdown {
     utmSources: utmSources.sort(bySize).slice(0, 20),
     utmCampaigns: utmCampaigns.sort(bySize).slice(0, 20),
   };
-}
-
-// One query for the whole range: per-period series plus the range's
-// breakdown by page kind, referrer and UTM tag.
-export async function loadVisitStats(unit: Granularity, today = kstDay()): Promise<VisitStats> {
-  const buckets = bucketList(unit, today);
-  const from = buckets[0];
-  const until = addPeriods(buckets[buckets.length - 1], unit, 1);
-  const trunc = Prisma.raw(`'${unit}'`);
-  const rows = await prisma.$queryRaw<MetricRow[]>`
-    SELECT date_trunc(${trunc}, "day")::date AS bucket, "metric", sum("value") AS n
-    FROM "MetricDaily"
-    WHERE ("metric" LIKE 'visit.%' OR "metric" LIKE 'search.%.%') AND "day" >= ${from}::date AND "day" < ${until}::date
-    GROUP BY 1, 2`.catch(() => [] as MetricRow[]);
-
-  const values = Object.fromEntries(VISIT_SERIES.map((s) => [s.key, buckets.map(() => 0)])) as Record<VisitSeriesKey, number[]>;
-  const seriesOf = new Map<string, VisitSeriesKey>(VISIT_SERIES.flatMap((s) => s.metrics.map((m) => [m, s.key] as const)));
-  const totals = new Map<string, number>();
-  for (const r of rows) {
-    const n = Number(r.n);
-    totals.set(r.metric, (totals.get(r.metric) ?? 0) + n);
-    const key = seriesOf.get(r.metric);
-    const i = buckets.indexOf(asDay(r.bucket));
-    if (key && i >= 0) values[key][i] += n;
-  }
-  return { buckets, values, breakdown: breakdownOf(totals) };
-}
-
-// 홍보 전후 비교 for the visit series: `days` days before `pivot` vs `pivot`
-// and the `days` days after it.
-export async function loadVisitComparison(
-  pivot: string,
-  days: number,
-): Promise<{ before: Record<VisitSeriesKey, number>; after: Record<VisitSeriesKey, number> }> {
-  const sum = async (from: string, until: string) => {
-    const rows = await prisma.$queryRaw<{ metric: string; n: bigint | number }[]>`
-      SELECT "metric", sum("value") AS n FROM "MetricDaily"
-      WHERE ("metric" LIKE 'visit.%' OR "metric" LIKE 'search.%.%') AND "day" >= ${from}::date AND "day" < ${until}::date
-      GROUP BY 1`.catch(() => []);
-    const byMetric = new Map(rows.map((r) => [r.metric, Number(r.n)]));
-    return Object.fromEntries(
-      VISIT_SERIES.map((s) => [s.key, s.metrics.reduce((acc, m) => acc + (byMetric.get(m) ?? 0), 0)]),
-    ) as Record<VisitSeriesKey, number>;
-  };
-  const [before, after] = await Promise.all([
-    sum(addPeriods(pivot, "day", -days), pivot),
-    sum(pivot, addPeriods(pivot, "day", days)),
-  ]);
-  return { before, after };
 }
