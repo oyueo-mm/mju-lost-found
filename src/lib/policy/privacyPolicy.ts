@@ -30,6 +30,8 @@ export type PrivacyPolicyRevision = {
   date: string; // KST day the revision took effect on Production
   summary: string; // what changed, one sentence (shown in §11; the newest also in the notice)
   consent: "notice" | "reconsent";
+  // History-page presentation only; summary remains the full notice text.
+  history?: { summary: string; before: string; after: string };
 };
 
 // Newest first. The first entry's date must be the day it reaches
@@ -39,26 +41,51 @@ export const PRIVACY_POLICY_REVISIONS: readonly PrivacyPolicyRevision[] = [
     date: "2026-10-16",
     summary: "서비스 이용 통계 목적과 로그인 회원의 이용 일자 기록(400일 보관, 회원탈퇴 시 삭제)을 추가하고, 처리 목적·항목을 실제 운영에 맞게 정리했습니다.",
     consent: "notice",
+    history: {
+      summary: "회원별 이용 일자: 400일 보관·탈퇴 시 삭제 안내",
+      before: "회원별 이용 일자 보관·삭제 안내 없음",
+      after: "이용 통계 목적, 400일 보관·탈퇴 시 삭제 명시",
+    },
   },
   {
     date: "2026-10-16",
     summary: "방문 통계에 방문 시간·체류 시간·이탈 화면의 시간대·구간별 합계를 추가하고, 이를 위해 브라우저 저장소에 현재 방문의 요약을 보관한다는 내용을 8조에 추가했습니다.",
     consent: "notice",
+    history: {
+      summary: "방문 시간대·체류 시간·첫/마지막 화면 집계 추가",
+      before: "조회·방문 수, 기기·유입 경로 등 합계 안내",
+      after: "방문 시간대·체류 시간·첫/마지막 화면 집계와 방문 요약 저장 안내 추가",
+    },
   },
   {
     date: "2026-10-16",
     summary: "8조 방문 통계의 날짜별 합계에 접속 기기 종류(모바일·PC·태블릿·기타)를 추가했습니다.",
     consent: "notice",
+    history: {
+      summary: "접속 기기 종류별 방문 통계 추가",
+      before: "기기 종류별 통계 안내 없음",
+      after: "모바일·PC·태블릿·기타별 합계 안내 추가",
+    },
   },
   {
     date: "2026-10-15",
     summary: "8조에 방문 통계용 브라우저 저장소 안내를 추가했습니다.",
     consent: "notice",
+    history: {
+      summary: "방문 통계·브라우저 저장소 사용 안내 추가",
+      before: "방문 통계용 브라우저 저장소 별도 안내 없음",
+      after: "방문 통계용 저장소 사용과 삭제·차단 선택권 안내",
+    },
   },
   {
     date: "2026-10-14",
     summary: "이름, 소속(학과·단과대학)을 개인정보 수집·이용 동의의 필수 항목에 추가했습니다(1조).",
     consent: "reconsent",
+    history: {
+      summary: "이름·소속 수집을 필수 동의로 변경",
+      before: "이름·소속 별도 선택 동의",
+      after: "개인정보 수집·이용의 필수 동의에 포함",
+    },
   },
 ];
 

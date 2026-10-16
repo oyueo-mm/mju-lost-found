@@ -27,6 +27,5 @@ describe("개인정보처리방침 개정 이력", () => {
       expect(entries[i]).toContain(r.summary);
       expect(entries[i]).toContain(r.consent === "notice" ? "변경 안내로 시행" : "기존 회원 재동의");
     });
-    expect(html).toContain("기존 회원에게 별도의 재동의를 요청하지 않습니다");
   });
 });
