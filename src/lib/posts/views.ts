@@ -1,10 +1,11 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 import { prisma } from "@/lib/db/prisma";
 import { getCurrentUser } from "@/lib/auth/session";
+import { isBotUserAgent } from "@/lib/metrics/visits";
 import type { PostType } from "./schema";
 
 const ANON_COOKIE_NAME = "anon_uid";
@@ -51,6 +52,9 @@ async function resolveViewerKey(): Promise<string> {
 // insert -- no upsert, no viewedAt comparison.
 export async function recordPostViewAction(type: PostType, postId: number): Promise<void> {
   try {
+    // 조회순 정렬: a crawler that runs scripts (it renders the page like a
+    // browser) must not count as a reader. Same filter as 방문 통계.
+    if (isBotUserAgent((await headers()).get("user-agent"))) return;
     const viewerKey = await resolveViewerKey();
 
     const existing = await prisma.postView.findUnique({

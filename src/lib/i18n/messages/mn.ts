@@ -263,7 +263,7 @@ export const mn: Dictionary = {
   "search.period.includeUnknown": "Огноо тодорхойгүйг оруулах",
   "search.period.invalidRange": "Дуусах огноо эхлэх огнооноос өмнө байж болохгүй.",
   "search.sort.latest": "Шинэ нь эхэндээ",
-  "search.sort.oldest": "Хуучин нь эхэндээ",
+  "search.sort.oldest": "Хуучин нь эхэндээ", "search.sort.views": "Их үзсэн", "search.sort.comments": "Их сэтгэгдэлтэй",
   "search.type.found": "Олдсон эд зүйл",
   "search.type.lost": "Гээгдсэн эд зүйл",
   "search.type.all": "Бүгд",

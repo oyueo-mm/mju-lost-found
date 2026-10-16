@@ -56,7 +56,9 @@ export const POST_LIST_TYPES = ["lost", "found", "all"] as const;
 export type PostListType = (typeof POST_LIST_TYPES)[number];
 export const postListTypeSchema = z.enum(POST_LIST_TYPES);
 
-export const SORT_OPTIONS = ["latest", "oldest"] as const;
+// 게시판 정렬: views = 조회순 (viewCount), comments = 댓글순 (commentCount,
+// kept by a DB trigger); ties fall back to newest first.
+export const SORT_OPTIONS = ["latest", "oldest", "views", "comments"] as const;
 export type SortOption = (typeof SORT_OPTIONS)[number];
 const sortOptionSchema = z.enum(SORT_OPTIONS);
 

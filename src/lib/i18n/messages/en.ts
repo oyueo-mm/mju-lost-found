@@ -264,7 +264,7 @@ export const en: Dictionary = {
   "search.period.includeUnknown": "Include unknown date",
   "search.period.invalidRange": "The end date can't be earlier than the start date.",
   "search.sort.latest": "Newest first",
-  "search.sort.oldest": "Oldest first",
+  "search.sort.oldest": "Oldest first", "search.sort.views": "Most viewed", "search.sort.comments": "Most comments",
   "search.type.found": "Found items",
   "search.type.lost": "Lost items",
   "search.type.all": "All",

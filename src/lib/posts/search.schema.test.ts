@@ -107,6 +107,9 @@ describe("listQuerySchema -- search/filter fields", () => {
   it("accepts sort=latest and sort=oldest", () => {
     expect(listQuerySchema.safeParse({ type: "lost", sort: "latest" }).success).toBe(true);
     expect(listQuerySchema.safeParse({ type: "lost", sort: "oldest" }).success).toBe(true);
+    expect(listQuerySchema.safeParse({ type: "lost", sort: "views" }).success).toBe(true);
+    expect(listQuerySchema.safeParse({ type: "found", sort: "comments" }).success).toBe(true);
+    expect(listQuerySchema.safeParse({ type: "lost", sort: "likes" }).success).toBe(false);
   });
 
   it("rejects an invalid sort value", () => {

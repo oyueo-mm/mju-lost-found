@@ -596,6 +596,10 @@ model LostPost {
   // file's own comment for why. Existing rows default to 0 via the
   // migration, same as any other additive column in this schema.
   viewCount      Int                         @default(0) @map("view_count")
+  // 게시판 댓글순 정렬: visible comments (replies included, no tombstones or
+  // report-hidden ones), kept by the "comment_count_refresh" trigger on
+  // Comment (migration 20261103000000) -- never written by app code.
+  commentCount   Int                         @default(0) @map("comment_count")
   // Legal pre-beta Phase: set while an admin has temporarily hidden this
   // post on a rights-infringement report (see ModerationAction
   // TEMP_HIDE_POST). Hidden posts are left out of every public list/search
@@ -667,6 +671,10 @@ model FoundPost {
   imageEmbedding Unsupported("vector(768)")?
   // See LostPost.viewCount's comment -- identical shape/reasoning.
   viewCount      Int                         @default(0) @map("view_count")
+  // 게시판 댓글순 정렬: visible comments (replies included, no tombstones or
+  // report-hidden ones), kept by the "comment_count_refresh" trigger on
+  // Comment (migration 20261103000000) -- never written by app code.
+  commentCount   Int                         @default(0) @map("comment_count")
   // Legal pre-beta Phase: set while an admin has temporarily hidden this
   // post on a rights-infringement report (see ModerationAction
   // TEMP_HIDE_POST). Hidden posts are left out of every public list/search

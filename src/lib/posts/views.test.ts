@@ -22,8 +22,10 @@ vi.mock("@/lib/auth/session", () => ({ getCurrentUser }));
 // get/set, same shape next/headers' real cookies() store exposes.
 const cookieGet = vi.fn();
 const cookieSet = vi.fn();
+let userAgent: string | null = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1";
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: cookieGet, set: cookieSet }),
+  headers: async () => ({ get: (name: string) => (name === "user-agent" ? userAgent : null) }),
 }));
 
 vi.mock("node:crypto", () => ({ randomUUID: () => "anon-uuid-1" }));
@@ -168,5 +170,16 @@ describe("recordPostViewAction -- failure handling", () => {
     await expect(recordPostViewAction("lost", 999)).resolves.toBeUndefined();
 
     errorSpy.mockRestore();
+  });
+});
+
+describe("recordPostViewAction -- crawlers", () => {
+  it("never counts a crawler or a request without a User-Agent", async () => {
+    for (const ua of ["Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", null]) {
+      userAgent = ua;
+      await recordPostViewAction("lost", 1);
+    }
+    userAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1";
+    expect(cookieSet).not.toHaveBeenCalled();
   });
 });

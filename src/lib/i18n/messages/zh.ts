@@ -261,7 +261,7 @@ export const zh: Dictionary = {
   "search.period.includeUnknown": "包含日期不详",
   "search.period.invalidRange": "结束日期不能早于开始日期。",
   "search.sort.latest": "最新优先",
-  "search.sort.oldest": "最早优先",
+  "search.sort.oldest": "最早优先", "search.sort.views": "浏览最多", "search.sort.comments": "评论最多",
   "search.type.found": "招领",
   "search.type.lost": "失物",
   "search.type.all": "全部",

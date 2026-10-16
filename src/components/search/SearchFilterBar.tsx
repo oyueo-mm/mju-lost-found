@@ -94,6 +94,8 @@ export const TYPE_OPTIONS: { value: PostListType; labelKey: TranslationKey }[] =
 const SORT_OPTIONS: { value: SortOption; labelKey: TranslationKey }[] = [
   { value: "latest", labelKey: "search.sort.latest" },
   { value: "oldest", labelKey: "search.sort.oldest" },
+  { value: "views", labelKey: "search.sort.views" },
+  { value: "comments", labelKey: "search.sort.comments" },
 ];
 
 // AI 검색 고도화 Phase: 이 앱의 검색 방식은 정확히 둘 -- "키워드 검색"

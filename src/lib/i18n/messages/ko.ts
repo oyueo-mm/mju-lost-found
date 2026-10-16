@@ -277,7 +277,7 @@ export const ko = {
   "search.period.includeUnknown": "날짜 모름 포함",
   "search.period.invalidRange": "종료일은 시작일보다 빠를 수 없어요.",
   "search.sort.latest": "최신순",
-  "search.sort.oldest": "오래된순",
+  "search.sort.oldest": "오래된순", "search.sort.views": "조회순", "search.sort.comments": "댓글순",
   "search.type.found": "습득물",
   "search.type.lost": "분실물",
   "search.type.all": "전체",

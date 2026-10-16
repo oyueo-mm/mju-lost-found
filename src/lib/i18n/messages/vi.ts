@@ -262,7 +262,7 @@ export const vi: Dictionary = {
   "search.period.includeUnknown": "Bao gồm không rõ ngày",
   "search.period.invalidRange": "Ngày kết thúc không được sớm hơn ngày bắt đầu.",
   "search.sort.latest": "Mới nhất",
-  "search.sort.oldest": "Cũ nhất",
+  "search.sort.oldest": "Cũ nhất", "search.sort.views": "Xem nhiều nhất", "search.sort.comments": "Nhiều bình luận nhất",
   "search.type.found": "Đồ nhặt được",
   "search.type.lost": "Đồ thất lạc",
   "search.type.all": "Tất cả",

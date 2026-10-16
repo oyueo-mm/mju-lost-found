@@ -344,9 +344,25 @@ export function eventTimeWhere<K extends EventField>(field: K, filters: PostFilt
   return { AND: [{ OR: [inRange, unknown] }] };
 }
 
+// The whole filtered result is ordered in the DB (before skip/take), so a
+// sort covers every page, not just the rows on screen. Equal view or
+// comment counts fall back to newest first, then id, so the order is stable
+// across pages.
 function buildOrderBy(sort: SortOption = DEFAULT_SORT) {
+  if (sort === "views") return [{ viewCount: "desc" as const }, { createdAt: "desc" as const }, { id: "desc" as const }];
+  if (sort === "comments") return [{ commentCount: "desc" as const }, { createdAt: "desc" as const }, { id: "desc" as const }];
   const direction = sort === "oldest" ? ("asc" as const) : ("desc" as const);
   return [{ createdAt: direction }, { id: direction }];
+}
+
+// The same order for the in-memory merge of type=all (two tables).
+type SortKeys = { createdAt: Date; id: number; viewCount: number; commentCount: number };
+export function compareForSort(sort: SortOption = DEFAULT_SORT) {
+  const newest = (a: SortKeys, b: SortKeys) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id;
+  if (sort === "views") return (a: SortKeys, b: SortKeys) => b.viewCount - a.viewCount || newest(a, b);
+  if (sort === "comments") return (a: SortKeys, b: SortKeys) => b.commentCount - a.commentCount || newest(a, b);
+  if (sort === "oldest") return (a: SortKeys, b: SortKeys) => -newest(a, b);
+  return newest;
 }
 
 export function toLostPostDTO(row: {
@@ -736,10 +752,13 @@ async function searchAllPosts({
     prisma.foundPost.count({ where: foundWhere }),
   ]);
 
-  const sortSign = filters.sort === "oldest" ? 1 : -1;
-  const merged = [...lostRows.map(toLostPostDTO), ...foundRows.map(toFoundPostDTO)].sort(
-    (a, b) => (a.createdAt.getTime() - b.createdAt.getTime()) * sortSign,
-  );
+  const compare = compareForSort(filters.sort);
+  const merged = [
+    ...lostRows.map((row) => ({ row, dto: toLostPostDTO(row) as PostDTO })),
+    ...foundRows.map((row) => ({ row, dto: toFoundPostDTO(row) as PostDTO })),
+  ]
+    .sort((a, b) => compare(a.row, b.row))
+    .map((entry) => entry.dto);
 
   const skip = (page - 1) * limit;
   const total = lostTotal + foundTotal;

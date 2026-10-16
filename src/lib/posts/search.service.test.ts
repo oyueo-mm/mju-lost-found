@@ -221,6 +221,22 @@ describe("search logic -- filtering is always done in the DB query, never in JS"
       expect.objectContaining({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
     );
   });
+
+  it("sorts by views or comments in the DB, together with filters and paging, ties newest first", async () => {
+    await listLostPosts({ page: 2, limit: 20, sort: "views", q: "지갑", categoryCode: "wallet" });
+    expect(lostPost.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        orderBy: [{ viewCount: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+        skip: 20,
+        take: 20,
+        where: expect.objectContaining({ categoryCode: "wallet" }),
+      }),
+    );
+    await listFoundPosts({ page: 1, limit: 20, sort: "comments", status: "보관 중" });
+    expect(foundPost.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({ orderBy: [{ commentCount: "desc" }, { createdAt: "desc" }, { id: "desc" }] }),
+    );
+  });
 });
 
 describe("pagination", () => {
