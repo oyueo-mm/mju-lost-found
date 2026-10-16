@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 
-import { isOutsideInitialView, observeViewCycle, prefersReducedMotion } from "./viewCycle";
+import { isOutsideInitialView, isPhoneViewport, observeViewCycle, prefersReducedMotion } from "./viewCycle";
 
 type ScrollRevealProps = {
   children: ReactNode;
@@ -45,7 +45,9 @@ export function ScrollReveal({ children, className = "", delayMs = 0, replay = f
     // Already on screen at load: shown as rendered; it only animates after
     // it has left and come back.
     if (isOutsideInitialView(el)) el.dataset.reveal = "hidden";
-    if (delayMs > 0) el.style.transitionDelay = `${delayMs}ms`;
+    // The stagger is for items side by side; on a phone they stack and
+    // each reveals on its own, so a delay would only make it late.
+    if (delayMs > 0 && !isPhoneViewport()) el.style.transitionDelay = `${delayMs}ms`;
     return observeViewCycle(el, {
       onEnter: () => {
         if (el.dataset.reveal === "hidden") el.dataset.reveal = "visible";

@@ -19,10 +19,11 @@ describe("landing demo schedule", () => {
 });
 
 describe("view cycle enter rule", () => {
-  const entry = (isIntersecting: boolean, ratio: number, height: number) => ({
+  const entry = (isIntersecting: boolean, ratio: number, height: number, elementHeight = ratio ? height / ratio : 0) => ({
     isIntersecting,
     intersectionRatio: ratio,
     intersectionRect: { height },
+    boundingClientRect: { height: elementHeight },
   });
 
   it("needs a real share of the element on screen, not just its edge", () => {
@@ -34,5 +35,16 @@ describe("view cycle enter rule", () => {
   it("counts an element taller than the screen once it fills 40% of the viewport", () => {
     expect(isEnteredEnough(entry(true, 0.15, 360), 800)).toBe(true);
     expect(isEnteredEnough(entry(true, 0.15, 200), 800)).toBe(false);
+  });
+
+  it("on a phone, waits until the section is well on screen (60% of it, or 22% of the viewport)", () => {
+    // 248px card on an 844px phone: 149px needed
+    expect(isEnteredEnough(entry(true, 72 / 248, 72, 248), 844, true)).toBe(false);
+    expect(isEnteredEnough(entry(true, 150 / 248, 150, 248), 844, true)).toBe(true);
+    // 746px section: 22% of 844 = 186px needed
+    expect(isEnteredEnough(entry(true, 0.25, 186, 746), 844, true)).toBe(true);
+    expect(isEnteredEnough(entry(true, 0.2, 149, 746), 844, true)).toBe(false);
+    // desktop rule unchanged for the same entry
+    expect(isEnteredEnough(entry(true, 72 / 248, 72, 248), 844)).toBe(true);
   });
 });

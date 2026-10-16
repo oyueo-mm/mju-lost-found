@@ -6,13 +6,37 @@
 export const ENTER_RATIO = 0.25;
 export const LEAVE_MARGIN = "25%";
 
+// Phones (below Tailwind's md, 768px): a section only counts as entered once
+// it is well on screen -- 60% of it, or (for a tall one) 22% of the
+// viewport height -- so its reveal plays where the reader is looking, not
+// at the bottom edge under their thumb.
+export const PHONE_QUERY = "(max-width: 767px)";
+export const PHONE_ENTER_RATIO = 0.6;
+export const PHONE_ENTER_VIEWPORT = 0.22;
+
 // Visible enough to count as entered: a quarter of the element, or (for an
-// element taller than the screen) at least 40% of the viewport height.
+// element taller than the screen) at least 40% of the viewport height. On a
+// phone: see PHONE_ENTER_RATIO above.
 export function isEnteredEnough(
-  entry: Pick<IntersectionObserverEntry, "isIntersecting" | "intersectionRatio"> & { intersectionRect: { height: number } },
+  entry: Pick<IntersectionObserverEntry, "isIntersecting" | "intersectionRatio"> & { intersectionRect: { height: number }; boundingClientRect: { height: number } },
   viewportHeight: number,
+  phone = false,
 ): boolean {
-  return entry.isIntersecting && (entry.intersectionRatio >= ENTER_RATIO || entry.intersectionRect.height >= viewportHeight * 0.4);
+  if (!entry.isIntersecting) return false;
+  if (phone) {
+    const needed = Math.min(entry.boundingClientRect.height * PHONE_ENTER_RATIO, viewportHeight * PHONE_ENTER_VIEWPORT);
+    return entry.intersectionRect.height >= needed - 1;
+  }
+  return entry.intersectionRatio >= ENTER_RATIO || entry.intersectionRect.height >= viewportHeight * 0.4;
+}
+
+// Ratios at which the enter observer re-checks: every 5%, so the phone rule
+// (whose needed share depends on the element's height) fires close to the
+// moment it is met rather than at the next coarse step.
+const ENTER_THRESHOLDS = Array.from({ length: 21 }, (_, i) => i / 20);
+
+export function isPhoneViewport(): boolean {
+  return typeof window !== "undefined" && window.matchMedia(PHONE_QUERY).matches;
 }
 
 export function observeViewCycle(
@@ -23,13 +47,13 @@ export function observeViewCycle(
   const enter = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
-        if (!inside && isEnteredEnough(entry, window.innerHeight)) {
+        if (!inside && isEnteredEnough(entry, window.innerHeight, isPhoneViewport())) {
           inside = true;
           onEnter();
         }
       }
     },
-    { threshold: [0, 0.1, 0.25, 0.4, 0.6, 0.8, 1] },
+    { threshold: ENTER_THRESHOLDS },
   );
   const leave = new IntersectionObserver(
     (entries) => {
