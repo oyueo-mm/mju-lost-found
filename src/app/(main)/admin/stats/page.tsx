@@ -295,7 +295,7 @@ export default async function AdminStatsPage({
             value={totals.active}
             coverage={cov.active}
             since={sinceLabel("ops")}
-            sub="기간 내 서로 다른 로그인 회원"
+            sub="기간 내 서로 다른 로그인 회원 · 탈퇴 시 그 회원 기록 삭제"
             values={trend ? core.active : undefined}
           />
           <StatCard primary label="방문 세션" value={sessionsTotal} coverage={cov.sessionAnon} since={sinceLabel("visit")} sub="고유 방문자 수 아님" values={trend ? sessionsAll : undefined} />

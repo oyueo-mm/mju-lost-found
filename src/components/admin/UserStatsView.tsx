@@ -73,6 +73,11 @@ export function UserStatsView({ report }: { report: UserReport }) {
               활동 기록의 비식별값을 서버 안에서 대조해 합계만 냅니다(새 식별자 없음).
             </li>
             <li>회원별 검색 이용은 기록하지 않아(검색은 날짜별 합계만 있음) 신규 회원의 검색 이용률은 제공하지 않습니다.</li>
+            <li>
+              회원이 탈퇴하면 그 회원의 활동 기록이 삭제되므로, 이미 지난 기간의 활성 회원 수·DAU·WAU·MAU·재방문 수도 그만큼 줄어들 수
+              있습니다. 탈퇴한 가입자는 재방문 산출에서 &lsquo;탈퇴&rsquo;로 따로 빼며 재방문하지 않은 것으로 세지 않습니다. 시간대별
+              로그인·페이지뷰 합계는 회원 정보가 없어 탈퇴와 관계없이 남습니다.
+            </li>
           </ul>
         </More>
       </div>
@@ -151,7 +156,7 @@ export function UserStatsView({ report }: { report: UserReport }) {
 
       <Section
         title="로그인 회원 활동"
-        description={`활동: 그날 로그인 상태로 사이트를 이용한 회원(하루 한 번) · ${activity.since}부터 집계 · 관리자 제외`}
+        description={`활동: 그날 로그인 상태로 사이트를 이용한 회원(하루 한 번) · ${activity.since}부터 집계 · 관리자 제외 · 탈퇴한 회원의 기록은 삭제되어 지난 기간 수치도 줄어들 수 있음`}
       >
         {activity.coverage === "none" ? (
           <p className="text-xs text-muted-foreground">미측정 기간입니다. {unmeasuredWhy}</p>
@@ -293,6 +298,11 @@ export function UserStatsView({ report }: { report: UserReport }) {
               />
             )}
             {p.newActive === null && p.newSignups > 0 && <p className="text-[11px] text-muted-foreground">활동 여부는 활동 기록 시작({activity.since}) 전 가입자라 미측정입니다.</p>}
+            {p.newWithdrawn > 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                이 중 {fmt(p.newWithdrawn)}명은 탈퇴해 활동 기록이 삭제되어 활동 여부에 반영되지 않습니다.
+              </p>
+            )}
             {p.newActive !== null && p.newBeforeCollection > 0 && (
               <p className="text-[11px] text-muted-foreground">
                 이 중 {fmt(p.newBeforeCollection)}명은 활동 기록 시작({activity.since}) 전에 가입해 그 전 활동은 반영되지 않습니다.

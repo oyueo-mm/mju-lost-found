@@ -3,6 +3,7 @@ import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { releaseResolvedWithdrawnIdentities } from "@/lib/auth/identityRelease";
 import { WITHDRAWN_IMAGE_TEXT, WITHDRAWN_POST_TITLE, clearPostInTx } from "@/lib/auth/withdrawal";
 import { deleteChatImageSafely } from "@/lib/images/chatStorage";
+import { deleteActivityMarks } from "@/lib/metrics/record";
 import { deletePostRowInTx, deletePostStorageObjects } from "@/lib/posts/service";
 import { encodePostTargetId } from "@/lib/report/targets";
 import {
@@ -38,6 +39,10 @@ import { AdminActionProposalStatus, ReportStatus, ReportTargetType, RejoinReques
 //    access log on it is a year old (those logs go with it); others stay.
 //  - WithdrawnIdentity: deleted as soon as its purpose ends
 //    (auth/identityRelease.ts), re-checked here too.
+//  - 이용 일자 기록 (ActivityDay) of a withdrawn account: deleted at the
+//    withdrawal; repeated here for every withdrawn account, for a mark
+//    written while the withdrawal was committing and for accounts withdrawn
+//    before the withdrawal deleted them. Exact HMAC matches only.
 
 export const EXPIRED_MESSAGE_TEXT = "(보유기간이 지나 삭제된 메시지)";
 
@@ -54,6 +59,7 @@ export type RetentionResult = {
   proposalsDeleted: number;
   rejoinRequestsDeleted: number;
   metricsDeleted: number;
+  withdrawnActivityDeleted: number;
 };
 
 const key = (type: ReportTargetType, id: number) => `${type}:${id}`;
@@ -72,6 +78,7 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
     proposalsDeleted: 0,
     rejoinRequestsDeleted: 0,
     metricsDeleted: 0,
+    withdrawnActivityDeleted: 0,
   };
   const recordCutoff = daysBefore(now, RECORD_RETENTION_DAYS);
   const accessLogCutoff = daysBefore(now, ACCESS_LOG_MIN_RETENTION_DAYS);
@@ -233,6 +240,11 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
       (await prisma.apiMetricHourly.deleteMany({ where: { hour: { lt: daysBefore(now, API_METRIC_RETENTION_DAYS) } } })).count;
   } catch (error) {
     console.error("Metrics retention skipped:", error instanceof Error ? error.name : "unknown");
+  }
+  try {
+    result.withdrawnActivityDeleted = await deleteActivityMarks(prisma, withdrawn.map((w) => w.id));
+  } catch (error) {
+    console.error("Withdrawn activity clean-up skipped:", error instanceof Error ? error.name : "unknown");
   }
 
   return result;

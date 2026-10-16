@@ -8,6 +8,7 @@ import { CURRENT_IDENTITY_KEY_VERSION, identityHmac, identitySubject } from "@/l
 import { removeCommentInTx } from "@/lib/comment/remove";
 import { deleteChatImageSafely } from "@/lib/images/chatStorage";
 import { deletePostDerivedDataInTx, deletePostRowInTx, deletePostStorageObjects } from "@/lib/posts/service";
+import { deleteActivityMarks } from "@/lib/metrics/record";
 import { encodePostTargetId } from "@/lib/report/targets";
 import { evidenceReleased, type ReportFacts } from "@/lib/retention/policy";
 import { NotificationType, OrganizationRequestStatus, ReportTargetType, type Prisma } from "@/generated/prisma/client";
@@ -45,6 +46,10 @@ import { NotificationType, OrganizationRequestStatus, ReportTargetType, type Pri
 //   are deleted unless the message has a pending report. No new messages
 //   can be sent to them.
 // - Feedback: deleted.
+// - 운영 통계 active-day marks (ActivityDay): deleted -- only this member's,
+//   matched by their HMAC (metrics/record.ts deleteActivityMarks). Past
+//   활성 회원 / 재방문 counts drop by them; the hourly totals, which hold no
+//   member data, stay.
 // - Reports, sanctions, appeals, AdminAccessLog: kept (pseudonymised
 //   through the identifier-free User row).
 // - A WithdrawnIdentity (HMAC only) is kept only if a sanction matter is
@@ -241,6 +246,8 @@ export async function withdrawAccount(userId: number): Promise<WithdrawAccountRe
       await tx.externalAccessGrant.deleteMany({ where: { email: normalizeEmail(user.email) } });
       // 실명·학과: direct identifiers, deleted with the rest of them.
       await tx.userIdentityInfo.deleteMany({ where: { userId } });
+      // 이용 일자 기록 (운영 통계): this member's marks only.
+      await deleteActivityMarks(tx, [userId]);
 
       // ---- the account itself: identifiers removed, row kept
       await tx.user.update({

@@ -157,6 +157,24 @@ export function activityActor(userId: number, secret = process.env.AUTH_SECRET ?
   return createHmac("sha256", `activity-day:v1:${secret}`).update(String(userId)).digest("base64url").slice(0, 22);
 }
 
+// 회원탈퇴 deletes the member's active-day marks (auth/withdrawal.ts, and
+// again in the daily retention run for every withdrawn account). A mark is
+// matched only by recomputing activityActor() for the given ids under this
+// deployment's AUTH_SECRET -- never by guess, so another member's marks (a
+// different HMAC) and marks made under another key (they match no one) are
+// left alone; those go with the 400-day clean-up.
+type ActivityMarks = { activityDay: { deleteMany(args: { where: { actor: { in: string[] } } }): Promise<{ count: number }> } };
+const MARK_DELETE_BATCH = 500;
+
+export async function deleteActivityMarks(db: ActivityMarks, userIds: number[]): Promise<number> {
+  const actors = [...new Set(userIds)].map((id) => activityActor(id));
+  let deleted = 0;
+  for (let i = 0; i < actors.length; i += MARK_DELETE_BATCH) {
+    deleted += (await db.activityDay.deleteMany({ where: { actor: { in: actors.slice(i, i + MARK_DELETE_BATCH) } } })).count;
+  }
+  return deleted;
+}
+
 export async function recordActiveDay(userId: number): Promise<void> {
   const day = kstDay();
   try {

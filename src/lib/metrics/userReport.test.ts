@@ -33,6 +33,7 @@ vi.mock("@/lib/db/prisma", () => ({
 
 const { loadUserReport, retentionExclusions, windowNote } = await import("./userReport");
 const { activityActor } = await import("./record");
+const { CURRENT_PRIVACY_VERSION } = await import("@/lib/auth/terms");
 
 const member = (id: number, createdAt: string, over: Partial<Member> = {}): Member => ({
   id,
@@ -42,7 +43,7 @@ const member = (id: number, createdAt: string, over: Partial<Member> = {}): Memb
   isAdmin: false,
   isSuspended: false,
   nickname: `m${id}`,
-  privacyConsentVersion: "2026-10-14",
+  privacyConsentVersion: CURRENT_PRIVACY_VERSION,
   termsVersion: "2026-10-04",
   userType: "STUDENT",
   ...over,
@@ -118,7 +119,19 @@ describe("사용자 통계: 활동", () => {
     ];
     activity = [...active(1, "2026-10-16", "2026-10-20"), ...active(2, "2026-10-17")];
     const r = await loadUserReport({ from: "2026-10-01", until: "2026-11-01", unit: "day" }, { now: NOW });
-    expect(r.activity.retention).toMatchObject({ cohort: 4, eligible: 2, returned: 1, pending: 1, beforeCollection: 1, expired: 0 });
+    expect(r.activity.retention).toMatchObject({ cohort: 4, eligible: 2, returned: 1, pending: 1, beforeCollection: 1, expired: 0, withdrawn: 0 });
+  });
+
+  it("leaves a withdrawn sign-up out of 재방문 (its marks were deleted), never as 'did not return'", async () => {
+    members = [
+      member(1, "2026-10-16T01:00:00Z"), // returns on 10-20
+      member(2, "2026-10-17T01:00:00Z", { withdrawnAt: new Date("2026-10-27T01:00:00Z"), deletedAt: new Date("2026-10-27T01:00:00Z") }),
+    ];
+    activity = active(1, "2026-10-16", "2026-10-20"); // member 2's marks are gone with the withdrawal
+    const r = await loadUserReport({ from: "2026-10-01", until: "2026-11-01", unit: "day" }, { now: NOW });
+    expect(r.activity.retention).toMatchObject({ cohort: 2, eligible: 1, returned: 1, withdrawn: 1 });
+    expect(retentionExclusions(r.activity.retention!)).toContain("탈퇴 1명(탈퇴로 활동 기록 삭제)");
+    expect(r.participation.newWithdrawn).toBe(1);
   });
 
   it("shows hourly member page views and sign-ins only from their first day", async () => {
@@ -153,6 +166,7 @@ describe("사용자 통계: 참여", () => {
       newSignups: 2, // 1 and 2 (admin out of the cohort)
       newActive: 2,
       newBeforeCollection: 0,
+      newWithdrawn: 0,
       newPosted: 1,
       newChatted: 1,
     });
@@ -215,7 +229,7 @@ describe("사용자 통계: 재방문 (B1)", () => {
     ];
     activity = [...active(1, "2026-10-16", "2026-10-20"), ...active(2, "2026-10-17"), ...active(4, "2026-10-18")];
     const r = await loadUserReport({ from: "2026-10-01", until: "2026-11-01", unit: "day" }, { now: NOW });
-    expect(r.activity.retention).toEqual({ cohort: 6, eligible: 3, returned: 1, pending: 1, beforeCollection: 2, expired: 0, nextReadyDay: "2026-11-06" });
+    expect(r.activity.retention).toEqual({ cohort: 6, eligible: 3, returned: 1, pending: 1, beforeCollection: 2, expired: 0, withdrawn: 0, nextReadyDay: "2026-11-06" });
     expect(retentionExclusions(r.activity.retention!)).toEqual([
       "집계 대기 1명(7일이 아직 안 지남, 2026-11-06부터 산출)",
       "미측정 2명(재방문 기간에 활동 기록 시작 전 날짜 포함)",

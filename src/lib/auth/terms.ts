@@ -19,7 +19,10 @@ export const CURRENT_TERMS_VERSION = "2026-10-04";
 // Production release day is fixed, changing this one line is the whole
 // switch: the policy shows that day, and every member re-consents once on
 // it. A day not yet reached is fine -- it is only compared for equality.
-export const PRIVACY_POLICY_EFFECTIVE_DATE = "2026-10-14";
+// 2026-10-16: 이용 통계 -- purpose (§3), the 이용 일자 record (§1/§8) and its
+// deletion at 회원탈퇴 (§7) are now part of what the consent screen asks
+// for, so every member consents once more.
+export const PRIVACY_POLICY_EFFECTIVE_DATE = "2026-10-16";
 
 // "2026-10-16" -> "2026년 10월 16일" (a plain calendar day, no time zone).
 export function formatEffectiveDate(isoDay: string): string {

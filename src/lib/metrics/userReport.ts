@@ -47,6 +47,10 @@ import {
 // Per-member links (new vs existing, retention, who posted) recompute the
 // HMAC of each member id in memory to match ActivityDay marks; nothing new
 // is stored and only counts come out.
+// 회원탈퇴 deletes the member's marks (auth/withdrawal.ts), so 활성 회원
+// counts of past periods drop when someone withdraws, and a withdrawn
+// sign-up's 재방문 is unknown -- left out as 탈퇴, never counted as "did
+// not return".
 
 const KST = 9 * 3600_000;
 const kst = (column: string) => Prisma.raw(`(("${column}" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul')`);
@@ -110,7 +114,8 @@ export type UserReport = {
     // the RETURN_WINDOW_DAYS days after the sign-up day -- can be judged:
     // eligible (over, measured end to end), pending (not over yet),
     // beforeCollection / expired (it reaches days without ActivityDay:
-    // before it began, or past retention -- 미측정 even when over).
+    // before it began, or past retention -- 미측정 even when over),
+    // withdrawn (their marks were deleted at 회원탈퇴).
     retention: {
       cohort: number;
       eligible: number;
@@ -118,6 +123,7 @@ export type UserReport = {
       pending: number;
       beforeCollection: number;
       expired: number;
+      withdrawn: number;
       nextReadyDay: string | null; // first day the earliest pending sign-up can be judged
     } | null;
   };
@@ -139,6 +145,7 @@ export type UserReport = {
     newSignups: number; // signed up in the range (admins out)
     newActive: number | null; // of those: an active day on/after sign-up (activity measured)
     newBeforeCollection: number; // of those: signed up before ActivityDay began (earlier activity 미측정)
+    newWithdrawn: number; // of those: withdrawn since (their activity marks are deleted)
     newPosted: number; // of those: posted after signing up (until now)
     newChatted: number;
   };
@@ -183,6 +190,7 @@ export function retentionExclusions(ret: NonNullable<UserReport["activity"]["ret
     ret.pending ? `집계 대기 ${ret.pending}명(${RETURN_WINDOW_DAYS}일이 아직 안 지남${ret.nextReadyDay ? `, ${ret.nextReadyDay}부터 산출` : ""})` : null,
     ret.beforeCollection ? `미측정 ${ret.beforeCollection}명(재방문 기간에 활동 기록 시작 전 날짜 포함)` : null,
     ret.expired ? `미측정 ${ret.expired}명(보관기한 400일이 지나 활동 기록 삭제)` : null,
+    ret.withdrawn ? `탈퇴 ${ret.withdrawn}명(탈퇴로 활동 기록 삭제)` : null,
   ].filter((s): s is string => s !== null);
 }
 
@@ -341,6 +349,7 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
   for (const r of inRangeMarks) perActorDays.set(r.actor, (perActorDays.get(r.actor) ?? 0) + 1);
   const cohort = members.filter((m) => !m.isAdmin && inRange(signupDay.get(m.id)!));
   const windowStatus = (m: MemberRow) => {
+    if (m.withdrawnAt) return "withdrawn" as const;
     const first = addPeriods(signupDay.get(m.id)!, "day", 1);
     if (first < ACTIVITY_FIRST_FULL_DAY) return "beforeCollection" as const;
     if (first < retainedFrom) return "expired" as const;
@@ -445,6 +454,7 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
             pending: pendingDays.length,
             beforeCollection: countStatus("beforeCollection"),
             expired: countStatus("expired"),
+            withdrawn: countStatus("withdrawn"),
             // the window of a sign-up on day D ends with D + RETURN_WINDOW_DAYS
             nextReadyDay: pendingDays.length ? addPeriods(pendingDays[0], "day", RETURN_WINDOW_DAYS + 1) : null,
           }
@@ -468,6 +478,7 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
       newSignups: cohort.length,
       newActive: cohort.length > newBeforeCollection ? newActive : null,
       newBeforeCollection,
+      newWithdrawn: cohort.filter((m) => m.withdrawnAt).length,
       newPosted: [...noAdmin(newPosters)].filter((id) => newSet.has(id)).length,
       newChatted: [...noAdmin(newChatters)].filter((id) => newSet.has(id)).length,
     },
