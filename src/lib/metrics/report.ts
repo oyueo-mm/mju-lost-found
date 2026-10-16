@@ -201,6 +201,11 @@ export type FlowReport = {
   pages: Record<PagesBucket, number>;
   open: number; // 종료 미확인 (still going, or never came back)
   closed: number; // 종료 확인 (the browser later started a new session)
+  // Data checks over the range (empty when the counts agree): a bucket
+  // whose stored total is below zero, or a distribution whose total differs
+  // from the flow sessions. Shown as a warning; the buckets themselves are
+  // displayed at 0 at least.
+  issues: string[];
 };
 
 export type Report = {
@@ -529,11 +534,20 @@ export function flowReportOf(
     pages: zeroOf(PAGES_BUCKETS),
     open: 0,
     closed: 0,
+    issues: [],
   };
+  const raw = new Map<string, number>(); // unclamped distribution totals
+  const negatives: string[] = [];
   const isKind = (v: string): v is PageKind => (PAGE_KINDS as readonly string[]).includes(v);
   const isDevice = (v: string): v is DeviceKind => (DEVICE_KINDS as readonly string[]).includes(v);
-  // a bucket a session left is never below 0 (a lost report can't push it under)
+  // A bucket is displayed at 0 at least; a stored total below zero (a report
+  // applied to a state the server never had) is listed in `issues`.
   const pos = (n: number) => Math.max(0, n);
+  for (const [metric, n] of totals) {
+    const dist = /^visit\.flow\.(exit|path|pages|dur|endhour)\./.exec(metric)?.[1] ?? (metric === "visit.flow.open" || metric === "visit.flow.closed" ? "status" : null);
+    if (dist) raw.set(dist, (raw.get(dist) ?? 0) + n);
+    if (dist && n < 0) negatives.push(`${metric} = ${n}`);
+  }
   for (const [metric, n] of totals) {
     let m: RegExpExecArray | null;
     if ((m = /^visit\.start\.hour\.(\d{2})$/.exec(metric))) out.startHour[Number(m[1])] += n;
@@ -559,6 +573,13 @@ export function flowReportOf(
     out.endDow[i] += Number(row.flows ?? 0);
   }
   out.paths.sort((a, b) => b.sessions - a.sessions);
+  const sessions = DEVICE_KINDS.reduce((a, d) => a + out.flowSessions[d], 0);
+  if (negatives.length) out.issues.push(`0보다 작은 구간 ${negatives.length}개 (화면에는 0으로 표시): ${negatives.slice(0, 5).join(", ")}${negatives.length > 5 ? " …" : ""}`);
+  const names: Record<string, string> = { exit: "마지막 이용 화면", path: "첫→마지막 화면", pages: "본 화면 수", dur: "체류 시간", endhour: "종료 시간대", status: "종료 확인+미확인" };
+  for (const [dist, label] of Object.entries(names)) {
+    const total = raw.get(dist) ?? 0;
+    if (sessions && total !== sessions) out.issues.push(`${label} 합계 ${total} ≠ 체류·이탈 집계 방문 ${sessions}`);
+  }
   return out;
 }
 

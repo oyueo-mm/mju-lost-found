@@ -90,6 +90,7 @@ function fakeReport(): Report {
       pages: { "1": 1, "2": 1, "3to4": 2, "5to9": 0, "10plus": 0 },
       open: 3,
       closed: 1,
+      issues: [],
     },
     device: {
       since: "2026-10-16",
@@ -165,9 +166,10 @@ describe("운영 통계 내보내기", () => {
     expect(summary["체류 시간 중앙값 (구간)"]).toBe("30초~1분");
     expect(summary["한 화면만 보고 끝난 방문 비율 (÷ 체류·이탈 집계 방문)"]).toBe("25.0%");
     expect(summary["종료 미확인 방문 (다시 오지 않아 끝을 확인 못 함, 대부분 이미 떠남)"]).toBe(3);
-    // 종료율: exits ÷ page views of the same days (post: 2 ÷ 4)
+    // 마지막 이용 화면 비중: exits ÷ the flow sessions (post: 2 ÷ 4); page views kept as a raw count
     const post = flow.tables[5].rows.find((r) => r[0] === "게시글 상세")!;
-    expect(post.slice(0, 5)).toEqual(["게시글 상세", 0, 2, 4, 0.5]);
+    expect(post.slice(0, 5)).toEqual(["게시글 상세", 0, 2, 0.5, 4]);
+    expect(summary["데이터 점검"]).toBe("이상 없음");
     expect(flow.tables[1].rows[10]).toEqual(["10시", 3, 2]);
     expect(flow.tables[1].rows[22]).toEqual(["22시", 0, 2]);
     expect(flow.tables[2].rows[4]).toEqual(["금", 5, 4]);

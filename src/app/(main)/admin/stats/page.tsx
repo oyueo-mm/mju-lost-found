@@ -29,7 +29,7 @@ import { DURATION_BUCKETS, DURATION_LABELS, PAGES_BUCKETS, PAGES_LABELS } from "
 import { StatsExportPanel } from "@/components/admin/StatsExportPanel";
 import { StatsPeriodPicker } from "@/components/admin/StatsPeriodPicker";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
-import { ChevronRightIcon, InfoIcon } from "@/components/icons";
+import { AlertIcon, ChevronRightIcon, InfoIcon } from "@/components/icons";
 
 // 운영 통계 (admin only). Read-only aggregates: no search text, no member
 // names -- 활성 회원 are counted from HMAC'd daily marks. Every number on
@@ -488,8 +488,9 @@ export default async function AdminStatsPage({
                   상태로 포함됩니다.
                 </li>
                 <li>
-                  종료율 = 그 화면에서 끝난 방문 ÷ 같은 기간 그 화면의 조회 수(체류·이탈 집계를 시작한 날부터, 첫날은 일부). 한 화면만 보고 끝난 방문
-                  비율 = 화면을 1개만 본 방문 ÷ 체류·이탈 집계 방문.
+                  마지막 이용 화면 비중 = 그 화면에서 끝난 방문 ÷ 체류·이탈 집계 방문(같은 방문들 안의 비율). 한 화면만 보고 끝난 방문 비율 = 화면을
+                  1개만 본 방문 ÷ 체류·이탈 집계 방문. 함께 표시한 조회 수는 같은 기간 그 화면이 열린 횟수(원시 집계)로, 방문 수와 단위가 달라 비율로
+                  나누지 않습니다.
                 </li>
                 <li>
                   브라우저가 마지막 활동을 보내기 전에 닫히면 다음 방문 때(7일 이내) 보내며, 끝내 오지 않으면 그 전까지 확인된 활동까지만 반영됩니다.
@@ -534,6 +535,20 @@ export default async function AdminStatsPage({
                 sub={`다시 오지 않아 끝을 확인 못 함 · 종료 확인 ${fmt(flow.closed)}회`}
               />
             </div>
+            {flow.issues.length > 0 && (
+              <div role="alert" className="flex gap-2 rounded-card border border-warning/50 bg-warning-muted px-3 py-2 text-[11px] leading-relaxed text-foreground">
+                <AlertIcon className="mt-0.5 size-4 shrink-0 text-warning" />
+                <div>
+                  <p className="font-semibold">데이터 불일치 발견 — 아래 분포는 보정 없이 그대로 믿기 어렵습니다.</p>
+                  <ul className="mt-1 list-disc pl-4">
+                    {flow.issues.map((issue) => (
+                      <li key={issue}>{issue}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-muted-foreground">보고 누락·중복(정확한 1회 처리를 보장하지 않음)으로 생길 수 있으며, 원시 값은 Excel/CSV에 그대로 있습니다.</p>
+                </div>
+              </div>
+            )}
             <p className="rounded-card border border-border bg-muted/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
               <b className="font-semibold text-foreground">종료 확인</b>: 같은 브라우저가 나중에 다시 방문해서, 앞의 방문이 끝났다는 것이 확인된 방문.{" "}
               <b className="font-semibold text-foreground">종료 미확인</b>: 그 뒤 다시 오지 않아 끝난 시점을 확인할 수 없는 방문으로, 대부분은 이미
@@ -581,8 +596,8 @@ export default async function AdminStatsPage({
               </div>
               <div className="flex flex-col gap-2">
                 <p className="text-[11px] text-muted-foreground">
-                  <span className="text-xs font-semibold text-foreground">마지막 화면 (추정 종료)</span> · 비중: 체류·이탈 집계 방문 중 · 종료율: 그
-                  화면에서 끝난 방문 ÷ 같은 기간 그 화면 조회 수
+                  <span className="text-xs font-semibold text-foreground">마지막 이용 화면 (추정)</span> · 비중 = 그 화면에서 끝난 방문 ÷ 체류·이탈 집계
+                  방문 {fmt(flowSessions)}회
                 </p>
                 <BarList
                   total={flowSessions}
@@ -592,7 +607,7 @@ export default async function AdminStatsPage({
                     .slice(0, 8)
                     .map(([kind, n]) => {
                       const pv = flow.pageViewsSinceFlow[kind as PageKind] ?? 0;
-                      return { label: PAGE_KIND_LABELS[kind as PageKind] ?? kind, value: n ?? 0, note: pv ? `종료율 ${Math.round(((n ?? 0) / pv) * 100)}%` : undefined };
+                      return { label: PAGE_KIND_LABELS[kind as PageKind] ?? kind, value: n ?? 0, note: `조회 ${fmt(pv)}회` };
                     })}
                 />
               </div>

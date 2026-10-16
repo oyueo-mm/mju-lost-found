@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: {} }));
 
-const { apiCoverage, autoUnit, bucketsOf, bucketSpan, coverageOf, resolvePeriod, summarizeTimings } = await import("./report");
+const { apiCoverage, autoUnit, bucketsOf, bucketSpan, coverageOf, flowReportOf, resolvePeriod, summarizeTimings } = await import("./report");
 const { kstDay } = await import("./record");
 
 const ok = (r: ReturnType<typeof resolvePeriod>) => {
@@ -94,3 +94,34 @@ describe("미측정 구분", () => {
     expect(summarizeTimings([])).toEqual({ count: 0, errors: 0, errorRate: null, avgMs: null, p95: "-" });
   });
 });
+
+describe("방문 시간·이탈 data checks", () => {
+  const opts = { startSince: "2026-10-16", since: "2026-10-16", from: "2026-10-16", until: "2026-10-17" };
+  const consistent = new Map<string, number>([
+    ["visit.flow.sessions.mobile", 2],
+    ["visit.flow.open", 1],
+    ["visit.flow.closed", 1],
+    ["visit.flow.exit.home.mobile", 1],
+    ["visit.flow.exit.lost.mobile", 1],
+    ["visit.flow.path.home.home", 1],
+    ["visit.flow.path.home.lost", 1],
+    ["visit.flow.pages.1", 1],
+    ["visit.flow.pages.2", 1],
+    ["visit.flow.dur.lt10s.mobile", 2],
+    ["visit.flow.endhour.10", 2],
+  ]);
+  it("reports nothing when every distribution sums to the flow sessions", () => {
+    expect(flowReportOf(consistent, [], opts).issues).toEqual([]);
+  });
+  it("names a bucket below zero and a distribution that doesn't add up, instead of hiding it", () => {
+    const broken = new Map(consistent);
+    broken.set("visit.flow.exit.home.mobile", -1); // a report applied to a state the server never had
+    broken.set("visit.flow.exit.search.mobile", 1);
+    const flow = flowReportOf(broken, [], opts);
+    expect(flow.exitPage.home).toBe(0); // displayed at 0 ...
+    expect(flow.issues).toHaveLength(2); // ... but reported
+    expect(flow.issues[0]).toContain("visit.flow.exit.home.mobile = -1");
+    expect(flow.issues[1]).toContain("마지막 이용 화면 합계 1 ≠ 체류·이탈 집계 방문 2");
+  });
+});
+
