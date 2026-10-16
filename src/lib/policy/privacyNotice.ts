@@ -1,4 +1,5 @@
-import { formatEffectiveDate, PRIVACY_POLICY_EFFECTIVE_DATE } from "@/lib/auth/terms";
+import { formatEffectiveDate } from "@/lib/auth/terms";
+import { LATEST_PRIVACY_POLICY_REVISION, PRIVACY_POLICY_EFFECTIVE_DATE } from "@/lib/policy/privacyPolicy";
 
 // 개인정보처리방침 변경 안내: a policy change announced instead of
 // re-consented (auth/terms.ts) is shown as one non-blocking bar above the
@@ -13,8 +14,8 @@ export const PRIVACY_NOTICE_DAYS = 30;
 export const PRIVACY_NOTICE_STORAGE_KEY = "mju-find:privacy-notice";
 export const PRIVACY_NOTICE_HREF = "/policy/privacy#changes";
 
-// What changed, in one line (the same as policy §11's history entry).
-export const PRIVACY_NOTICE_SUMMARY = "서비스 이용 통계 목적과 로그인 회원의 이용 일자 기록(400일 보관, 회원탈퇴 시 삭제)을 안내했습니다.";
+// What changed: the newest revision's summary (policy §11 shows the same).
+export const PRIVACY_NOTICE_SUMMARY = LATEST_PRIVACY_POLICY_REVISION.summary;
 
 export type PrivacyNotice = { id: string; text: string; summary: string; href: string } | null;
 

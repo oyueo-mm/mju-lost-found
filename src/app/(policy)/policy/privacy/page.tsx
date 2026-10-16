@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { formatEffectiveDate, PRIVACY_POLICY_EFFECTIVE_DATE } from "@/lib/auth/terms";
+import { formatEffectiveDate } from "@/lib/auth/terms";
+import { LATEST_PRIVACY_POLICY_REVISION, PRIVACY_POLICY_EFFECTIVE_DATE, PRIVACY_POLICY_REVISIONS } from "@/lib/policy/privacyPolicy";
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 
 // Phase 9: mirrors the exact items/purposes shown at consent time
@@ -46,8 +47,13 @@ import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 // are pseudonymous, re-linkable personal data, never called anonymous --
 // and that the hourly totals carry no member data, have no deletion date
 // (MetricDaily is not cleaned up) and stay after 회원탈퇴. Announced (§11
-// and the in-service notice, lib/policy/privacyNotice.ts), not re-consented:
-// the consent version (auth/terms.ts) and the consent screen are unchanged.
+// and the in-service notice, lib/policy/privacyNotice.ts); existing consents
+// stay valid (auth/terms.ts ACCEPTED_PRIVACY_VERSIONS).
+// 처리 목적·항목 정리 (same revision): §1 lists every kind of data the code
+// stores (also 단체 신청, 키워드 알림, 서비스 개선 제안, 외부 관계자 승인,
+// 신고·조치 기록), §3 the purposes by area (AI 검색·추천 vectors; search
+// input not stored), §8 the hosting request log (may hold search words) and
+// the server run log. §11 is generated from lib/policy/privacyPolicy.ts.
 // 이름·소속 필수 수집 (2026-10-16): 이름·소속 are required items of the
 // 개인정보 동의; §1, §3, §4, §6, §7, §9 describe it. Consent withdrawal of a
 // required item is 회원탈퇴 (§6), as for the rest of this consent.
@@ -63,6 +69,13 @@ import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 // may be required at all is a legal question still open (see the report).
 // `id`: an anchor the in-service change notice links to (#changes).
 type Section = { title: string; body: React.ReactNode; id?: string };
+
+// §11 from the revision history (lib/policy/privacyPolicy.ts).
+const CONSENT_NOTE = {
+  notice: "이 개정은 서비스 안의 변경 안내로 알리며, 기존 회원에게 별도의 재동의를 요청하지 않습니다.",
+  reconsent: "기존 회원은 시행일 이후 처음 로그인할 때 변경된 내용을 확인하고 다시 동의해야 회원 기능을 이용할 수 있습니다.",
+} as const;
+const REVISION_NOTE = { notice: "(변경 안내로 시행)", reconsent: "(기존 회원 재동의)" } as const;
 
 const SECTIONS: Section[] = [
   {
@@ -91,6 +104,10 @@ const SECTIONS: Section[] = [
         <li>작성한 게시글(제목, 내용, 장소, 날짜, 첨부 이미지)</li>
         <li>작성한 댓글 및 답글</li>
         <li>주고받은 채팅 메시지 및 채팅으로 전송한 사진</li>
+        <li>신고·이의신청·재가입 요청에 작성한 내용, 이용 정지 등 관리자 조치 기록</li>
+        <li>키워드 알림 설정(알림 받을 단어와 게시판·캠퍼스·분류 조건), 서비스 개선 제안의 내용</li>
+        <li>단체 등록·가입을 신청할 때 입력한 단체 정보, 연락처 이메일, 신청 사유·메시지</li>
+        <li>외부 관계자의 이용 승인을 위해 관리자가 입력한 이메일 주소, 이름, 소속, 캠퍼스</li>
         <li>로그인 일시, 게시글 조회 기록, 신고/알림 등 서비스 이용 기록</li>
         <li>
           로그인한 상태로 서비스를 이용한 날짜(이용 일자 기록, 하루 한 번): 이용 통계(아래 3조)에만 쓰며, 회원 번호를 비밀 키로
@@ -118,16 +135,27 @@ const SECTIONS: Section[] = [
     title: "3. 이용 목적",
     body: (
       <>
-        회원 식별 및 로그인, 분실물·습득물 게시글/댓글/채팅 등 서비스 핵심 기능 제공, 신고 처리 및 부정 이용 방지를 위해
-        이용합니다. 이름·소속은 게시글·채팅으로 실제 물건을 주고받을 때의 본인 확인과 신고·분쟁 처리에만 이용하며, 다른
-        이용자에게 공개하지 않습니다(게시글·댓글·채팅에는 닉네임만 표시됩니다).
-        <span className="mt-2 block">
-          또한 서비스 이용 현황을 파악하고 개선하기 위한 이용 통계 작성(가입·탈퇴 회원 수, 활성 회원 수, 가입 후 재방문, 게시글·채팅에
-          참여한 회원 수, 방문·검색 이용량 등)에 이용합니다. 통계는 합계로만 만들어 관리자 통계 화면과 관리자가 내려받는 파일에만
-          표시하며, 회원별 이용 기록은 표시하지 않고 통계 작성 외의 목적에는 쓰지 않습니다. 통계에 쓰는 정보와 보관기간은 아래
-          7조·8조와 같습니다. 회원탈퇴 시 그 회원의 이용 일자 기록은 삭제되므로, 이미 작성된 지난 기간의 활성 회원 수·재방문 통계도
-          그만큼 줄어들 수 있습니다.
-        </span>
+        <p>수집한 개인정보는 다음 목적에만 이용합니다.</p>
+        <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
+          <li>회원 가입·식별·관리: Google 로그인, 동의 기록, 계정 비활성화·회원탈퇴, 외부 관계자 이용 승인</li>
+          <li>
+            분실물·습득물 서비스 제공: 게시글·사진의 등록과 공개, 키워드·자연어(AI)·사진 검색, 비슷한 게시글 추천, 댓글·채팅·알림·키워드
+            알림, 단체 기능. AI 검색과 추천을 위해 게시글의 글과 사진을 서버 안에서 숫자 값(벡터)으로 바꿔 함께 저장하며, 검색할 때
+            입력한 문장이나 사진은 검색 결과를 만드는 데에만 쓰고 저장하지 않습니다.
+          </li>
+          <li>
+            이용자 보호와 부정 이용 방지: 신고·제재·이의신청 처리, 재가입 보류, 이용량 제한, 관리자 열람 기록. 이름·소속은 게시글·채팅으로
+            실제 물건을 주고받을 때의 본인 확인과 신고·분쟁 처리에만 이용하며, 다른 이용자에게 공개하지 않습니다(게시글·댓글·채팅에는
+            닉네임만 표시됩니다).
+          </li>
+          <li>
+            서비스 운영과 개선: 이용 통계 작성(가입·탈퇴 회원 수, 활성 회원 수, 가입 후 재방문, 게시글·채팅에 참여한 회원 수, 방문·검색
+            이용량 등), 장애·오류 분석과 보안, 서비스 개선 제안 처리. 통계는 합계로만 만들어 관리자 통계 화면과 관리자가 내려받는
+            파일에만 표시하며, 회원별 이용 기록은 표시하지 않습니다. 회원탈퇴 시 그 회원의 이용 일자 기록은 삭제되므로 지난 기간의 활성
+            회원 수·재방문 통계도 그만큼 줄어들 수 있습니다(아래 7조·8조).
+          </li>
+        </ul>
+        <p className="mt-2">위 목적 외의 용도로 이용하거나 마케팅·광고에 이용하지 않으며, 목적이 바뀌는 경우에는 미리 알리고 필요한 동의를 받습니다.</p>
       </>
     ),
   },
@@ -141,7 +169,9 @@ const SECTIONS: Section[] = [
         신고·제재 기록 등 이용자 보호, 서비스 운영 및 분쟁 대응에 필요한 정보는 필요한 범위에서 보관될
         수 있습니다. 관계 법령에 따라 일정 기간 보존이 필요한 정보가 있는 경우에는 해당 법령에서 정한
         기간 동안 보관합니다. 이름·소속은 회원 계정이 유지되는 동안 보유하며(계정 비활성화 중 포함), 회원탈퇴 시 즉시
-        삭제합니다. 회원탈퇴 시 삭제되는 정보와 탈퇴 후 보유기간은 아래 6조·7조를 따릅니다.
+        삭제합니다. 이용 통계를 위한 로그인 회원의 이용 일자 기록은 이용한 날로부터 400일 동안 보관하고(회원탈퇴 시 즉시 삭제), 회원
+        정보가 들어 있지 않은 날짜·시간대별 합계는 기한을 두지 않고 보관합니다(아래 8조). 회원탈퇴 시 삭제되는 정보와 탈퇴 후
+        보유기간은 아래 6조·7조를 따릅니다.
       </>
     ),
   },
@@ -272,7 +302,12 @@ const SECTIONS: Section[] = [
             <span className="font-medium text-foreground">IP 주소</span>: 로그인하지 않은 상태의 AI 검색 이용량을
             제한하기 위해, IP 주소를 원래 값으로 되돌릴 수 없는 해시 값으로 바꾼 뒤 이용 횟수와 함께 저장합니다(IP
             주소 자체는 저장하지 않으며, 2일이 지난 기록은 수시로 삭제됩니다). 또한 호스팅 업체(Vercel)의 요청
-            기록에 접속 IP 주소와 User-Agent가 포함될 수 있습니다.
+            기록에 접속 IP 주소, User-Agent, 요청한 주소(검색어가 들어 있을 수 있음)가 포함될 수 있습니다.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">서버 운영 기록</span>: 장애·오류 분석과 보안을 위해 서버 실행 기록에 요청
+            경로, 오류 내용, 로그인 시 이름·소속 확인 결과(회원 번호와 함께 남으며 이름·소속 값은 남기지 않음)가 남을 수 있고, 호스팅
+            업체의 기록 보관 기간이 지나면 삭제됩니다. API 응답 시간·오류율은 회원 정보 없이 시간대별 합계로만 90일 동안 보관합니다.
           </li>
           <li>
             <span className="font-medium text-foreground">User-Agent(브라우저·기기 정보)</span>: 이 서비스는 직접
@@ -353,32 +388,15 @@ const SECTIONS: Section[] = [
     id: "changes",
     body: (
       <>
-        이 개인정보처리방침은 {formatEffectiveDate(PRIVACY_POLICY_EFFECTIVE_DATE)}부터 시행합니다. 이번 변경으로 서비스 이용 통계
-        작성 목적(위 3조)과 로그인 회원의 이용 일자 기록(위 1조·8조), 그 기록의 보관기간과 회원탈퇴 시 삭제 기준(위 7조·8조)을
-        안내합니다. 이번 변경은 서비스 안의 변경 안내로 알리며, 기존 회원에게 별도의 재동의를 요청하지 않습니다.
-        <span className="mt-2 block">
-          2026년 10월 14일: 이름, 소속(학과·단과대학)을 필수 수집 항목에 추가했습니다(위 1조). 기존 회원은 그 시행일 이후 처음
-          로그인할 때 다시 동의하도록 했습니다.
-        </span>
-        <span className="mt-2 block">
-          2026년 10월 15일: 8조에 방문 통계용 브라우저 저장소 안내를 추가했습니다. 수집하는 개인정보 항목과 이용
-          목적은 바뀌지 않아 다시 동의할 필요는 없습니다.
-        </span>
-        <span className="mt-2 block">
-          2026년 10월 16일: 8조 방문 통계의 날짜별 합계에 접속 기기 종류(모바일·PC·태블릿·기타)를 추가했습니다. 이미
-          안내한 User-Agent에서 기기 종류만 구분해 합계로 저장하며, 수집하는 개인정보 항목과 이용 목적은 바뀌지 않아
-          다시 동의할 필요는 없습니다.
-        </span>
-        <span className="mt-2 block">
-          2026년 10월 16일: 방문 통계에 방문 시간·체류 시간·이탈 화면의 시간대·구간별 합계를 추가하고, 이를 위해 브라우저
-          저장소에 현재 방문의 요약을 보관한다는 내용을 8조에 추가했습니다. 개인별 이동 기록이나 정확한 접속·종료 시각은
-          저장하지 않으며, 수집하는 개인정보 항목과 이용 목적은 바뀌지 않아 다시 동의할 필요는 없습니다.
-        </span>
-        <span className="mt-2 block">
-          {formatEffectiveDate(PRIVACY_POLICY_EFFECTIVE_DATE)}: 1조에 이용 일자 기록을, 3조에 이용 통계 작성 목적을 추가하고, 7조에
-          회원탈퇴 시 이용 일자 기록 삭제를, 8조에 이용 일자 기록과 시간대별 로그인·이용 합계를 어떻게 저장·대조·보관하는지
-          안내했습니다. 변경 안내로 시행하며 별도의 재동의는 요청하지 않습니다.
-        </span>
+        이 개인정보처리방침은 {formatEffectiveDate(PRIVACY_POLICY_EFFECTIVE_DATE)}부터 시행합니다.{" "}
+        {CONSENT_NOTE[LATEST_PRIVACY_POLICY_REVISION.consent]}
+        <ul className="mt-2 flex flex-col gap-1">
+          {PRIVACY_POLICY_REVISIONS.map((r) => (
+            <li key={`${r.date}:${r.summary}`}>
+              {formatEffectiveDate(r.date)}: {r.summary} {REVISION_NOTE[r.consent]}
+            </li>
+          ))}
+        </ul>
       </>
     ),
   },

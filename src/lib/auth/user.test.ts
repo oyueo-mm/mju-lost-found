@@ -36,6 +36,7 @@ vi.mock("@/lib/db/prisma", () => ({
 const { resolveOrCreateUser, recordRequiredConsents, withdrawUser } = await import("./user");
 const CURRENT_VERSION = "2026-09-27";
 const PRIVACY_VERSION = "2026-10-04";
+const { ACCEPTED_IDENTITY_CONSENT_VERSIONS, ACCEPTED_PRIVACY_VERSIONS } = await import("@/lib/auth/terms");
 const IDENTITY_VERSION = "2026-10-16";
 
 queryRaw.mockResolvedValue([]);
@@ -204,7 +205,7 @@ describe("recordRequiredConsents", () => {
     expect(updateMany).toHaveBeenNthCalledWith(1, {
       where: {
         id: 5,
-        OR: [{ privacyConsentAt: null }, { privacyConsentVersion: null }, { privacyConsentVersion: { not: PRIVACY_VERSION } }],
+        OR: [{ privacyConsentAt: null }, { privacyConsentVersion: null }, { privacyConsentVersion: { notIn: [PRIVACY_VERSION, ...ACCEPTED_PRIVACY_VERSIONS] } }],
       },
       data: { privacyConsentAt: expect.any(Date), privacyConsentVersion: PRIVACY_VERSION },
     });
@@ -215,7 +216,7 @@ describe("recordRequiredConsents", () => {
     // 이름·소속 (a required item of the 개인정보 동의) is stamped in the same
     // transaction; an earlier optional version is re-stamped.
     expect(updateMany).toHaveBeenNthCalledWith(3, {
-      where: { id: 5, OR: [{ identityConsentVersion: null }, { identityConsentVersion: { not: IDENTITY_VERSION } }] },
+      where: { id: 5, OR: [{ identityConsentVersion: null }, { identityConsentVersion: { notIn: [...new Set([IDENTITY_VERSION, ...ACCEPTED_IDENTITY_CONSENT_VERSIONS])] } }] },
       data: { identityConsentAt: expect.any(Date), identityConsentVersion: IDENTITY_VERSION },
     });
   });

@@ -20,13 +20,13 @@ describe("privacy policy 시행일", () => {
 
   // An announced policy change moves only the 시행일: the consent versions
   // stay the Production ones, so no member is asked to consent again.
-  it("is kept apart from the consent versions, which stay at the Production one", () => {
-    expect(CURRENT_PRIVACY_VERSION).toBe("2026-10-14");
+  it("records new consents with the current screen versions", () => {
+    expect(CURRENT_PRIVACY_VERSION).toBe("2026-10-16");
     expect(CURRENT_IDENTITY_CONSENT_VERSION).toBe("2026-10-14");
     expect(CURRENT_TERMS_VERSION).toBe("2026-10-04");
   });
 
-  it("accepts the current consents and the Preview-only 2026-10-16 ones, nothing older", () => {
+  it("keeps the Production consents valid, and nothing older than 2026-10-14", () => {
     for (const ok of ["2026-10-14", "2026-10-16"]) {
       expect(isAcceptedPrivacyVersion(ok)).toBe(true);
       expect(isAcceptedIdentityConsentVersion(ok)).toBe(true);

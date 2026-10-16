@@ -8,6 +8,7 @@ import { LogoMark } from "@/components/layout/Logo";
 import { ShieldIcon, ChevronRightIcon, BookIcon } from "@/components/icons";
 import { PrivacyConsentButton } from "./PrivacyConsentButton";
 import { hasCurrentIdentityConsent } from "@/lib/identity/service";
+import { ACTIVITY_RECORD_RETENTION, COLLECTED_ITEMS, STATISTICS_PURPOSE } from "./consentText";
 
 // Phase 8: the actual items/purposes below are drawn directly from this
 // app's real schema and features (see prisma/schema.prisma, and this
@@ -31,25 +32,9 @@ import { hasCurrentIdentityConsent } from "@/lib/identity/service";
 // phase's own design put them: /policy/terms and /policy/community are
 // only linked from here, never reproduced inline (that content lives in
 // its own pages, same as this one never repeats a URL's real content).
-const COLLECTED_ITEMS: { label: string; detail: string }[] = [
-  { label: "Google 계정 식별 정보", detail: "Google 계정의 고유 식별자(구글 로그인 시 발급)" },
-  { label: "이메일 주소", detail: "Google 계정의 이메일 주소(이메일 인증 여부는 로그인 확인에만 쓰고 저장하지 않음)" },
-  { label: "닉네임", detail: "직접 설정한 닉네임(다른 이용자에게 공개되는 이름으로, 아래 이름과는 별개)" },
-  {
-    label: "이름, 소속(학과·단과대학)",
-    detail:
-      "명지대 Google 계정의 표시 이름이 '이름/신분/소속' 형식이면 이름과 소속을 자동으로 추출해 저장하고, 로그인할 때마다 비교해 갱신(신분은 저장하지 않음). 학교 학적 시스템에서 확인된 정보가 아니며, 소속은 학과가 아닌 단과대학일 수 있음. 자동으로 가져올 수 없는 계정은 게시글 등록·채팅 전에 직접 입력. 본인과 신고·분쟁을 처리하는 관리자(열람 기록)만 볼 수 있음",
-  },
-  {
-    label: "Google 계정 이름",
-    detail: "Google 로그인 시 전달받아 위 이름·소속 자동 추출에만 사용(동의 전에는 서버에 저장하지 않음)",
-  },
-  { label: "게시글 정보", detail: "분실물/습득물 게시글의 제목, 내용, 장소, 날짜, 첨부 이미지" },
-  { label: "댓글/답글", detail: "게시글에 작성한 댓글 및 답글 내용" },
-  { label: "채팅 메시지", detail: "다른 이용자와 주고받은 채팅 메시지, 채팅으로 전송한 사진" },
-  { label: "서비스 이용 기록", detail: "로그인 일시, 게시글 조회 기록, 신고/알림 등 서비스 이용 내역" },
-  { label: "자동 수집 정보", detail: "해시 처리된 IP(비로그인 AI 검색 이용량 제한), 로그인 세션·언어 설정·조회수 집계용 쿠키" },
-];
+//
+// 이용 통계 (consent screen version 2026-10-16, auth/terms.ts): consentText.ts. Its text
+// is that version -- change it only together with a new CURRENT_PRIVACY_VERSION.
 
 export default async function PrivacyConsentPage({
   searchParams,
@@ -128,7 +113,7 @@ export default async function PrivacyConsentPage({
           <div className="flex flex-col gap-2">
             <p>Google 계정 · 이름·소속 · 닉네임 · 게시글 · 이미지 · 댓글 · 채팅</p>
             <p className="text-muted-foreground">
-              분실물을 등록하고 검색하고 연락하기 위해 사용됩니다.
+              분실물을 등록하고 검색하고 연락하기 위해 사용됩니다. {STATISTICS_PURPOSE}
             </p>
           </div>
 
@@ -166,7 +151,7 @@ export default async function PrivacyConsentPage({
                   메시지 본문은 탈퇴 후 90일, 처리가 끝난 신고·제재·이의신청 기록과 관련 증거는 처리 완료 후
                   1년간 보관한 뒤 삭제합니다(처리 중인 신고의 대상 정보는 처리가 끝날 때까지 보관). 관계
                   법령에 따라 일정 기간 보존이 필요한 정보가 있는 경우에는 해당 법령에서 정한 기간 동안
-                  보관합니다. 자세한 내용은{" "}
+                  보관합니다. {ACTIVITY_RECORD_RETENTION} 자세한 내용은{" "}
                   <Link href="/policy/privacy" target="_blank" className="font-medium text-primary hover:opacity-80">
                     개인정보처리방침
                   </Link>

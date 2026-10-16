@@ -10,10 +10,15 @@ import { syncIdentityFromHints, type IdentitySyncResult } from "./service";
 // before the hints existed) nothing is stored ("skipped"); posting/chatting
 // then send the member to /me/identity. Once stored, the hints are dropped
 // from the session cookie.
-export async function collectIdentityAfterConsent(userId: number): Promise<IdentitySyncResult> {
+// `identityConsentVersion`: the member's 이름·소속 consent as now on file
+// (an earlier accepted one is kept, auth/user.ts recordRequiredConsents).
+export async function collectIdentityAfterConsent(
+  userId: number,
+  identityConsentVersion: string | null = CURRENT_IDENTITY_CONSENT_VERSION,
+): Promise<IdentitySyncResult> {
   const session = await auth();
   const hints = session?.identityHints;
-  const result = await syncIdentityFromHints({ id: userId, identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION }, hints);
+  const result = await syncIdentityFromHints({ id: userId, identityConsentVersion }, hints);
   // Value-free: whether this session had hints, and whether they were a
   // display-name split the collection could use.
   console.info(

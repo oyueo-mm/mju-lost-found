@@ -11,7 +11,7 @@ const section = (n: number) => text.slice(text.indexOf(`${n}. `), text.indexOf(`
 describe("개인정보처리방침: 이용 통계", () => {
   it("names the statistics purpose in §3", () => {
     expect(section(3)).toContain("이용 통계 작성");
-    expect(section(3)).toContain("회원별 이용 기록은 표시하지 않고");
+    expect(section(3)).toContain("회원별 이용 기록은 표시하지 않습니다");
   });
 
   it("lists the active-day record (§1), deletes it at 회원탈퇴 (§7, §8) and keeps it 400 days otherwise", () => {

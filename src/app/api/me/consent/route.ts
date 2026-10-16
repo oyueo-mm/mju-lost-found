@@ -33,7 +33,7 @@ export const POST = withErrorHandling(async () => {
   // syncs). Prisma errors can quote the values -- log only the kind.
   let identity: Awaited<ReturnType<typeof collectIdentityAfterConsent>> | "failed";
   try {
-    identity = await collectIdentityAfterConsent(user.id);
+    identity = await collectIdentityAfterConsent(user.id, updated.identityConsentVersion);
   } catch (error) {
     const code = (error as { code?: unknown })?.code;
     console.error("Identity collection after consent failed:", error instanceof Error ? error.name : "unknown", typeof code === "string" ? code : "");

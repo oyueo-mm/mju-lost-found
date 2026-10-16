@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { userTypeForEmail } from "@/lib/auth/access";
 import { consumeApprovedRejoin, findHeldIdentity } from "@/lib/auth/withdrawnIdentity";
+import { ACCEPTED_IDENTITY_CONSENT_VERSIONS, ACCEPTED_PRIVACY_VERSIONS } from "@/lib/auth/terms";
 import { RejoinRequestStatus, type Prisma } from "@/generated/prisma/client";
 
 // Get-or-create by email (already @unique on User), matching the legacy
@@ -154,17 +155,22 @@ export type RequiredConsentUser = Awaited<ReturnType<typeof prisma.user.findUniq
 // 이름·소속 필수 수집: the 이름·소속 consent is stamped in the same
 // transaction (same "only if missing or on another version" rule) -- it is
 // part of the 개인정보 동의 the member just gave.
+// 동의 버전 구조 (auth/terms.ts): a privacy / 이름·소속 consent on file that is
+// still accepted is kept as it is -- e.g. a member who only had to agree to
+// new terms keeps their earlier privacy record, which says what they saw.
 export async function recordRequiredConsents(
   userId: number,
   termsVersion: string,
   privacyVersion: string,
   identityVersion: string,
+  keep: { privacy: readonly string[]; identity: readonly string[] } = { privacy: ACCEPTED_PRIVACY_VERSIONS, identity: ACCEPTED_IDENTITY_CONSENT_VERSIONS },
 ): Promise<RequiredConsentUser> {
+  const stillValid = (versions: readonly string[], current: string) => [...new Set([current, ...versions])];
   return prisma.$transaction(async (tx) => {
     await tx.user.updateMany({
       where: {
         id: userId,
-        OR: [{ privacyConsentAt: null }, { privacyConsentVersion: null }, { privacyConsentVersion: { not: privacyVersion } }],
+        OR: [{ privacyConsentAt: null }, { privacyConsentVersion: null }, { privacyConsentVersion: { notIn: stillValid(keep.privacy, privacyVersion) } }],
       },
       data: { privacyConsentAt: new Date(), privacyConsentVersion: privacyVersion },
     });
@@ -173,7 +179,7 @@ export async function recordRequiredConsents(
       data: { termsAcceptedAt: new Date(), termsVersion },
     });
     await tx.user.updateMany({
-      where: { id: userId, OR: [{ identityConsentVersion: null }, { identityConsentVersion: { not: identityVersion } }] },
+      where: { id: userId, OR: [{ identityConsentVersion: null }, { identityConsentVersion: { notIn: stillValid(keep.identity, identityVersion) } }] },
       data: { identityConsentAt: new Date(), identityConsentVersion: identityVersion },
     });
     return tx.user.findUniqueOrThrow({ where: { id: userId } });

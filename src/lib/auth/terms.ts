@@ -14,13 +14,11 @@
 // 2026-10-04: terms art. 8 (계정 비활성화 및 회원탈퇴) changed.
 export const CURRENT_TERMS_VERSION = "2026-10-04";
 
-// 시행일 of the current 개인정보처리방침 (shown in its §11, and in the
-// in-service change notice, lib/policy/privacyNotice.ts). It is the policy
-// document's own date and is kept apart from the consent versions below:
-// a policy change that is announced rather than re-consented moves only
-// this line. Set it to the day the change actually reaches Production.
-// 2026-10-16: 이용 통계 (§1/§3/§7/§8) -- announced, no re-consent.
-export const PRIVACY_POLICY_EFFECTIVE_DATE = "2026-10-16";
+// 시행일 of the current 개인정보처리방침: the newest entry of its revision
+// history (lib/policy/privacyPolicy.ts), which is kept apart from the
+// consent versions below -- a policy revision never asks anyone to consent
+// again by itself.
+export { PRIVACY_POLICY_EFFECTIVE_DATE } from "@/lib/policy/privacyPolicy";
 
 // "2026-10-16" -> "2026년 10월 16일" (a plain calendar day, no time zone).
 export function formatEffectiveDate(isoDay: string): string {
@@ -28,37 +26,43 @@ export function formatEffectiveDate(isoDay: string): string {
   return `${year}년 ${month}월 ${day}일`;
 }
 
-// 개인정보 수집·이용 동의 version -- compared with User.privacyConsentVersion
-// the same way (plain string equality). Bump it when what the consent
-// screen asks people to agree to changes (items, purposes, retention).
+// 개인정보 수집·이용 동의 (the consent screen, privacy-consent/page.tsx).
+// Two separate things are tracked:
+//  - CURRENT_PRIVACY_VERSION: the consent screen text a new consent is
+//    recorded with (User.privacyConsentVersion). Bump it whenever that
+//    screen's text changes, so every record says what its member saw.
+//  - ACCEPTED_PRIVACY_VERSIONS: the recorded versions that still satisfy
+//    the required consent. A screen change that only explains processing
+//    already covered keeps the earlier versions here (nobody is asked
+//    again); only a change that needs everyone's new consent drops them,
+//    and members on a dropped version see the screen once more.
+// How to tell the two apart: lib/policy/privacyPolicy.ts.
+//
+// History (versions are the day the screen text took effect):
 // 2026-10-04: 회원탈퇴 후 보유기간 (chat text 90 days, processed
 // report/sanction records 1 year, ...) added.
 // 2026-10-05: collected items corrected (Google sign-in returns id, e-mail
 // and e-mail-verified only; IP/User-Agent/cookies listed). Terms unchanged.
 // 2026-10-14: 이름·소속 are now required items of this consent (collected
 // from the school Google display name), so every existing member -- with or
-// without the earlier optional 실명·소속 consent -- sees the screen once more.
-// (The Production consent version; the 2026-10-16 policy change did not
-// change it.)
-export const CURRENT_PRIVACY_VERSION = "2026-10-14";
+// without the earlier optional 실명·소속 consent -- saw the screen once more.
+// 2026-10-16: the screen also states the 이용 통계 purpose, the 이용 일자
+// 기록 and its keeping / deletion at 회원탈퇴 (consentText.ts), as the policy
+// does. 2026-10-14 consents stay accepted: whether that processing needs
+// their consent is an open legal question, not settled by this screen.
+export const CURRENT_PRIVACY_VERSION = "2026-10-16";
+export const ACCEPTED_PRIVACY_VERSIONS: readonly string[] = ["2026-10-16", "2026-10-14"];
 
-// 실명·학과 수집·이용 동의: a separate consent given on the 실명·학과 form
-// (UserIdentityInfo.consentVersion). Bumping it only asks members who
-// entered their details again when they next update them -- it does not
-// touch CURRENT_PRIVACY_VERSION, so nobody is sent back through the
-// general consent screen because of it.
-// 2026-10-14: part of the required 개인정보 동의 (stamped together with it by
-// recordRequiredConsents). Earlier versions were a separate, optional consent;
-// a member on any of them consents again before 이름·소속 are collected.
+// 이름·소속 수집·이용 동의: part of the required 개인정보 동의 since
+// 2026-10-14 (stamped together with it by recordRequiredConsents; also
+// UserIdentityInfo.consentVersion). Same two-part rule as above; its text
+// did not change on 2026-10-16. "2026-10-16" is accepted because Preview
+// briefly recorded it (stamped with the privacy version that day); such
+// records are left as they are.
 export const CURRENT_IDENTITY_CONSENT_VERSION = "2026-10-14";
+export const ACCEPTED_IDENTITY_CONSENT_VERSIONS: readonly string[] = ["2026-10-14", "2026-10-16"];
 
-// Consents on file that still count. New consents are recorded with the
-// CURRENT_* version; "2026-10-16" was recorded only on Preview, by a consent
-// screen that briefly asked for the same consent plus the 이용 통계 notice
-// (later turned into an announced policy change). It stays valid so no one
-// who gave it is sent back, and their record is left as it is.
-const PREVIEW_ONLY_CONSENT_VERSION = "2026-10-16";
-export const ACCEPTED_PRIVACY_VERSIONS: readonly string[] = [CURRENT_PRIVACY_VERSION, PREVIEW_ONLY_CONSENT_VERSION];
-export const ACCEPTED_IDENTITY_CONSENT_VERSIONS: readonly string[] = [CURRENT_IDENTITY_CONSENT_VERSION, PREVIEW_ONLY_CONSENT_VERSION];
-export const isAcceptedPrivacyVersion = (version: string | null) => version !== null && ACCEPTED_PRIVACY_VERSIONS.includes(version);
-export const isAcceptedIdentityConsentVersion = (version: string | null) => version !== null && ACCEPTED_IDENTITY_CONSENT_VERSIONS.includes(version);
+export const isAcceptedPrivacyVersion = (version: string | null, accepted: readonly string[] = ACCEPTED_PRIVACY_VERSIONS) =>
+  version !== null && accepted.includes(version);
+export const isAcceptedIdentityConsentVersion = (version: string | null, accepted: readonly string[] = ACCEPTED_IDENTITY_CONSENT_VERSIONS) =>
+  version !== null && accepted.includes(version);
