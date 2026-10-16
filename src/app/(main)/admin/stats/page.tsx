@@ -8,6 +8,7 @@ import { kstDay } from "@/lib/metrics/record";
 import {
   apiCoverage,
   bucketSpan,
+  EARLIEST_DAY,
   isInternalRoute,
   KEYWORD_BASIS_CHANGED_AT,
   loadReport,
@@ -31,6 +32,8 @@ import { StatsExportPanel } from "@/components/admin/StatsExportPanel";
 import { StatsPeriodPicker } from "@/components/admin/StatsPeriodPicker";
 import { UserStatsView } from "@/components/admin/UserStatsView";
 import { loadUserReport } from "@/lib/metrics/userReport";
+import { HourlyStatsView, MAX_COMPARE_DAYS } from "@/components/admin/HourlyStatsView";
+import { daysFrom, isHourlyMetric, loadHourlyCells, type HourlyMetric } from "@/lib/metrics/hourly";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
 import { AlertIcon, ChevronRightIcon, InfoIcon } from "@/components/icons";
 
@@ -143,7 +146,7 @@ function SeriesTable({ report, columns }: { report: Report; columns: { label: st
 export default async function AdminStatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string }>;
+  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[] }>;
 }) {
   await requireAdmin();
   const params = await searchParams;
@@ -154,7 +157,7 @@ export default async function AdminStatsPage({
   const period = "error" in asked ? (resolvePeriod({ preset: "month" }, today) as Exclude<typeof asked, { error: string }>) : asked;
   const periodError = "error" in asked ? asked.error : null;
   const unit = period.range.unit;
-  const tab: "ops" | "users" = params.tab === "users" ? "users" : "ops";
+  const tab: "ops" | "users" | "hourly" = params.tab === "users" ? "users" : params.tab === "hourly" ? "hourly" : "ops";
   const periodQuery =
     period.selection.preset === "custom"
       ? `period=custom&from=${period.selection.from}&to=${period.selection.to}`
@@ -189,6 +192,9 @@ export default async function AdminStatsPage({
         <Link href={`/admin/stats?tab=users&${periodQuery}`} aria-current={tab === "users" ? "page" : undefined} className={tabClass(tab === "users")}>
           사용자 통계
         </Link>
+        <Link href={`/admin/stats?tab=hourly&${periodQuery}`} aria-current={tab === "hourly" ? "page" : undefined} className={tabClass(tab === "hourly")}>
+          시간대 분석
+        </Link>
       </nav>
       <div className="flex flex-col gap-2">
         <StatsPeriodPicker
@@ -216,6 +222,38 @@ export default async function AdminStatsPage({
       </details>
     </div>
   );
+
+  if (tab === "hourly") {
+    const metric: HourlyMetric = isHourlyMetric(params.m) ? params.m : "pv";
+    const days = daysFrom(period.range.from, period.range.until);
+    // 비교할 날짜 (?d=YYYY-MM-DD, up to 4): real KST days up to today, in
+    // order; none chosen -> the period's last 3 days
+    const realDay = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && new Date(Date.parse(`${d}T00:00:00Z`) || 0).toISOString().slice(0, 10) === d;
+    const asked = [params.d ?? []].flat().filter((d) => realDay(d) && d >= EARLIEST_DAY && d <= today);
+    const chosen = [...new Set(asked)].sort().slice(0, MAX_COMPARE_DAYS);
+    const compareDays = chosen.length ? chosen : days.slice(-3);
+    const [rangeCells, compareCells] = await Promise.all([loadHourlyCells(days), loadHourlyCells(compareDays)]);
+    const periodParams = new URLSearchParams(periodQuery);
+    const hrefWith = ({ m = metric, d = chosen }: { m?: HourlyMetric; d?: string[] }) => {
+      const q = new URLSearchParams({ tab: "hourly", ...Object.fromEntries(periodParams), m });
+      for (const day of d) q.append("d", day);
+      return `/admin/stats?${q.toString()}`;
+    };
+    return (
+      <div className="flex flex-col gap-6">
+        {header}
+        <HourlyStatsView
+          range={rangeCells}
+          compare={compareCells}
+          metric={metric}
+          compareDays={chosen}
+          hrefWith={hrefWith}
+          hiddenFields={[{ name: "tab", value: "hourly" }, ...[...periodParams].map(([name, value]) => ({ name, value })), { name: "m", value: metric }]}
+          today={today}
+        />
+      </div>
+    );
+  }
 
   if (tab === "users") {
     const users = await loadUserReport(period.range);

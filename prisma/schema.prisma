@@ -352,6 +352,15 @@ model User {
   // Deliberately NOT a "currently online" signal -- see admin/users.ts's
   // getUserDetailForAdmin for why presence isn't derived from this alone.
   lastLoginAt               DateTime? @map("last_login_at")
+  // 최근 활동 감지 시각: the latest time this member was seen using the site
+  // while signed in (a screen shown, or input on a visible screen), written
+  // by metrics/record.ts recordMemberActivity at most every
+  // LAST_ACTIVE_INTERVAL_MS (plus once on each new KST hour) -- so the real
+  // last activity can be up to that interval later. One value per member,
+  // overwritten, never a history; never a log-out or leave time. Null =
+  // nothing recorded yet (never backfilled or guessed). Written with raw SQL
+  // so updatedAt is not bumped; cleared at 회원탈퇴.
+  lastActiveAt              DateTime? @map("last_active_at")
   // Phase 8: NULL means this user has never agreed to the service's
   // privacy notice; a timestamp means they agreed at that exact instant.
   // Deliberately NOT a boolean -- a single flag would lose *when* consent

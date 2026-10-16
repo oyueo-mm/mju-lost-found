@@ -34,9 +34,11 @@ const foundPost = { count: vi.fn() };
 const comment = { count: vi.fn(), findMany: vi.fn() };
 const report = { count: vi.fn() };
 const activityDay = { findFirst: vi.fn() };
+// 최근 활동 감지 시각: this environment's recording start (marker row)
+const metricDaily = { findFirst: vi.fn() };
 
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { user, notification, moderationAction, adminActionProposal, adminActionAuditLog, lostPost, foundPost, comment, report, activityDay, $transaction },
+  prisma: { user, notification, moderationAction, adminActionProposal, adminActionAuditLog, lostPost, foundPost, comment, report, activityDay, metricDaily, $transaction },
 }));
 // isAdmin() is a one-line `return user.isAdmin` in moderation/service.ts,
 // but that module also pulls in report/service.ts and report/targets.ts --
@@ -87,6 +89,7 @@ const baseRow = {
 beforeEach(() => {
   vi.clearAllMocks();
   activityDay.findFirst.mockReset().mockResolvedValue(null);
+  metricDaily.findFirst.mockReset().mockResolvedValue(null);
 });
 
 describe("listUsersForAdmin", () => {
@@ -587,6 +590,33 @@ describe("updateUserByAdmin", () => {
         where: { actor: activityActor(5), day: { gte: new Date("2026-10-15T00:00:00Z"), lte: new Date("2026-10-17T00:00:00Z") } },
         orderBy: { day: "desc" }, select: { day: true },
       });
+    });
+
+    it("returns the stored detected-activity time as is, never updatedAt or the login time, with the recording start", async () => {
+      user.findUnique.mockResolvedValueOnce({
+        ...baseRow,
+        lastLoginAt: new Date("2026-10-01T00:00:00Z"),
+        updatedAt: new Date("2026-10-17T03:00:00Z"),
+        lastActiveAt: new Date("2026-10-17T02:04:12.345Z"),
+      });
+      metricDaily.findFirst.mockResolvedValueOnce({ day: new Date("2026-10-17T00:00:00Z"), value: 9 * 60 + 5 });
+      const result = await getUserDetailForAdmin(admin as never, 5);
+      expect(result.kind).toBe("ok");
+      if (result.kind !== "ok") return;
+      expect(result.data.lastActiveAt).toEqual(new Date("2026-10-17T02:04:12.345Z"));
+      expect(result.data.lastActiveSince).toBe("2026-10-17 09:05");
+      expect(metricDaily.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { metric: "meta.since.traffic_hourly" } }));
+    });
+
+    it("reports no detected activity (null) rather than estimating one, and hides it for a withdrawn account", async () => {
+      user.findUnique.mockResolvedValueOnce({ ...baseRow, lastLoginAt: new Date("2026-10-17T00:00:00Z"), updatedAt: new Date("2026-10-17T01:00:00Z"), lastActiveAt: null });
+      const none = await getUserDetailForAdmin(admin as never, 5);
+      expect(none.kind === "ok" && none.data.lastActiveAt).toBeNull();
+      expect(none.kind === "ok" && none.data.lastActiveSince).toBeNull();
+
+      user.findUnique.mockResolvedValueOnce({ ...baseRow, withdrawnAt: new Date("2026-10-16T12:00:00Z"), lastActiveAt: new Date("2026-10-16T11:00:00Z") });
+      const withdrawn = await getUserDetailForAdmin(admin as never, 5);
+      expect(withdrawn.kind === "ok" && withdrawn.data.lastActiveAt).toBeNull();
     });
 
     it("does not infer activity from a login when no day was measured", async () => {

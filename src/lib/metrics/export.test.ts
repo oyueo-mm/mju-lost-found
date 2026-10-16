@@ -217,6 +217,22 @@ describe("운영 통계 내보내기", () => {
     expect(sheet.rows.flat().some((c) => c && typeof c === "object" && c.v === "주의: 테스트 데이터")).toBe(true);
   });
 
+  it("adds 날짜·시간대별 only when hourly cells are given, as a sheet and a CSV", async () => {
+    const { buildCells } = await import("./hourly");
+    const none = { pvMember: null, pvAnon: null, session: null, active: null, login: null };
+    const cells = buildCells(
+      ["2026-10-16"],
+      [{ day: "2026-10-16", metric: "visit.anon.hour.10", n: 7 }],
+      { ...none, pvMember: { day: "2026-10-15", minute: 0 }, pvAnon: { day: "2026-10-15", minute: 0 } },
+      new Date("2026-10-17T05:30:00Z"),
+    );
+    expect(datasetsOf(fakeReport()).some((d) => d.key === "hourly")).toBe(false);
+    expect(datasetsOf(fakeReport(), undefined, cells).at(-1)?.name).toBe("날짜·시간대별");
+    const csv = toCsv(fakeReport(), "hourly", undefined, undefined, null, cells);
+    expect(csv).toContain("2026-10-16,10시,7,0,7,,,,"); // 세션·활성·로그인: 미측정 (blank)
+    expect(csv).toContain("# 주의: 시간대별 활성 회원은");
+  });
+
   it("states the required caveats in every file", () => {
     const text = CAVEATS.join("\n");
     expect(text).toContain("고유 방문자 수가 아닙니다");

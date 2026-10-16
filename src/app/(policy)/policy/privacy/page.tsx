@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { PRIVACY_POLICY_EFFECTIVE_DATE } from "@/lib/policy/privacyPolicy";
 import { PRIVACY_CONTACT_TEAM, SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
+import { LAST_ACTIVE_INTERVAL_MINUTES } from "@/lib/metrics/activityTime";
 
 type Section = { title: string; body: React.ReactNode };
 
@@ -36,7 +37,7 @@ const SECTIONS: Section[] = [
         </li>
         <li>
           <strong className="font-medium text-foreground">운영·보안 과정에서 생성되는 기록</strong>: 조회·알림 등 이용 내역,
-          관리자 조치·열람 기록, 회원별 이용 일자, 접속 정보·쿠키. 자동 수집 정보는 5항에서 안내합니다.
+          관리자 조치·열람 기록, 회원별 이용 일자·최근 이용 시각, 접속 정보·쿠키. 자동 수집 정보는 5항에서 안내합니다.
         </li>
       </ul>
     ),
@@ -74,7 +75,7 @@ const SECTIONS: Section[] = [
           계정 비활성화는 데이터를 보존하는 기능으로, 같은 Google 계정으로 로그인하면 복구됩니다(알림 내역은 삭제).
         </p>
         <p className="mt-2">
-          회원탈퇴 시 계정 식별정보·이름·소속·동의 기록, 알림·조회·이용 일자 기록, 단체 구성원·외부 승인 정보, 개선 제안,
+          회원탈퇴 시 계정 식별정보·이름·소속·동의 기록, 알림·조회·이용 일자 기록, 최근 이용 시각, 단체 구성원·외부 승인 정보, 개선 제안,
           작성한 게시글·사진·댓글을 운영 DB·파일 저장소에서 즉시 삭제합니다. 다른 이용자의 댓글·답글과 연결된 글은 내용을 지운 상태로 남고,
           계정은 식별정보를 제거한 &lsquo;탈퇴한 사용자&rsquo;로 남습니다. 채팅 사진도 삭제합니다.
           다만 아래 표의 신고·분쟁 관련 정보는 예외로 보관합니다.
@@ -182,7 +183,12 @@ const SECTIONS: Section[] = [
             다만 관리자 사용자 상세 보기에서는 보관 중인 기록의 최근 이용일(날짜만)을 확인할 수 있습니다.
           </li>
           <li>
-            <strong className="font-medium text-foreground">회원과 연결되지 않는 집계</strong>: 날짜·시간대별 로그인 횟수·조회 수와
+            <strong className="font-medium text-foreground">최근 이용 시각</strong>: 로그인 상태로 화면을 보거나 조작한 가장 최근
+            시각을 회원 계정에 하나만 저장합니다(최대 {LAST_ACTIVE_INTERVAL_MINUTES}분 간격으로 덮어쓰며 이력은 남기지 않음). 회원 관리와 부정 이용
+            대응을 위해 관리자 사용자 상세 보기에만 표시하며, 회원탈퇴 시 삭제합니다.
+          </li>
+          <li>
+            <strong className="font-medium text-foreground">회원과 연결되지 않는 집계</strong>: 날짜·시간대별 로그인 횟수·조회 수·이용 회원 수와
             위 방문 통계 합계에는 회원 정보가 없으며, 보관 기한 없이 탈퇴 후에도 남습니다.
           </li>
         </ul>

@@ -8,6 +8,7 @@ import { AuthorLink } from "@/components/user/AuthorLink";
 import { MyCommentList } from "@/components/comment/MyCommentList";
 import { ShieldIcon } from "@/components/icons";
 import { COLLECTION_SINCE } from "@/lib/metrics/report";
+import { LAST_ACTIVE_INTERVAL_MINUTES } from "@/lib/metrics/activityTime";
 import { ACTIVITY_RETENTION_DAYS } from "@/lib/retention/policy";
 
 // Vercel's Node runtime defaults to UTC (no TZ env var set), so formatting
@@ -18,6 +19,12 @@ function formatDateTime(date: Date | null): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(
     date,
   );
+}
+
+// 접속 정보: exact KST time to the second ("YYYY-MM-DD HH:mm:ss"), the
+// way the times are stored -- no locale formatting, no rounding.
+function formatKstSeconds(date: Date): string {
+  return new Date(date.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 19).replace("T", " ");
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -66,6 +73,8 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
     googleLinked,
     lastLoginAt,
     lastActivityDay,
+    lastActiveAt,
+    lastActiveSince,
     lostPostCount,
     foundPostCount,
     commentCount,
@@ -120,17 +129,40 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
           <Field label="관리자 권한" value={user.isAdmin ? "있음" : "없음"} />
         </Section>
 
-        {/* Login time and the last recorded KST activity day are distinct;
-            neither establishes presence or an exact visit time. */}
+        {/* Three different records: the last completed Google sign-in, the
+            last detected signed-in activity (stored every few minutes), and
+            the last KST day with an activity mark. None is presence, a
+            log-out or a leave time; nothing missing is ever estimated. */}
         <Section title="접속 정보">
-          <Field label="마지막 로그인" value={formatDateTime(lastLoginAt)} />
+          <Field label="최근 로그인 시각" value={lastLoginAt ? `${formatKstSeconds(lastLoginAt)} (KST)` : "기록 없음"} />
+          <Field
+            label="최근 활동 감지 시각"
+            value={lastActiveAt ? `${formatKstSeconds(lastActiveAt)} (KST)` : lastActiveSince ? "기록 없음" : "미측정"}
+          />
           <Field label="최근 이용일" value={lastActivityDay ? `${lastActivityDay} (KST)` : "기록 없음"} />
           <div className="sm:col-span-2 text-xs leading-relaxed text-muted-foreground">
-            <dt className="sr-only">이용일 측정 기준</dt>
+            <dt className="sr-only">접속 정보 측정 기준</dt>
             <dd>
-              로그인 상태의 이용 날짜만 기록하며 정확한 방문 시각은 측정하지 않습니다.
-              {COLLECTION_SINCE.ops.replace("T", " ")}(KST) 이후 수집된 최근 {ACTIVITY_RETENTION_DAYS}일 보관 범위의 기록입니다.
-              기록이 없어도 서비스를 이용하지 않았다는 뜻은 아닙니다.
+              <ul className="flex list-disc flex-col gap-1 pl-4">
+                <li>
+                  <b className="font-medium text-foreground">최근 로그인 시각</b>: Google 로그인을 새로 마친 시각입니다. 로그인 상태는 최대 30일
+                  유지되므로, 로그인한 채로 다시 방문해도 바뀌지 않습니다.
+                </li>
+                <li>
+                  <b className="font-medium text-foreground">최근 활동 감지 시각</b>: 로그인 상태에서 화면을 열거나, 보이는 화면을 터치·클릭·스크롤·입력한
+                  것이 마지막으로 기록된 시각입니다(로그인 유지 중 재방문 포함). 서버 부하를 줄이려고 {LAST_ACTIVE_INTERVAL_MINUTES}분에 한 번(시간대가
+                  바뀌면 바로)만 갱신하므로 실제 마지막 활동은 표시 시각보다 최대 {LAST_ACTIVE_INTERVAL_MINUTES}분 늦을 수 있습니다. 로그아웃하거나
+                  사이트를 떠난 시각이 아니며, 화면을 띄워 두기만 한 시간이나 백그라운드 탭은 포함하지 않습니다.{" "}
+                  {lastActiveSince
+                    ? `${lastActiveSince}(KST)부터 기록하며, 그 전의 접속 시각은 기록하지 않아 알 수 없습니다.`
+                    : "이 환경에서는 아직 기록을 시작하지 않았습니다(미측정)."}
+                </li>
+                <li>
+                  <b className="font-medium text-foreground">최근 이용일</b>: 로그인 상태로 이용한 날짜(하루 단위) 기록입니다.{" "}
+                  {COLLECTION_SINCE.ops.replace("T", " ")}(KST) 이후 수집된 최근 {ACTIVITY_RETENTION_DAYS}일 보관 범위의 기록입니다.
+                </li>
+                <li>기록이 없어도 서비스를 이용하지 않았다는 뜻은 아닙니다. 회원탈퇴 시 최근 활동 감지 시각과 이용일 기록은 삭제됩니다.</li>
+              </ul>
             </dd>
           </div>
         </Section>

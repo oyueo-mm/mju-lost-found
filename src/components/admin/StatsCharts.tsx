@@ -556,3 +556,139 @@ export function Meter({ label, used, limit, unit }: { label: string; used: numbe
     </div>
   );
 }
+
+// Date × hour heatmap (시간대 분석): one row per KST day, 24 hour cells. A
+// real table, so every value stays readable as a number (no hover needed
+// on a phone) and screen readers get rows and columns. Shade = the cell
+// against the largest one, in five steps of --chart-1 kept light enough for
+// the number on top in both themes. 미측정 is the hatched grey band, 부분
+// 측정 a hatched cell, a measured 0 a plain grey cell with a muted 0, and
+// hours not reached yet stay empty. `extras`: summary columns after the
+// hours (e.g. 오전 / 오후 / 합계), already formatted.
+export type HeatmapCellStatus = Coverage | "future";
+const HEAT_SHADES = [12, 22, 33, 44, 55];
+
+export function HourHeatmap({
+  title,
+  unit,
+  rows,
+  extraLabels = [],
+  note,
+}: {
+  title: string;
+  unit: string;
+  rows: { label: string; values: (number | null)[]; status: HeatmapCellStatus[]; extras?: ReactNode[] }[];
+  extraLabels?: string[];
+  note?: ReactNode;
+}) {
+  const max = Math.max(0, ...rows.flatMap((r) => r.values.map((v) => v ?? 0)));
+  const statuses = new Set(rows.flatMap((r) => r.status));
+  const hasZero = rows.some((r) => r.values.some((v, h) => v === 0 && r.status[h] !== "none"));
+  const shade = (v: number) => HEAT_SHADES[Math.min(HEAT_SHADES.length - 1, Math.max(0, Math.ceil((v / max) * HEAT_SHADES.length) - 1))];
+  const cellText = (v: number | null, s: HeatmapCellStatus) =>
+    s === "future" ? "아직 지나지 않음" : s === "none" || v === null ? "미측정" : `${fmt(v)}${unit}${s === "partial" ? " (부분 측정)" : ""}`;
+  return (
+    <figure className="flex min-w-0 flex-col gap-2">
+      <figcaption className="flex flex-col gap-1">
+        <span className="text-xs font-semibold text-foreground">
+          {title}
+          <span className="ml-1 font-normal text-muted-foreground">(단위: {unit}, 한국 시간)</span>
+        </span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1">
+            적음
+            {HEAT_SHADES.map((p) => (
+              <span key={p} className="inline-block size-2.5 rounded-[3px]" style={{ backgroundColor: `color-mix(in srgb, var(--chart-1) ${p}%, transparent)` }} aria-hidden />
+            ))}
+            많음{max > 0 && ` (최대 ${fmt(max)}${unit})`}
+          </span>
+          {hasZero && (
+            <span className="flex items-center gap-1">
+              <Swatch className="bg-muted" />
+              {`0${unit}`}
+            </span>
+          )}
+          {statuses.has("partial") && (
+            <span className="flex items-center gap-1">
+              <Swatch className="chart-hatch-on bg-chart-1/40" />
+              부분 측정
+            </span>
+          )}
+          {statuses.has("none") && (
+            <span className="flex items-center gap-1">
+              <Swatch className="chart-hatch border border-border bg-muted" />
+              미측정(수집 전)
+            </span>
+          )}
+          {statuses.has("future") && (
+            <span className="flex items-center gap-1">
+              <Swatch className="border border-dashed border-border" />
+              아직 지나지 않음
+            </span>
+          )}
+        </div>
+      </figcaption>
+      {/* relative: keeps the cells' sr-only (absolute) text inside the scroll box */}
+      <div className="relative overflow-x-auto rounded-lg border border-border">
+        <table className="w-full min-w-[46rem] border-separate border-spacing-0.5 text-center text-[10px] leading-none tabular-nums">
+          <caption className="sr-only">{`${title} (단위: ${unit}). 행은 날짜, 열은 0시부터 23시까지의 한국 시간`}</caption>
+          <thead className="text-muted-foreground">
+            <tr>
+              <th scope="col" className="sticky left-0 z-10 bg-card px-1.5 py-1 text-left font-medium">
+                날짜
+              </th>
+              {Array.from({ length: 24 }, (_, h) => (
+                <th key={h} scope="col" className="py-1 font-medium">
+                  <span className="sr-only">{h}시</span>
+                  <span aria-hidden>{h}</span>
+                </th>
+              ))}
+              {extraLabels.map((l) => (
+                <th key={l} scope="col" className="px-1 py-1 font-medium whitespace-nowrap">
+                  {l}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.label}>
+                <th scope="row" className="sticky left-0 z-10 bg-card px-1.5 text-left font-medium whitespace-nowrap text-foreground">
+                  {r.label}
+                </th>
+                {r.values.map((v, h) => {
+                  const s = r.status[h];
+                  const label = `${r.label} ${h}시: ${cellText(v, s)}`;
+                  if (s === "future") return <td key={h} title={label} className="h-7 min-w-6 rounded-[3px] border border-dashed border-border/70" />;
+                  if (s === "none" || v === null)
+                    return (
+                      <td key={h} title={label} className="chart-hatch h-7 min-w-6 rounded-[3px] bg-muted/60">
+                        <span className="sr-only">미측정</span>
+                      </td>
+                    );
+                  return (
+                    <td
+                      key={h}
+                      title={label}
+                      className={`relative h-7 min-w-6 rounded-[3px] ${v === 0 ? "bg-muted text-muted-foreground/70" : "font-medium text-foreground"} ${s === "partial" ? "chart-hatch-on" : ""}`}
+                      style={v > 0 ? { backgroundColor: `color-mix(in srgb, var(--chart-1) ${shade(v)}%, transparent)` } : undefined}
+                    >
+                      {formatTick(v, 1)}
+                      {s === "partial" && <span className="sr-only"> (부분 측정)</span>}
+                    </td>
+                  );
+                })}
+                {(r.extras ?? []).map((x, k) => (
+                  <td key={k} className="px-1 font-semibold whitespace-nowrap text-foreground">
+                    {x}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {note && <div className="text-[11px] leading-relaxed text-muted-foreground">{note}</div>}
+    </figure>
+  );
+}

@@ -16,13 +16,14 @@ import {
 } from "./report";
 import { describeRoute } from "./apiRoutes";
 import { NEW_MEMBER_DAYS, RETURN_WINDOW_DAYS, windowNote, type UserReport } from "./userReport";
+import { byHour, HOURLY_METRICS, type CellStatus, type HourlyCells } from "./hourly";
 import { DURATION_BUCKETS, DURATION_LABELS, PAGES_BUCKETS, PAGES_LABELS } from "./flow";
 import { DEVICE_KINDS, DEVICE_LABELS, PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "./visits";
 import { buildCsv, buildXlsx, columnName, type Cell, type Sheet } from "./xlsx";
 
 // 운영 통계 내보내기: the same Report the dashboard shows, laid out as the
-// eight sheets of the Excel file or one of eight CSV files (the last one,
-// 사용자 통계, from a UserReport of the same period). Aggregates only --
+// sheets of the Excel file or one CSV file each (사용자 통계 from a
+// UserReport of the same period, 날짜·시간대별 from its HourlyCells). Aggregates only --
 // no names, e-mails, member ids, IPs, search text or audit logs exist in a
 // Report to begin with.
 
@@ -60,8 +61,60 @@ function coverageNote(coverage: Coverage, key: MetricKey | VisitSeriesKey): stri
   return coverage === "none" ? `미측정(${sinceLabel(source)}부터 집계)` : `${sinceLabel(source)} 이후만 집계(이전은 미측정)`;
 }
 
-export function datasetsOf(report: Report, users?: UserReport): Dataset[] {
-  return [...opsDatasets(report), ...(users ? [userDataset(users)] : [])];
+export function datasetsOf(report: Report, users?: UserReport, hourly?: HourlyCells): Dataset[] {
+  return [...opsDatasets(report), ...(users ? [userDataset(users)] : []), ...(hourly ? [hourlyDataset(hourly)] : [])];
+}
+
+// 시간대 분석: one row per KST day and hour (hours not reached yet left
+// out), then the 0-23시 totals. null = 미측정 (that counter had not begun).
+const HOURLY_COLUMNS = HOURLY_METRICS.map((m) => m.key);
+const statusNote = (statuses: CellStatus[]) => (statuses.includes("partial") ? "부분 측정 포함" : "");
+
+export function hourlyDataset(h: HourlyCells): Dataset {
+  const rows: Value[][] = [];
+  h.days.forEach((day, d) => {
+    for (let hour = 0; hour < 24; hour++) {
+      if (h.metrics.pv.status[d][hour] === "future") continue;
+      rows.push([
+        day,
+        `${hour}시`,
+        ...HOURLY_COLUMNS.map((k) => h.metrics[k].values[d][hour]),
+        statusNote(HOURLY_COLUMNS.map((k) => h.metrics[k].status[d][hour])),
+      ]);
+    }
+  });
+  const profiles = HOURLY_COLUMNS.map((k) => byHour(h.metrics[k]));
+  const columns = [
+    ...HOURLY_METRICS.map((m) => ({ label: `${m.label}(${m.unit})`, kind: "int" as const })),
+    { label: "측정 상태", kind: "text" as const },
+  ];
+  return {
+    key: "hourly",
+    name: "날짜·시간대별",
+    widths: [12, 8, 14, 16, 16, 14, 16, 12, 14],
+    tables: [
+      {
+        title: "날짜·시간대별 이용량 (한국 시간)",
+        columns: [{ label: "날짜", kind: "text" }, { label: "시간", kind: "text" }, ...columns],
+        rows,
+      },
+      {
+        title: "시간대별 합계 (기간 안의 날짜를 같은 시간끼리 더함)",
+        columns: [{ label: "시간", kind: "text" }, ...columns],
+        rows: Array.from({ length: 24 }, (_, hour) => [
+          `${hour}시`,
+          ...profiles.map((p) => p.values[hour]),
+          statusNote(profiles.map((p) => p.status[hour])),
+        ]),
+      },
+    ],
+    notes: [
+      "페이지뷰는 화면이 열린 횟수(볼 때의 로그인 여부로 구분, 전체 = 회원 + 비로그인), 방문 세션은 그 시간에 시작된 방문 수(사람 수 아님), 로그인 완료는 Google 로그인을 새로 마친 횟수입니다. 관리자의 이용은 포함하지 않습니다.",
+      "시간대별 활성 회원은 그 시간에 로그인 상태 활동이 감지된 서로 다른 회원 수입니다. 여러 시간·날짜를 더한 값(시간대별 합계 표)은 사람 수가 아니라 '회원·시간' 수입니다.",
+      `수집 시작(이 환경): ${HOURLY_METRICS.filter((m) => m.key !== "pv").map((m) => `${m.short} ${h.metrics[m.key].since ?? "수집 전"}`).join(", ")}. 그 전은 미측정(0이 아님)이며 추정하지 않습니다. 수집을 시작한 시간과 일부 지표만 측정된 시간은 '부분 측정 포함'으로 표시합니다.`,
+      "회원별 접속 기록은 포함하지 않습니다(시간대별 합계만). 모든 날짜와 시각은 한국 시간(KST) 기준입니다.",
+    ],
+  };
 }
 
 function opsDatasets(report: Report): Dataset[] {
@@ -628,14 +681,14 @@ export function toSheets(report: Report, label?: string, datasets = datasetsOf(r
   });
 }
 
-export function toXlsx(report: Report, label?: string, users?: UserReport, notice?: string | null): Buffer {
-  return buildXlsx(toSheets(report, label, datasetsOf(report, users), notice), { title: "MJU Find 운영 통계", createdAt: new Date() });
+export function toXlsx(report: Report, label?: string, users?: UserReport, notice?: string | null, hourly?: HourlyCells): Buffer {
+  return buildXlsx(toSheets(report, label, datasetsOf(report, users, hourly), notice), { title: "MJU Find 운영 통계", createdAt: new Date() });
 }
 
 // One CSV per data kind: "#" lines (service, period, time, caveats) on top
 // -- skipped by most tools with a comment option -- then plain tables.
-export function toCsv(report: Report, key: DatasetKey, label?: string, users?: UserReport, notice?: string | null): string {
-  const ds = datasetsOf(report, users).find((d) => d.key === key);
+export function toCsv(report: Report, key: DatasetKey, label?: string, users?: UserReport, notice?: string | null, hourly?: HourlyCells): string {
+  const ds = datasetsOf(report, users, hourly).find((d) => d.key === key);
   if (!ds) throw new Error(`no data for ${key}`);
   // "#" lines are written as they are (never quoted), so a reader's comment
   // option skips each one whole even when it holds a comma.

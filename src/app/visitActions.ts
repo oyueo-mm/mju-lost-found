@@ -28,7 +28,8 @@ import { deviceOf, isBotUserAgent, isPageKind, isRefSource, MAX_EVENTS_PER_CALL,
 //                               added to them
 //   start.hour.<HH>, start.page.<kind>   sessions by KST start hour / first
 //                               screen (counted with session.<aud>)
-//   member.hour.<HH>            signed-in members' page views by KST hour
+//   member.hour.<HH>, anon.hour.<HH>   page views by KST hour, signed in /
+//                               signed out (anon: from 시간대 분석's release)
 //   flow.*                      방문 시간·이탈 (lib/metrics/flow.ts): each
 //                               session's latest end screen, duration,
 //                               page count and end hour, moved between
@@ -115,9 +116,10 @@ export async function recordVisitsAction(
       addDailyCount(`visit.pv.${audience}`);
       addDailyCount(`visit.page.${event.kind}.${audience}`);
       addDailyCount(`visit.device.${device}.pv`);
-      // 사용자 통계: signed-in members' page views by KST hour, judged at
-      // each view (a visit that signs in midway counts from that point on)
-      if (audience === "member") addDailyCount(`visit.member.hour.${String(kstNow.getUTCHours()).padStart(2, "0")}`);
+      // 사용자 통계 / 시간대 분석: page views by KST hour and login state,
+      // judged at each view (a visit that signs in midway counts from that
+      // point on); member + anon = all page views of that hour
+      addDailyCount(`visit.${audience}.hour.${String(kstNow.getUTCHours()).padStart(2, "0")}`);
       if (event.sessionStart !== true) continue;
       addDailyCount(`visit.session.${audience}`);
       addDailyCount(`visit.device.${device}.session`);

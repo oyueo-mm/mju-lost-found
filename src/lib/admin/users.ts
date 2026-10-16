@@ -10,7 +10,7 @@ import { isAdmin } from "@/lib/moderation/service";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { UUID_PATTERN } from "@/lib/user/service";
 import { listCommentsByUser, type MyCommentDTO } from "@/lib/comment/service";
-import { activityActor, kstDay } from "@/lib/metrics/record";
+import { activityActor, kstDay, TRAFFIC_HOURLY_SINCE_METRIC } from "@/lib/metrics/record";
 import { activityRetainedFrom, COLLECTION_SINCE } from "@/lib/metrics/report";
 import { createAdminActionProposal, type AdminActionProposalDTO } from "./proposals";
 import type { AdminUserAction, AdminActionProposalTypeValue } from "./schema";
@@ -99,18 +99,21 @@ export type AdminUserDetailDTO = {
   googleLinked: boolean;
   // Phase P-1: real "last completed sign-in" (see User.lastLoginAt's own
   // schema comment) -- null for a user who predates this column. Never a
-  // computed/derived "currently online" value -- see this file's own
-  // comment on why that's deliberately NOT shown: a valid-but-idle session
-  // would falsely read as online, and this app's JWT sessions carry no
-  // server-side presence/heartbeat signal to distinguish the two (see
-  // auth/auth.ts's own comment on the JWT strategy). Implementing real
-  // presence would need either a heartbeat endpoint hit on every page view
-  // or a Realtime presence channel outside chat's existing per-room one --
-  // both a bigger change than this phase's "최소 변경" scope, so this phase
-  // keeps lastLoginAt separate from the recorded activity day below.
+  // computed/derived "currently online" value: a valid-but-idle session
+  // would falsely read as online. Most visits reuse a 30-day session and
+  // never sign in again, so the detected activity time below is the one
+  // that follows actual use -- and it, too, is not presence.
   lastLoginAt: Date | null;
   // KST calendar day from existing ActivityDay marks, never a visit timestamp.
   lastActivityDay: string | null;
+  // 최근 활동 감지 시각 (User.lastActiveAt): the latest detected signed-in
+  // activity, stored at most every few minutes (metrics/activityTime.ts) --
+  // never a log-out / leave time, never User.updatedAt (which any profile
+  // change bumps). Null when nothing was recorded (or the account is
+  // withdrawn); `lastActiveSince` is when this environment began recording
+  // it (KST "YYYY-MM-DD HH:mm"), null before the first record.
+  lastActiveAt: Date | null;
+  lastActiveSince: string | null;
   lostPostCount: number;
   foundPostCount: number;
   commentCount: number;
@@ -132,6 +135,8 @@ export type AdminUserDetailDTO = {
   reportsAgainstCount: number;
 };
 
+const hhmm = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+
 export async function getUserDetailForAdmin(
   admin: User,
   targetUserId: number,
@@ -146,7 +151,7 @@ export async function getUserDetailForAdmin(
 
   const today = kstDay();
   const activityFrom = [activityRetainedFrom(today), COLLECTION_SINCE.ops.slice(0, 10)].sort().at(-1)!;
-  const [lostPostCount, foundPostCount, commentCount, reportsFiledCount, reportsAgainstCount, comments, activity] =
+  const [lostPostCount, foundPostCount, commentCount, reportsFiledCount, reportsAgainstCount, comments, activity, since] =
     await Promise.all([
       prisma.lostPost.count({ where: { userId: targetUserId } }),
       prisma.foundPost.count({ where: { userId: targetUserId } }),
@@ -164,6 +169,10 @@ export async function getUserDetailForAdmin(
         orderBy: { day: "desc" },
         select: { day: true },
       }),
+      // when this environment began recording lastActiveAt (record.ts marker)
+      prisma.metricDaily
+        .findFirst({ where: { metric: TRAFFIC_HOURLY_SINCE_METRIC }, orderBy: { day: "asc" }, select: { day: true, value: true } })
+        .catch(() => null),
     ]);
 
   return {
@@ -174,6 +183,8 @@ export async function getUserDetailForAdmin(
       googleLinked: row.googleId !== null,
       lastLoginAt: row.lastLoginAt,
       lastActivityDay: activity?.day.toISOString().slice(0, 10) ?? null,
+      lastActiveAt: row.withdrawnAt ? null : row.lastActiveAt,
+      lastActiveSince: since ? `${since.day.toISOString().slice(0, 10)} ${hhmm(since.value)}` : null,
       lostPostCount,
       foundPostCount,
       commentCount,

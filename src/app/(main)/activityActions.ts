@@ -1,13 +1,15 @@
 "use server";
 
 import { getCurrentUser } from "@/lib/auth/session";
-import { recordActiveDay } from "@/lib/metrics/record";
+import { recordMemberActivity } from "@/lib/metrics/record";
 
-// 운영 통계 활성 이용자: marks today (KST) as an active day for the signed-in
-// member -- an HMAC of the id, one row per member per day (see
-// lib/metrics/record.ts). A server action, not a new API route: the Hobby
-// plan's function cap is already used up (see next.config.ts).
-export async function markActiveTodayAction(): Promise<void> {
+// 최근 활동 감지 (components/layout/ActivityBeacon): the signed-in member was
+// active just now. recordMemberActivity decides from the row this request
+// read whether anything is written (at most every few minutes and once per
+// new KST hour), so calling this often costs a read, not a write. A server
+// action, not a new API route: the Hobby plan's function cap is already
+// used up (see next.config.ts).
+export async function markActiveAction(): Promise<void> {
   const user = await getCurrentUser();
-  if (user) await recordActiveDay(user.id);
+  if (user) await recordMemberActivity(user);
 }

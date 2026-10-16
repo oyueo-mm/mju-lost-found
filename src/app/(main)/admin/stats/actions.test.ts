@@ -8,6 +8,8 @@ vi.mock("@/lib/metrics/record", () => ({ kstDay: () => "2026-10-16" }));
 vi.mock("@/lib/metrics/report", async (importOriginal) => ({ ...(await importOriginal<object>()), loadReport }));
 const loadUserReport = vi.fn(async (range: unknown) => ({ users: true, range }));
 vi.mock("@/lib/metrics/userReport", async (importOriginal) => ({ ...(await importOriginal<object>()), loadUserReport }));
+const loadHourlyCells = vi.fn(async (days: string[]) => ({ hourly: true, days }));
+vi.mock("@/lib/metrics/hourly", async (importOriginal) => ({ ...(await importOriginal<object>()), loadHourlyCells }));
 const toXlsx = vi.fn(() => Buffer.from("xlsx"));
 const toCsv = vi.fn(() => "csv");
 vi.mock("@/lib/metrics/export", async (importOriginal) => ({ ...(await importOriginal<object>()), toXlsx, toCsv }));
@@ -30,12 +32,27 @@ describe("운영 통계 내보내기 action", () => {
     const xlsx = await exportStatsAction({ format: "xlsx", preset: "week" });
     expect(loadReport).toHaveBeenLastCalledWith({ from: "2026-10-12", until: "2026-10-17", unit: "day" });
     expect(xlsx).toMatchObject({ ok: true, filename: "mju-find-stats_20261012-20261016.xlsx", base64: Buffer.from("xlsx").toString("base64") });
-    expect(toXlsx).toHaveBeenLastCalledWith(expect.anything(), "이번 주 (2026-10-12 ~ 2026-10-16)", expect.objectContaining({ users: true }), expect.stringContaining("실제 이용자 통계가 아닙니다"));
+    expect(toXlsx).toHaveBeenLastCalledWith(
+      expect.anything(),
+      "이번 주 (2026-10-12 ~ 2026-10-16)",
+      expect.objectContaining({ users: true }),
+      expect.stringContaining("실제 이용자 통계가 아닙니다"),
+      expect.objectContaining({ hourly: true }),
+    );
     expect(loadUserReport).toHaveBeenLastCalledWith({ from: "2026-10-12", until: "2026-10-17", unit: "day" });
+    // 날짜·시간대별: every KST day of the same period
+    expect(loadHourlyCells).toHaveBeenLastCalledWith(["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16"]);
 
     await exportStatsAction({ format: "csv", preset: "year", dataset: "visits" });
     expect(loadReport).toHaveBeenLastCalledWith({ from: "2026-01-01", until: "2026-10-17", unit: "month" });
-    expect(toCsv).toHaveBeenLastCalledWith(expect.anything(), "visits", "올해 (2026-01-01 ~ 2026-10-16)", expect.objectContaining({ users: true }), expect.stringContaining("실제 이용자 통계가 아닙니다"));
+    expect(toCsv).toHaveBeenLastCalledWith(
+      expect.anything(),
+      "visits",
+      "올해 (2026-01-01 ~ 2026-10-16)",
+      expect.objectContaining({ users: true }),
+      expect.stringContaining("실제 이용자 통계가 아닙니다"),
+      expect.objectContaining({ hourly: true }),
+    );
 
     const custom = await exportStatsAction({ format: "csv", preset: "custom", from: "2026-10-01", to: "2026-10-15", dataset: "server" });
     expect(loadReport).toHaveBeenLastCalledWith({ from: "2026-10-01", until: "2026-10-16", unit: "day" });

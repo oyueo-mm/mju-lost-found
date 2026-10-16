@@ -1,4 +1,4 @@
-// The kinds of data in the 운영 통계 export: the Excel file's eight sheets, or
+// The kinds of data in the 운영 통계 export: the Excel file's sheets, or
 // one CSV file each. Kept apart from export.ts so the export panel (a client
 // component) can list them without pulling in the file builders.
 export const DATASETS = [
@@ -10,6 +10,7 @@ export const DATASETS = [
   { key: "server", name: "서버 운영" },
   { key: "flow", name: "방문 시간·이탈" },
   { key: "users", name: "사용자 통계" },
+  { key: "hourly", name: "날짜·시간대별" },
 ] as const;
 export type DatasetKey = (typeof DATASETS)[number]["key"];
 

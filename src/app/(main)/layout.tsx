@@ -4,7 +4,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { DraftJanitor } from "@/components/post/DraftJanitor";
-import { ActiveDayBeacon } from "@/components/layout/ActiveDayBeacon";
+import { ActivityBeacon } from "@/components/layout/ActivityBeacon";
 import { PrivacyPolicyNotice } from "@/components/layout/PrivacyPolicyNotice";
 import { kstDay } from "@/lib/metrics/record";
 import { privacyNotice } from "@/lib/policy/privacyNotice";
@@ -107,7 +107,7 @@ export default async function MainLayout({ children }: { children: React.ReactNo
       <Header />
       {notice && <PrivacyPolicyNotice notice={notice} />}
       <DraftJanitor userId={user?.id ?? null} />
-      {user && <ActiveDayBeacon userId={user.id} />}
+      {user && <ActivityBeacon userId={user.id} />}
       {/* Phase 9: BottomNav-clearance padding (pb-20/no-pb on md+) moved
           off this <main> and onto Footer below, now that Footer -- not
           this <main> -- is the last element in the page flow that a fully

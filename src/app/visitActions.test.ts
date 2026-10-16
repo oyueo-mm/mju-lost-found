@@ -17,8 +17,8 @@ vi.mock("@/lib/metrics/record", () => ({
 const { recordVisitsAction } = await import("./visitActions");
 
 // The counters these tests compare exactly; visit.start.* (start hour, first
-// screen) are checked on their own below.
-const counted = () => Object.fromEntries([...counts].filter(([k]) => !k.startsWith("visit.start.")));
+// screen) and the page views by hour are checked on their own below.
+const counted = () => Object.fromEntries([...counts].filter(([k]) => !k.startsWith("visit.start.") && !/^visit\.(anon|member)\.hour\./.test(k)));
 
 beforeEach(() => {
   counts.clear();
@@ -109,6 +109,25 @@ describe("방문 통계 server action", () => {
     expect(await recordVisitsAction([{ kind: "home", sessionStart: false }])).toEqual({ admin: false });
     expect(Object.fromEntries([...counts].filter(([k]) => !k.startsWith("visit.member.hour.")))).toEqual({ "visit.pv.member": 1, "visit.page.home.member": 1, "visit.device.mobile.pv": 1 });
     expect([...counts.keys()].filter((k) => k.startsWith("visit.member.hour."))).toHaveLength(1); // 사용자 통계: by hour
+  });
+
+  it("counts page views by KST hour and login state at each view (member + anon = all views); admins stay out", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-10-16T05:30:00Z")); // 14:30 KST
+      await recordVisitsAction([{ kind: "home", sessionStart: true, ref: "direct" }, { kind: "lost", sessionStart: false }]);
+      audience = "member";
+      vi.setSystemTime(new Date("2026-10-16T14:59:59Z")); // 23:59 KST
+      await recordVisitsAction([{ kind: "post", sessionStart: false }]);
+      audience = "internal";
+      await recordVisitsAction([{ kind: "post", sessionStart: false }]);
+      const hourly = Object.fromEntries([...counts].filter(([k]) => /^visit\.[a-z]+\.hour\./.test(k)));
+      // (visit.start.hour.14: the session that began then -- a separate measure)
+      expect(hourly).toEqual({ "visit.anon.hour.14": 2, "visit.member.hour.23": 1, "visit.start.hour.14": 1 });
+      expect(hourly["visit.anon.hour.14"] + hourly["visit.member.hour.23"]).toBe(counts.get("visit.pv.anon")! + counts.get("visit.pv.member")!);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("caps one client at 60 events a minute, without affecting another client", async () => {

@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { after } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
+import { activityStep } from "./activityTime";
 
 // 운영 통계 recording (admin dashboard, /admin/stats). Rules:
 // - Only what the existing tables can't answer is recorded here: search
@@ -138,6 +139,11 @@ async function countByAudience(metric: string): Promise<void> {
 // and value = KST minute of the day of the earliest instance start. Never
 // a count; only the first row matters (see userReport.ts hourlySince).
 export const USER_HOURLY_SINCE_METRIC = "meta.since.user_hourly";
+// The same, for the counters added with 시간대 분석 (visit.anon.hour.<HH>,
+// active.member.hour.<HH>) and User.lastActiveAt: they began later than the
+// ones above (in Production, with the same deployment).
+export const TRAFFIC_HOURLY_SINCE_METRIC = "meta.since.traffic_hourly";
+const SINCE_MARKERS = [USER_HOURLY_SINCE_METRIC, TRAFFIC_HOURLY_SINCE_METRIC] as const;
 const instanceStartedAt = new Date();
 let hourlySinceMarked = false;
 export function kstMinuteOfDay(at: Date): number {
@@ -175,13 +181,58 @@ export async function deleteActivityMarks(db: ActivityMarks, userIds: number[]):
   return deleted;
 }
 
-export async function recordActiveDay(userId: number): Promise<void> {
-  const day = kstDay();
+// ---------- 최근 활동 감지 시각 · 시간대별 활성 회원 ----------
+// A signed-in member's activity (components/layout/ActivityBeacon: a screen
+// shown, or input on a visible screen) keeps three things, all from one
+// conditional write:
+// - User.lastActiveAt: the latest detected time, one value per member,
+//   overwritten (never a history). Written at most every
+//   LAST_ACTIVE_INTERVAL_MS (activityTime.ts), and on the first activity of
+//   each new KST hour -- so the real last activity can be up to that
+//   interval later than the stored time. Not a log-out or leave time.
+// - ActivityDay: the member's HMAC mark for a new KST day (as before).
+// - active.member.hour.<HH>: members active in that KST hour, counted
+//   once per member and hour (a plain counter, no member data; admins out).
+// The write is a compare-and-set on the value the request read, so two
+// tabs reporting at once never count the same hour twice.
+export const ACTIVE_MEMBER_HOUR_PREFIX = "active.member.hour.";
+
+export function kstHour(at: Date): number {
+  return new Date(at.getTime() + KST_OFFSET_MS).getUTCHours();
+}
+
+type ActiveMember = { id: number; isAdmin: boolean; lastActiveAt: Date | null };
+
+// Returns whether this call wrote (false: within the interval, the account
+// is deactivated / withdrawn, or another request wrote first).
+export async function recordMemberActivity(user: ActiveMember, now: Date = new Date()): Promise<boolean> {
+  const last = user.lastActiveAt ?? null;
+  const step = activityStep(last, now);
+  if (!step.write) return false;
+  const day = kstDay(now);
   try {
-    await prisma.$executeRaw`INSERT INTO "ActivityDay" ("day", "actor") VALUES (${day}::date, ${activityActor(userId)})
-      ON CONFLICT DO NOTHING`;
+    // timestamp columns hold UTC wall time: convert explicitly, never
+    // through the driver's local-time handling of a Date parameter
+    const rows = await prisma.$queryRaw<{ n: number }[]>`
+      WITH u AS (
+        UPDATE "User" SET "last_active_at" = (${now.toISOString()}::timestamptz AT TIME ZONE 'UTC')
+        WHERE "id" = ${user.id} AND "deleted_at" IS NULL AND "withdrawn_at" IS NULL
+          AND "last_active_at" IS NOT DISTINCT FROM (${last ? last.toISOString() : null}::timestamptz AT TIME ZONE 'UTC')
+        RETURNING "id"
+      ), d AS (
+        INSERT INTO "ActivityDay" ("day", "actor")
+        SELECT ${day}::date, ${activityActor(user.id)} FROM u WHERE ${step.newDay}::boolean
+        ON CONFLICT DO NOTHING
+      )
+      SELECT count(*)::int AS n FROM u`;
+    const wrote = Number(rows[0]?.n ?? 0) > 0;
+    if (wrote && step.newHour && !user.isAdmin) {
+      addDailyCount(`${ACTIVE_MEMBER_HOUR_PREFIX}${String(kstHour(now)).padStart(2, "0")}`, 1, day);
+    }
+    return wrote;
   } catch (error) {
     swallow(error);
+    return false;
   }
 }
 
@@ -292,15 +343,15 @@ export async function flushTimings(): Promise<void> {
           "errors" = "ApiMetricHourly"."errors" + EXCLUDED."errors",
           "total_ms" = "ApiMetricHourly"."total_ms" + EXCLUDED."total_ms",
           "buckets" = ARRAY(SELECT a + b FROM unnest("ApiMetricHourly"."buckets", EXCLUDED."buckets") WITH ORDINALITY AS u(a, b, i) ORDER BY i)`,
-      // 사용자 통계 시간대별 지표: this environment's collection start, once
+      // 시간대별 지표: this environment's collection start, once per marker
       ...(hourlySinceMarked
         ? []
-        : [
-            prisma.$executeRaw`INSERT INTO "MetricDaily" ("day", "metric", "value")
-              SELECT ${kstDay(instanceStartedAt)}::date, ${USER_HOURLY_SINCE_METRIC}, ${kstMinuteOfDay(instanceStartedAt)}
-              WHERE NOT EXISTS (SELECT 1 FROM "MetricDaily" WHERE "metric" = ${USER_HOURLY_SINCE_METRIC})
+        : SINCE_MARKERS.map(
+            (marker) => prisma.$executeRaw`INSERT INTO "MetricDaily" ("day", "metric", "value")
+              SELECT ${kstDay(instanceStartedAt)}::date, ${marker}, ${kstMinuteOfDay(instanceStartedAt)}
+              WHERE NOT EXISTS (SELECT 1 FROM "MetricDaily" WHERE "metric" = ${marker})
               ON CONFLICT ("day", "metric") DO UPDATE SET "value" = LEAST("MetricDaily"."value", EXCLUDED."value")`,
-          ]),
+          )),
     ]);
     hourlySinceMarked = true;
   } catch (error) {

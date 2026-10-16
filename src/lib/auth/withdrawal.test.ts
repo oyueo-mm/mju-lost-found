@@ -91,6 +91,30 @@ describe("withdrawAccount: 이용 일자 기록", () => {
     expect(ids).toEqual([7]);
   });
 
+  it("clears the member's 최근 활동 감지 시각 and login time on the account row", async () => {
+    const user = { id: 7, email: "a@mju.ac.kr", googleId: "g", deletedAt: null, withdrawnAt: null, lastActiveAt: new Date(), lastLoginAt: new Date() };
+    const base = fakeTx(user);
+    const updates: { where: unknown; data: Record<string, unknown> }[] = [];
+    const tx = new Proxy(base, {
+      get: (target, model: string) =>
+        model === "user"
+          ? new Proxy(target.user as object, {
+              get: (m, method: string) =>
+                method === "update" ? async (args: (typeof updates)[number]) => (updates.push(args), user) : (m as Record<string, unknown>)[method],
+            })
+          : target[model],
+    });
+    prisma.$transaction = async (fn: (t: unknown) => unknown) => fn(tx);
+    vi.mocked(authUser.soleLeaderOrganizationNames).mockResolvedValue([]);
+    vi.mocked(holdState.pendingReportsAbout).mockResolvedValue([] as never);
+    vi.mocked(holdState.openHoldReasons).mockResolvedValue([]);
+
+    expect(await withdrawAccount(7)).toEqual({ kind: "ok", held: false });
+    const account = updates.find((u) => "withdrawnAt" in u.data);
+    expect(account?.where).toEqual({ id: 7 });
+    expect(account?.data).toMatchObject({ lastActiveAt: null, lastLoginAt: null });
+  });
+
   it("deletes nothing when the withdrawal does not happen", async () => {
     deleteActivityMarks.mockClear();
     prisma.$transaction = async (fn: (t: unknown) => unknown) => fn(fakeTx({ id: 7, withdrawnAt: new Date() }));

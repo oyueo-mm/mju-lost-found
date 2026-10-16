@@ -22,9 +22,9 @@ import { NotificationType, OrganizationRequestStatus, ReportTargetType, type Pri
 //
 // Per data:
 // - User: e-mail -> withdrawn-<id>@withdrawn.invalid, name/nickname -> "탈퇴한
-//   사용자", googleId/consents/lastLoginAt/nickname cooldown -> null, a new
-//   publicId (old profile links stop resolving), isAdmin off, deletedAt +
-//   withdrawnAt set. Suspension fields stay (sanction record).
+//   사용자", googleId/consents/lastLoginAt/lastActiveAt/nickname cooldown ->
+//   null, a new publicId (old profile links stop resolving), isAdmin off,
+//   deletedAt + withdrawnAt set. Suspension fields stay (sanction record).
 // - Own notifications, keyword alerts, reactions, read markers, PostView
 //   rows, rate-limit counters, memberships, pending organization requests,
 //   the external-access approval: deleted.
@@ -265,6 +265,7 @@ export async function withdrawAccount(userId: number): Promise<WithdrawAccountRe
           termsAcceptedAt: null,
           termsVersion: null,
           lastLoginAt: null,
+          lastActiveAt: null,
           nicknameChangeAvailableAt: null,
           isAdmin: false,
           deletedAt: user.deletedAt ?? now,

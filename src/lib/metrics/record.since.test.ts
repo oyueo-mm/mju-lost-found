@@ -21,9 +21,9 @@ vi.mock("@/lib/db/prisma", () => ({
 }));
 vi.mock("next/server", () => ({ after: () => {} }));
 
-const { addDailyCount, flushTimings, kstMinuteOfDay, USER_HOURLY_SINCE_METRIC } = await import("./record");
+const { addDailyCount, flushTimings, kstMinuteOfDay, TRAFFIC_HOURLY_SINCE_METRIC, USER_HOURLY_SINCE_METRIC } = await import("./record");
 
-const markerWrites = () => executeCalls.filter((c) => c.values.includes(USER_HOURLY_SINCE_METRIC));
+const markerWrites = (marker: string = USER_HOURLY_SINCE_METRIC) => executeCalls.filter((c) => c.values.includes(marker));
 
 describe("사용자 통계 시간대별 지표: this environment's collection start", () => {
   it("is written with the instance's first batch only, as a KST day and minute, never summed", async () => {
@@ -39,10 +39,17 @@ describe("사용자 통계 시간대별 지표: this environment's collection st
     expect(write.sql).toContain("LEAST");
     expect(write.values[0]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(typeof write.values[2]).toBe("number");
+    // 시간대 분석's counters (anon hourly views, hourly active members) and
+    // User.lastActiveAt: their own marker, written the same way, same start
+    const [traffic] = markerWrites(TRAFFIC_HOURLY_SINCE_METRIC);
+    expect(markerWrites(TRAFFIC_HOURLY_SINCE_METRIC)).toHaveLength(1);
+    expect(traffic.sql).toContain("WHERE NOT EXISTS");
+    expect([traffic.values[0], traffic.values[2]]).toEqual([write.values[0], write.values[2]]);
     executeCalls.length = 0;
     addDailyCount("visit.member.hour.21");
     await flushTimings();
     expect(markerWrites()).toHaveLength(0);
+    expect(markerWrites(TRAFFIC_HOURLY_SINCE_METRIC)).toHaveLength(0);
   });
 
   it("reads the minute of the KST day", () => {

@@ -27,6 +27,16 @@ describe("개인정보처리방침: 이용 통계", () => {
     expect(section(5)).toContain("보관 기한 없이 탈퇴 후에도 남습니다");
   });
 
+  it("lists the one stored 최근 이용 시각: overwritten, no history, admin user detail only, deleted at withdrawal", () => {
+    expect(section(1)).toContain("최근 이용 시각");
+    const s3 = section(3);
+    expect(s3.slice(s3.indexOf("회원탈퇴 시"), s3.indexOf("즉시 삭제합니다"))).toContain("최근 이용 시각");
+    expect(section(5)).toContain("최근 이용 시각: 로그인 상태로 화면을 보거나 조작한 가장 최근 시각을 회원 계정에 하나만 저장합니다");
+    expect(section(5)).toContain("최대 5분 간격으로 덮어쓰며 이력은 남기지 않음");
+    expect(section(5)).toContain("관리자 사용자 상세 보기에만 표시하며, 회원탈퇴 시 삭제합니다");
+    expect(section(5)).toContain("날짜·시간대별 로그인 횟수·조회 수·이용 회원 수");
+  });
+
   it("says past active-member / revisit counts can drop after withdrawal", () => {
     expect(section(5)).toContain("지난 기간의 활성 회원·재방문 통계도 줄어들 수 있습니다");
   });
