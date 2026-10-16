@@ -385,10 +385,12 @@ export default async function PostDetailPage({
           {post.description}
         </p>
         <p className="text-xs text-muted-foreground/70">
-          {t("post.createdAt", {
-            created: formatDate(post.createdAt, locale),
-            updated: formatDate(post.updatedAt, locale),
-          })}
+          {/* 작성일 only: updated_at used to move with every new view (fixed in
+              views.ts), so it is not a trustworthy edit time for existing
+              posts. Show a 수정일 again once real edits can be told apart
+              (e.g. an edit timestamp set only by updateLostPost /
+              updateFoundPost). */}
+          {t("post.createdAt", { created: formatDate(post.createdAt, locale) })}
         </p>
         {lastStatusChange && (
           <p className="text-xs text-muted-foreground/70">

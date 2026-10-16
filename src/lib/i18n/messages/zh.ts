@@ -377,7 +377,7 @@ export const zh: Dictionary = {
   "post.deleteFailed": "删除失败。",
   "post.deleteConfirm": "确定要删除吗？此操作无法撤销。",
   "post.currentStatus": "当前状态：{status}",
-  "post.createdAt": "发布于 {created} · 修改于 {updated}",
+  "post.createdAt": "发布于 {created}",
   "post.foundContactNotice":
     "💡 请一并说明物品的特征 —— 告知帖子中未公开的特征或丢失的地点、时间等，有助于确认失主并安全归还。",
   "post.lostPropertyNotice":

@@ -62,25 +62,28 @@ export async function recordPostViewAction(type: PostType, postId: number): Prom
     });
     if (existing) return;
 
-    await prisma.$transaction([
+    await prisma.$transaction(async (tx) => {
+      // A plain SQL increment, not prisma.<post>.update(): Prisma's
+      // @updatedAt would stamp updated_at on every new view, so a post's
+      // "수정일" would become its last view time. `view_count + 1` runs in
+      // the DB -- never a read-then-write -- so concurrent viewers never lose
+      // an increment. updated_at stays the time of the last real edit.
+      const bumped =
+        type === "lost"
+          ? await tx.$executeRaw`UPDATE "LostPost" SET "view_count" = "view_count" + 1 WHERE "id" = ${postId}`
+          : await tx.$executeRaw`UPDATE "FoundPost" SET "view_count" = "view_count" + 1 WHERE "id" = ${postId}`;
+      // No such post (deleted meanwhile): record nothing, as before.
+      if (bumped === 0) throw new Error(`no ${type} post ${postId}`);
       // `create` (not `upsert`) is what makes the one race this can't
       // observe from a single SELECT -- the same viewer firing this twice
       // at the same instant, before either request's SELECT above sees the
       // other's not-yet-committed row -- fail safely instead of double-
       // counting: the loser's create() hits the unique constraint on
-      // (postType, postId, viewerKey), the whole transaction array rolls
-      // back together (Prisma's array form is one transaction), and the
-      // catch below just logs it. The increment on the winning transaction
-      // still lands exactly once.
-      prisma.postView.create({ data: { postType: type, postId, viewerKey } }),
-      // `{ increment: 1 }` compiles to `SET view_count = view_count + 1` at
-      // the DB level -- never a read-then-write in application code -- so
-      // two genuinely concurrent *different* viewers never lose an
-      // increment to a race either.
-      type === "lost"
-        ? prisma.lostPost.update({ where: { id: postId }, data: { viewCount: { increment: 1 } } })
-        : prisma.foundPost.update({ where: { id: postId }, data: { viewCount: { increment: 1 } } }),
-    ]);
+      // (postType, postId, viewerKey), its whole transaction (increment
+      // included) rolls back, and the catch below just logs it. The
+      // increment on the winning transaction still lands exactly once.
+      await tx.postView.create({ data: { postType: type, postId, viewerKey } });
+    });
   } catch (error) {
     // Two expected causes, both silent by design: the post was deleted
     // between page load and this background call firing, or the same

@@ -397,7 +397,7 @@ export const ko = {
   "post.deleteFailed": "삭제하지 못했습니다.",
   "post.deleteConfirm": "정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
   "post.currentStatus": "현재 상태: {status}",
-  "post.createdAt": "작성일 {created} · 수정일 {updated}",
+  "post.createdAt": "작성일 {created}",
   "post.foundContactNotice":
     "💡 물건의 특징을 함께 알려주세요 -- 게시글에 공개되지 않은 특징이나 분실 장소·시기 등을 전달하면 소유자 확인과 안전한 반환에 도움이 돼요.",
   "post.lostPropertyNotice":

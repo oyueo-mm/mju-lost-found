@@ -2,9 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const findUnique = vi.fn();
 const create = vi.fn();
+// The view-count increment is raw SQL inside an interactive transaction
+// (so Prisma never touches updated_at); `rows` is how many posts it hit.
+let rows = 1;
+const executeRaw = vi.fn<(strings: TemplateStringsArray, ...values: unknown[]) => Promise<number>>(async () => rows);
 const lostPostUpdate = vi.fn();
 const foundPostUpdate = vi.fn();
-const $transaction = vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops));
+const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({ $executeRaw: executeRaw, postView: { create } }));
+// [table, id] of each increment
+const increments = () => executeRaw.mock.calls.map(([strings, id]) => [/UPDATE "(\w+)" SET "view_count" = "view_count" \+ 1 WHERE "id" = $/.exec(strings.join(""))?.[1], id]);
 
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
@@ -34,6 +40,7 @@ const { recordPostViewAction } = await import("./views");
 
 beforeEach(() => {
   vi.clearAllMocks();
+  rows = 1;
   getCurrentUser.mockResolvedValue(null);
   cookieGet.mockReturnValue(undefined);
 });
@@ -49,7 +56,7 @@ describe("recordPostViewAction -- signed-in viewers", () => {
       where: { postType_postId_viewerKey: { postType: "lost", postId: 1, viewerKey: "u:1" } },
     });
     expect(create).toHaveBeenCalledWith({ data: { postType: "lost", postId: 1, viewerKey: "u:1" } });
-    expect(lostPostUpdate).toHaveBeenCalledWith({ where: { id: 1 }, data: { viewCount: { increment: 1 } } });
+    expect(increments()).toEqual([["LostPost", 1]]);
   });
 
   it("사용자 A가 다시 게시글 1을 봄 -> 변화 없음", async () => {
@@ -59,7 +66,7 @@ describe("recordPostViewAction -- signed-in viewers", () => {
     await recordPostViewAction("lost", 1);
 
     expect(create).not.toHaveBeenCalled();
-    expect(lostPostUpdate).not.toHaveBeenCalled();
+    expect(executeRaw).not.toHaveBeenCalled();
   });
 
   it("사용자 A가 게시글 2를 봄 -> +1 (별도 게시글은 별도로 카운트)", async () => {
@@ -71,7 +78,7 @@ describe("recordPostViewAction -- signed-in viewers", () => {
     expect(findUnique).toHaveBeenCalledWith({
       where: { postType_postId_viewerKey: { postType: "lost", postId: 2, viewerKey: "u:1" } },
     });
-    expect(lostPostUpdate).toHaveBeenCalledWith({ where: { id: 2 }, data: { viewCount: { increment: 1 } } });
+    expect(increments()).toEqual([["LostPost", 2]]);
   });
 
   it("사용자 B가 게시글 1을 봄 -> +1 (다른 사용자는 독립적으로 카운트)", async () => {
@@ -84,7 +91,7 @@ describe("recordPostViewAction -- signed-in viewers", () => {
       where: { postType_postId_viewerKey: { postType: "lost", postId: 1, viewerKey: "u:2" } },
     });
     expect(create).toHaveBeenCalledWith({ data: { postType: "lost", postId: 1, viewerKey: "u:2" } });
-    expect(lostPostUpdate).toHaveBeenCalledWith({ where: { id: 1 }, data: { viewCount: { increment: 1 } } });
+    expect(increments()).toEqual([["LostPost", 1]]);
   });
 
   it("does not re-count after any amount of time -- no time window, unlike the pre-Phase-L behavior", async () => {
@@ -95,7 +102,7 @@ describe("recordPostViewAction -- signed-in viewers", () => {
     await recordPostViewAction("lost", 1);
 
     expect(create).not.toHaveBeenCalled();
-    expect(lostPostUpdate).not.toHaveBeenCalled();
+    expect(executeRaw).not.toHaveBeenCalled();
   });
 
   it("increments FoundPost.viewCount for a found-board post", async () => {
@@ -105,8 +112,7 @@ describe("recordPostViewAction -- signed-in viewers", () => {
     await recordPostViewAction("found", 7);
 
     expect(create).toHaveBeenCalledWith({ data: { postType: "found", postId: 7, viewerKey: "u:1" } });
-    expect(foundPostUpdate).toHaveBeenCalledWith({ where: { id: 7 }, data: { viewCount: { increment: 1 } } });
-    expect(lostPostUpdate).not.toHaveBeenCalled();
+    expect(increments()).toEqual([["FoundPost", 7]]);
   });
 });
 
@@ -145,7 +151,7 @@ describe("recordPostViewAction -- logged-out viewers", () => {
     await recordPostViewAction("lost", 1);
 
     expect(create).not.toHaveBeenCalled();
-    expect(lostPostUpdate).not.toHaveBeenCalled();
+    expect(executeRaw).not.toHaveBeenCalled();
   });
 });
 
@@ -181,5 +187,41 @@ describe("recordPostViewAction -- crawlers", () => {
     }
     userAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Safari/604.1";
     expect(cookieSet).not.toHaveBeenCalled();
+  });
+});
+
+describe("recordPostViewAction -- 수정일 (updated_at) is not touched by views", () => {
+  it("increments view_count with plain SQL only -- never through prisma.<post>.update (which stamps updated_at)", async () => {
+    getCurrentUser.mockResolvedValue({ id: 1 });
+    findUnique.mockResolvedValueOnce(null);
+    await recordPostViewAction("found", 3);
+    const sql = executeRaw.mock.calls[0][0].join("?");
+    expect(sql).toBe(`UPDATE "FoundPost" SET "view_count" = "view_count" + 1 WHERE "id" = ?`);
+    expect(sql).not.toMatch(/updated_at/);
+    expect(lostPostUpdate).not.toHaveBeenCalled();
+    expect(foundPostUpdate).not.toHaveBeenCalled();
+  });
+
+  it("counts several different viewers once each (one increment per new viewer)", async () => {
+    for (const id of [1, 2, 3]) {
+      getCurrentUser.mockResolvedValue({ id });
+      findUnique.mockResolvedValueOnce(null);
+      await recordPostViewAction("lost", 5);
+    }
+    getCurrentUser.mockResolvedValue({ id: 2 }); // viewer 2 again: already counted
+    findUnique.mockResolvedValueOnce({ id: 7, postType: "lost", postId: 5, viewerKey: "u:2", viewedAt: new Date() });
+    await recordPostViewAction("lost", 5);
+    expect(increments()).toEqual([["LostPost", 5], ["LostPost", 5], ["LostPost", 5]]);
+    expect(create).toHaveBeenCalledTimes(3);
+  });
+
+  it("records no view for a post that no longer exists (nothing incremented, nothing saved)", async () => {
+    getCurrentUser.mockResolvedValue({ id: 1 });
+    findUnique.mockResolvedValueOnce(null);
+    rows = 0;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(recordPostViewAction("lost", 404)).resolves.toBeUndefined();
+    expect(create).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });

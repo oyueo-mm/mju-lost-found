@@ -380,7 +380,7 @@ export const mn: Dictionary = {
   "post.deleteFailed": "Устгаж чадсангүй.",
   "post.deleteConfirm": "Устгахдаа итгэлтэй байна уу? Энэ үйлдлийг буцаах боломжгүй.",
   "post.currentStatus": "Одоогийн төлөв: {status}",
-  "post.createdAt": "Нийтэлсэн {created} · Зассан {updated}",
+  "post.createdAt": "Нийтэлсэн {created}",
   "post.foundContactNotice":
     "💡 Эд зүйлийн онцлогийг хамт хэлээрэй — нийтлэлд ороогүй онцлог, эсвэл хаана хэзээ гээснээ дуулгавал эзнийг нь баталгаажуулж, аюулгүй буцаахад тусална.",
   "post.lostPropertyNotice":

@@ -378,7 +378,7 @@ export const vi: Dictionary = {
   "post.deleteFailed": "Không xoá được.",
   "post.deleteConfirm": "Bạn có chắc muốn xoá không? Thao tác này không thể hoàn tác.",
   "post.currentStatus": "Trạng thái hiện tại: {status}",
-  "post.createdAt": "Đăng {created} · Sửa {updated}",
+  "post.createdAt": "Đăng {created}",
   "post.foundContactNotice":
     "💡 Hãy mô tả thêm đặc điểm của món đồ — cho biết một đặc điểm chưa nêu trong bài, hoặc nơi và thời điểm bị mất, sẽ giúp xác nhận chủ nhân và trả lại an toàn.",
   "post.lostPropertyNotice":

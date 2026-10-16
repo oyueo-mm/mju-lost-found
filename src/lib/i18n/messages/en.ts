@@ -380,7 +380,7 @@ export const en: Dictionary = {
   "post.deleteFailed": "Could not delete the post.",
   "post.deleteConfirm": "Are you sure you want to delete this? This cannot be undone.",
   "post.currentStatus": "Current status: {status}",
-  "post.createdAt": "Posted {created} · Updated {updated}",
+  "post.createdAt": "Posted {created}",
   "post.foundContactNotice":
     "💡 Include details about the item — telling them a feature that isn't in the post, or where and when you lost it, helps confirm ownership and return it safely.",
   "post.lostPropertyNotice":
