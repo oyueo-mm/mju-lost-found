@@ -39,7 +39,7 @@ export type PrivacyPolicyRevision = {
 export const PRIVACY_POLICY_REVISIONS: readonly PrivacyPolicyRevision[] = [
   {
     date: "2026-10-16",
-    summary: "서비스 이용 통계 목적과 로그인 회원의 이용 일자 기록(400일 보관, 회원탈퇴 시 삭제)을 추가하고, 처리 목적·항목을 실제 운영에 맞게 정리했습니다.",
+    summary: "회원별 이용 일자 통계(400일 보관, 회원탈퇴 시 삭제)를 안내하고, 처리방침을 간소화했습니다. 개인정보 문의처·처리 지역·백업 안내와 추가 이용 판단 기준을 보완했습니다.",
     consent: "notice",
     history: {
       summary: "회원별 이용 일자: 400일 보관·탈퇴 시 삭제 안내",
