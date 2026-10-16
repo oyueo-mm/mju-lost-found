@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 
 import { bucketSpan } from "@/lib/metrics/report";
 import { NEW_MEMBER_DAYS, RETURN_WINDOW_DAYS, retentionExclusions, windowNote, type UserReport } from "@/lib/metrics/userReport";
-import { BarList, GroupedBarChart, StackedBarChart } from "@/components/admin/StatsCharts";
-import { AlertIcon, ChevronRightIcon } from "@/components/icons";
+import { BarList, GroupedBarChart, LineChart, StackedBarChart } from "@/components/admin/StatsCharts";
+import { More, Section, StatTile, Unmeasured } from "@/components/admin/StatsBlocks";
+import { AlertIcon } from "@/components/icons";
 
 // 사용자 통계 tab of /admin/stats: sign-ups, signed-in activity and
 // participation, aggregates only (see lib/metrics/userReport.ts for each
@@ -12,6 +13,7 @@ import { AlertIcon, ChevronRightIcon } from "@/components/icons";
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const pct = (part: number, whole: number) => (whole ? `${Math.round((part / whole) * 100)}%` : "-");
 export const DOW_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
+const HOUR_LABELS = Array.from({ length: 24 }, (_, h) => `${h}시`);
 const UNIT_TEXT = { day: "일별", week: "주별", month: "월별" } as const;
 
 function label(start: string, unit: "day" | "week" | "month") {
@@ -19,47 +21,18 @@ function label(start: string, unit: "day" | "week" | "month") {
   return unit === "month" ? `${start.slice(2, 4)}.${m}` : unit === "week" ? `${m}/${d}~` : `${m}/${d}`;
 }
 
-function Section({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-4 rounded-card border border-border bg-card p-4">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold text-foreground">{title}</h2>
-        {description && <div className="text-xs leading-relaxed text-muted-foreground">{description}</div>}
-      </div>
-      {children}
-    </section>
-  );
+function Card({ title, value, sub, primary }: { title: string; value: ReactNode; sub?: ReactNode; primary?: boolean }) {
+  return <StatTile label={title} value={value} sub={sub} primary={primary} />;
 }
-
-function More({ label: text = "자세히 보기", children }: { label?: string; children: ReactNode }) {
-  return (
-    <details className="group text-[11px] leading-relaxed text-muted-foreground">
-      <summary className="inline-flex w-fit cursor-pointer list-none items-center gap-1 rounded-md font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-        {text}
-        <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
-      </summary>
-      <div className="mt-2">{children}</div>
-    </details>
-  );
-}
-
-function Card({ title, value, sub }: { title: string; value: ReactNode; sub?: ReactNode }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-card border border-border bg-card p-3">
-      <span className="text-xs text-muted-foreground">{title}</span>
-      <span className="text-xl font-bold tabular-nums text-foreground">{value}</span>
-      {sub && <span className="text-[11px] leading-snug text-muted-foreground">{sub}</span>}
-    </div>
-  );
-}
-
-const Unmeasured = ({ text = "미측정" }: { text?: string }) => <span className="text-lg font-bold text-muted-foreground">{text}</span>;
 
 export function UserStatsView({ report }: { report: UserReport }) {
   const { accounts, signups, activity, hourly, participation: p, range } = report;
   const labels = report.buckets.map((b) => label(bucketSpan(range, b).from, range.unit));
   const trend = report.buckets.length > 1;
-  const avgByDow = activity.memberDaysByDow.map((n, i) => (activity.daysByDow[i] ? Math.round((n / activity.daysByDow[i]) * 10) / 10 : 0));
+  // a weekday with no measured day in the range is 미측정, not an average of 0
+  const avgByDow = activity.memberDaysByDow.map((n, i) => (activity.daysByDow[i] ? Math.round((n / activity.daysByDow[i]) * 10) / 10 : null));
+  // the last period runs to today, so its count is still growing
+  const inProgress = range.until > report.today;
   const ret = activity.retention;
   const retValue = !ret ? "-" : ret.eligible ? pct(ret.returned, ret.eligible) : ret.pending ? <Unmeasured text="집계 대기" /> : <Unmeasured />;
   const unmeasuredWhy = activity.expiredInRange
@@ -110,19 +83,21 @@ export function UserStatsView({ report }: { report: UserReport }) {
         </h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           <Card
+            primary
             title="가입 회원 (현재)"
             value={fmt(accounts.current)}
             sub={`이용 가능 ${fmt(accounts.available)} · 비활성화 ${fmt(accounts.deactivated)} · 탈퇴 ${fmt(accounts.withdrawn)} · 누적 ${fmt(accounts.total)}`}
           />
-          <Card title="기간 신규 가입" value={fmt(signups.inRange)} sub={`탈퇴 ${fmt(report.withdrawals.inRange)}`} />
+          <Card primary title="기간 신규 가입" value={fmt(signups.inRange)} sub={`탈퇴 ${fmt(report.withdrawals.inRange)}`} />
           <Card
+            primary
             title="기간 활성 회원"
             value={activity.unique === null ? <Unmeasured /> : fmt(activity.unique)}
             sub={activity.coverage === "partial" ? `부분 측정 · ${activity.expiredInRange ? `${activity.retainedFrom} 이전 삭제` : `${activity.since}부터 기록`}` : "서로 다른 회원 수"}
           />
-          <Card title="DAU" value={activity.dau === null ? <Unmeasured /> : fmt(activity.dau)} sub={windowNote(activity.windows.dau, 1, activity)} />
-          <Card title="WAU" value={activity.wau === null ? <Unmeasured /> : fmt(activity.wau)} sub={windowNote(activity.windows.wau, 7, activity)} />
-          <Card title="MAU" value={activity.mau === null ? <Unmeasured /> : fmt(activity.mau)} sub={windowNote(activity.windows.mau, 30, activity)} />
+          <Card primary title="DAU" value={activity.dau === null ? <Unmeasured /> : fmt(activity.dau)} sub={windowNote(activity.windows.dau, 1, activity)} />
+          <Card primary title="WAU" value={activity.wau === null ? <Unmeasured /> : fmt(activity.wau)} sub={windowNote(activity.windows.wau, 7, activity)} />
+          <Card primary title="MAU" value={activity.mau === null ? <Unmeasured /> : fmt(activity.mau)} sub={windowNote(activity.windows.mau, 30, activity)} />
         </div>
       </section>
 
@@ -130,28 +105,34 @@ export function UserStatsView({ report }: { report: UserReport }) {
         {trend && (
           <div className="grid gap-5 md:grid-cols-2">
             <StackedBarChart
-              title="신규 가입"
+              title={`${UNIT_TEXT[range.unit]} 신규 가입`}
+              unit="명"
               labels={labels}
-              series={[{ label: "신규 가입", values: signups.perBucket, className: "fill-primary", swatch: "bg-primary" }]}
+              inProgress={inProgress}
+              series={[{ label: "신규 가입", values: signups.perBucket, tone: 1 }]}
             />
-            <StackedBarChart
-              title="누적 가입 (탈퇴 포함, 각 기간 말)"
+            <LineChart
+              title="누적 가입 (탈퇴 포함, 각 기간 말 기준)"
+              unit="명"
               labels={labels}
-              series={[{ label: "누적 가입", values: signups.cumulative, className: "fill-primary/50", swatch: "bg-primary/50" }]}
+              inProgress={inProgress}
+              series={[{ label: "누적 가입", values: signups.cumulative, tone: 1 }]}
             />
           </div>
         )}
         <div className="grid gap-5 md:grid-cols-2">
           <GroupedBarChart
-            title="시간대별 가입 (KST, 시)"
-            labels={Array.from({ length: 24 }, (_, h) => String(h))}
+            title="시간대별 가입 (KST, 기간 합계)"
+            unit="명"
+            labels={HOUR_LABELS}
             tickEvery={3}
-            series={[{ label: "가입", values: signups.byHour, className: "fill-primary", swatch: "bg-primary" }]}
+            series={[{ label: "가입", values: signups.byHour, tone: 1 }]}
           />
           <GroupedBarChart
-            title="요일별 가입"
+            title="요일별 가입 (기간 합계)"
+            unit="명"
             labels={DOW_LABELS}
-            series={[{ label: "가입", values: signups.byDow, className: "fill-primary", swatch: "bg-primary" }]}
+            series={[{ label: "가입", values: signups.byDow, tone: 1 }]}
           />
         </div>
         <p className="text-xs text-muted-foreground">
@@ -159,7 +140,7 @@ export function UserStatsView({ report }: { report: UserReport }) {
           {signups.peakDow ? `${DOW_LABELS[signups.peakDow.dow]} (${fmt(signups.peakDow.n)}명)` : "-"} · 시간대:{" "}
           {signups.peakHour ? `${signups.peakHour.hour}시 (${fmt(signups.peakHour.n)}명)` : "-"}
         </p>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5 max-md:[&>*:last-child]:col-span-2">
           <Card title="동의·닉네임 완료" value={fmt(accounts.onboarded)} sub={`이용 가능 회원의 ${pct(accounts.onboarded, accounts.available)}`} />
           <Card title="동의 미완료·재동의 필요" value={fmt(accounts.notOnboarded)} sub="회원 기능 이용 전" />
           <Card title="비활성화" value={fmt(accounts.deactivated)} sub="로그인 불가 · 다시 로그인하면 복구(탈퇴 아님)" />
@@ -179,19 +160,23 @@ export function UserStatsView({ report }: { report: UserReport }) {
             {activity.coverage === "partial" && <p className="text-[11px] text-muted-foreground">부분 측정: {unmeasuredWhy}</p>}
             {trend && (
               <StackedBarChart
-                title="기간별 활성 회원 (서로 다른 회원 수)"
+                title={`${UNIT_TEXT[range.unit]} 활성 회원 (서로 다른 회원 수)`}
+                unit="명"
                 labels={labels}
+                coverage={activity.perBucketCoverage}
+                inProgress={inProgress}
                 series={[
-                  { label: `신규(가입 ${NEW_MEMBER_DAYS}일 이내)`, values: activity.newPerBucket, className: "fill-primary", swatch: "bg-primary" },
-                  { label: "기존 회원", values: activity.existingPerBucket, className: "fill-primary/35", swatch: "bg-primary/35" },
+                  { label: "기존 회원", values: activity.existingPerBucket, tone: 1 },
+                  { label: `신규(가입 ${NEW_MEMBER_DAYS}일 이내)`, values: activity.newPerBucket, tone: 3 },
                 ]}
               />
             )}
             <div className="grid gap-5 md:grid-cols-2">
               <GroupedBarChart
                 title="요일별 하루 평균 활성 회원"
+                unit="명"
                 labels={DOW_LABELS}
-                series={[{ label: "평균 활성 회원", values: avgByDow, className: "fill-primary", swatch: "bg-primary" }]}
+                series={[{ label: "평균 활성 회원", values: avgByDow, tone: 1 }]}
               />
               <div className="grid grid-cols-2 gap-3">
                 <Card
@@ -242,21 +227,30 @@ export function UserStatsView({ report }: { report: UserReport }) {
           </div>
         </div>
         <div className="flex flex-col gap-2">
-          <h3 className="text-xs font-semibold text-foreground">시간대별 로그인 회원 이용량 · 로그인 완료 (KST, 시)</h3>
+          <h3 className="text-xs font-semibold text-foreground">시간대별 로그인 회원 이용량 · 로그인 완료 (KST, 기간 합계)</h3>
           {hourly.memberPv === null && hourly.logins === null ? (
             <p className="text-xs text-muted-foreground">
               미측정 기간입니다({hourly.memberPvSince || hourly.loginSince ? `이 환경의 수집 시작: ${hourly.memberPvSince ?? hourly.loginSince}` : "이 환경에서 아직 수집 전"}).
             </p>
           ) : (
-            <GroupedBarChart
-              title=""
-              labels={Array.from({ length: 24 }, (_, h) => String(h))}
-              tickEvery={3}
-              series={[
-                { label: "로그인 회원 페이지뷰", values: hourly.memberPv ?? Array(24).fill(null), className: "fill-primary", swatch: "bg-primary" },
-                { label: "로그인 완료", values: hourly.logins ?? Array(24).fill(null), className: "fill-primary/35", swatch: "bg-primary/35" },
-              ]}
-            />
+            // Two charts, not one: page views run far above sign-ins, and on
+            // a shared axis the sign-in bars would flatten to nothing.
+            <div className="grid gap-5 md:grid-cols-2">
+              <GroupedBarChart
+                title="로그인 회원 페이지뷰"
+                unit="회"
+                labels={HOUR_LABELS}
+                tickEvery={3}
+                series={[{ label: "로그인 회원 페이지뷰", values: hourly.memberPv ?? Array(24).fill(null), tone: 1 }]}
+              />
+              <GroupedBarChart
+                title="로그인 완료"
+                unit="회"
+                labels={HOUR_LABELS}
+                tickEvery={3}
+                series={[{ label: "로그인 완료", values: hourly.logins ?? Array(24).fill(null), tone: 2 }]}
+              />
+            </div>
           )}
           <p className="text-[11px] text-muted-foreground">
             페이지뷰: {hourly.memberPvSince ? `${hourly.memberPvSince}부터` : "수집 전"} · 로그인 완료: {hourly.loginSince ? `${hourly.loginSince}부터` : "수집 전"}{" "}
@@ -289,6 +283,7 @@ export function UserStatsView({ report }: { report: UserReport }) {
               <p className="text-xs text-muted-foreground">이 기간 가입자가 없습니다.</p>
             ) : (
               <BarList
+                unit="명"
                 total={p.newSignups}
                 rows={[
                   ...(p.newActive === null ? [] : [{ label: "로그인 상태로 활동", value: p.newActive }]),
@@ -307,9 +302,11 @@ export function UserStatsView({ report }: { report: UserReport }) {
         </div>
         {report.withdrawals.inRange > 0 && trend && (
           <StackedBarChart
-            title="회원 탈퇴"
+            title={`${UNIT_TEXT[range.unit]} 회원 탈퇴`}
+            unit="명"
             labels={labels}
-            series={[{ label: "탈퇴", values: report.withdrawals.perBucket, className: "fill-destructive/60", swatch: "bg-destructive/60" }]}
+            inProgress={inProgress}
+            series={[{ label: "탈퇴", values: report.withdrawals.perBucket, tone: 2 }]}
           />
         )}
         <p className="flex gap-2 text-[11px] text-muted-foreground">

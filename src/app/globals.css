@@ -51,7 +51,33 @@
   --destructive-foreground: #ffffff;
   --destructive-muted: #fef2f2;
 
+  /* 운영 통계 chart series (StatsCharts): fixed, not accent-driven, so a
+     green/amber accent never collides with a series hue. Blue / orange /
+     aqua validated as a categorical set (CVD-separated, light and dark);
+     chart-4 is the neutral "기타". */
+  --chart-1: #006ec7;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #9ca3af;
+
   --radius: 0.875rem;
+}
+
+/* 운영 통계 charts: 미측정 bands and 부분 측정 bars wear a 45° hatch so
+   they never read as a measured value (a measured 0 is a baseline tick). */
+.chart-hatch {
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--muted-foreground) 22%, transparent) 0 1px,
+    transparent 1px 6px
+  );
+}
+.chart-hatch-on {
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--card) 70%, transparent) 0 1.5px,
+    transparent 1.5px 5px
+  );
 }
 
 /* 게시판 반응형 배치 (PostCard variant="board", BOARD_RESULTS_GRID_CLASS).
@@ -118,6 +144,10 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive-muted: var(--destructive-muted);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
   --radius-card: var(--radius);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
@@ -157,6 +187,10 @@
     --destructive: #f87171;
     --destructive-foreground: #2b0a0a;
     --destructive-muted: #2a1414;
+    --chart-1: #5b8ef2;
+    --chart-2: #d95926;
+    --chart-3: #199e70;
+    --chart-4: #6b7280;
   }
 }
 
@@ -187,6 +221,10 @@
   --destructive: #f87171;
   --destructive-foreground: #2b0a0a;
   --destructive-muted: #2a1414;
+  --chart-1: #5b8ef2;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #6b7280;
 }
 
 /* ---------- Accent colors (Phase H-3) ----------

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
 
 import { requireAdmin } from "@/lib/auth/session";
 import { FREE_LIMITS_MB, METRICS, percentileMs, VISIT_SERIES, type Granularity, type TimingRow } from "@/lib/metrics/dashboard";
@@ -25,7 +24,8 @@ import {
 } from "@/lib/metrics/report";
 import { DEVICE_KINDS, DEVICE_LABELS, PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "@/lib/metrics/visits";
 import { ApiStatsTable, type ApiStatRow } from "@/components/admin/ApiStatsTable";
-import { BarList, GroupedBarChart, Meter, Sparkline, StackedBarChart } from "@/components/admin/StatsCharts";
+import { BarList, GroupedBarChart, Meter, StackedBarChart } from "@/components/admin/StatsCharts";
+import { More, Section, StatTile, Unmeasured } from "@/components/admin/StatsBlocks";
 import { DURATION_BUCKETS, DURATION_LABELS, PAGES_BUCKETS, PAGES_LABELS } from "@/lib/metrics/flow";
 import { StatsExportPanel } from "@/components/admin/StatsExportPanel";
 import { StatsPeriodPicker } from "@/components/admin/StatsPeriodPicker";
@@ -46,32 +46,10 @@ const bucketLabel = (start: string, unit: Granularity) => {
   return unit === "month" ? `${start.slice(2, 4)}.${m}` : unit === "week" ? `${m}/${d}~` : `${m}/${d}`;
 };
 const UNIT_TEXT: Record<Granularity, string> = { day: "일별", week: "주별", month: "월별" };
+const HOUR_LABELS = Array.from({ length: 24 }, (_, h) => `${h}시`);
+const DOW_LABELS = ["월", "화", "수", "목", "금", "토", "일"];
 const sum = (...values: (number | null)[]) => (values.every((v) => v === null) ? null : values.reduce<number>((a, v) => a + (v ?? 0), 0));
 const addSeries = (a: (number | null)[], b: (number | null)[]) => a.map((v, i) => sum(v, b[i]));
-
-function Section({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-4 rounded-card border border-border bg-card p-4">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold text-foreground">{title}</h2>
-        {description && <div className="text-xs leading-relaxed text-muted-foreground">{description}</div>}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function More({ label = "자세히 보기", children }: { label?: string; children: ReactNode }) {
-  return (
-    <details className="group text-[11px] leading-relaxed text-muted-foreground">
-      <summary className="inline-flex w-fit cursor-pointer list-none items-center gap-1 rounded-md font-medium text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-        {label}
-        <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
-      </summary>
-      <div className="mt-2">{children}</div>
-    </details>
-  );
-}
 
 // A big number for the period, or 미측정 when the count hadn't begun.
 function StatCard({
@@ -82,6 +60,7 @@ function StatCard({
   sub,
   values,
   display,
+  primary,
 }: {
   label: string;
   value: number | null;
@@ -90,24 +69,17 @@ function StatCard({
   since?: string;
   sub?: string;
   values?: (number | null)[];
+  primary?: boolean;
 }) {
+  const note = [sub, coverage !== "full" && since ? `${since}부터 집계` : null].filter(Boolean).join(" · ");
   return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-card border border-border bg-card p-3">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      {display !== undefined ? (
-        <span className="text-xl font-bold tabular-nums text-foreground">{display}</span>
-      ) : value === null ? (
-        <span className="text-lg font-bold text-muted-foreground">미측정</span>
-      ) : (
-        <span className="text-xl font-bold tabular-nums text-foreground">{fmt(value)}</span>
-      )}
-      {(sub || (coverage !== "full" && since)) && (
-        <span className="text-[11px] leading-snug text-muted-foreground">
-          {[sub, coverage !== "full" && since ? `${since}부터 집계` : null].filter(Boolean).join(" · ")}
-        </span>
-      )}
-      {values && <Sparkline values={values} />}
-    </div>
+    <StatTile
+      label={label}
+      primary={primary}
+      value={display !== undefined ? display : value === null ? <Unmeasured /> : fmt(value)}
+      sub={note || undefined}
+      trend={values}
+    />
   );
 }
 
@@ -291,6 +263,8 @@ export default async function AdminStatsPage({
     };
   });
   const latest = trend ? `최근 ${labels[last]}: ` : null;
+  // the last period runs to today, so its count is still growing
+  const inProgress = report.range.until > report.today;
 
   return (
     <div className="flex flex-col gap-6">
@@ -314,8 +288,9 @@ export default async function AdminStatsPage({
           핵심 지표 <span className="text-xs font-normal text-muted-foreground">표시 기간 합계</span>
         </h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 max-md:[&>*:last-child]:col-span-2">
-          <StatCard label="신규 가입" value={totals.signups} sub={latest ? `${latest}${fmt(core.signups[last] ?? 0)}` : undefined} values={trend ? core.signups : undefined} />
+          <StatCard primary label="신규 가입" value={totals.signups} sub={latest ? `${latest}${fmt(core.signups[last] ?? 0)}` : undefined} values={trend ? core.signups : undefined} />
           <StatCard
+            primary
             label="활성 회원"
             value={totals.active}
             coverage={cov.active}
@@ -323,9 +298,10 @@ export default async function AdminStatsPage({
             sub="기간 내 서로 다른 로그인 회원"
             values={trend ? core.active : undefined}
           />
-          <StatCard label="방문 세션" value={sessionsTotal} coverage={cov.sessionAnon} since={sinceLabel("visit")} sub="고유 방문자 수 아님" values={trend ? sessionsAll : undefined} />
-          <StatCard label="페이지뷰" value={sum(totals.pvAnon, totals.pvMember)} coverage={cov.pvAnon} since={sinceLabel("visit")} values={trend ? pvAll : undefined} />
+          <StatCard primary label="방문 세션" value={sessionsTotal} coverage={cov.sessionAnon} since={sinceLabel("visit")} sub="고유 방문자 수 아님" values={trend ? sessionsAll : undefined} />
+          <StatCard primary label="페이지뷰" value={sum(totals.pvAnon, totals.pvMember)} coverage={cov.pvAnon} since={sinceLabel("visit")} values={trend ? pvAll : undefined} />
           <StatCard
+            primary
             label="검색 이용량"
             value={sum(totals.searchKeyword, totals.searchSemantic, totals.searchImage)}
             coverage={cov.searchKeyword}
@@ -381,18 +357,24 @@ export default async function AdminStatsPage({
           <div className="grid gap-5 md:grid-cols-2">
             <StackedBarChart
               title="페이지뷰"
+              unit="회"
               labels={labels}
+              coverage={report.coverage.pvAnon}
+              inProgress={inProgress}
               series={[
-                { label: "비로그인", values: visit.pvAnon, className: "fill-primary/35", swatch: "bg-primary/35" },
-                { label: "로그인", values: visit.pvMember, className: "fill-primary", swatch: "bg-primary" },
+                { label: "로그인", values: visit.pvMember, tone: 1 },
+                { label: "비로그인", values: visit.pvAnon, tone: 2 },
               ]}
             />
             <StackedBarChart
               title="방문 세션"
+              unit="회"
               labels={labels}
+              coverage={report.coverage.sessionAnon}
+              inProgress={inProgress}
               series={[
-                { label: "비로그인으로 시작", values: visit.sessionAnon, className: "fill-primary/35", swatch: "bg-primary/35" },
-                { label: "로그인 상태로 시작", values: visit.sessionMember, className: "fill-primary", swatch: "bg-primary" },
+                { label: "로그인 상태로 시작", values: visit.sessionMember, tone: 1 },
+                { label: "비로그인으로 시작", values: visit.sessionAnon, tone: 2 },
               ]}
             />
           </div>
@@ -482,13 +464,11 @@ export default async function AdminStatsPage({
                 <div className="md:col-span-2">
                   <StackedBarChart
                     title="기기별 방문 세션"
+                    unit="회"
                     labels={labels}
-                    series={DEVICE_KINDS.map((k, i) => ({
-                      label: DEVICE_LABELS[k],
-                      values: report.device.session[k],
-                      className: ["fill-primary", "fill-primary/55", "fill-primary/25", "fill-muted-foreground/40"][i],
-                      swatch: ["bg-primary", "bg-primary/55", "bg-primary/25", "bg-muted-foreground/40"][i],
-                    }))}
+                    coverage={report.device.coverage}
+                    inProgress={inProgress}
+                    series={DEVICE_KINDS.map((k, i) => ({ label: DEVICE_LABELS[k], values: report.device.session[k], tone: ([1, 2, 3, 4] as const)[i] }))}
                   />
                 </div>
               )}
@@ -554,7 +534,7 @@ export default async function AdminStatsPage({
           <p className="text-xs text-muted-foreground">미측정 기간입니다.</p>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5 max-md:[&>*:last-child]:col-span-2">
               <StatCard label="평균 체류 시간 (추정)" value={null} display={formatSeconds(meanDuration(flow))} sub={`체류 집계 방문 ${fmt(flowSessions)}회`} />
               <StatCard
                 label="체류 시간 중앙값 (구간)"
@@ -602,20 +582,22 @@ export default async function AdminStatsPage({
             </p>
             <div className="grid gap-5 md:grid-cols-2">
               <GroupedBarChart
-                title="시간대별 방문 시작·추정 종료 (KST, 시)"
-                labels={Array.from({ length: 24 }, (_, h) => String(h))}
+                title="시간대별 방문 시작·추정 종료 (KST)"
+                unit="회"
+                labels={HOUR_LABELS}
                 tickEvery={3}
                 series={[
-                  { label: "방문 시작", values: flow.startHour, className: "fill-primary", swatch: "bg-primary" },
-                  { label: "추정 종료(마지막 활동)", values: flow.endHour, className: "fill-primary/35", swatch: "bg-primary/35" },
+                  { label: "방문 시작", values: flow.startHour, tone: 1 },
+                  { label: "추정 종료(마지막 활동)", values: flow.endHour, tone: 2 },
                 ]}
               />
               <GroupedBarChart
                 title="요일별 방문 시작·추정 종료"
-                labels={["월", "화", "수", "목", "금", "토", "일"]}
+                unit="회"
+                labels={DOW_LABELS}
                 series={[
-                  { label: "방문 시작", values: flow.startDow, className: "fill-primary", swatch: "bg-primary" },
-                  { label: "추정 종료", values: flow.endDow, className: "fill-primary/35", swatch: "bg-primary/35" },
+                  { label: "방문 시작", values: flow.startDow, tone: 1 },
+                  { label: "추정 종료", values: flow.endDow, tone: 2 },
                 ]}
               />
             </div>
@@ -748,10 +730,13 @@ export default async function AdminStatsPage({
           {trend && (
             <StackedBarChart
               title="게시글 등록"
+              unit="건"
               labels={labels}
+              coverage={report.coverage.lost}
+              inProgress={inProgress}
               series={[
-                { label: "분실물", values: core.lost, className: "fill-primary/35", swatch: "bg-primary/35" },
-                { label: "습득물", values: core.found, className: "fill-primary", swatch: "bg-primary" },
+                { label: "분실물", values: core.lost, tone: 1 },
+                { label: "습득물", values: core.found, tone: 2 },
               ]}
             />
           )}
