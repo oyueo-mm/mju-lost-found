@@ -58,4 +58,23 @@ describe("개인정보처리방침: 이용 통계", () => {
     expect(section(6)).toContain("개인정보 열람·정정·삭제·처리정지");
     expect(html).toContain('href="mailto:mjusmartlostfound@gmail.com"');
   });
+
+  it("names the actual student-run privacy contact without inventing a phone or a school department", () => {
+    expect(section(7)).toContain("MJU Find 운영팀");
+    expect(section(7)).toContain("학생들이 자체 운영하는 서비스");
+    expect(section(7)).toContain("학교 공식 부서가 아닙니다");
+    expect(html).not.toContain('href="tel:');
+  });
+
+  it("discloses all four additional-use criteria and distinguishes regional hosting from overseas processing", () => {
+    for (const criterion of ["원래 수집 목적과의 관련성", "예측 가능성", "이용자의 이익을 부당하게", "안전조치"]) {
+      expect(section(2)).toContain(criterion);
+    }
+    expect(section(2)).toContain("별도의 동의 등 적법한 근거가 필요합니다");
+    expect(section(4)).toContain("서버 함수와 주 데이터베이스·파일 저장소는 서울 지역");
+    expect(section(4)).toContain("EU 데이터센터의 로그 처리");
+    expect(section(4)).toContain("별도 플랫폼·보안 기록의 보관기간과 같지는 않습니다");
+    expect(html).toContain('href="mailto:privacy@vercel.com"');
+    expect(html).toContain('href="mailto:privacy@supabase.io"');
+  });
 });

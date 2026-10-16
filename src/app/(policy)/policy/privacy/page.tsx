@@ -1,7 +1,7 @@
 ﻿import { formatEffectiveDate } from "@/lib/auth/terms";
 import Link from "next/link";
 import { PRIVACY_POLICY_EFFECTIVE_DATE } from "@/lib/policy/privacyPolicy";
-import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
+import { PRIVACY_CONTACT_TEAM, SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 
 type Section = { title: string; body: React.ReactNode };
 
@@ -57,6 +57,11 @@ const SECTIONS: Section[] = [
           Google 로그인과 별도로 동의 화면에서 직접 동의해야 회원 기능을 이용할 수 있습니다. 동의하지 않아도 공개 게시글
           열람·검색은 가능합니다. 필수 동의(이름·소속 포함)를 철회하면 회원탈퇴로 처리됩니다.
         </p>
+        <p className="mt-2">
+          개인정보의 추가 이용은 원래 수집 목적과의 관련성, 수집 경위·기존 안내에 따른 예측 가능성, 이용자의 이익을 부당하게
+          침해하는지, 식별값 변환·접근 제한·합계 표시·보관기간 등 안전조치를 기준으로 판단합니다. 운영팀은 이 기준의 충족 여부를
+          점검하며, 요건을 충족하지 않는 추가 이용에는 별도의 동의 등 적법한 근거가 필요합니다.
+        </p>
       </>
     ),
   },
@@ -107,15 +112,36 @@ const SECTIONS: Section[] = [
     title: "4. 처리 위탁과 제3자 제공",
     body: (
       <>
-        <ul className="flex list-disc flex-col gap-2 pl-5">
-          <li>Vercel: 웹 호스팅, 서버 실행, 정기 보유기간 정리 작업</li>
-          <li>Supabase: 데이터베이스·이미지 저장, 실시간 채팅 알림 전달</li>
-        </ul>
-        <p className="mt-2">
+        <p>
           하위 수탁자는 각 업체의 공개 목록(
           <a href="https://vercel.com/legal/sub-processors" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:opacity-80">Vercel</a>,{" "}
           <a href="https://supabase.com/legal/customer-resources/subprocessor-list" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:opacity-80">Supabase</a>
           )에서 확인할 수 있습니다. 서비스가 직접 마케팅·광고 등 다른 목적으로 개인정보를 제3자에게 제공하지는 않습니다.
+        </p>
+        <p className="mt-2">
+          서버 함수와 주 데이터베이스·파일 저장소는 서울 지역으로 설정되어 있습니다.
+          다만 이 설정이 모든 처리를 국내로 제한하지는 않습니다. Vercel은 미국 등 수탁처리 지역에서 운영·보안 업무를 처리할 수
+          있고, Supabase는 EU 데이터센터의 로그 처리, 미국 등에서의 지원·운영, 전 세계 CDN의 파일 전송을 안내하고 있습니다.
+        </p>
+        <ul className="mt-2 flex list-disc flex-col gap-2 pl-5">
+          <li>
+            Vercel Inc. (<a href="mailto:privacy@vercel.com" className="text-primary hover:opacity-80">privacy@vercel.com</a>):
+            서비스 요청 시 접속 정보와 서버가 처리하는 회원·콘텐츠 정보를 전송해 호스팅·서버 실행·정기 보유기간 정리·보안·오류 분석에 사용합니다.
+            현재 Hobby 요금제의 서버 실행 로그 조회 보관기간은 1시간이며, 별도 플랫폼·보안 기록의 보관기간과 같지는 않습니다.
+          </li>
+          <li>
+            Supabase Pte. Ltd. (<a href="mailto:privacy@supabase.io" className="text-primary hover:opacity-80">privacy@supabase.io</a>):
+            서비스 이용 중 회원 정보·작성 정보·이용 기록·이미지를 데이터베이스·파일 저장소에 저장하고 실시간 채팅 알림을 전달합니다.
+            지원 요청이나 보안 사고 대응 시 필요한 정보에
+            국외에서 접근할 수 있습니다. 서비스 데이터의 보관·삭제는 3항에 따르며, 백업·플랫폼 로그에는 업체별 보관정책이 적용됩니다.
+          </li>
+        </ul>
+        <p className="mt-2">
+          지역 밖 처리에 관한 업체의 안내는{" "}
+          <a href="https://vercel.com/docs/security/compliance" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:opacity-80">Vercel</a>과{" "}
+          <a href="https://supabase.com/legal/privacy-resources/data-residency-and-transfers-faq" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:opacity-80">Supabase</a>
+          에서 확인할 수 있습니다. 관련 문의·처리정지 요청은 7항의 운영팀 이메일로 할 수 있으며, 서비스 제공에 필수인 처리를
+          중단하면 해당 기능의 이용이 제한될 수 있습니다.
         </p>
       </>
     ),
@@ -184,10 +210,11 @@ const SECTIONS: Section[] = [
           이름·소속은 처리 중인 신고의 당사자에 한해 사유를 입력해야 열람할 수 있습니다. 열람자·대상·신고·사유·시각을 기록합니다.
         </p>
         <p className="mt-2">
-          개인정보 관련 문의와 권리 행사 요청은 개인정보 문의 담당(
+          개인정보 보호업무와 열람·정정·삭제·처리정지 등 권리 행사 요청은 {PRIVACY_CONTACT_TEAM}(
           <a href={SUPPORT_MAILTO} className="break-all font-medium text-primary hover:opacity-80">{SUPPORT_EMAIL}</a>
           )으로 연락해주세요.
         </p>
+        <p className="mt-2">MJU Find는 학생들이 자체 운영하는 서비스이며, 명지대학교 공식 서비스나 학교 공식 부서가 아닙니다.</p>
       </>
     ),
   },

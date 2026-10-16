@@ -3,6 +3,7 @@
 // and on the login screen so anyone, signed in or not, can reach the team.
 export const SUPPORT_EMAIL = "mjusmartlostfound@gmail.com";
 export const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}`;
+export const PRIVACY_CONTACT_TEAM = "MJU Find 운영팀";
 
 // 개발자 문의: the developer's school address (Footer only).
 export const DEVELOPER_EMAIL = "oyueo.mm@mju.ac.kr";
