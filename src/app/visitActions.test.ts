@@ -16,6 +16,10 @@ vi.mock("@/lib/metrics/record", () => ({
 
 const { recordVisitsAction } = await import("./visitActions");
 
+// The counters these tests compare exactly; visit.start.* (start hour, first
+// screen) are checked on their own below.
+const counted = () => Object.fromEntries([...counts].filter(([k]) => !k.startsWith("visit.start.")));
+
 beforeEach(() => {
   counts.clear();
   audience = "anon";
@@ -30,7 +34,8 @@ describe("방문 통계 server action", () => {
       { kind: "found", sessionStart: false },
       { kind: "post", sessionStart: false },
     ]);
-    expect(Object.fromEntries(counts)).toEqual({
+    expect(counts.get("visit.start.page.home")).toBe(1);
+    expect(counted()).toEqual({
       "visit.pv.anon": 3,
       "visit.page.home.anon": 1,
       "visit.page.found.anon": 1,
@@ -69,7 +74,7 @@ describe("방문 통계 server action", () => {
       { kind: "home", sessionStart: true, ref: "https://evil.example", utmSource: "<script>", utmCampaign: "에브리타임" },
       "not an object",
     ]);
-    expect(Object.fromEntries(counts)).toEqual({
+    expect(counted()).toEqual({
       "visit.pv.anon": 1,
       "visit.page.home.anon": 1,
       "visit.session.anon": 1,
@@ -145,4 +150,36 @@ describe("방문 통계 server action", () => {
     await recordVisitsAction([{ kind: "home", sessionStart: true, ref: "direct" }]);
     expect([...counts.keys()].some((k) => k.startsWith("visit.device."))).toBe(false); // admins stay out
   });
+
+  it("counts start hour and first screen with each session, and applies flow reports on their own day", async () => {
+    await recordVisitsAction([{ kind: "lost", sessionStart: true, ref: "direct" }], {
+      flow: [
+        { day: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), init: true, to: { first: "lost", exit: "lost", pages: "1", dur: "lt10s", hour: 10 } },
+        { day: "2000-01-01", init: true, to: { first: "lost", exit: "lost", pages: "1", dur: "lt10s", hour: 10 } }, // too old: dropped
+      ],
+    });
+    expect(counts.get("visit.start.page.lost")).toBe(1);
+    expect([...counts.keys()].filter((k) => k.startsWith("visit.start.hour.")).length).toBe(1);
+    expect(counts.get("visit.flow.sessions.mobile")).toBe(1);
+    expect(counts.get("visit.flow.exit.lost.mobile")).toBe(1);
+
+    // a report without page views (a backgrounded tab) is accepted too
+    counts.clear();
+    ip = "198.51.100.30";
+    const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+    const s1 = { first: "lost", exit: "lost", pages: "1", dur: "lt10s", hour: 10 };
+    await recordVisitsAction([], { flow: [{ day: today, from: s1, to: { ...s1, dur: "30to60s" }, durSec: 40 }] });
+    expect(Object.fromEntries(counts)).toEqual({
+      "visit.flow.dur.lt10s.mobile": -1,
+      "visit.flow.dur.30to60s.mobile": 1,
+      "visit.flow.dursec.mobile": 40,
+    });
+
+    // admins and opted-out browsers: nothing
+    counts.clear();
+    audience = "internal";
+    await recordVisitsAction([], { flow: [{ day: today, init: true, to: s1 }] });
+    expect(counts.size).toBe(0);
+  });
 });
+

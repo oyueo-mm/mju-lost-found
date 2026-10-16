@@ -61,6 +61,35 @@ function fakeReport(): Report {
       utmCampaigns: [{ value: "-launch", sessions: 2 }],
     },
     internalSearches: 0,
+    flow: {
+      startSince: "2026-10-16",
+      since: "2026-10-16",
+      coverage: "partial",
+      startCoverage: "partial",
+      startHour: Array.from({ length: 24 }, (_, h) => (h === 10 ? 3 : h === 21 ? 2 : 0)),
+      endHour: Array.from({ length: 24 }, (_, h) => (h === 10 ? 2 : h === 22 ? 2 : 0)),
+      startDow: [0, 0, 0, 0, 5, 0, 0],
+      endDow: [0, 0, 0, 0, 4, 0, 0],
+      firstPage: { home: 3, lost: 2 },
+      exitPage: { post: 2, home: 1, found: 1 },
+      exitByDevice: { mobile: { post: 2, home: 1 }, pc: { found: 1 }, tablet: {}, other: {} },
+      paths: [
+        { first: "home", last: "post", sessions: 2 },
+        { first: "home", last: "home", sessions: 1 },
+      ],
+      duration: { lt10s: 1, "10to30s": 0, "30to60s": 1, "1to3m": 2, "3to5m": 0, "5to10m": 0, "10mplus": 0 },
+      durationByDevice: {
+        mobile: { lt10s: 1, "10to30s": 0, "30to60s": 0, "1to3m": 2, "3to5m": 0, "5to10m": 0, "10mplus": 0 },
+        pc: { lt10s: 0, "10to30s": 0, "30to60s": 1, "1to3m": 0, "3to5m": 0, "5to10m": 0, "10mplus": 0 },
+        tablet: { lt10s: 0, "10to30s": 0, "30to60s": 0, "1to3m": 0, "3to5m": 0, "5to10m": 0, "10mplus": 0 },
+        other: { lt10s: 0, "10to30s": 0, "30to60s": 0, "1to3m": 0, "3to5m": 0, "5to10m": 0, "10mplus": 0 },
+      },
+      durationSeconds: { mobile: 250, pc: 40, tablet: 0, other: 0 },
+      flowSessions: { mobile: 3, pc: 1, tablet: 0, other: 0 },
+      pages: { "1": 1, "2": 1, "3to4": 2, "5to9": 0, "10plus": 0 },
+      open: 3,
+      closed: 1,
+    },
     device: {
       since: "2026-10-16",
       coverage: ["none", "none", "partial"],
@@ -102,7 +131,7 @@ describe("운영 통계 내보내기", () => {
   it("builds six sheets whose totals match the report (the dashboard's numbers)", () => {
     const report = fakeReport();
     const sets = datasetsOf(report);
-    expect(sets.map((s) => s.name)).toEqual(["운영 요약", "방문 통계", "유입 분석", "서비스 이용", "완료 처리", "서버 운영"]);
+    expect(sets.map((s) => s.name)).toEqual(["운영 요약", "방문 통계", "유입 분석", "서비스 이용", "완료 처리", "서버 운영", "방문 시간·이탈"]);
     const summary = sets[0].tables[0].rows;
     const value = (label: string) => summary.find((r) => r[1] === label)?.[2];
     expect(value("페이지뷰 합계")).toBe(71 + 20 + 38 + 10);
@@ -126,6 +155,20 @@ describe("운영 통계 내보내기", () => {
     expect(device.rows[2]).toEqual(["2026-10-16", 5, 2, 1, 0, 20, 8, 2, 0]);
     expect(device.total).toEqual(["합계", 5, 2, 1, 0, 20, 8, 2, 0]);
     expect(toCsv(fakeReport(), "visits")).toContain("2026-10-16,5,2,1,0,20,8,2,0");
+  });
+
+  it("adds 방문 시간·이탈: start/exit by hour, durations (estimates), screens, open sessions", () => {
+    const flow = datasetsOf(fakeReport()).find((d) => d.key === "flow")!;
+    const summary = Object.fromEntries(flow.tables[0].rows.map((r) => [r[0], r[1]]));
+    expect(summary["평균 체류 시간 (초)"]).toBe(73); // (250 + 40) / 4
+    expect(summary["체류 시간 중앙값 (구간)"]).toBe("30초~1분");
+    expect(summary["한 화면만 본 방문 비율"]).toBe("25.0%");
+    expect(summary["종료 미확인 방문 (이용 중이거나 다시 오지 않음)"]).toBe(3);
+    expect(flow.tables[1].rows[10]).toEqual(["10시", 3, 2]);
+    expect(flow.tables[1].rows[22]).toEqual(["22시", 0, 2]);
+    expect(flow.tables[2].rows[4]).toEqual(["금", 5, 4]);
+    expect(flow.notes.join(" ")).toContain("추정치");
+    expect(toCsv(fakeReport(), "flow")).toContain("# MJU Find 운영 통계 - 방문 시간·이탈");
   });
 
   it("states the required caveats in every file", () => {

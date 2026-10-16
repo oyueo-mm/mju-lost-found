@@ -106,8 +106,10 @@ export function recordDaily(metric: DailyMetric, dedupeParts?: unknown[]): boole
 
 // Adds to a per-day counter in the same batched write (방문 통계 uses its
 // own "visit.*" names -- see lib/metrics/visits.ts and app/visitActions.ts).
-export function addDailyCount(metric: string, n = 1): void {
-  const key = `${kstDay()}|${metric}`;
+// `day` (KST "YYYY-MM-DD"): for a count that belongs to another day than
+// today -- 방문 시간·이탈 reports about a session that started earlier.
+export function addDailyCount(metric: string, n = 1, day: string = kstDay()): void {
+  const key = `${day}|${metric}`;
   pendingDaily.set(key, (pendingDaily.get(key) ?? 0) + n);
   noteObservation();
 }

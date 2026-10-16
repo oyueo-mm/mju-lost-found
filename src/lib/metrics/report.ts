@@ -17,7 +17,8 @@ import {
 import { API_METRIC_RETENTION_DAYS } from "@/lib/retention/policy";
 import { PERIOD_PRESETS, type PeriodPreset } from "./exportOptions";
 import { kstDay } from "./record";
-import { DEVICE_KINDS, type DeviceKind } from "./visits";
+import { DURATION_BUCKETS, PAGES_BUCKETS, type DurationBucket, type PagesBucket } from "./flow";
+import { DEVICE_KINDS, PAGE_KINDS, type DeviceKind, type PageKind } from "./visits";
 
 // 운영 통계 for any KST date range -- the one loader behind both the
 // /admin/stats dashboard and its Excel/CSV export, so the two always show
@@ -173,6 +174,32 @@ export function bucketSpan(range: ReportRange, bucket: string): { from: string; 
 
 type Values<K extends string> = Record<K, (number | null)[]>;
 
+// 방문 시간·이탈 (lib/metrics/flow.ts) for the range. Start counts (hour,
+// first screen, weekday) come with every session; the rest only from
+// sessions whose browser reported their flow (flowSessions). Values are the
+// latest known state of each session; today's include sessions still going.
+export type FlowReport = {
+  startSince: string | null; // first day with start-hour counts
+  since: string | null; // first day with flow counts
+  coverage: Coverage; // of the flow counts over the range
+  startCoverage: Coverage;
+  startHour: number[]; // 0..23, KST
+  endHour: number[]; // 0..23, KST hour of the last confirmed activity
+  startDow: number[]; // Mon..Sun, sessions started
+  endDow: number[]; // Mon..Sun, flow sessions (a session ends on its start day)
+  firstPage: Partial<Record<PageKind, number>>;
+  exitPage: Partial<Record<PageKind, number>>;
+  exitByDevice: Record<DeviceKind, Partial<Record<PageKind, number>>>;
+  paths: { first: PageKind; last: PageKind; sessions: number }[];
+  duration: Record<DurationBucket, number>;
+  durationByDevice: Record<DeviceKind, Record<DurationBucket, number>>;
+  durationSeconds: Record<DeviceKind, number>;
+  flowSessions: Record<DeviceKind, number>;
+  pages: Record<PagesBucket, number>;
+  open: number; // 종료 미확인 (still going, or never came back)
+  closed: number; // 종료 확인 (the browser later started a new session)
+};
+
 export type Report = {
   range: ReportRange;
   buckets: string[];
@@ -191,6 +218,7 @@ export type Report = {
   // 접속 기기: the same page views / sessions split by device class. Began
   // with its release, whose day is read from the data (first device row);
   // null values are 미측정.
+  flow: FlowReport;
   device: {
     since: string | null;
     coverage: Coverage[];
@@ -310,10 +338,22 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
     })(),
   ]);
 
-  const [timings, capacity, firstDevice] = await Promise.all([
+  const [timings, capacity, firstDevice, flowFirsts, perDay] = await Promise.all([
     loadTimingsBetween(from, until),
     loadCapacity(),
     prisma.$queryRaw<{ day: Date | string | null }[]>`SELECT min("day") AS day FROM "MetricDaily" WHERE "metric" LIKE 'visit.device.%'`.catch(() => []),
+    prisma.$queryRaw<{ start_day: Date | string | null; flow_day: Date | string | null }[]>`
+      SELECT min("day") FILTER (WHERE "metric" LIKE 'visit.start.%') AS start_day, min("day") FILTER (WHERE "metric" LIKE 'visit.flow.%') AS flow_day
+      FROM "MetricDaily" WHERE "metric" LIKE 'visit.start.%' OR "metric" LIKE 'visit.flow.%'`.catch(() => []),
+    // per KST day (for weekdays): sessions started, and flow sessions
+    prisma.$queryRaw<{ day: Date | string; starts: bigint | number | null; flows: bigint | number | null }[]>`
+      SELECT "day",
+        sum("value") FILTER (WHERE "metric" IN ('visit.session.anon', 'visit.session.member')) AS starts,
+        sum("value") FILTER (WHERE "metric" LIKE 'visit.flow.sessions.%') AS flows
+      FROM "MetricDaily"
+      WHERE "day" >= ${from}::date AND "day" < ${until}::date
+        AND ("metric" IN ('visit.session.anon', 'visit.session.member') OR "metric" LIKE 'visit.flow.sessions.%')
+      GROUP BY 1`.catch(() => []),
   ]);
   deviceSince = firstDevice[0]?.day ? asDay(firstDevice[0].day) : null;
   const deviceCoverage = buckets.map((b) => {
@@ -361,6 +401,12 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
     totals,
     totalCoverage,
     breakdown: totalCoverage.pvAnon === "none" ? breakdownOf(new Map()) : breakdownOf(visitTotals),
+    flow: flowReportOf(visitTotals, perDay, {
+      startSince: flowFirsts[0]?.start_day ? asDay(flowFirsts[0].start_day) : null,
+      since: flowFirsts[0]?.flow_day ? asDay(flowFirsts[0].flow_day) : null,
+      from,
+      until,
+    }),
     device: {
       since: deviceSince,
       coverage: deviceCoverage,
@@ -443,3 +489,101 @@ export function unsplitSearches(report: Report): number | null {
   const sum = total.reduce<number>((a, v) => a + (v ?? 0), 0);
   return Math.max(0, sum - (report.totals.searchAnon ?? 0) - (report.totals.searchMember ?? 0) - report.internalSearches);
 }
+
+// ---------- 방문 시간·이탈 ----------
+
+const zero24 = () => Array.from({ length: 24 }, () => 0);
+const zeroOf = <K extends string>(keys: readonly K[]) => Object.fromEntries(keys.map((k) => [k, 0])) as Record<K, number>;
+
+// Monday = 0 .. Sunday = 6, for a KST calendar day.
+export function weekdayIndex(day: string): number {
+  return (new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7;
+}
+
+export function flowReportOf(
+  totals: Map<string, number>,
+  perDay: { day: Date | string; starts: bigint | number | null; flows: bigint | number | null }[],
+  { startSince, since, from, until }: { startSince: string | null; since: string | null; from: string; until: string },
+): FlowReport {
+  const out: FlowReport = {
+    startSince,
+    since,
+    coverage: coverageSinceDay(since, from, until),
+    startCoverage: coverageSinceDay(startSince, from, until),
+    startHour: zero24(),
+    endHour: zero24(),
+    startDow: Array.from({ length: 7 }, () => 0),
+    endDow: Array.from({ length: 7 }, () => 0),
+    firstPage: {},
+    exitPage: {},
+    exitByDevice: Object.fromEntries(DEVICE_KINDS.map((d) => [d, {}])) as FlowReport["exitByDevice"],
+    paths: [],
+    duration: zeroOf(DURATION_BUCKETS),
+    durationByDevice: Object.fromEntries(DEVICE_KINDS.map((d) => [d, zeroOf(DURATION_BUCKETS)])) as FlowReport["durationByDevice"],
+    durationSeconds: zeroOf(DEVICE_KINDS),
+    flowSessions: zeroOf(DEVICE_KINDS),
+    pages: zeroOf(PAGES_BUCKETS),
+    open: 0,
+    closed: 0,
+  };
+  const isKind = (v: string): v is PageKind => (PAGE_KINDS as readonly string[]).includes(v);
+  const isDevice = (v: string): v is DeviceKind => (DEVICE_KINDS as readonly string[]).includes(v);
+  // a bucket a session left is never below 0 (a lost report can't push it under)
+  const pos = (n: number) => Math.max(0, n);
+  for (const [metric, n] of totals) {
+    let m: RegExpExecArray | null;
+    if ((m = /^visit\.start\.hour\.(\d{2})$/.exec(metric))) out.startHour[Number(m[1])] += n;
+    else if ((m = /^visit\.start\.page\.([a-z_]+)$/.exec(metric)) && isKind(m[1])) out.firstPage[m[1]] = (out.firstPage[m[1]] ?? 0) + n;
+    else if ((m = /^visit\.flow\.endhour\.(\d{2})$/.exec(metric))) out.endHour[Number(m[1])] += pos(n);
+    else if ((m = /^visit\.flow\.exit\.([a-z_]+)\.([a-z]+)$/.exec(metric)) && isKind(m[1]) && isDevice(m[2])) {
+      out.exitPage[m[1]] = (out.exitPage[m[1]] ?? 0) + pos(n);
+      out.exitByDevice[m[2]][m[1]] = (out.exitByDevice[m[2]][m[1]] ?? 0) + pos(n);
+    } else if ((m = /^visit\.flow\.path\.([a-z_]+)\.([a-z_]+)$/.exec(metric)) && isKind(m[1]) && isKind(m[2])) {
+      if (n > 0) out.paths.push({ first: m[1], last: m[2], sessions: n });
+    } else if ((m = /^visit\.flow\.dur\.([a-z0-9]+)\.([a-z]+)$/.exec(metric)) && (DURATION_BUCKETS as readonly string[]).includes(m[1]) && isDevice(m[2])) {
+      out.duration[m[1] as DurationBucket] += pos(n);
+      out.durationByDevice[m[2]][m[1] as DurationBucket] += pos(n);
+    } else if ((m = /^visit\.flow\.dursec\.([a-z]+)$/.exec(metric)) && isDevice(m[1])) out.durationSeconds[m[1]] += pos(n);
+    else if ((m = /^visit\.flow\.sessions\.([a-z]+)$/.exec(metric)) && isDevice(m[1])) out.flowSessions[m[1]] += n;
+    else if ((m = /^visit\.flow\.pages\.([a-z0-9]+)$/.exec(metric)) && (PAGES_BUCKETS as readonly string[]).includes(m[1])) out.pages[m[1] as PagesBucket] += pos(n);
+    else if (metric === "visit.flow.open") out.open += pos(n);
+    else if (metric === "visit.flow.closed") out.closed += pos(n);
+  }
+  for (const row of perDay) {
+    const i = weekdayIndex(asDay(row.day));
+    out.startDow[i] += Number(row.starts ?? 0);
+    out.endDow[i] += Number(row.flows ?? 0);
+  }
+  out.paths.sort((a, b) => b.sessions - a.sessions);
+  return out;
+}
+
+// Mean seconds over the flow sessions (all devices, or one).
+export function meanDuration(flow: FlowReport, device?: DeviceKind): number | null {
+  const devices: readonly DeviceKind[] = device ? [device] : DEVICE_KINDS;
+  const sessions = devices.reduce<number>((a, d) => a + flow.flowSessions[d], 0);
+  if (!sessions) return null;
+  return Math.round(devices.reduce<number>((a, d) => a + flow.durationSeconds[d], 0) / sessions);
+}
+
+// The bucket holding the middle session (an exact median would need every
+// session's duration, which is never stored).
+export function medianBucket(distribution: Record<DurationBucket, number>): DurationBucket | null {
+  const total = DURATION_BUCKETS.reduce((a, b) => a + distribution[b], 0);
+  if (!total) return null;
+  let seen = 0;
+  for (const b of DURATION_BUCKETS) {
+    seen += distribution[b];
+    if (seen >= total / 2) return b;
+  }
+  return null;
+}
+
+export function formatSeconds(seconds: number | null): string {
+  if (seconds === null) return "-";
+  if (seconds < 60) return `${seconds}초`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return s ? `${m}분 ${s}초` : `${m}분`;
+}
+

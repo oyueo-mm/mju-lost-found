@@ -167,3 +167,48 @@ export function Meter({ label, used, limit, unit }: { label: string; used: numbe
     </div>
   );
 }
+
+// Side-by-side columns per label (방문 시작 vs 추정 이탈 by hour / weekday).
+export function GroupedBarChart({ labels, series, title, tickEvery = 1 }: { labels: string[]; series: ChartSeries[]; title: string; tickEvery?: number }) {
+  const n = labels.length;
+  const max = Math.max(1, ...series.flatMap((s) => s.values.map((v) => v ?? 0)));
+  const W = 100 * n;
+  const H = 100;
+  const width = 80 / series.length;
+  return (
+    <figure className="flex flex-col gap-1.5">
+      <figcaption className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+        <span className="text-xs font-semibold text-foreground">{title}</span>
+        {series.map((s) => (
+          <span key={s.label} className="flex items-center gap-1">
+            <span className={`inline-block size-2.5 rounded-sm ${s.swatch}`} aria-hidden />
+            {s.label}
+          </span>
+        ))}
+      </figcaption>
+      <div className="relative">
+        <span className="absolute top-0 left-0 rounded bg-card/80 px-0.5 text-[10px] leading-none tabular-nums text-muted-foreground">최대 {fmt(max)}</span>
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-28 w-full" role="img" aria-label={`${title} 그래프`}>
+          <line x1="0" y1={H / 2} x2={W} y2={H / 2} className="stroke-border" strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+          <line x1="0" y1={H} x2={W} y2={H} className="stroke-border" vectorEffect="non-scaling-stroke" />
+          {labels.map((label, i) => (
+            <g key={label}>
+              <title>{`${label}: ${series.map((s) => `${s.label} ${fmt(s.values[i] ?? 0)}`).join(", ")}`}</title>
+              {series.map((s, j) => {
+                const h = ((s.values[i] ?? 0) / max) * (H - 4);
+                return h > 0 ? <rect key={s.label} x={i * 100 + 10 + j * width} y={H - h} width={width - 2} height={h} className={s.className} /> : null;
+              })}
+            </g>
+          ))}
+        </svg>
+      </div>
+      <div className="flex text-[10px] tabular-nums text-muted-foreground">
+        {labels.map((label, i) => (
+          <span key={label} className="flex-1 text-center" aria-hidden={i % tickEvery !== 0}>
+            {i % tickEvery === 0 ? label : ""}
+          </span>
+        ))}
+      </div>
+    </figure>
+  );
+}
