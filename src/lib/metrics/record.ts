@@ -131,6 +131,20 @@ async function countByAudience(metric: string): Promise<void> {
   }
 }
 
+// 사용자 통계 시간대별 지표 (auth.login.hour.<HH>, visit.member.hour.<HH>)
+// are collected by the deployments that carry this code. When that began
+// differs per environment (each has its own DB), so it is kept in that DB:
+// one MetricDaily row written with an instance's first batch, day = KST day
+// and value = KST minute of the day of the earliest instance start. Never
+// a count; only the first row matters (see userReport.ts hourlySince).
+export const USER_HOURLY_SINCE_METRIC = "meta.since.user_hourly";
+const instanceStartedAt = new Date();
+let hourlySinceMarked = false;
+export function kstMinuteOfDay(at: Date): number {
+  const k = new Date(at.getTime() + KST_OFFSET_MS);
+  return k.getUTCHours() * 60 + k.getUTCMinutes();
+}
+
 // 사용자 통계: a completed Google sign-in, counted by KST hour only
 // (auth.login.hour.<HH>; no user id). Admins are left out by the caller.
 export function recordSignIn(at: Date = new Date()): void {
@@ -260,7 +274,17 @@ export async function flushTimings(): Promise<void> {
           "errors" = "ApiMetricHourly"."errors" + EXCLUDED."errors",
           "total_ms" = "ApiMetricHourly"."total_ms" + EXCLUDED."total_ms",
           "buckets" = ARRAY(SELECT a + b FROM unnest("ApiMetricHourly"."buckets", EXCLUDED."buckets") WITH ORDINALITY AS u(a, b, i) ORDER BY i)`,
+      // 사용자 통계 시간대별 지표: this environment's collection start, once
+      ...(hourlySinceMarked
+        ? []
+        : [
+            prisma.$executeRaw`INSERT INTO "MetricDaily" ("day", "metric", "value")
+              SELECT ${kstDay(instanceStartedAt)}::date, ${USER_HOURLY_SINCE_METRIC}, ${kstMinuteOfDay(instanceStartedAt)}
+              WHERE NOT EXISTS (SELECT 1 FROM "MetricDaily" WHERE "metric" = ${USER_HOURLY_SINCE_METRIC})
+              ON CONFLICT ("day", "metric") DO UPDATE SET "value" = LEAST("MetricDaily"."value", EXCLUDED."value")`,
+          ]),
     ]);
+    hourlySinceMarked = true;
   } catch (error) {
     requeue(rows.filter((r) => r.route !== "db:ping"), daily);
     throw error;

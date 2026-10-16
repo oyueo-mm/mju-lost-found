@@ -16,6 +16,7 @@ import {
   meanDuration,
   medianBucket,
   resolvePeriod,
+  testDataNotice,
   sinceLabel,
   summarizeTimings,
   unsplitSearches,
@@ -191,6 +192,7 @@ export default async function AdminStatsPage({
       active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
     }`;
 
+  const notice = testDataNotice();
   const header = (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
@@ -202,6 +204,12 @@ export default async function AdminStatsPage({
           {period.label} · {UNIT_TEXT[unit]} 집계 · 한국 시간 기준(진행 중인 기간은 오늘 현재까지) · 개인정보와 검색어 원문은 수집하지 않습니다.
         </p>
       </div>
+      {notice && (
+        <p role="note" className="flex gap-2 rounded-card border border-warning/40 bg-warning/10 px-3 py-2 text-xs leading-relaxed text-foreground">
+          <AlertIcon className="mt-0.5 size-4 shrink-0" />
+          <span>{notice}</span>
+        </p>
+      )}
       <nav className="flex gap-1 border-b border-border" aria-label="통계 종류">
         <Link href={`/admin/stats?${periodQuery}`} aria-current={tab === "ops" ? "page" : undefined} className={tabClass(tab === "ops")}>
           운영 통계
@@ -293,7 +301,8 @@ export default async function AdminStatsPage({
             <InfoIcon className="mt-0.5 size-4 shrink-0" />
             <span>
               통계 수집을 시작하기 전 기간은 <b className="font-semibold text-foreground">미측정</b>으로 표시합니다(0건과 다름). 검색·활성 회원·응답 시간은{" "}
-              {sinceLabel("ops")}부터, 방문 통계와 검색의 로그인 구분은 {sinceLabel("visit")}부터 집계됩니다.
+              {sinceLabel("ops")}부터, 방문 통계와 검색의 로그인 구분은 {sinceLabel("visit")}부터 집계됩니다. 활성 회원은 기록을 400일 보관하므로 그보다 오래된 날짜도
+              미측정입니다.
             </span>
           </p>
         )}

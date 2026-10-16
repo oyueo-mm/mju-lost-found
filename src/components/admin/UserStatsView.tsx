@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { bucketSpan } from "@/lib/metrics/report";
-import { NEW_MEMBER_DAYS, RETURN_WINDOW_DAYS, type UserReport } from "@/lib/metrics/userReport";
+import { NEW_MEMBER_DAYS, RETURN_WINDOW_DAYS, retentionExclusions, windowNote, type UserReport } from "@/lib/metrics/userReport";
 import { BarList, GroupedBarChart, StackedBarChart } from "@/components/admin/StatsCharts";
 import { AlertIcon, ChevronRightIcon } from "@/components/icons";
 
@@ -53,7 +53,7 @@ function Card({ title, value, sub }: { title: string; value: ReactNode; sub?: Re
   );
 }
 
-const Unmeasured = () => <span className="text-lg font-bold text-muted-foreground">미측정</span>;
+const Unmeasured = ({ text = "미측정" }: { text?: string }) => <span className="text-lg font-bold text-muted-foreground">{text}</span>;
 
 export function UserStatsView({ report }: { report: UserReport }) {
   const { accounts, signups, activity, hourly, participation: p, range } = report;
@@ -61,6 +61,10 @@ export function UserStatsView({ report }: { report: UserReport }) {
   const trend = report.buckets.length > 1;
   const avgByDow = activity.memberDaysByDow.map((n, i) => (activity.daysByDow[i] ? Math.round((n / activity.daysByDow[i]) * 10) / 10 : 0));
   const ret = activity.retention;
+  const retValue = !ret ? "-" : ret.eligible ? pct(ret.returned, ret.eligible) : ret.pending ? <Unmeasured text="집계 대기" /> : <Unmeasured />;
+  const unmeasuredWhy = activity.expiredInRange
+    ? `${activity.since}부터 기록했고, ${activity.retainedFrom} 이전 기록은 보관기한(400일)이 지나 삭제되었을 수 있어 미측정입니다(0명이 아님).`
+    : `${activity.since}부터 기록해 그 전은 미측정입니다(0명이 아님).`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -73,11 +77,23 @@ export function UserStatsView({ report }: { report: UserReport }) {
         <More label="집계 기준 자세히">
           <ul className="flex list-disc flex-col gap-1 pl-4">
             <li>모든 날짜·시간은 한국 시간(KST)입니다. DB의 UTC 값을 변환해 셉니다.</li>
-            <li>가입 완료(동의·닉네임) 시각은 따로 기록되지 않아(재동의 때 덮어씀) 현재 완료 여부만 셉니다.</li>
-            <li>활성 회원은 {activity.since}부터 집계되며 그 전은 미측정입니다. 관리자 계정은 활동·참여 지표에서 뺍니다(가입 수에는 포함).</li>
             <li>
-              시간대별 로그인 회원 이용량은 각 화면을 볼 때의 로그인 여부로 셉니다(방문 시작 때의 로그인 여부가 아님). 시간대별 지표는 수집 시작 이후만
-              있습니다. 시간대별로 &lsquo;서로 다른 회원 수&rsquo;는 저장하지 않으므로 이용량(페이지뷰)으로 봅니다.
+              회원 수: 누적 가입 = 현재 가입 + 탈퇴. 현재 가입 = 이용 가능 + 비활성화(비활성화는 다시 로그인하면 복구되므로 탈퇴가 아님). 동의·닉네임 완료,
+              관리자, 이용 정지, 외부 계정은 이용 가능 회원 중의 수입니다.
+            </li>
+            <li>가입 완료(동의·닉네임) 시각은 따로 기록되지 않아(재동의 때 덮어씀) 현재 완료 여부만 셉니다.</li>
+            <li>
+              활성 회원은 {activity.since}부터 기록되며 그 전은 미측정입니다. 활동 기록은 400일 뒤 삭제되므로 그보다 오래된 날짜도 미측정입니다(0명이
+              아님). 관리자 계정은 활동·참여 지표에서 뺍니다(가입 수에는 포함).
+            </li>
+            <li>
+              시간대별 로그인 회원 이용량은 각 화면을 볼 때의 로그인 여부로 셉니다(방문 시작 때의 로그인 여부가 아님). 시간대별 지표는 이 환경에서 수집을
+              시작한 뒤만 있고, 그 뒤 기록이 없는 시간은 0건입니다. 시간대별로 &lsquo;서로 다른 회원 수&rsquo;는 저장하지 않으므로 이용량(페이지뷰)으로
+              봅니다.
+            </li>
+            <li>
+              대상 범위 차이: 페이지뷰에는 동의 미완료·이용 정지 회원이 본 동의·안내 화면도 들어가지만, 활성 회원은 동의·닉네임을 마치고 정지되지 않은
+              회원만 셉니다. &lsquo;내 방문 통계에서 제외&rsquo;를 켠 브라우저의 회원 페이지뷰는 빠지지만 그 회원의 활동 일자는 기록됩니다.
             </li>
             <li>
               신규 회원 = 가입한 날부터 {NEW_MEMBER_DAYS}일 이내. 재방문 = 가입한 다음 날부터 {RETURN_WINDOW_DAYS}일 안에 다시 활동. 회원별 연결은 기존
@@ -93,16 +109,20 @@ export function UserStatsView({ report }: { report: UserReport }) {
           핵심 지표
         </h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-          <Card title="가입 회원 (현재)" value={fmt(accounts.current)} sub={`탈퇴 ${fmt(accounts.withdrawn)} · 누적 ${fmt(accounts.total)}`} />
+          <Card
+            title="가입 회원 (현재)"
+            value={fmt(accounts.current)}
+            sub={`이용 가능 ${fmt(accounts.available)} · 비활성화 ${fmt(accounts.deactivated)} · 탈퇴 ${fmt(accounts.withdrawn)} · 누적 ${fmt(accounts.total)}`}
+          />
           <Card title="기간 신규 가입" value={fmt(signups.inRange)} sub={`탈퇴 ${fmt(report.withdrawals.inRange)}`} />
           <Card
             title="기간 활성 회원"
             value={activity.unique === null ? <Unmeasured /> : fmt(activity.unique)}
-            sub={activity.coverage === "partial" ? `${activity.since}부터 집계` : "서로 다른 회원 수"}
+            sub={activity.coverage === "partial" ? `부분 측정 · ${activity.expiredInRange ? `${activity.retainedFrom} 이전 삭제` : `${activity.since}부터 기록`}` : "서로 다른 회원 수"}
           />
-          <Card title="DAU" value={activity.dau === null ? <Unmeasured /> : fmt(activity.dau)} sub={activity.refDay ? `${activity.refDay} 기준` : undefined} />
-          <Card title="WAU" value={activity.wau === null ? <Unmeasured /> : fmt(activity.wau)} sub="기준일 포함 7일" />
-          <Card title="MAU" value={activity.mau === null ? <Unmeasured /> : fmt(activity.mau)} sub="기준일 포함 30일" />
+          <Card title="DAU" value={activity.dau === null ? <Unmeasured /> : fmt(activity.dau)} sub={windowNote(activity.windows.dau, 1, activity)} />
+          <Card title="WAU" value={activity.wau === null ? <Unmeasured /> : fmt(activity.wau)} sub={windowNote(activity.windows.wau, 7, activity)} />
+          <Card title="MAU" value={activity.mau === null ? <Unmeasured /> : fmt(activity.mau)} sub={windowNote(activity.windows.mau, 30, activity)} />
         </div>
       </section>
 
@@ -139,9 +159,10 @@ export function UserStatsView({ report }: { report: UserReport }) {
           {signups.peakDow ? `${DOW_LABELS[signups.peakDow.dow]} (${fmt(signups.peakDow.n)}명)` : "-"} · 시간대:{" "}
           {signups.peakHour ? `${signups.peakHour.hour}시 (${fmt(signups.peakHour.n)}명)` : "-"}
         </p>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Card title="동의·닉네임 완료" value={fmt(accounts.onboarded)} sub={`현재 회원의 ${pct(accounts.onboarded, accounts.current)}`} />
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <Card title="동의·닉네임 완료" value={fmt(accounts.onboarded)} sub={`이용 가능 회원의 ${pct(accounts.onboarded, accounts.available)}`} />
           <Card title="동의 미완료·재동의 필요" value={fmt(accounts.notOnboarded)} sub="회원 기능 이용 전" />
+          <Card title="비활성화" value={fmt(accounts.deactivated)} sub="로그인 불가 · 다시 로그인하면 복구(탈퇴 아님)" />
           <Card title="이용 정지 중" value={fmt(accounts.suspended)} />
           <Card title="관리자 · 외부 계정" value={`${fmt(accounts.admins)} · ${fmt(accounts.external)}`} sub="가입 수에 포함" />
         </div>
@@ -152,9 +173,10 @@ export function UserStatsView({ report }: { report: UserReport }) {
         description={`활동: 그날 로그인 상태로 사이트를 이용한 회원(하루 한 번) · ${activity.since}부터 집계 · 관리자 제외`}
       >
         {activity.coverage === "none" ? (
-          <p className="text-xs text-muted-foreground">미측정 기간입니다.</p>
+          <p className="text-xs text-muted-foreground">미측정 기간입니다. {unmeasuredWhy}</p>
         ) : (
           <>
+            {activity.coverage === "partial" && <p className="text-[11px] text-muted-foreground">부분 측정: {unmeasuredWhy}</p>}
             {trend && (
               <StackedBarChart
                 title="기간별 활성 회원 (서로 다른 회원 수)"
@@ -179,13 +201,20 @@ export function UserStatsView({ report }: { report: UserReport }) {
                 />
                 <Card
                   title={`가입 후 ${RETURN_WINDOW_DAYS}일 내 재방문`}
-                  value={ret && ret.eligible ? pct(ret.returned, ret.eligible) : "-"}
+                  value={retValue}
                   sub={
-                    ret
-                      ? ret.eligible
-                        ? `${fmt(ret.returned)}명 / 산출 가능 ${fmt(ret.eligible)}명 (제외 ${fmt(ret.excluded)}명: ${RETURN_WINDOW_DAYS}일이 아직 안 지남·활동 기록 전 가입)`
-                        : `산출 가능한 가입자 없음 (${RETURN_WINDOW_DAYS}일이 지나야 계산)`
-                      : "이 기간 가입자 없음"
+                    ret ? (
+                      <>
+                        {ret.eligible ? `${fmt(ret.returned)}명 / 산출 가능 ${fmt(ret.eligible)}명` : "산출 가능한 가입자 없음"} (기간 가입 {fmt(ret.cohort)}명)
+                        {retentionExclusions(ret).map((t) => (
+                          <span key={t} className="block">
+                            제외: {t}
+                          </span>
+                        ))}
+                      </>
+                    ) : (
+                      "이 기간 가입자 없음"
+                    )
                   }
                 />
               </div>
@@ -193,9 +222,31 @@ export function UserStatsView({ report }: { report: UserReport }) {
           </>
         )}
         <div className="flex flex-col gap-2">
+          <h3 className="text-xs font-semibold text-foreground">세 지표의 차이 (이 기간)</h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Card
+              title="고유 활성 회원"
+              value={activity.unique === null ? <Unmeasured /> : `${fmt(activity.unique)}명`}
+              sub="사람 수: 로그인 상태로 이용한 회원을 기간 안에서 한 번만 셈"
+            />
+            <Card
+              title="로그인 완료"
+              value={hourly.loginTotal === null ? <Unmeasured /> : `${fmt(hourly.loginTotal)}회`}
+              sub="횟수: Google 로그인을 새로 마친 수(로그인 유지 중 방문은 세지 않음)"
+            />
+            <Card
+              title="로그인 회원 페이지뷰"
+              value={hourly.memberPvTotal === null ? <Unmeasured /> : `${fmt(hourly.memberPvTotal)}회`}
+              sub="이용량: 로그인 상태에서 본 화면 수(한 회원이 여러 번)"
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-2">
           <h3 className="text-xs font-semibold text-foreground">시간대별 로그인 회원 이용량 · 로그인 완료 (KST, 시)</h3>
           {hourly.memberPv === null && hourly.logins === null ? (
-            <p className="text-xs text-muted-foreground">미측정 기간입니다(이번 업데이트부터 수집).</p>
+            <p className="text-xs text-muted-foreground">
+              미측정 기간입니다({hourly.memberPvSince || hourly.loginSince ? `이 환경의 수집 시작: ${hourly.memberPvSince ?? hourly.loginSince}` : "이 환경에서 아직 수집 전"}).
+            </p>
           ) : (
             <GroupedBarChart
               title=""
@@ -209,7 +260,7 @@ export function UserStatsView({ report }: { report: UserReport }) {
           )}
           <p className="text-[11px] text-muted-foreground">
             페이지뷰: {hourly.memberPvSince ? `${hourly.memberPvSince}부터` : "수집 전"} · 로그인 완료: {hourly.loginSince ? `${hourly.loginSince}부터` : "수집 전"}{" "}
-            (그 전은 미측정, 수집 첫날은 일부)
+            (이 환경의 수집 시작 기준. 그 전은 미측정, 그 뒤 기록이 없으면 0건. 시작 시각이 없는 날짜는 그날 일부만 수집)
           </p>
         </div>
       </Section>
@@ -247,6 +298,11 @@ export function UserStatsView({ report }: { report: UserReport }) {
               />
             )}
             {p.newActive === null && p.newSignups > 0 && <p className="text-[11px] text-muted-foreground">활동 여부는 활동 기록 시작({activity.since}) 전 가입자라 미측정입니다.</p>}
+            {p.newActive !== null && p.newBeforeCollection > 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                이 중 {fmt(p.newBeforeCollection)}명은 활동 기록 시작({activity.since}) 전에 가입해 그 전 활동은 반영되지 않습니다.
+              </p>
+            )}
           </div>
         </div>
         {report.withdrawals.inRange > 0 && trend && (

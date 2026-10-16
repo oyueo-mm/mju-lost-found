@@ -14,7 +14,7 @@ import {
   type VisitBreakdown,
   type VisitSeriesKey,
 } from "./dashboard";
-import { API_METRIC_RETENTION_DAYS } from "@/lib/retention/policy";
+import { ACTIVITY_RETENTION_DAYS, API_METRIC_RETENTION_DAYS } from "@/lib/retention/policy";
 import { PERIOD_PRESETS, type PeriodPreset } from "./exportOptions";
 import { kstDay } from "./record";
 import { DURATION_BUCKETS, PAGES_BUCKETS, type DurationBucket, type PagesBucket } from "./flow";
@@ -89,6 +89,39 @@ export const sinceLabel = (source: CollectionSource) => {
   const [day, time] = COLLECTION_SINCE[source].split("T");
   return time === "00:00" ? day : `${day} ${time}`;
 };
+
+const COVERAGE_RANK: Record<Coverage, number> = { full: 0, partial: 1, none: 2 };
+const worstOf = (...cs: Coverage[]): Coverage => cs.reduce((a, c) => (COVERAGE_RANK[c] > COVERAGE_RANK[a] ? c : a), "full");
+
+// 활성 회원 (ActivityDay) marks exist from the 운영 지표 release until the
+// daily clean-up removes them after ACTIVITY_RETENTION_DAYS. The clean-up
+// (03:00 KST) deletes days before about today - 401, so every day from
+// today - ACTIVITY_RETENTION_DAYS on is always still there; older days may
+// be gone and are 미측정 -- never read as 0.
+export function activityRetainedFrom(today: string): string {
+  return addPeriods(today, "day", -ACTIVITY_RETENTION_DAYS);
+}
+
+// The first day whose whole 24 hours were recorded: the start day only
+// counts in full when collection began at midnight.
+export const ACTIVITY_FIRST_FULL_DAY = COLLECTION_SINCE.ops.endsWith("T00:00")
+  ? COLLECTION_SINCE.ops.slice(0, 10)
+  : addPeriods(COLLECTION_SINCE.ops.slice(0, 10), "day", 1);
+
+export function activityCoverageOf(from: string, until: string, today: string): Coverage {
+  const retained = activityRetainedFrom(today);
+  const kept: Coverage = until <= retained ? "none" : from < retained ? "partial" : "full";
+  return worstOf(coverageOf("ops", from, until), kept);
+}
+
+// Preview and local builds read a test database: their numbers mix test
+// accounts and automated-test (E2E) traffic. Shown on the dashboard and in
+// every exported file there; null on Production.
+export function testDataNotice(env = process.env.VERCEL_ENV): string | null {
+  return env === "production"
+    ? null
+    : "Preview·개발 환경의 통계입니다. 테스트 계정과 자동화 테스트(E2E) 기록이 섞여 있어 실제 이용자 통계가 아닙니다.";
+}
 
 export type ReportRange = { from: string; until: string; unit: Granularity };
 
@@ -382,14 +415,16 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
   const all: [MetricKey | VisitSeriesKey, (number | null)[]][] = [...Object.entries(core), ...Object.entries(visit)] as never;
   for (const [key, values] of all) {
     const source = SOURCE_OF[key];
+    // 활성 회원 also stops being measured once its marks are past retention.
+    const coverOf = (f: string, u: string) => (key === "active" ? activityCoverageOf(f, u, kstDay(now)) : coverageOf(source, f, u));
     coverage[key] = buckets.map((b) => {
       const span = bucketSpan(range, b);
-      return coverageOf(source, span.from, span.until);
+      return coverOf(span.from, span.until);
     });
     coverage[key].forEach((c, i) => {
       if (c === "none") values[i] = null;
     });
-    totalCoverage[key] = coverageOf(source, from, until);
+    totalCoverage[key] = coverOf(from, until);
     totals[key] = totalCoverage[key] === "none" ? null : values.reduce<number>((a, v) => a + (v ?? 0), 0);
   }
   totals.active = totalCoverage.active === "none" ? null : activeTotal;

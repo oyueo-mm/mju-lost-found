@@ -36,6 +36,14 @@ import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 //
 // §11 shows the 시행일 from auth/terms.ts's PRIVACY_POLICY_EFFECTIVE_DATE,
 // the same value the consent versions follow.
+// 이용 통계 (2026-10-16): §3 names the statistics purpose, §7 the 400-day
+// keeping of the active-day marks after 회원탈퇴 (retention/policy.ts
+// ACTIVITY_RETENTION_DAYS; withdrawal does not delete them), §8 how the marks
+// are made (metrics/record.ts activityActor: an HMAC of the member id under
+// a server key) and matched back to member ids in memory for counts
+// (metrics/userReport.ts) -- so they are pseudonymous, re-linkable personal
+// data, never called anonymous -- and that the hourly totals carry no member
+// data and have no deletion date (MetricDaily is not cleaned up).
 // 이름·소속 필수 수집 (2026-10-16): 이름·소속 are required items of the
 // 개인정보 동의; §1, §3, §4, §6, §7, §9 describe it. Consent withdrawal of a
 // required item is 회원탈퇴 (§6), as for the rest of this consent.
@@ -104,6 +112,12 @@ const SECTIONS: Section[] = [
         회원 식별 및 로그인, 분실물·습득물 게시글/댓글/채팅 등 서비스 핵심 기능 제공, 신고 처리 및 부정 이용 방지를 위해
         이용합니다. 이름·소속은 게시글·채팅으로 실제 물건을 주고받을 때의 본인 확인과 신고·분쟁 처리에만 이용하며, 다른
         이용자에게 공개하지 않습니다(게시글·댓글·채팅에는 닉네임만 표시됩니다).
+        <span className="mt-2 block">
+          또한 서비스 이용 현황을 파악하고 개선하기 위한 이용 통계 작성(가입·탈퇴 회원 수, 활성 회원 수, 가입 후 재방문, 게시글·채팅에
+          참여한 회원 수, 방문·검색 이용량 등)에 이용합니다. 통계는 합계로만 만들어 관리자 통계 화면과 관리자가 내려받는 파일에만
+          표시하며, 회원별 이용 기록은 표시하지 않고 통계 작성 외의 목적에는 쓰지 않습니다. 통계에 쓰는 정보와 보관기간은 아래
+          7조·8조와 같습니다.
+        </span>
       </>
     ),
   },
@@ -227,6 +241,11 @@ const SECTIONS: Section[] = [
             처리 기록은 처리 후 1년.
           </li>
           <li>관리자의 채팅 열람 기록, 이름·소속 열람 기록: 최소 1년</li>
+          <li>
+            로그인 회원의 이용 일자 기록(아래 8조): 탈퇴 여부와 관계없이 이용한 날로부터 400일. 탈퇴 전 기간의 활성 회원 수와 가입 후
+            재방문 통계가 탈퇴에 따라 바뀌지 않도록 같은 기간 동안 보관하며, 탈퇴 후에는 직접 식별정보가 삭제된 계정(위 6조의
+            &lsquo;탈퇴한 사용자&rsquo;)과만 대조됩니다.
+          </li>
         </ul>
         <p className="mt-2">보관 기간이 지난 정보는 매일 자동으로 삭제됩니다.</p>
       </>
@@ -262,11 +281,18 @@ const SECTIONS: Section[] = [
             같은 브라우저의 조회가 중복 집계되지 않도록 무작위 식별값을 저장합니다(1년).
           </li>
           <li>
-            <span className="font-medium text-foreground">로그인 회원의 이용 일자</span>: 활성 회원 수를 세기 위해, 로그인한
-            상태로 이용한 날마다 한 번 회원 번호를 운영자만 가진 키로 바꾼 값(가명 처리)과 날짜만 저장하며 400일이 지나면
-            삭제합니다. 관리자 통계 화면과 내려받는 파일에는 이를 회원 단위로 대조한 합계(가입 후 재방문 수, 게시글·채팅에
-            참여한 회원 수 등)만 표시하고, 회원별 이용 기록은 표시하지 않습니다. 로그인 완료 횟수와 로그인 상태에서 본 화면
-            수는 회원 정보 없이 시간대별 합계로만 저장합니다.
+            <span className="font-medium text-foreground">로그인 회원의 이용 일자</span>: 활성 회원 수, 가입 후 재방문 등 이용
+            통계(위 3조)를 내기 위해, 로그인한 상태로 이용한 날마다 한 번 회원 번호를 서비스 운영자만 접근할 수 있는 비밀 키로 변환한 값과 날짜를
+            저장하며, 이용한 날로부터 400일이 지나면 매일 자동으로 삭제합니다(탈퇴한 경우에도 같음, 위 7조). 이 값에는 이름·이메일이
+            들어 있지 않지만, 서비스는 같은 키로 회원 번호를 다시 변환해 어느 회원의 기록인지 대조할 수 있으므로 익명 정보가
+            아니라 개인정보로 취급합니다. 대조는 통계를 계산할 때 서버 안에서만 하며, 관리자 통계 화면과 내려받는 파일에는 대조한
+            결과의 합계(활성 회원 수, 가입 후 재방문 수, 게시글·채팅에 참여한 회원 수 등)만 표시하고 회원별 이용 기록은 표시하지
+            않습니다.
+          </li>
+          <li>
+            <span className="font-medium text-foreground">시간대별 로그인·이용 합계</span>: Google 로그인을 마친 횟수와 로그인
+            상태에서 본 화면 수를 날짜·시간대별 합계로만 저장합니다. 회원 번호 등 회원 정보는 함께 저장하지 않으며, 이 합계는
+            따로 삭제 기한을 두지 않고 보관합니다.
           </li>
           <li>
             <span className="font-medium text-foreground">방문 통계용 브라우저 저장소</span>: 로그인 여부와 관계없이
@@ -331,9 +357,8 @@ const SECTIONS: Section[] = [
           저장하지 않으며, 수집하는 개인정보 항목과 이용 목적은 바뀌지 않아 다시 동의할 필요는 없습니다.
         </span>
         <span className="mt-2 block">
-          2026년 10월 16일: 8조에 로그인 회원의 이용 일자(가명 처리, 400일 보관)와 시간대별 로그인·이용 합계를 어떻게
-          통계에 쓰는지 안내를 추가했습니다. 1조의 &lsquo;로그인 일시 등 서비스 이용 기록&rsquo;에 해당하는 내용을 자세히
-          적은 것입니다.
+          2026년 10월 16일: 3조에 이용 통계 작성 목적을 적고, 7조에 로그인 회원의 이용 일자 기록의 탈퇴 후 보관기간(400일)을
+          추가했으며, 8조에 이용 일자 기록과 시간대별 로그인·이용 합계를 어떻게 저장·대조·보관하는지 안내했습니다.
         </span>
       </>
     ),

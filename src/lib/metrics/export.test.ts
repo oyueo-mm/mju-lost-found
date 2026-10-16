@@ -183,12 +183,12 @@ describe("운영 통계 내보내기", () => {
       buckets: ["2026-10-14", "2026-10-15", "2026-10-16"],
       generatedAt: "2026-10-16 09:30",
       today: "2026-10-16",
-      accounts: { total: 6, current: 5, withdrawn: 1, onboarded: 4, notOnboarded: 1, admins: 1, suspended: 0, external: 0 },
+      accounts: { total: 6, current: 5, available: 4, deactivated: 1, withdrawn: 1, onboarded: 3, notOnboarded: 1, admins: 1, suspended: 0, external: 0 },
       signups: { inRange: 3, perBucket: [1, 2, 0], cumulative: [4, 6, 6], byHour: Array.from({ length: 24 }, (_, h) => (h === 21 ? 3 : 0)), byDow: [0, 0, 1, 2, 0, 0, 0], peakDay: { day: "2026-10-15", n: 2 }, peakDow: { dow: 3, n: 2 }, peakHour: { hour: 21, n: 3 } },
       withdrawals: { inRange: 1, perBucket: [0, 0, 1] },
-      activity: { since: "2026-10-15 03:35", coverage: "partial", perBucketCoverage: ["none", "partial", "full"], refDay: "2026-10-16", dau: 2, wau: 3, mau: 3, unique: 3, perBucket: [null, 2, 2], newPerBucket: [null, 1, 1], existingPerBucket: [null, 1, 1], memberDaysByDow: [0, 0, 0, 2, 2, 0, 0], daysByDow: [0, 0, 0, 1, 1, 0, 0], repeat: { active: 3, multiDay: 1 }, retention: { cohort: 3, eligible: 0, returned: 0, excluded: 3 } },
-      hourly: { memberPvSince: null, memberPvCoverage: "none", memberPv: null, loginSince: null, loginCoverage: "none", logins: null },
-      participation: { posters: 2, chatters: 1, activeWithPost: 1, activeWithChat: 1, newSignups: 3, newActive: 2, newPosted: 1, newChatted: 0 },
+      activity: { since: "2026-10-15 03:35", retainedFrom: "2025-09-11", expiredInRange: false, coverage: "partial", perBucketCoverage: ["none", "partial", "full"], refDay: "2026-10-16", windows: { dau: "full", wau: "partial", mau: "partial" }, dau: 2, wau: 3, mau: 3, unique: 3, perBucket: [null, 2, 2], newPerBucket: [null, 1, 1], existingPerBucket: [null, 1, 1], memberDaysByDow: [0, 0, 0, 2, 2, 0, 0], daysByDow: [0, 0, 0, 1, 1, 0, 0], repeat: { active: 3, multiDay: 1 }, retention: { cohort: 3, eligible: 0, returned: 0, pending: 2, beforeCollection: 1, expired: 0, nextReadyDay: "2026-10-23" } },
+      hourly: { memberPvSince: null, memberPvCoverage: "none", memberPv: null, memberPvTotal: null, loginSince: null, loginCoverage: "none", logins: null, loginTotal: null },
+      participation: { posters: 2, chatters: 1, activeWithPost: 1, activeWithChat: 1, newSignups: 3, newActive: 2, newBeforeCollection: 1, newPosted: 1, newChatted: 0 },
     } as unknown as import("./userReport").UserReport;
     const sets = datasetsOf(fakeReport(), users);
     expect(sets.map((s) => s.name).at(-1)).toBe("사용자 통계");
@@ -196,12 +196,25 @@ describe("운영 통계 내보내기", () => {
     const summary = Object.fromEntries(u.tables[0].rows.map((r) => [r[0], r[1]]));
     expect(summary["기간 신규 가입"]).toBe(3);
     expect(summary["MAU"]).toBe(3);
+    // B4: 현재 = 이용 가능 + 비활성화
+    expect([summary["가입 회원 (현재, 탈퇴 제외)"], summary["이용 가능 회원"], summary["비활성화 회원"]]).toEqual([5, 4, 1]);
+    // B1: no sign-up judged yet -> 집계 대기 (not 0, not 미측정), reasons apart
+    expect(summary["가입 후 7일 내 재방문"]).toBe("집계 대기");
+    expect([summary["  제외: 집계 대기"], summary["  제외: 미측정(기록 시작 전)"], summary["  제외: 미측정(보관기한 경과)"]]).toEqual([2, 1, 0]);
+    const basis = Object.fromEntries(u.tables[0].rows.map((r) => [r[0], r[2]]));
+    expect(basis["WAU"]).toBe("기준일 포함 7일 · 부분 측정(2026-10-15 03:35부터만 기록)");
+    expect(summary["로그인 완료 (횟수)"]).toBeNull(); // not collected in this environment yet
     expect(u.tables[1].rows[0]).toEqual(["2026-10-14", 1, 4, 0, null, null, null]); // activity 미측정 before it began
     expect(u.tables[2].rows[21]).toEqual(["21시", 3, null, null]); // hourly activity not collected yet
     expect(u.tables[4].rows[2]).toEqual(["활성 회원 중 게시글 등록", 1, 3, 1 / 3]);
     expect(u.notes.join(" ")).toContain("실명·이메일·학과·학번");
     expect(toCsv(fakeReport(), "users", undefined, users)).toContain("# MJU Find 운영 통계 - 사용자 통계");
     expect(datasetsOf(fakeReport()).some((d) => d.key === "users")).toBe(false);
+    // Preview / local: the test-data notice heads every file
+    expect(toCsv(fakeReport(), "users", undefined, users, "테스트 데이터")).toContain("# 주의: 테스트 데이터");
+    expect(toCsv(fakeReport(), "users", undefined, users, null)).not.toContain("테스트 데이터");
+    const sheet = toSheets(fakeReport(), undefined, datasetsOf(fakeReport(), users), "테스트 데이터").at(-1)!;
+    expect(sheet.rows.flat().some((c) => c && typeof c === "object" && c.v === "주의: 테스트 데이터")).toBe(true);
   });
 
   it("states the required caveats in every file", () => {
