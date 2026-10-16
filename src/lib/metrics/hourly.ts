@@ -233,3 +233,27 @@ export function peakHour(values: (number | null)[]): { hour: number; n: number }
 export function totalOf(cells: MetricCells): { value: number | null; status: CellStatus } {
   return { value: sumOrNull(cells.values.flat()), status: worst(cells.status.flat()) };
 }
+
+// How much of the chosen days' past hours a metric measured: hours fully
+// measured, in part, not at all; and the days with at least one measured hour.
+export function measuredOf(cells: MetricCells): { hours: number; full: number; partial: number; none: number; days: number } {
+  const past = cells.status.flat().filter((s) => s !== "future");
+  return {
+    hours: past.length,
+    full: past.filter((s) => s === "full").length,
+    partial: past.filter((s) => s === "partial").length,
+    none: past.filter((s) => s === "none").length,
+    days: cells.status.filter((row) => row.some((s) => s === "full" || s === "partial")).length,
+  };
+}
+
+// The busiest single day-hour (first one on a tie); null without counts.
+export function peakCell(cells: MetricCells): { d: number; hour: number; n: number } | null {
+  let best: { d: number; hour: number; n: number } | null = null;
+  cells.values.forEach((row, d) =>
+    row.forEach((v, hour) => {
+      if (v !== null && v > 0 && (!best || v > best.n)) best = { d, hour, n: v };
+    }),
+  );
+  return best;
+}

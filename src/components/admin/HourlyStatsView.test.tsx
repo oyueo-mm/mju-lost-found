@@ -27,7 +27,7 @@ const rows = [
 const cells = buildCells(["2026-10-16", "2026-10-17"], rows, starts, NOW);
 
 const dayCells = (days: string[]) => buildCells(days, rows, starts, NOW);
-function render(metric: "pv" | "active" = "pv", c = cells) {
+function render(metric: "pv" | "active" | "login" | "session" | "all" = "pv", c = cells) {
   return renderToStaticMarkup(
     <HourlyStatsView
       cells={c}
@@ -72,7 +72,7 @@ describe("HourHeatmap", () => {
 });
 
 describe("시간대 분석 view: drawn by how many days are chosen", () => {
-  it("shows totals by login state, the busiest hour, the metric switch, the calendar and the downloads", () => {
+  it("shows the metric switch (with 전체 지표 보기), the calendar and the downloads", () => {
     const markup = render();
     expect(markup).toContain("시간대 분석");
     expect(markup).toContain('aria-current="page"');
@@ -114,6 +114,70 @@ describe("시간대 분석 view: drawn by how many days are chosen", () => {
     expect(markup).toContain("고른 6일의 시간대별 합계");
     expect(markup).toContain("회원·시간");
     expect(lines(markup)).toBe(0); // no tangle of six lines
+  });
+});
+
+describe("시간대 분석 summary: about the chosen metric and days only", () => {
+  const tiles = (markup: string) => [...markup.matchAll(/<span class="text-xs font-medium text-muted-foreground">([^<]+)<\/span>/g)].map((m) => m[1]);
+
+  it("three cards that all follow the metric: total, busiest hour of day, measured range", () => {
+    const pv = render("pv");
+    expect(tiles(pv)).toEqual(["페이지뷰 합계", "최다 이용 시간대", "측정 범위"]);
+    expect(pv).toContain("2/2일"); // both days have measured hours
+    const session = render("session");
+    expect(tiles(session)).toEqual(["방문 세션 합계", "최다 이용 시간대", "측정 범위"]);
+    expect(session).toContain("5회");
+    // 활성 회원: the most in one hour, never a sum of people
+    const active = render("active");
+    expect(tiles(active)[0]).toBe("한 시간 최다 활성 회원");
+    expect(active).toContain("2명");
+    expect(active).toContain("회원·시간, 사람 수 아님");
+  });
+
+  it("nothing measured: one line instead of a row of 미측정 cards", () => {
+    const login = render("login", dayCells(["2026-10-14", "2026-10-15"]));
+    expect(tiles(login)).toEqual([]);
+    expect(login).toContain("고른 2일은 <b class=\"font-semibold text-foreground\">로그인 완료</b> 수집 전이라 모두");
+  });
+
+  it("전체 지표 보기: one summary row per metric, unmeasured ones as one short cell", () => {
+    const all = render("all", dayCells(["2026-10-15", "2026-10-16", "2026-10-17"]));
+    expect(all).toContain('aria-current="page"');
+    expect(all).toMatch(/전체 지표 보기/);
+    expect(all).toContain("고른 날짜의 지표별 요약");
+    expect(all).toMatch(/비로그인 페이지뷰<\/th><td colSpan="3"|비로그인 페이지뷰<\/th><td[^>]*>[0-9]/);
+  });
+});
+
+describe("시간대 분석 charts", () => {
+  it("2-4 days: a line per day, a day's colour and its 부분 측정 / to-come points kept per point", () => {
+    const markup = render("pv", dayCells(["2026-10-16", "2026-10-17"]));
+    expect(markup).toContain("10/16(금)");
+    expect(markup).toContain("10/17(토)");
+    expect(markup).toContain("stroke-chart-1");
+    expect(markup).toContain("stroke-chart-2");
+    expect(markup).toContain("아직 지나지 않음"); // 10/17 after 14시, in the hover card
+    expect(markup).toContain("border-chart-1"); // hollow dot: 10/16 member views counted in part
+    expect(markup).toContain("속이 빈 점은 부분 측정");
+  });
+
+  it("전체 지표 보기, up to 4 days: one small chart per metric, each with its own unit, the same colour per day", () => {
+    const markup = render("all", dayCells(["2026-10-16", "2026-10-17"]));
+    for (const t of ["페이지뷰(전체)", "방문 세션(시작)", "시간대별 활성 회원", "로그인 완료"]) expect(markup).toContain(`>${t}<span class="ml-1 font-normal text-muted-foreground">(단위: `);
+    expect(markup).toContain("(단위: 명)");
+    expect(lines(markup)).toBeGreaterThanOrEqual(4);
+    // 10/16 is chart-1, 10/17 chart-2 in every chart; 활성 회원 has no 10/16
+    // line (not measured yet), never a line at 0
+    expect(markup.match(/stroke-chart-1/g)).toHaveLength(3);
+    expect(markup.match(/stroke-chart-2/g)).toHaveLength(4);
+    expect(markup).toContain("md:grid-cols-2"); // stacked on a phone
+  });
+
+  it("전체 지표 보기, 5+ days: the hours added up per metric instead of tangled lines", () => {
+    const markup = render("all", dayCells(["2026-10-11", "2026-10-12", "2026-10-13", "2026-10-16", "2026-10-17"]));
+    expect(lines(markup)).toBe(0);
+    expect(markup).toContain("방문 세션(시작) · 5일 합계");
+    expect(markup).toContain("지표 하나를 고르세요");
   });
 });
 

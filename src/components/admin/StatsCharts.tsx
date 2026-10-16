@@ -17,14 +17,22 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
 // Fixed series hues (globals.css --chart-*), assigned by meaning across the
 // dashboard: 1 회원·로그인·주 지표, 2 비로그인·대비 지표, 3 신규·세 번째, 4 기타.
 export type ChartTone = 1 | 2 | 3 | 4;
-const TONE: Record<ChartTone, { bg: string; fill: string; stroke: string }> = {
-  1: { bg: "bg-chart-1", fill: "fill-chart-1", stroke: "stroke-chart-1" },
-  2: { bg: "bg-chart-2", fill: "fill-chart-2", stroke: "stroke-chart-2" },
-  3: { bg: "bg-chart-3", fill: "fill-chart-3", stroke: "stroke-chart-3" },
-  4: { bg: "bg-chart-4", fill: "fill-chart-4", stroke: "stroke-chart-4" },
+const TONE: Record<ChartTone, { bg: string; fill: string; stroke: string; border: string }> = {
+  1: { bg: "bg-chart-1", fill: "fill-chart-1", stroke: "stroke-chart-1", border: "border-chart-1" },
+  2: { bg: "bg-chart-2", fill: "fill-chart-2", stroke: "stroke-chart-2", border: "border-chart-2" },
+  3: { bg: "bg-chart-3", fill: "fill-chart-3", stroke: "stroke-chart-3", border: "border-chart-3" },
+  4: { bg: "bg-chart-4", fill: "fill-chart-4", stroke: "stroke-chart-4", border: "border-chart-4" },
 };
 
-export type ChartSeries = { label: string; values: (number | null)[]; tone: ChartTone };
+// `status` (optional, per value): when one series is measured differently
+// from the others at the same point (시간대 분석: one line per day) --
+// 부분 측정 values get a hollow dot on a line, and hours not reached yet say
+// so in the hover card instead of 미측정.
+export type PointStatus = Coverage | "future";
+export type ChartSeries = { label: string; values: (number | null)[]; tone: ChartTone; status?: PointStatus[] };
+
+const pointText = (x: number | null, status: PointStatus | undefined, unit: string) =>
+  status === "future" ? "아직 지나지 않음" : x === null || status === "none" ? "미측정" : `${formatValue(x)}${unit}${status === "partial" ? " (부분 측정)" : ""}`;
 
 type ChartProps = {
   title: string;
@@ -105,7 +113,7 @@ function Tooltip({ i, n, label, status, inProgress, rows, total, unit }: {
   label: string;
   status: Status;
   inProgress: boolean;
-  rows: { label: string; value: number | null; tone: ChartTone }[];
+  rows: { label: string; value: number | null; tone: ChartTone; status?: PointStatus }[];
   total?: number | null;
   unit: string;
 }) {
@@ -131,7 +139,7 @@ function Tooltip({ i, n, label, status, inProgress, rows, total, unit }: {
                 {rows.length > 1 && <Swatch className={TONE[r.tone].bg} />}
                 {r.label}
               </span>
-              <span className="font-semibold tabular-nums">{v(r.value)}</span>
+              <span className="font-semibold tabular-nums">{r.status ? pointText(r.value, r.status, unit) : v(r.value)}</span>
             </span>
           ))}
           {total !== undefined && rows.length > 1 && (
@@ -225,7 +233,7 @@ function Frame({
                     label={label}
                     status={status[i]}
                     inProgress={inProgress && i === n - 1}
-                    rows={series.map((s) => ({ label: s.label, value: s.values[i], tone: s.tone }))}
+                    rows={series.map((s) => ({ label: s.label, value: s.values[i], tone: s.tone, status: s.status?.[i] }))}
                     total={total?.(i)}
                     unit={unit}
                   />
@@ -266,7 +274,7 @@ function Frame({
                   {status[i] === "partial" ? " (부분 측정)" : ""}
                 </th>
                 {series.map((s) => (
-                  <td key={s.label}>{s.values[i] === null ? "미측정" : formatValue(s.values[i]!)}</td>
+                  <td key={s.label}>{s.status ? pointText(s.values[i], s.status[i], "") : s.values[i] === null ? "미측정" : formatValue(s.values[i]!)}</td>
                 ))}
               </tr>
             ))}
@@ -427,8 +435,9 @@ export function LineChart(props: ChartProps) {
               .filter((seg) => seg.length > 1)
               .map((seg, k) => (
                 <g key={`${s.label}${k}`}>
-                  {/* the area means "from 0": only drawn when the axis starts there */}
-                  {scale.bottom === 0 && (
+                  {/* the area means "from 0": only drawn when the axis starts
+                      there, and for a single line (several areas would overlap) */}
+                  {scale.bottom === 0 && series.length === 1 && (
                     <polygon points={`${seg[0][0]},100 ${seg.map((p) => p.join(",")).join(" ")} ${seg[seg.length - 1][0]},100`} className={TONE[s.tone].fill} opacity={0.1} />
                   )}
                   <polyline
@@ -451,13 +460,17 @@ export function LineChart(props: ChartProps) {
           if (v === null) return null;
           const end = i === lastMeasured[k];
           const bottom = `${frac(v) * 100}%`;
+          const partial = s.status?.[i] === "partial";
           return (
             <span key={s.label}>
               <span
-                className={`absolute left-1/2 size-2 -translate-x-1/2 translate-y-1/2 rounded-full ring-2 ring-card ${TONE[s.tone].bg} ${dots || end ? "" : "hidden group-hover:block group-focus:block"}`}
+                className={`absolute left-1/2 size-2 -translate-x-1/2 translate-y-1/2 rounded-full ring-2 ring-card ${
+                  partial ? `border-2 bg-card ${TONE[s.tone].border}` : `${TONE[s.tone].bg} ${dots || end ? "" : "hidden group-hover:block group-focus:block"}`
+                }`}
                 style={{ bottom }}
               />
-              {end && <span className="absolute left-1/2 -translate-x-1/2 pb-1.5 text-[10px] leading-none font-semibold tabular-nums text-foreground" style={{ bottom }}>{formatValue(v)}</span>}
+              {/* the last value, for a single line (several would collide; the hover card has them) */}
+              {end && series.length === 1 && <span className="absolute left-1/2 -translate-x-1/2 pb-1.5 text-[10px] leading-none font-semibold tabular-nums text-foreground" style={{ bottom }}>{formatValue(v)}</span>}
             </span>
           );
         })

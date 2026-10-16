@@ -97,6 +97,15 @@ describe("buildCells", () => {
     expect(totalOf(cells.metrics.login)).toEqual({ value: null, status: "none" });
   });
 
+  it("counts the measured range (hours to come left out) and finds the busiest day-hour", async () => {
+    const { measuredOf, peakCell } = await import("./hourly");
+    // pvAnon: 10/16 none (24h); 10/17 0~7 none, 8~9 partial, 10~14 full, 15~ future
+    expect(measuredOf(cells.metrics.pvAnon)).toEqual({ hours: 39, full: 5, partial: 2, none: 32, days: 1 });
+    expect(measuredOf(cells.metrics.login)).toMatchObject({ full: 0, partial: 0, days: 0 });
+    expect(peakCell(cells.metrics.pv)).toEqual({ d: 1, hour: 10, n: 8 });
+    expect(peakCell(cells.metrics.login)).toBeNull();
+  });
+
   it("lists KST days", () => {
     expect(daysFrom("2026-10-30", "2026-11-02")).toEqual(["2026-10-30", "2026-10-31", "2026-11-01"]);
   });

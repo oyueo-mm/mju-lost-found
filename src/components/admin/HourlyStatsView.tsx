@@ -2,14 +2,16 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { GroupedBarChart, HourHeatmap, LineChart, StackedBarChart, type ChartSeries, type ChartTone } from "@/components/admin/StatsCharts";
-import { More, Section, StatTile, SubHeading, Unmeasured } from "@/components/admin/StatsBlocks";
+import { More, Section, StatTile, SubHeading } from "@/components/admin/StatsBlocks";
 import { LAST_ACTIVE_INTERVAL_MINUTES } from "@/lib/metrics/activityTime";
 import { describeDays, MAX_SELECTED_DAYS } from "@/lib/metrics/daySelection";
 import {
   byHour,
   halves,
   HOURLY_METRICS,
+  measuredOf,
   metricInfo,
+  peakCell,
   peakHour,
   totalOf,
   type CellStatus,
@@ -21,10 +23,14 @@ import type { Coverage } from "@/lib/metrics/report";
 
 // 시간대 분석 (a section of 운영 통계): the service's use by KST hour on the
 // days chosen on the calendar (HourlyDayPicker) -- any set of days, never
-// the days in between. How it is drawn follows the count: one day as its
-// own hours, 2-4 days as one line each, 5 or more as a date x hour heatmap
-// plus the hours added up (no day is ever dropped). Server only; every
-// number comes from lib/metrics/hourly.ts, the same cells the export uses.
+// the days in between. One metric at a time, or 전체 지표 보기 (one small
+// chart per metric on the same 0-23시 axis, each with its own y axis). How
+// it is drawn follows the count: one day as its own hours, 2-4 days as one
+// line each (the same colour per day in every chart), 5 or more as a date
+// x hour heatmap plus the hours added up (no day is ever dropped). The
+// summary beside the calendar is about the chosen metric and days only.
+// Server only; every number comes from lib/metrics/hourly.ts, the same
+// cells the export uses.
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const md = (day: string) => `${Number(day.slice(5, 7))}/${Number(day.slice(8, 10))}`;
@@ -33,6 +39,9 @@ const dayLabel = (day: string) => `${md(day)}(${DOW[new Date(`${day}T00:00:00Z`)
 const HOUR_LABELS = Array.from({ length: 24 }, (_, h) => `${h}시`);
 // Up to this many days are drawn as one line each.
 export const MAX_LINE_DAYS = 4;
+// 전체 지표 보기: one small chart each, never two units on one axis.
+export const SMALL_MULTIPLES: HourlyMetric[] = ["pv", "session", "active", "login"];
+export type HourlyView = HourlyMetric | "all";
 
 // Charts take Coverage; hours not reached yet are cut off before this.
 const asCoverage = (s: CellStatus): Coverage => (s === "future" ? "full" : s);
@@ -78,6 +87,33 @@ function HourTotals({ cells, metric, title, hours, inProgress, note }: { cells: 
   return <GroupedBarChart title={title} unit={info.unit} labels={labels} tickEvery={3} series={[s]} coverage={s.coverage} inProgress={inProgress} note={note} />;
 }
 
+// One line per chosen day, coloured by its place in the choice (so a day
+// has the same colour in every chart); each point keeps its own measured /
+// partial / still-to-come state.
+function DayLines({ cells, metric, hours, title, note }: { cells: HourlyCells; metric: HourlyMetric; hours: number; title: string; note?: ReactNode }) {
+  const c = cells.metrics[metric];
+  return (
+    <LineChart
+      title={title}
+      unit={metricInfo(metric).unit}
+      labels={HOUR_LABELS.slice(0, hours)}
+      tickEvery={3}
+      series={cells.days.map((day, d) => ({
+        label: dayLabel(day),
+        tone: ((d % 4) + 1) as ChartTone,
+        values: c.values[d].slice(0, hours),
+        status: c.status[d].slice(0, hours),
+      }))}
+      coverage={Array.from({ length: hours }, (_, h): Coverage => {
+        const s = cells.days.map((_, d) => c.status[d][h]).filter((x) => x !== "future");
+        if (s.includes("partial")) return "partial";
+        return s.some((x) => x === "full") ? "full" : "none";
+      })}
+      note={note}
+    />
+  );
+}
+
 // 오전 / 오후 / 하루 합계 and the busiest hour of each chosen day.
 function DayTable({ cells, metric }: { cells: HourlyCells; metric: HourlyMetric }) {
   const info = metricInfo(metric);
@@ -117,6 +153,121 @@ function DayTable({ cells, metric }: { cells: HourlyCells; metric: HourlyMetric 
   );
 }
 
+const measuredText = (x: ReturnType<typeof measuredOf>) =>
+  [`측정 ${fmt(x.full)}시간`, x.partial ? `부분 ${fmt(x.partial)}시간` : null, x.none ? `미측정 ${fmt(x.none)}시간` : null].filter(Boolean).join(" · ");
+
+// The chosen metric on the chosen days: its total (for 활성 회원 the most
+// members in one hour -- a sum would be member-hours), its busiest hour of
+// day and how much of the time was measured. Nothing measured: one line.
+function MetricSummary({ cells, metric }: { cells: HourlyCells; metric: HourlyMetric }) {
+  const info = metricInfo(metric);
+  const c = cells.metrics[metric];
+  const n = cells.days.length;
+  const measured = measuredOf(c);
+  if (measured.full + measured.partial === 0)
+    return (
+      <p className="rounded-card border border-dashed border-border px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+        고른 {n}일은 <b className="font-semibold text-foreground">{info.label}</b> 수집 전이라 모두 <b className="font-semibold text-foreground">미측정</b>입니다(0건이
+        아님). 이 환경의 수집 시작: {c.since ?? "아직 수집 전"}.
+      </p>
+    );
+  const total = totalOf(c);
+  const top = peakCell(c);
+  const profilePeak = peakHour(byHour(c).values);
+  const split = metric === "pv" ? { member: totalOf(cells.metrics.pvMember), anon: totalOf(cells.metrics.pvAnon) } : null;
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {metric === "active" ? (
+        <StatTile
+          label="한 시간 최다 활성 회원"
+          value={top ? `${fmt(top.n)}명` : "0명"}
+          sub={
+            <>
+              {top ? `${dayLabel(cells.days[top.d])} ${top.hour}시 · ` : ""}시간별 수의 합 {valueText(total.value, total.status, "")}(회원·시간, 사람 수 아님)
+            </>
+          }
+        />
+      ) : (
+        <StatTile
+          label={`${info.short} 합계`}
+          value={valueText(total.value, total.status, info.unit)}
+          sub={
+            split ? (
+              <>
+                회원 {valueText(split.member.value, split.member.status, "")} · 비로그인 {valueText(split.anon.value, split.anon.status, "")}
+              </>
+            ) : (
+              `고른 ${n}일의 측정된 시간 합계`
+            )
+          }
+        />
+      )}
+      <StatTile
+        label="최다 이용 시간대"
+        value={profilePeak ? `${profilePeak.hour}시` : "-"}
+        sub={
+          profilePeak
+            ? `고른 날짜 합 ${fmt(profilePeak.n)}${info.unit}${top && n > 1 ? ` · 가장 많았던 때 ${dayLabel(cells.days[top.d])} ${top.hour}시 ${fmt(top.n)}${info.unit}` : ""}`
+            : "측정된 시간에 기록 없음(0건)"
+        }
+      />
+      <StatTile label="측정 범위" value={`${measured.days}/${n}일`} sub={`${measuredText(measured)}${measured.none ? ` · 수집 시작 ${c.since ?? "-"}` : ""}`} />
+    </div>
+  );
+}
+
+// 전체 지표 보기: one row per metric instead of a card each, so unmeasured
+// metrics read as one short line.
+function AllMetricsSummary({ cells }: { cells: HourlyCells }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[28rem] text-right text-xs tabular-nums">
+        <caption className="sr-only">고른 날짜의 지표별 요약</caption>
+        <thead className="text-muted-foreground">
+          <tr>
+            <th scope="col" className="py-1.5 pr-2 text-left font-medium">지표</th>
+            <th scope="col" className="py-1.5 pr-2 font-medium">합계</th>
+            <th scope="col" className="py-1.5 pr-2 font-medium">최다 시간대</th>
+            <th scope="col" className="py-1.5 pr-2 font-medium">측정한 날</th>
+          </tr>
+        </thead>
+        <tbody>
+          {HOURLY_METRICS.map((x) => {
+            const c = cells.metrics[x.key];
+            const measured = measuredOf(c);
+            const total = totalOf(c);
+            const top = peakCell(c);
+            const peak = peakHour(byHour(c).values);
+            return (
+              <tr key={x.key} className="border-t border-border">
+                <th scope="row" className="py-1.5 pr-2 text-left font-medium text-foreground">
+                  {x.label}
+                </th>
+                {measured.full + measured.partial === 0 ? (
+                  <td colSpan={3} className="py-1.5 pr-2 text-muted-foreground">
+                    미측정 · 수집 시작 {c.since ?? "전"}
+                  </td>
+                ) : (
+                  <>
+                    <td className="py-1.5 pr-2 font-semibold">
+                      {x.key === "active" ? (top ? `한 시간 최다 ${fmt(top.n)}명` : "0명") : valueText(total.value, total.status, x.unit)}
+                    </td>
+                    <td className="py-1.5 pr-2">{peak ? `${peak.hour}시` : "-"}</td>
+                    <td className="py-1.5 pr-2">
+                      {measured.days}/{cells.days.length}일
+                      {measured.partial || measured.none ? <span className="text-muted-foreground"> (일부)</span> : null}
+                    </td>
+                  </>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function HourlyStatsView({
   cells,
   metric,
@@ -127,40 +278,29 @@ export function HourlyStatsView({
   notice,
 }: {
   cells: HourlyCells; // the chosen days, in order
-  metric: HourlyMetric;
-  // this page's URL with the metric replaced (days and period kept)
-  hrefWith: (metric: HourlyMetric) => string;
+  metric: HourlyView;
+  // this page's URL with the metric (or 전체 지표 보기) replaced, days and period kept
+  hrefWith: (metric: HourlyView) => string;
   today: string;
   picker: ReactNode; // the calendar
   actions?: ReactNode; // downloads of the same days
   notice?: string | null;
 }) {
-  const info = metricInfo(metric);
-  const m = cells.metrics;
-  const c = m[metric];
   const n = cells.days.length;
   // only today chosen: the hours still to come are left off the axis
   const onlyToday = n > 0 && cells.days.every((d) => d === today);
   const hours = onlyToday ? cells.nowHour + 1 : 24;
   const hasToday = cells.days.includes(today);
-  const total = (x: MetricCells) => totalOf(x);
-  const pvMember = total(m.pvMember);
-  const pvAnon = total(m.pvAnon);
-  const busiestActive = (() => {
-    let best: { d: number; h: number; n: number } | null = null;
-    m.active.values.forEach((row, d) =>
-      row.forEach((v, h) => {
-        if (v !== null && v > 0 && (!best || v > best.n)) best = { d, h, n: v };
-      }),
-    );
-    return best as { d: number; h: number; n: number } | null;
-  })();
-  const profile = byHour(c);
-  const peak = peakHour(profile.values);
   const sinceLine = HOURLY_METRICS.filter((x) => x.key !== "pv")
-    .map((x) => `${x.short} ${m[x.key].since ? `${m[x.key].since}부터` : "수집 전"}`)
+    .map((x) => `${x.short} ${cells.metrics[x.key].since ? `${cells.metrics[x.key].since}부터` : "수집 전"}`)
     .join(" · ");
   const todayNote = hasToday ? `오늘(${md(today)})은 ${cells.nowHour}시까지의 값입니다.` : undefined;
+  const lineNote = `선 하나가 하루입니다(같은 날짜는 모든 그래프에서 같은 색). 속이 빈 점은 부분 측정, 끊긴 구간은 미측정이며 0으로 잇지 않습니다.${todayNote ? ` ${todayNote}` : ""}`;
+  const sumNote = (key: HourlyMetric) => (key === "active" ? "여러 날을 더한 값이라 사람 수가 아닌 '회원·시간' 수입니다." : undefined);
+  const chip = (active: boolean) =>
+    `rounded-full border px-3 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+      active ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground"
+    }`;
 
   return (
     <Section
@@ -193,7 +333,8 @@ export function HourlyStatsView({
               </li>
               <li>
                 1일은 그날의 시간대별 막대, 2~{MAX_LINE_DAYS}일은 날짜별 선, 5일 이상은 선이 겹치지 않도록 날짜 × 시간대 히트맵과 시간대별 합계로 보여
-                줍니다. 고른 날짜는 모두 반영하며, 고르지 않은 날짜는 집계하지 않습니다. 최대 {MAX_SELECTED_DAYS}일.
+                줍니다. &lsquo;전체 지표 보기&rsquo;는 지표마다 작은 그래프를 같은 0~23시 축으로 나란히 놓고, 세로축은 지표마다 따로 둡니다. 고른 날짜는 모두
+                반영하며, 고르지 않은 날짜는 집계하지 않습니다. 최대 {MAX_SELECTED_DAYS}일.
               </li>
               <li>
                 활성 회원 감지는 화면을 열거나 보이는 화면을 조작할 때 이뤄지며, 이미 그 시간에 감지된 회원은 다시 세지 않습니다(최근 활동 시각 갱신은{" "}
@@ -214,85 +355,70 @@ export function HourlyStatsView({
           )}
           <nav className="flex flex-wrap gap-2" aria-label="분석 지표">
             {HOURLY_METRICS.map((x) => (
-              <Link
-                key={x.key}
-                href={hrefWith(x.key)}
-                scroll={false}
-                aria-current={x.key === metric ? "page" : undefined}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-                  x.key === metric ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground"
-                }`}
-              >
+              <Link key={x.key} href={hrefWith(x.key)} scroll={false} aria-current={x.key === metric ? "page" : undefined} className={chip(x.key === metric)}>
                 {x.label}
               </Link>
             ))}
+            <Link href={hrefWith("all")} scroll={false} aria-current={metric === "all" ? "page" : undefined} className={chip(metric === "all")}>
+              전체 지표 보기
+            </Link>
           </nav>
           {n === 0 ? (
             <p className="text-xs text-muted-foreground">달력에서 날짜를 골라 주세요.</p>
           ) : (
-            <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
-              <StatTile
-                label="페이지뷰(전체)"
-                value={valueText(total(m.pv).value, total(m.pv).status, "회")}
-                sub={
-                  <>
-                    회원 {valueText(pvMember.value, pvMember.status, "")} · 비로그인 {valueText(pvAnon.value, pvAnon.status, "")}
-                  </>
-                }
-              />
-              <StatTile label="방문 세션(시작)" value={valueText(total(m.session).value, total(m.session).status, "회")} sub="방문 횟수, 사람 수 아님" />
-              <StatTile
-                label="활성 회원 최다 시간"
-                value={busiestActive ? `${fmt(busiestActive.n)}명` : total(m.active).status === "none" ? <Unmeasured /> : "0명"}
-                sub={busiestActive ? `${dayLabel(cells.days[busiestActive.d])} ${busiestActive.h}시` : "한 시간 안의 서로 다른 회원 수"}
-              />
-              <StatTile label="로그인 완료" value={valueText(total(m.login).value, total(m.login).status, "회")} sub="Google 로그인을 새로 마친 수" />
-              <StatTile
-                label={`${info.short} 최다 시간대`}
-                value={peak ? `${peak.hour}시` : profile.status.every((s) => s === "none" || s === "future") ? <Unmeasured /> : "-"}
-                sub={peak ? `고른 날짜 합계 ${fmt(peak.n)}${info.unit}` : "기록 없음"}
-              />
+            <div className="flex flex-col gap-2">
+              <SubHeading basis={`${n}일 · ${metric === "all" ? "모든 지표" : metricInfo(metric).label}`}>고른 날짜: {describeDays(cells.days)}</SubHeading>
+              {metric === "all" ? <AllMetricsSummary cells={cells} /> : <MetricSummary cells={cells} metric={metric} />}
             </div>
           )}
           {actions}
         </div>
       </div>
 
-      {n === 1 && (
+      {n > 0 && metric === "all" && (
+        <div className="flex flex-col gap-2">
+          <SubHeading basis={n <= MAX_LINE_DAYS ? "날짜별 선 · 0~23시 공통 · 세로축은 지표마다 따로" : `고른 ${n}일의 시간대별 합계 · 세로축은 지표마다 따로`}>
+            지표별 그래프
+          </SubHeading>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            {SMALL_MULTIPLES.map((key) =>
+              n <= MAX_LINE_DAYS ? (
+                <DayLines key={key} cells={cells} metric={key} hours={hours} title={metricInfo(key).label} />
+              ) : (
+                <HourTotals key={key} cells={cells} metric={key} title={`${metricInfo(key).label} · ${n}일 합계`} hours={24} inProgress={hasToday} note={sumNote(key)} />
+              ),
+            )}
+          </div>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {n <= MAX_LINE_DAYS ? lineNote : "날짜별로 나눠 보려면 지표 하나를 고르세요(날짜 × 시간대 히트맵)."}
+          </p>
+        </div>
+      )}
+
+      {metric !== "all" && n === 1 && (
         <>
-          <HourTotals cells={cells} metric={metric} title={`${dayLabel(cells.days[0])} ${info.label} · 시간대별`} hours={hours} inProgress={onlyToday} note={todayNote} />
+          <HourTotals cells={cells} metric={metric} title={`${dayLabel(cells.days[0])} ${metricInfo(metric).label} · 시간대별`} hours={hours} inProgress={onlyToday} note={todayNote} />
           <DayTable cells={cells} metric={metric} />
         </>
       )}
 
-      {n >= 2 && n <= MAX_LINE_DAYS && (
+      {metric !== "all" && n >= 2 && n <= MAX_LINE_DAYS && (
         <>
-          <LineChart
-            title={`${info.label} · 날짜별 비교`}
-            unit={info.unit}
-            labels={HOUR_LABELS.slice(0, hours)}
-            tickEvery={3}
-            series={cells.days.map((day, d) => ({ label: dayLabel(day), tone: ((d % 4) + 1) as ChartTone, values: c.values[d].slice(0, hours) }))}
-            coverage={Array.from({ length: hours }, (_, h): Coverage => {
-              const s = cells.days.map((_, d) => c.status[d][h]).filter((x) => x !== "future");
-              if (s.includes("partial")) return "partial";
-              return s.some((x) => x === "full") ? "full" : "none";
-            })}
-            note={todayNote}
-          />
+          <DayLines cells={cells} metric={metric} hours={hours} title={`${metricInfo(metric).label} · 날짜별 비교`} note={lineNote} />
           <DayTable cells={cells} metric={metric} />
         </>
       )}
 
-      {n > MAX_LINE_DAYS && (
+      {metric !== "all" && n > MAX_LINE_DAYS && (
         <>
           <div className="flex flex-col gap-2">
             <SubHeading basis={`${n}일 · 고른 날짜만, 날짜 순`}>{describeDays(cells.days)}</SubHeading>
             <HourHeatmap
-              title={info.label}
-              unit={info.unit}
+              title={metricInfo(metric).label}
+              unit={metricInfo(metric).unit}
               extraLabels={["오전", "오후", "합계"]}
               rows={cells.days.map((day, d) => {
+                const c = cells.metrics[metric];
                 const half = halves(c, d);
                 return {
                   label: dayLabel(day),
@@ -304,14 +430,7 @@ export function HourlyStatsView({
               note={metric === "active" ? "칸마다 그 시간의 서로 다른 회원 수입니다. 오전·오후·합계는 시간별 수를 더한 '회원·시간' 수입니다." : todayNote}
             />
           </div>
-          <HourTotals
-            cells={cells}
-            metric={metric}
-            title={`${info.label} · 고른 ${n}일의 시간대별 합계`}
-            hours={24}
-            inProgress={hasToday}
-            note={metric === "active" ? "여러 날을 더한 값이라 사람 수가 아닌 '회원·시간' 수입니다." : undefined}
-          />
+          <HourTotals cells={cells} metric={metric} title={`${metricInfo(metric).label} · 고른 ${n}일의 시간대별 합계`} hours={24} inProgress={hasToday} note={sumNote(metric)} />
         </>
       )}
     </Section>

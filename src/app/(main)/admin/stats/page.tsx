@@ -31,10 +31,10 @@ import { StatsExportPanel } from "@/components/admin/StatsExportPanel";
 import { StatsPeriodPicker } from "@/components/admin/StatsPeriodPicker";
 import { UserStatsView } from "@/components/admin/UserStatsView";
 import { loadUserReport } from "@/lib/metrics/userReport";
-import { HourlyStatsView } from "@/components/admin/HourlyStatsView";
+import { HourlyStatsView, type HourlyView } from "@/components/admin/HourlyStatsView";
 import { HourlyDayPicker } from "@/components/admin/HourlyDayPicker";
 import { HourlyExportButtons } from "@/components/admin/HourlyExportButtons";
-import { isHourlyMetric, loadHourlyCells, type HourlyMetric } from "@/lib/metrics/hourly";
+import { isHourlyMetric, loadHourlyCells } from "@/lib/metrics/hourly";
 import { describeDays, encodeDays, resolveSelection } from "@/lib/metrics/daySelection";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
 import { AlertIcon, ChevronRightIcon, InfoIcon } from "@/components/icons";
@@ -166,7 +166,7 @@ export default async function AdminStatsPage({
   const dParam = params.d === undefined ? null : [params.d].flat().join(",");
   const selection = resolveSelection(dParam, today);
   const selectedParam = encodeDays(selection.days);
-  const metric: HourlyMetric = isHourlyMetric(params.m) ? params.m : "pv";
+  const metric: HourlyView = params.m === "all" ? "all" : isHourlyMetric(params.m) ? params.m : "pv";
   const hourlyQuery = new URLSearchParams({ d: selectedParam, m: metric }).toString();
   const periodQuery =
     period.selection.preset === "custom"
@@ -249,7 +249,7 @@ export default async function AdminStatsPage({
   }
 
   const [report, hourlyCells] = await Promise.all([loadReport(period.range), loadHourlyCells(selection.days)]);
-  const hourlyHref = (m: HourlyMetric) => `/admin/stats?${new URLSearchParams({ ...Object.fromEntries(new URLSearchParams(periodQuery)), d: selectedParam, m }).toString()}`;
+  const hourlyHref = (m: HourlyView) => `/admin/stats?${new URLSearchParams({ ...Object.fromEntries(new URLSearchParams(periodQuery)), d: selectedParam, m }).toString()}`;
   const { core, visit, totals, totalCoverage: cov } = report;
   const labels = report.buckets.map((b) => bucketLabel(bucketSpan(report.range, b).from, unit));
   const last = report.buckets.length - 1;
