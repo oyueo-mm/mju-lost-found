@@ -10,8 +10,13 @@
 # is given only to the seal.mjs child processes.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup\protect.ps1 -Dir <backupDir> [-RemovePlain]
+#
+# Restore check only, of an archive made earlier (nothing sealed or deleted;
+# the quarterly check, or before removing older copies):
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup\protect.ps1 -Enc <file.tar.enc>
 param(
-  [Parameter(Mandatory = $true)][string]$Dir,
+  [string]$Dir = "",
+  [string]$Enc = "",
   [switch]$RemovePlain,
   [string]$Repo = "",
   [string]$PgBin = "C:\msys64\ucrt64\bin",
@@ -22,7 +27,15 @@ param(
 $ErrorActionPreference = "Stop"
 if (-not $Repo) { $Repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path }
 Import-Module (Join-Path $PSScriptRoot "BackupSecret.psm1") -Force
-$Dir = (Resolve-Path $Dir).Path.TrimEnd("\")
+$verifyOnly = [bool]$Enc
+if ($verifyOnly) {
+  if ($Dir -or $RemovePlain) { throw "-Enc checks an existing archive only (no -Dir / -RemovePlain)" }
+  $Enc = (Resolve-Path $Enc).Path
+  $Dir = $Enc -replace "\.tar\.enc$", ""
+} else {
+  if (-not $Dir) { throw "give -Dir <backupDir> (encrypt + check) or -Enc <file.tar.enc> (check only)" }
+  $Dir = (Resolve-Path $Dir).Path.TrimEnd("\")
+}
 if (-not $Log) { $Log = Join-Path (Split-Path $Dir -Parent) "protect-backup.log" }
 function Log($m) { $line = "$(Get-Date -Format s) $m"; $line | Add-Content -Encoding utf8 $Log; Write-Host $line }
 function Run($exe, [string[]]$argv, $what) {
@@ -35,18 +48,20 @@ function Run($exe, [string[]]$argv, $what) {
   return $out
 }
 
-$enc = "$Dir.tar.enc"
+$enc = if ($verifyOnly) { $Enc } else { "$Dir.tar.enc" }
 $tmp = Join-Path $env:TEMP ("mju-verify-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
 $cluster = Join-Path $tmp "pg"
 $copy = Join-Path $tmp "copy"
 $pg = $null
 Set-Location $Repo
 try {
-  if (-not (Test-Path (Join-Path $Dir "SHA256SUMS"))) { throw "not a backup folder (no SHA256SUMS): $Dir" }
   $env:BACKUP_PASSPHRASE = Get-BackupPassphraseText -Target $CredentialTarget
-  Log "seal $Dir"
-  $o = Run "node" @("scripts/backup/seal.mjs", "seal", $Dir) "seal.mjs seal"
-  Log $o.Trim()
+  if (-not $verifyOnly) {
+    if (-not (Test-Path (Join-Path $Dir "SHA256SUMS"))) { throw "not a backup folder (no SHA256SUMS): $Dir" }
+    Log "seal $Dir"
+    $o = Run "node" @("scripts/backup/seal.mjs", "seal", $Dir) "seal.mjs seal"
+    Log $o.Trim()
+  }
 
   Log "restore check of $enc"
   New-Item -ItemType Directory -Force $tmp | Out-Null
@@ -64,14 +79,16 @@ try {
   if ($o -notmatch "RESTORE VERIFIED") { throw "restore not verified" }
   Log "RESTORE VERIFIED from the encrypted file: $enc"
 
-  if ($RemovePlain) {
+  if ($verifyOnly) {
+    # check only: nothing sealed, nothing deleted
+  } elseif ($RemovePlain) {
     Remove-Item -LiteralPath $Dir -Recurse -Force
     Log "plaintext folder removed: $Dir"
   } else {
     Log "plaintext folder kept (no -RemovePlain): $Dir"
   }
 } catch {
-  Log "FAILED: $($_.Exception.Message) -- plaintext folder kept"
+  Log "FAILED: $($_.Exception.Message) -- nothing deleted"
   throw
 } finally {
   if (Test-Path Env:BACKUP_PASSPHRASE) { Remove-Item Env:BACKUP_PASSPHRASE }

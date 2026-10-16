@@ -110,6 +110,8 @@ Supabase Free에는 **자동 백업이 없다.** 백업은 운영자가 직접 �
   | `seal.mjs ... failed` / `restore not verified` | 디스크 부족, pgvector 없음, 손상 | 남은 평문 폴더로 `protect.ps1 -Dir <폴더>` 재실행 |
   수동 재실행: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup\weekly.ps1`(같은 날짜면 폴더를 먼저 정리).
   매월 1회 로그와 최신 파일 날짜를 확인한다(주간 실행이 매번 복원 검증을 포함).
+  이미 만든 암호화본만 다시 검증할 때(분기 점검, 오래된 사본 정리 전): `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup\protect.ps1 -Enc <파일.tar.enc>`
+  (암호화·삭제 없이 복원 검증만).
 - 저장 위치와 권한: 운영자 PC의 `%USERPROFILE%\mju-lost-found-backups`(상속 해제, 본인·SYSTEM·Administrators만 접근).
 - 별도 저장소(같은 PC 고장·분실 대비): **암호화본(`.tar.enc`)만** 월 1회 외장 디스크 등 다른 매체에 복사하고 해시를 대조한다.
   `robocopy %USERPROFILE%\mju-lost-found-backups E:\mju-backups *.tar.enc /XO` →
