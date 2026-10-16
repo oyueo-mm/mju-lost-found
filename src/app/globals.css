@@ -55,11 +55,12 @@
      green/amber accent never collides with a series hue. Blue / orange /
      aqua validated as a categorical set (CVD-separated, light and dark,
      each >= 3:1 on its card surface);
-     chart-4 is the neutral "기타". */
+     chart-4 is the neutral "기타": a dark grey in light mode, since a
+     lighter grey at 3:1 would sit next to aqua's lightness. */
   --chart-1: #006ec7;
   --chart-2: #eb6834;
   --chart-3: #16a173;
-  --chart-4: #9ca3af;
+  --chart-4: #4b5563;
 
   --radius: 0.875rem;
 }
