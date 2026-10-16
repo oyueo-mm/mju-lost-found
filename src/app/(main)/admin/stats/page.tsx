@@ -19,7 +19,7 @@ import {
   type Coverage,
   type Report,
 } from "@/lib/metrics/report";
-import { PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "@/lib/metrics/visits";
+import { DEVICE_KINDS, DEVICE_LABELS, PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "@/lib/metrics/visits";
 import { ApiStatsTable, type ApiStatRow } from "@/components/admin/ApiStatsTable";
 import { BarList, Meter, Sparkline, StackedBarChart } from "@/components/admin/StatsCharts";
 import { StatsExportPanel } from "@/components/admin/StatsExportPanel";
@@ -403,6 +403,61 @@ export default async function AdminStatsPage({
             }))}
             empty={cov.pvAnon === "none" ? "미측정 기간입니다." : "아직 기록이 없습니다."}
           />
+        </div>
+        <div className="flex flex-col gap-3 border-t border-border pt-4">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-sm font-semibold text-foreground">접속 기기</h3>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              {report.device.since
+                ? `기기별 통계는 ${report.device.since}부터 집계됩니다(첫날은 일부, 그 전은 미측정). `
+                : "기기별 통계는 아직 수집된 기록이 없습니다. "}
+              비율의 분모는 기기 집계가 있는 방문 세션·페이지뷰입니다.
+            </p>
+            <More label="기기 구분 기준">
+              <ul className="flex list-disc flex-col gap-1 pl-4">
+                <li>브라우저가 보내는 User-Agent와 모바일 여부 힌트(Client Hints)로 서버에서 기기 종류만 나누어 셉니다. 원본 값이나 기기 식별자는 저장하지 않습니다.</li>
+                <li>iPad는 Mac과 같은 User-Agent를 보내므로, 터치 화면이 있는 Mac 환경을 태블릿으로 셉니다(Mac에는 터치 화면이 없음).</li>
+                <li>Windows 터치 노트북·Surface, 모바일 브라우저의 &lsquo;데스크톱 사이트&rsquo; 모드는 PC와 구분할 수 없어 PC로 셉니다.</li>
+                <li>Android는 User-Agent에 Mobile이 없으면 태블릿으로 셉니다. TV·게임기·알 수 없는 브라우저는 기타·미확인입니다.</li>
+              </ul>
+            </More>
+          </div>
+          {report.device.totalCoverage === "none" ? (
+            <p className="text-xs text-muted-foreground">미측정 기간입니다.</p>
+          ) : (
+            <div className="grid gap-5 md:grid-cols-2">
+              {trend && (
+                <div className="md:col-span-2">
+                  <StackedBarChart
+                    title="기기별 방문 세션"
+                    labels={labels}
+                    series={DEVICE_KINDS.map((k, i) => ({
+                      label: DEVICE_LABELS[k],
+                      values: report.device.session[k],
+                      className: ["fill-primary", "fill-primary/55", "fill-primary/25", "fill-muted-foreground/40"][i],
+                      swatch: ["bg-primary", "bg-primary/55", "bg-primary/25", "bg-muted-foreground/40"][i],
+                    }))}
+                  />
+                </div>
+              )}
+              {(
+                [
+                  ["방문 세션", report.device.totals.session],
+                  ["페이지뷰", report.device.totals.pv],
+                ] as const
+              ).map(([title, totalsByKind]) => {
+                const all = DEVICE_KINDS.reduce((a, k) => a + (totalsByKind[k] ?? 0), 0);
+                return (
+                  <div key={title} className="flex flex-col gap-2">
+                    <p className="text-[11px] text-muted-foreground">
+                      <span className="text-xs font-semibold text-foreground">기기별 {title}</span> · 분모: {fmt(all)}회
+                    </p>
+                    <BarList rows={DEVICE_KINDS.map((k) => ({ label: DEVICE_LABELS[k], value: totalsByKind[k] ?? 0 }))} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </Section>
 

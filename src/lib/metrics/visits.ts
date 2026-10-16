@@ -163,3 +163,41 @@ export type VisitEvent = {
 // one person on two devices, or after clearing site data, is two sessions.
 export const SESSION_IDLE_MS = 30 * 60 * 1000;
 export const MAX_EVENTS_PER_CALL = 20;
+
+// ---------- 접속 기기 ----------
+// Device class of a visit, decided on the server from the request's
+// User-Agent and the Sec-CH-UA-Mobile client hint, plus one flag from the
+// browser (does it have a touch screen). Only the class is counted; the
+// User-Agent itself is never stored.
+//
+// Limits, kept honest rather than guessed:
+// - iPadOS Safari sends a Mac desktop User-Agent. A Mac has no touch
+//   screen, so "Mac + touch" is counted as a tablet; without the flag
+//   (old beacon, no JS detail) it would read as a PC.
+// - A Windows touch laptop / Surface, or a phone using "desktop site"
+//   mode, cannot be told apart from a PC and is counted as one.
+// - Android tablets are the Android devices whose User-Agent lacks
+//   "Mobile" (the convention Android browsers follow).
+// - TVs, consoles, unknown or missing User-Agents: 기타·미확인.
+export const DEVICE_KINDS = ["mobile", "pc", "tablet", "other"] as const;
+export type DeviceKind = (typeof DEVICE_KINDS)[number];
+export const DEVICE_LABELS: Record<DeviceKind, string> = {
+  mobile: "모바일(스마트폰)",
+  pc: "PC",
+  tablet: "태블릿",
+  other: "기타·미확인",
+};
+
+export function deviceOf(userAgent: string | null | undefined, clientHintMobile?: string | null, touch?: boolean): DeviceKind {
+  const ua = userAgent ?? "";
+  if (!ua.trim()) return "other";
+  if (/SmartTV|SMART-TV|HbbTV|Tizen.*TV|Web0S|NetCast|CrKey|AppleTV|PlayStation|Xbox|Nintendo/i.test(ua)) return "other";
+  if (/iPad/.test(ua)) return "tablet";
+  if (/iPhone|iPod/.test(ua)) return "mobile";
+  if (/Android/i.test(ua)) return /Mobile/.test(ua) ? "mobile" : "tablet";
+  if (clientHintMobile === "?1") return "mobile";
+  if (/Windows Phone|IEMobile|BlackBerry|BB10|KAIOS|Opera Mini/i.test(ua)) return "mobile";
+  if (/Macintosh|Mac OS X/.test(ua)) return touch === true ? "tablet" : "pc";
+  if (/Windows NT|CrOS|X11|Linux x86_64|Linux i686/.test(ua)) return "pc";
+  return "other";
+}

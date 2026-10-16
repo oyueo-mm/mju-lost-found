@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { headers } from "next/headers";
 
 import { addDailyCount, currentAudience } from "@/lib/metrics/record";
-import { isBotUserAgent, isPageKind, isRefSource, MAX_EVENTS_PER_CALL, sanitizeUtm } from "@/lib/metrics/visits";
+import { deviceOf, isBotUserAgent, isPageKind, isRefSource, MAX_EVENTS_PER_CALL, sanitizeUtm } from "@/lib/metrics/visits";
 
 // 방문 통계: page views from components/layout/VisitBeacon (real browser
 // renders only -- a prefetch never runs it). A server action, not a new API
@@ -21,6 +21,10 @@ import { isBotUserAgent, isPageKind, isRefSource, MAX_EVENTS_PER_CALL, sanitizeU
 //   ref.<source>                sessions by referrer category
 //   utm_source.<v>, utm_campaign.<v>   sessions with UTM tags
 //   internal.pv                 admins' page views (kept out of the above)
+//   device.<kind>.pv, device.<kind>.session   the same page views / sessions
+//                               by device class (lib/metrics/visits.ts
+//                               deviceOf) -- a split of pv / session, never
+//                               added to them
 //
 // A browser opted out ("내 방문 통계에서 제외", on by default once an admin
 // has signed in there) still sends its views with `optedOut`: signed in as
@@ -69,7 +73,7 @@ function cappedUtm(kind: "source" | "campaign", value: string, day: string): str
   return value;
 }
 
-export async function recordVisitsAction(events: unknown, options?: { optedOut?: boolean }): Promise<{ admin: boolean } | void> {
+export async function recordVisitsAction(events: unknown, options?: { optedOut?: boolean; touch?: boolean }): Promise<{ admin: boolean } | void> {
   try {
     if (!Array.isArray(events) || events.length === 0) return;
     const requestHeaders = await headers();
@@ -81,6 +85,7 @@ export async function recordVisitsAction(events: unknown, options?: { optedOut?:
     const audience = await currentAudience();
     if (audience !== "internal" && options?.optedOut === true) return { admin: false };
     const day = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const device = deviceOf(requestHeaders.get("user-agent"), requestHeaders.get("sec-ch-ua-mobile"), options?.touch === true);
 
     for (const raw of events.slice(0, admitted)) {
       if (typeof raw !== "object" || raw === null) continue;
@@ -92,8 +97,10 @@ export async function recordVisitsAction(events: unknown, options?: { optedOut?:
       }
       addDailyCount(`visit.pv.${audience}`);
       addDailyCount(`visit.page.${event.kind}.${audience}`);
+      addDailyCount(`visit.device.${device}.pv`);
       if (event.sessionStart !== true) continue;
       addDailyCount(`visit.session.${audience}`);
+      addDailyCount(`visit.device.${device}.session`);
       addDailyCount(`visit.ref.${isRefSource(event.ref) ? event.ref : "other"}`);
       const utmSource = sanitizeUtm(typeof event.utmSource === "string" ? event.utmSource : null);
       const utmCampaign = sanitizeUtm(typeof event.utmCampaign === "string" ? event.utmCampaign : null);

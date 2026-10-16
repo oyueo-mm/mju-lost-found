@@ -39,6 +39,8 @@ describe("방문 통계 server action", () => {
       "visit.ref.everytime": 1,
       "visit.utm_source.everytime": 1,
       "visit.utm_campaign.launch": 1,
+      "visit.device.mobile.pv": 3,
+      "visit.device.mobile.session": 1,
     });
   });
 
@@ -72,6 +74,8 @@ describe("방문 통계 server action", () => {
       "visit.page.home.anon": 1,
       "visit.session.anon": 1,
       "visit.ref.other": 1,
+      "visit.device.other.pv": 1,
+      "visit.device.other.session": 1,
     });
 
     counts.clear();
@@ -98,7 +102,7 @@ describe("방문 통계 server action", () => {
 
     // not opted out: counted as usual, and the reply says "not an admin"
     expect(await recordVisitsAction([{ kind: "home", sessionStart: false }])).toEqual({ admin: false });
-    expect(Object.fromEntries(counts)).toEqual({ "visit.pv.member": 1, "visit.page.home.member": 1 });
+    expect(Object.fromEntries(counts)).toEqual({ "visit.pv.member": 1, "visit.page.home.member": 1, "visit.device.mobile.pv": 1 });
   });
 
   it("caps one client at 60 events a minute, without affecting another client", async () => {
@@ -121,5 +125,24 @@ describe("방문 통계 server action", () => {
     ip = "192.0.2.250";
     await recordVisitsAction([{ kind: "home", sessionStart: true, ref: "direct", utmCampaign: "spam0" }]);
     expect(counts.get("visit.utm_campaign.spam0")).toBe(2);
+  });
+
+  it("splits the same views and sessions by device, never adding to the totals", async () => {
+    userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
+    await recordVisitsAction([{ kind: "home", sessionStart: true, ref: "direct" }, { kind: "lost", sessionStart: false }], { touch: true });
+    expect(counts.get("visit.device.tablet.session")).toBe(1); // iPadOS: Mac User-Agent with a touch screen
+    expect(counts.get("visit.device.tablet.pv")).toBe(2);
+    expect(counts.get("visit.pv.anon")).toBe(2);
+    expect(counts.get("visit.session.anon")).toBe(1);
+
+    counts.clear();
+    ip = "198.51.100.9";
+    await recordVisitsAction([{ kind: "home", sessionStart: true, ref: "direct" }]); // same Mac, no touch
+    expect(counts.get("visit.device.pc.session")).toBe(1);
+
+    counts.clear();
+    audience = "internal";
+    await recordVisitsAction([{ kind: "home", sessionStart: true, ref: "direct" }]);
+    expect([...counts.keys()].some((k) => k.startsWith("visit.device."))).toBe(false); // admins stay out
   });
 });

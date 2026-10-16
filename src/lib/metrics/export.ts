@@ -12,7 +12,7 @@ import {
   type Report,
 } from "./report";
 import { describeRoute } from "./apiRoutes";
-import { PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "./visits";
+import { DEVICE_KINDS, DEVICE_LABELS, PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "./visits";
 import { buildCsv, buildXlsx, columnName, type Cell, type Sheet } from "./xlsx";
 
 // 운영 통계 내보내기: the same Report the dashboard shows, laid out as the
@@ -31,6 +31,9 @@ type Table = { title?: string; columns: { label: string; kind: Kind }[]; rows: V
 type Dataset = { key: DatasetKey; name: string; tables: Table[]; notes: string[]; widths: number[] };
 
 const UNIT_LABEL = { day: "일별", week: "주별(월요일 시작)", month: "월별" } as const;
+
+export const DEVICE_CAVEAT =
+  "접속 기기는 User-Agent와 Client Hints로 서버에서 종류만 나누어 셉니다(원본 값·기기 식별자 저장 안 함). iPad는 터치 화면이 있는 Mac 환경으로 판별하며, Windows 터치 노트북·'데스크톱 사이트' 모드의 휴대폰은 PC와 구분할 수 없어 PC로 셉니다. 기기별 통계는 수집을 시작한 날부터 있으며 그 전은 미측정입니다.";
 
 export const CAVEATS = [
   "방문 세션은 고유 방문자 수가 아닙니다. 같은 브라우저에서 30분 넘게 조회가 없거나 날짜가 바뀌면 새 방문으로 세며, 한 사람이 기기 두 대로 들어오면 두 번 셉니다.",
@@ -62,6 +65,9 @@ export function datasetsOf(report: Report): Dataset[] {
   const sessions = sumOf(totals.sessionAnon, totals.sessionMember);
   const everytime = cov.sessionAnon === "none" ? null : (refs.find((r) => r.source === "everytime")?.sessions ?? 0);
 
+  const deviceNote = report.device.since
+    ? `기기별은 ${report.device.since}부터 집계${report.device.totalCoverage === "partial" ? "(이전은 미측정)" : ""}`
+    : "미측정(기기별 수집 전)";
   const summaryRows: Value[][] = [
     ["회원", "신규 가입", totals.signups, ""],
     ["회원", "활성 회원(기간 내 서로 다른 로그인 회원)", totals.active, coverageNote(cov.active, "active")],
@@ -72,6 +78,12 @@ export function datasetsOf(report: Report): Dataset[] {
     ["방문", "방문 세션(비로그인으로 시작)", totals.sessionAnon, ""],
     ["방문", "방문 세션(로그인 상태로 시작)", totals.sessionMember, "방문 도중 로그인한 경우는 비로그인으로 시작한 방문에 포함"],
     ["방문", "에브리타임 유입 방문 세션", everytime, ""],
+    ...DEVICE_KINDS.map((k, i): Value[] => [
+      "방문",
+      `방문 세션(${DEVICE_LABELS[k]})`,
+      report.device.totals.session[k],
+      i === 0 ? deviceNote : "",
+    ]),
     ["검색", "검색 합계", sumOf(totals.searchKeyword, totals.searchSemantic, totals.searchImage), coverageNote(cov.searchKeyword, "searchKeyword")],
     ["검색", "키워드 검색", totals.searchKeyword, `${KEYWORD_BASIS_CHANGED_AT.replace("T", " ")} 집계 기준 변경`],
     ["검색", "자연어(AI) 검색", totals.searchSemantic, ""],
@@ -106,6 +118,12 @@ export function datasetsOf(report: Report): Dataset[] {
     totals.internalPv,
   ];
   const pagesMeasured = cov.pvAnon !== "none";
+  const deviceRows = buckets.map((b, i) => [
+    startOf(b),
+    ...DEVICE_KINDS.map((k) => report.device.session[k][i]),
+    ...DEVICE_KINDS.map((k) => report.device.pv[k][i]),
+  ]);
+  const deviceTotal: Value[] = ["합계", ...DEVICE_KINDS.map((k) => report.device.totals.session[k]), ...DEVICE_KINDS.map((k) => report.device.totals.pv[k])];
   const pageRows: Value[][] = report.breakdown.pages.map((p) => [PAGE_KIND_LABELS[p.kind as PageKind] ?? p.kind, p.anon, p.member, p.anon + p.member]);
 
   const refRows: Value[][] = refs.map((r) => [REF_SOURCE_LABELS[r.source as RefSource] ?? r.source, r.sessions, ratio(r.sessions, sessions)]);
@@ -162,7 +180,7 @@ export function datasetsOf(report: Report): Dataset[] {
     {
       key: "visits",
       name: "방문 통계",
-      widths: [14, 13, 13, 13, 15, 15, 13, 13, 13, 15],
+      widths: [14, 14, 14, 14, 15, 15, 14, 14, 14, 15],
       tables: [
         {
           title: `${UNIT_LABEL[report.range.unit]} 페이지뷰·방문 세션`,
@@ -182,12 +200,26 @@ export function datasetsOf(report: Report): Dataset[] {
           total: visitTotal,
         },
         {
+          title: `${UNIT_LABEL[report.range.unit]} 접속 기기별 방문 세션·페이지뷰`,
+          columns: [
+            period,
+            ...DEVICE_KINDS.map((k) => ({ label: `방문 세션(${DEVICE_LABELS[k]})`, kind: "int" as const })),
+            ...DEVICE_KINDS.map((k) => ({ label: `페이지뷰(${DEVICE_LABELS[k]})`, kind: "int" as const })),
+          ],
+          rows: deviceRows,
+          total: deviceTotal,
+        },
+        {
           title: "화면별 페이지뷰(기간 전체)",
           columns: [{ label: "화면", kind: "text" }, { label: "비로그인", kind: "int" }, { label: "로그인", kind: "int" }, { label: "합계", kind: "int" }],
           rows: pagesMeasured ? pageRows : [["미측정", null, null, null]],
         },
       ],
-      notes: [CAVEATS[0], CAVEATS[1], "활성 회원은 그 기간에 로그인해 이용한 서로 다른 회원 수이며, 합계 행은 기간 전체의 서로 다른 회원 수입니다(기간별 값의 합이 아님).", `방문 통계는 ${sinceLabel("visit")}부터 집계되며 그 전은 미측정입니다.`],
+      notes: [
+        CAVEATS[0],
+        CAVEATS[1],
+        DEVICE_CAVEAT,
+        "활성 회원은 그 기간에 로그인해 이용한 서로 다른 회원 수이며, 합계 행은 기간 전체의 서로 다른 회원 수입니다(기간별 값의 합이 아님).", `방문 통계는 ${sinceLabel("visit")}부터 집계되며 그 전은 미측정입니다.`],
     },
     {
       key: "referrals",

@@ -17,6 +17,7 @@ import {
 import { API_METRIC_RETENTION_DAYS } from "@/lib/retention/policy";
 import { PERIOD_PRESETS, type PeriodPreset } from "./exportOptions";
 import { kstDay } from "./record";
+import { DEVICE_KINDS, type DeviceKind } from "./visits";
 
 // 운영 통계 for any KST date range -- the one loader behind both the
 // /admin/stats dashboard and its Excel/CSV export, so the two always show
@@ -65,6 +66,13 @@ export const SOURCE_OF: Record<MetricKey | VisitSeriesKey, CollectionSource | nu
 export type Coverage = "full" | "partial" | "none";
 
 // Is [from, until) (KST days, `until` exclusive) measured by `source`?
+// For a count whose start is only known from the data (its first recorded
+// day): before that day 미측정, the first day itself partial.
+export function coverageSinceDay(firstDay: string | null, from: string, until: string): Coverage {
+  if (!firstDay || until <= firstDay) return "none";
+  return from > firstDay ? "full" : "partial";
+}
+
 export function coverageOf(source: CollectionSource | null, from: string, until: string): Coverage {
   if (!source) return "full";
   const since = COLLECTION_SINCE[source];
@@ -180,6 +188,17 @@ export type Report = {
   breakdown: VisitBreakdown;
   // Admins' searches (search.*.internal): in the totals, in neither column.
   internalSearches: number;
+  // 접속 기기: the same page views / sessions split by device class. Began
+  // with its release, whose day is read from the data (first device row);
+  // null values are 미측정.
+  device: {
+    since: string | null;
+    coverage: Coverage[];
+    totalCoverage: Coverage;
+    pv: Record<DeviceKind, (number | null)[]>;
+    session: Record<DeviceKind, (number | null)[]>;
+    totals: { pv: Record<DeviceKind, number | null>; session: Record<DeviceKind, number | null> };
+  };
   timings: TimingRow[];
   capacity: Awaited<ReturnType<typeof loadCapacity>>;
 };
@@ -228,6 +247,9 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
     }
   };
   let activeTotal = 0;
+  let deviceSince: string | null = null;
+  const devicePv = Object.fromEntries(DEVICE_KINDS.map((k) => [k, zeros()])) as Record<DeviceKind, (number | null)[]>;
+  const deviceSession = Object.fromEntries(DEVICE_KINDS.map((k) => [k, zeros()])) as Record<DeviceKind, (number | null)[]>;
   let visitTotals = new Map<string, number>();
 
   await Promise.all([
@@ -282,11 +304,28 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
         visitTotals.set(r.metric, (visitTotals.get(r.metric) ?? 0) + Number(r.n));
         const key = seriesOf.get(r.metric);
         if (key) put(visit[key], [r]);
+        const device = /^visit\.device\.([a-z]+)\.(pv|session)$/.exec(r.metric);
+        if (device && (DEVICE_KINDS as readonly string[]).includes(device[1])) put((device[2] === "pv" ? devicePv : deviceSession)[device[1] as DeviceKind], [r]);
       }
     })(),
   ]);
 
-  const [timings, capacity] = await Promise.all([loadTimingsBetween(from, until), loadCapacity()]);
+  const [timings, capacity, firstDevice] = await Promise.all([
+    loadTimingsBetween(from, until),
+    loadCapacity(),
+    prisma.$queryRaw<{ day: Date | string | null }[]>`SELECT min("day") AS day FROM "MetricDaily" WHERE "metric" LIKE 'visit.device.%'`.catch(() => []),
+  ]);
+  deviceSince = firstDevice[0]?.day ? asDay(firstDevice[0].day) : null;
+  const deviceCoverage = buckets.map((b) => {
+    const span = bucketSpan(range, b);
+    return coverageSinceDay(deviceSince, span.from, span.until);
+  });
+  for (const series of [devicePv, deviceSession]) {
+    for (const kind of DEVICE_KINDS) deviceCoverage.forEach((c, i) => c === "none" && (series[kind][i] = null));
+  }
+  const deviceTotalCoverage = coverageSinceDay(deviceSince, from, until);
+  const totalOf = (series: Record<DeviceKind, (number | null)[]>) =>
+    Object.fromEntries(DEVICE_KINDS.map((k) => [k, deviceTotalCoverage === "none" ? null : series[k].reduce<number>((a, v) => a + (v ?? 0), 0)])) as Record<DeviceKind, number | null>;
 
   // Periods before a count began are 미측정 (null), whatever the table holds.
   const coverage = {} as Report["coverage"];
@@ -322,6 +361,14 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
     totals,
     totalCoverage,
     breakdown: totalCoverage.pvAnon === "none" ? breakdownOf(new Map()) : breakdownOf(visitTotals),
+    device: {
+      since: deviceSince,
+      coverage: deviceCoverage,
+      totalCoverage: deviceTotalCoverage,
+      pv: devicePv,
+      session: deviceSession,
+      totals: { pv: totalOf(devicePv), session: totalOf(deviceSession) },
+    },
     internalSearches: [...visitTotals].reduce((a, [m, n]) => (/^search\.[a-z]+\.internal$/.test(m) ? a + n : a), 0),
     timings,
     capacity,

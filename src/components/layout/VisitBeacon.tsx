@@ -90,7 +90,9 @@ function send() {
   if (queue.length === 0) return;
   const batch = queue.slice(0, MAX_EVENTS_PER_CALL);
   writeQueue(queue.slice(MAX_EVENTS_PER_CALL));
-  recordVisitsAction(batch, { optedOut: optedOut() })
+  // touch: whether this browser has a touch screen -- the one detail the
+  // server can't see, needed to tell an iPad (Mac User-Agent) from a Mac.
+  recordVisitsAction(batch, { optedOut: optedOut(), touch: navigator.maxTouchPoints > 1 })
     .then((reply) => {
       if (reply?.admin) defaultOptOutForAdmin();
     })

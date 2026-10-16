@@ -61,6 +61,14 @@ function fakeReport(): Report {
       utmCampaigns: [{ value: "-launch", sessions: 2 }],
     },
     internalSearches: 0,
+    device: {
+      since: "2026-10-16",
+      coverage: ["none", "none", "partial"],
+      totalCoverage: "partial",
+      pv: { mobile: n(null, null, 20), pc: n(null, null, 8), tablet: n(null, null, 2), other: n(null, null, 0) },
+      session: { mobile: n(null, null, 5), pc: n(null, null, 2), tablet: n(null, null, 1), other: n(null, null, 0) },
+      totals: { pv: { mobile: 20, pc: 8, tablet: 2, other: 0 }, session: { mobile: 5, pc: 2, tablet: 1, other: 0 } },
+    },
     timings: [
       { route: "GET /api/posts", count: 10, errors: 1, avgMs: 250, p50: "≤ 200ms", p95: "≤ 800ms", totalMs: 2500, buckets: [0, 0, 0, 5, 4, 1, 0, 0, 0, 0] },
       { route: "ai:text-embed", count: 3, errors: 0, avgMs: 600, p50: "≤ 800ms", p95: "≤ 800ms", totalMs: 1800, buckets: [0, 0, 0, 0, 0, 3, 0, 0, 0, 0] },
@@ -105,6 +113,19 @@ describe("운영 통계 내보내기", () => {
     expect(value("활성 회원(기간 내 서로 다른 로그인 회원)")).toBe(12);
     // a 미측정 day stays null, never 0
     expect(sets[1].tables[0].rows[0]).toEqual(["2026-10-14", null, null, null, null, null, null, null, null, null]);
+  });
+
+  it("adds the device split to the summary and the 방문 통계 sheet (미측정 before it began)", () => {
+    const sets = datasetsOf(fakeReport());
+    const summary = sets[0].tables[0].rows;
+    expect(summary.find((r) => r[1] === "방문 세션(모바일(스마트폰))")?.[2]).toBe(5);
+    expect(summary.find((r) => r[1] === "방문 세션(태블릿)")?.[2]).toBe(1);
+    const device = sets[1].tables[1];
+    expect(device.title).toContain("접속 기기별");
+    expect(device.rows[0]).toEqual(["2026-10-14", null, null, null, null, null, null, null, null]);
+    expect(device.rows[2]).toEqual(["2026-10-16", 5, 2, 1, 0, 20, 8, 2, 0]);
+    expect(device.total).toEqual(["합계", 5, 2, 1, 0, 20, 8, 2, 0]);
+    expect(toCsv(fakeReport(), "visits")).toContain("2026-10-16,5,2,1,0,20,8,2,0");
   });
 
   it("states the required caveats in every file", () => {
