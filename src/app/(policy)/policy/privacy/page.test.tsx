@@ -31,14 +31,15 @@ describe("개인정보처리방침: 이용 통계", () => {
     expect(section(5)).toContain("지난 기간의 활성 회원·재방문 통계도 줄어들 수 있습니다");
   });
 
-  it("keeps seven visible sections, the effective date and a collapsed history at the notice anchor", () => {
+  it("keeps seven visible sections and only the date and history link at the notice anchor", () => {
     expect(sections).toHaveLength(7);
     expect(html).not.toContain("11. 시행일 및 변경");
     const footer = text.slice(text.indexOf("시행일:"));
     expect(footer).toContain(`시행일: ${formatEffectiveDate(PRIVACY_POLICY_EFFECTIVE_DATE)}`);
-    expect(footer).toContain("기존 회원에게 별도의 재동의를 요청하지 않습니다");
-    expect(html).toMatch(/id="changes"[\s\S]*<details\s+class=/);
-    expect(html).not.toMatch(/<details[^>]*\bopen(?:=|\s|>)/);
+    expect(footer).toContain("이전 개인정보처리방침 및 변경 내역");
+    expect(html).toMatch(/id="changes"[\s\S]*href="\/policy\/privacy\/history"/);
+    expect(html).not.toContain("<details");
+    expect(footer).not.toContain("재동의");
     expect(text).toContain("변경 안내를 닫은 시행일");
   });
 

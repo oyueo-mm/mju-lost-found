@@ -1,14 +1,9 @@
 ﻿import { formatEffectiveDate } from "@/lib/auth/terms";
-import { LATEST_PRIVACY_POLICY_REVISION, PRIVACY_POLICY_EFFECTIVE_DATE, PRIVACY_POLICY_REVISIONS } from "@/lib/policy/privacyPolicy";
+import Link from "next/link";
+import { PRIVACY_POLICY_EFFECTIVE_DATE } from "@/lib/policy/privacyPolicy";
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 
 type Section = { title: string; body: React.ReactNode };
-
-const CONSENT_NOTE = {
-  notice: "이 개정은 서비스 안의 변경 안내로 알리며, 기존 회원에게 별도의 재동의를 요청하지 않습니다.",
-  reconsent: "기존 회원은 시행일 이후 처음 로그인할 때 변경된 내용을 확인하고 다시 동의해야 회원 기능을 이용할 수 있습니다.",
-} as const;
-const REVISION_NOTE = { notice: "(변경 안내로 시행)", reconsent: "(기존 회원 재동의)" } as const;
 
 // 실제 보유정책은 lib/retention/policy.ts·service.ts, 탈퇴 처리는
 // auth/withdrawal.ts를 따릅니다. 문서 편집으로 동의 버전을 바꾸지 않습니다.
@@ -218,17 +213,9 @@ export default function PrivacyPolicyPage() {
       {/* 변경 안내 바의 /policy/privacy#changes 링크를 유지합니다. */}
       <div id="changes" className="scroll-mt-24 space-y-3 text-sm leading-relaxed text-muted-foreground">
         <p>시행일: {formatEffectiveDate(PRIVACY_POLICY_EFFECTIVE_DATE)}</p>
-        <details className="rounded-card border border-border bg-card p-4">
-          <summary className="cursor-pointer font-medium text-foreground">개정 이력 보기</summary>
-          <p className="mt-3">{CONSENT_NOTE[LATEST_PRIVACY_POLICY_REVISION.consent]}</p>
-          <ul className="mt-3 flex flex-col gap-3">
-            {PRIVACY_POLICY_REVISIONS.map((r) => (
-              <li key={`${r.date}:${r.summary}`}>
-                {formatEffectiveDate(r.date)}: {r.summary} {REVISION_NOTE[r.consent]}
-              </li>
-            ))}
-          </ul>
-        </details>
+        <Link href="/policy/privacy/history" className="inline-block font-medium text-primary hover:opacity-80">
+          이전 개인정보처리방침 및 변경 내역
+        </Link>
       </div>
     </div>
   );

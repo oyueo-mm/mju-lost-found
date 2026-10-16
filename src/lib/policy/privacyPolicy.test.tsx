@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { formatEffectiveDate } from "@/lib/auth/terms";
-import PrivacyPolicyPage from "@/app/(policy)/policy/privacy/page";
+import PrivacyPolicyHistoryPage from "@/app/(policy)/policy/privacy/history/page";
 import { LATEST_PRIVACY_POLICY_REVISION, PRIVACY_POLICY_EFFECTIVE_DATE, PRIVACY_POLICY_REVISIONS } from "./privacyPolicy";
 
 describe("개인정보처리방침 개정 이력", () => {
@@ -18,11 +18,15 @@ describe("개인정보처리방침 개정 이력", () => {
     }
   });
 
-  it("shows every registry entry in the collapsible history", () => {
-    const html = renderToStaticMarkup(PrivacyPolicyPage());
-    const history = html.match(/<details\b[^>]*>([\s\S]*?)<\/details>/)?.[1];
-    expect(history).toBeDefined();
-    const text = history!.replace(/<[^>]+>/g, "").replace(/\s+/g, " ");
-    for (const r of PRIVACY_POLICY_REVISIONS) expect(text).toContain(`${formatEffectiveDate(r.date)}: ${r.summary}`);
+  it("shows every registry entry in the dedicated history page", () => {
+    const html = renderToStaticMarkup(PrivacyPolicyHistoryPage());
+    const entries = [...html.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " "));
+    expect(entries).toHaveLength(PRIVACY_POLICY_REVISIONS.length);
+    PRIVACY_POLICY_REVISIONS.forEach((r, i) => {
+      expect(entries[i]).toContain(formatEffectiveDate(r.date));
+      expect(entries[i]).toContain(r.summary);
+      expect(entries[i]).toContain(r.consent === "notice" ? "변경 안내로 시행" : "기존 회원 재동의");
+    });
+    expect(html).toContain("기존 회원에게 별도의 재동의를 요청하지 않습니다");
   });
 });
