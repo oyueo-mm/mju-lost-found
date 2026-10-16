@@ -85,24 +85,37 @@ Supabase Free에는 **자동 백업이 없다.** 백업은 운영자가 직접 �
 - 실제 복원: 새(빈) Supabase 프로젝트에 같은 migration을 적용하지 말고, `extensions` 스키마와 `vector` 확장을 만든 뒤
   `pg_restore --no-owner --no-privileges db/public.dump`, Storage 파일을 같은 경로·MIME으로 다시 올린다. **운영 중인 DB 위에
   덮어쓰지 않는다.**
-- 암호화: `BACKUP_PASSPHRASE=... node scripts/backup/seal.mjs seal <백업 폴더> --remove-plain` → `<폴더>.tar.enc`
-  (AES-256-GCM, scrypt 키, 만든 직후 복호화해 원본과 대조한 뒤에만 평문을 지운다). 복원할 때
-  `seal.mjs unseal <파일> <폴더>`. 암호는 암호 관리자에만 두고 2명 이상이 안다(잃으면 복원 불가). Windows 11 Home에는
-  EFS·BitLocker가 없어 이 방식을 쓴다.
-- **자동 실행(주 1회)**: `scripts/backup/weekly.ps1`이 백업 → 암호화 → 평문 삭제 → `weekly-*.tar.enc` 최근 4개만 보존을 한다.
-  이름이 다른 백업(예: migration 직전본)은 지우지 않는다. 실패하면 로그(`weekly-backup.log`)에 남기고 메시지 창을 띄우며
-  종료 코드 1로 끝난다(작업 스케줄러의 "마지막 실행 결과"에도 표시). 등록(운영자 PC, 한 번만):
+- 암호: Windows 자격 증명 관리자(이 PC·이 Windows 사용자만, DPAPI 보호)에 둔다. 사용자 환경변수·파일·채팅에 두지 않는다.
+  같은 암호를 암호 관리자에도 보관하고 2명 이상이 안다(잃으면 복원 불가, PC를 바꾸면 새 PC에서 다시 저장).
   ```
-  [Environment]::SetEnvironmentVariable("BACKUP_PASSPHRASE", "<암호>", "User")
-  schtasks /Create /TN "MJU Find weekly backup" /SC WEEKLY /D SUN /ST 04:00 /RL LIMITED /TR ^
-    "powershell -NoProfile -ExecutionPolicy Bypass -File C:\proj_claude\mju-lost-found-vercel\scripts\backup\weekly.ps1"
+  Import-Module C:\proj_claude\mju-lost-found-vercel\scripts\backup\BackupSecret.psm1
+  Set-BackupPassphrase        # 두 번 입력(화면에 안 보임), 16자 이상
+  Test-BackupPassphrase       # True면 저장됨 (암호는 출력하지 않음)
   ```
-  PC가 꺼져 있으면 실행되지 않는다(작업 스케줄러에서 "예약된 시작 시간을 놓친 경우 가능한 대로 빨리 실행" 설정 권장).
-  매월 1회 로그와 최신 파일 날짜를 확인하고, 분기마다 1회 `unseal` + `verify-restore.mjs`로 복원 검증을 한다.
+- 암호화 + 복원 검증: `scripts/backup/protect.ps1 -Dir <백업 폴더> [-RemovePlain]`
+  1) `seal.mjs seal`(AES-256-GCM, scrypt 키, 직후 복호화 대조) 2) 만든 `.tar.enc`를 임시로 풀어 임시 로컬 PostgreSQL에서
+  `verify-restore.mjs`(행 수, 사진 존재) 3) `RESTORE VERIFIED`일 때만, 그리고 `-RemovePlain`을 준 경우에만 평문 폴더 삭제.
+  임시 복원본·클러스터는 항상 지운다. 로그: 백업 폴더 옆 `protect-backup.log`(주간 실행은 `weekly-backup.log`).
+  실제 복원은 `seal.mjs unseal <파일> <폴더>`(암호는 `BACKUP_PASSPHRASE` 환경변수로 그 창에만) 후 위 복원 절차.
+- **자동 실행(주 1회)**: `weekly.ps1` = `backup.mjs`(Production 읽기만) → `protect.ps1 -RemovePlain` →
+  `weekly-*.tar.enc` 최근 4개만 보존(이름이 다른 백업은 건드리지 않음). 등록(운영자가 한 번, 암호 저장 후):
+  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup\register-weekly.ps1`
+  → 매주 일요일 04:00, 놓치면 켜진 뒤 바로 실행, 이 사용자가 로그인해 있을 때만(자격 증명 관리자 접근), 일반 권한, 최대 2시간.
+- 실패 확인과 복구: `weekly-backup.log`의 `FAILED:` 줄, 실패 시 메시지 창, 작업 스케줄러 > "MJU Find weekly backup" >
+  마지막 실행 결과(0이 아니면 실패). 실패해도 평문은 지우지 않으므로 남은 `weekly-날짜` 폴더를 확인한다.
+  | 로그 | 원인 | 조치 |
+  |---|---|---|
+  | `passphrase not in Windows Credential Manager` | 암호 미저장·다른 사용자로 실행 | `Set-BackupPassphrase` |
+  | `backup.mjs failed` | 네트워크, `.env` 변경, Supabase 장애 | 연결 확인 후 수동 재실행 |
+  | `seal.mjs ... failed` / `restore not verified` | 디스크 부족, pgvector 없음, 손상 | 남은 평문 폴더로 `protect.ps1 -Dir <폴더>` 재실행 |
+  수동 재실행: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup\weekly.ps1`(같은 날짜면 폴더를 먼저 정리).
+  매월 1회 로그와 최신 파일 날짜를 확인한다(주간 실행이 매번 복원 검증을 포함).
 - 저장 위치와 권한: 운영자 PC의 `%USERPROFILE%\mju-lost-found-backups`(상속 해제, 본인·SYSTEM·Administrators만 접근).
-  같은 디스크 고장에 대비해 월 1회 암호화본(`.tar.enc`)만 외장 저장장치 등 다른 매체에 복사한다. 평문 백업은 외부로 옮기지 않는다.
-- 보존: 주간 암호화본 4개, migration 직전본은 다음 migration 검증까지. 기간이 지난 평문 폴더는 확인 후 삭제한다.
-- 2026-10-14 이름·소속 배포 직전 백업: `production-2026-10-14-pre-identity` (복원 검증 완료, 평문 — 암호를 정한 뒤 seal 권장).
+- 별도 저장소(같은 PC 고장·분실 대비): **암호화본(`.tar.enc`)만** 월 1회 외장 디스크 등 다른 매체에 복사하고 해시를 대조한다.
+  `robocopy %USERPROFILE%\mju-lost-found-backups E:\mju-backups *.tar.enc /XO` →
+  `Get-FileHash <원본>, <사본> -Algorithm SHA256`. 개인 클라우드에 올린다면 암호화본만, 공유 폴더가 아닌 본인 계정에.
+  암호는 백업 파일과 같은 곳에 두지 않는다. 평문 폴더는 외부로 옮기지 않는다.
+- 보존: 주간 암호화본 4개, migration 직전본은 다음 migration 검증까지(암호화본으로). 평문 폴더는 암호화본의 복원 검증 뒤 삭제한다.
 
 ## 6. 관리자
 
