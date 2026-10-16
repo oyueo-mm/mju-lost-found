@@ -235,6 +235,16 @@ export function ChevronDownIcon(props: IconProps) {
   );
 }
 
+// 시간대 분석's date button.
+export function CalendarIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3.5" y="5" width="17" height="15" rx="2" />
+      <path d="M3.5 9.5h17M8 3v4M16 3v4" />
+    </svg>
+  );
+}
+
 export function XIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

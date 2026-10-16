@@ -16,13 +16,22 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
 
 // Fixed series hues (globals.css --chart-*), assigned by meaning across the
 // dashboard: 1 회원·로그인·주 지표, 2 비로그인·대비 지표, 3 신규·세 번째, 4 기타.
-export type ChartTone = 1 | 2 | 3 | 4;
+// 5-8 only extend identity sets past three (시간대 분석: one line per day,
+// DAY_TONES below).
+export type ChartTone = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 const TONE: Record<ChartTone, { bg: string; fill: string; stroke: string; border: string }> = {
   1: { bg: "bg-chart-1", fill: "fill-chart-1", stroke: "stroke-chart-1", border: "border-chart-1" },
   2: { bg: "bg-chart-2", fill: "fill-chart-2", stroke: "stroke-chart-2", border: "border-chart-2" },
   3: { bg: "bg-chart-3", fill: "fill-chart-3", stroke: "stroke-chart-3", border: "border-chart-3" },
   4: { bg: "bg-chart-4", fill: "fill-chart-4", stroke: "stroke-chart-4", border: "border-chart-4" },
+  5: { bg: "bg-chart-5", fill: "fill-chart-5", stroke: "stroke-chart-5", border: "border-chart-5" },
+  6: { bg: "bg-chart-6", fill: "fill-chart-6", stroke: "stroke-chart-6", border: "border-chart-6" },
+  7: { bg: "bg-chart-7", fill: "fill-chart-7", stroke: "stroke-chart-7", border: "border-chart-7" },
+  8: { bg: "bg-chart-8", fill: "fill-chart-8", stroke: "stroke-chart-8", border: "border-chart-8" },
 };
+// Seven identity hues in their validated order (no neutral grey): the n-th
+// chosen day is always DAY_TONES[n], so a day keeps its colour in every chart.
+export const DAY_TONES: readonly ChartTone[] = [1, 2, 3, 5, 6, 7, 8];
 
 // `status` (optional, per value): when one series is measured differently
 // from the others at the same point (시간대 분석: one line per day) --

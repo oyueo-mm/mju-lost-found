@@ -36,7 +36,16 @@ type Drag = { anchor: string; current: string; mode: DragMode };
 
 const dayFromPoint = (x: number, y: number) => (document.elementFromPoint(x, y)?.closest("[data-day]") as HTMLElement | null)?.dataset.day ?? null;
 
-export function HourlyDayPicker({ selected, today }: { selected: string[]; today: string }) {
+export function HourlyDayPicker({
+  selected,
+  today,
+  onChosenChange,
+}: {
+  selected: string[];
+  today: string;
+  // told of every accepted change at once (the date button's label), before the page follows
+  onChosenChange?: (days: string[]) => void;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -83,6 +92,7 @@ export function HourlyDayPicker({ selected, today }: { selected: string[]; today
     }
     setMessage(null);
     setChosen(next);
+    onChosenChange?.([...next].sort());
     navigate(next, delay);
   };
 
@@ -218,7 +228,7 @@ export function HourlyDayPicker({ selected, today }: { selected: string[]; today
         </button>
       </div>
 
-      <div className="w-full max-w-sm rounded-card border border-border p-3">
+      <div className="w-full rounded-card border border-border p-3">
         <div className="mb-2 flex items-center justify-between">
           <button type="button" className={navButton} aria-label="이전 달" disabled={month <= EARLIEST_SELECTABLE_DAY.slice(0, 7)} onClick={() => setMonth(addMonths(month, -1))}>
             <ChevronRightIcon className="size-4 rotate-180" />
@@ -302,8 +312,7 @@ export function HourlyDayPicker({ selected, today }: { selected: string[]; today
           </p>
         )}
         <p>
-          날짜를 누르면 선택·해제, 끌면 지나간 날짜를 한꺼번에 선택합니다(선택된 날짜에서 시작하면 한꺼번에 해제). 터치 화면은 날짜를 잠깐 누른 채로 끌어 주세요.
-          키보드: 방향키로 이동, Enter·Space로 선택, PageUp·PageDown으로 달 이동.
+          누르면 선택·해제, 끌면 여러 날을 한꺼번에(선택된 날에서 시작하면 해제). 터치는 잠깐 누른 뒤 끌기. 키보드: 방향키·Enter·PageUp/Down.
         </p>
       </div>
     </div>

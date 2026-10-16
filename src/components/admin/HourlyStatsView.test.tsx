@@ -2,6 +2,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/db/prisma", () => ({ prisma: {} }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => "/admin/stats",
+  useSearchParams: () => new URLSearchParams("period=week"),
+}));
 
 const { buildCells } = await import("@/lib/metrics/hourly");
 const { HourlyStatsView } = await import("./HourlyStatsView");
@@ -32,9 +37,7 @@ function render(metric: "pv" | "active" | "login" | "session" | "all" = "pv", c 
     <HourlyStatsView
       cells={c}
       metric={metric}
-      hrefWith={(m) => `/admin/stats?period=week&d=x&m=${m}`}
       today="2026-10-17"
-      picker={<div data-testid="picker" />}
       actions={<div data-testid="actions" />}
     />,
   );
@@ -71,49 +74,70 @@ describe("HourHeatmap", () => {
   });
 });
 
-describe("시간대 분석 view: drawn by how many days are chosen", () => {
-  it("shows the metric switch (with 전체 지표 보기), the calendar and the downloads", () => {
-    const markup = render();
-    expect(markup).toContain("시간대 분석");
-    expect(markup).toContain('aria-current="page"');
-    expect(markup).toContain("/admin/stats?period=week&amp;d=x&amp;m=active");
-    expect(markup).toContain('data-testid="picker"');
-    expect(markup).toContain('data-testid="actions"');
-    expect(markup).toContain("(부분)"); // the unmeasured part stays visible
+const at = (markup: string, needle: string) => {
+  const i = markup.indexOf(needle);
+  if (i < 0) throw new Error(`missing: ${needle}`);
+  return i;
+};
+const nDays = (n: number) => Array.from({ length: n }, (_, i) => `2026-10-${String(17 - n + 1 + i).padStart(2, "0")}`);
+
+describe("시간대 분석 layout: filters, then charts, summary, 오전·오후, downloads", () => {
+  it("puts the metric dropdown and the date button right above the charts, the summary and downloads after them", () => {
+    const markup = render("pv", dayCells(["2026-10-16", "2026-10-17"]));
+    const filters = at(markup, "<select");
+    const button = at(markup, "날짜 선택 · 2일");
+    const chart = at(markup, "<figure");
+    const summary = at(markup, "페이지뷰(전체) 요약");
+    const halfDay = at(markup, "날짜별 오전·오후");
+    const downloads = at(markup, 'data-testid="actions"');
+    expect(filters < button && button < chart && chart < summary && summary < halfDay && halfDay < downloads).toBe(true);
+    // the calendar is a closed popover: no grid between the filters and the chart
+    expect(markup).toMatch(/role="dialog" aria-label="날짜 선택" hidden=""/);
+    expect(markup).toContain("10/16~10/17");
+  });
+
+  it("one dropdown: six metrics and 전체 지표 보기, the current one selected", () => {
+    const markup = render("session");
+    const options = [...markup.matchAll(/<option value="([a-zA-Z]+)"( selected="")?>([^<]+)<\/option>/g)];
+    expect(options.map((o) => o[3])).toEqual(["페이지뷰(전체)", "로그인 회원 페이지뷰", "비로그인 페이지뷰", "방문 세션(시작)", "시간대별 활성 회원", "로그인 완료", "전체 지표 보기"]);
+    expect(options.find((o) => o[2])?.[1]).toBe("session");
   });
 
   it("asks for days when none is chosen", () => {
-    expect(render("pv", dayCells([]))).toContain("달력에서 날짜를 골라 주세요.");
+    expect(render("pv", dayCells([]))).toContain("날짜 선택에서 날짜를 골라 주세요.");
   });
 
-  it("one day: its own hours as bars, up to the current hour when it is today, with 오전/오후", () => {
+  it("1 day: its hours as bars (to the current hour when it is today), then 오전/오후", () => {
     const markup = render("pv", dayCells(["2026-10-17"]));
-    expect(markup).toContain("10/17(토) 페이지뷰(전체) · 시간대별");
+    expect(markup).toContain("페이지뷰(전체) · 10/17(토)");
     expect(markup).toContain("오늘(10/17)은 14시까지의 값입니다.");
     expect(markup).toContain("오전 (0~11시)");
-    expect(markup).not.toContain("15시</span>"); // hours to come are left off the axis
     expect(lines(markup)).toBe(0);
-    expect(markup).not.toContain("<table class=\"w-full min-w-[46rem]"); // no heatmap
+    expect(markup).not.toContain("min-w-[46rem]"); // no heatmap
   });
 
-  it("2-4 days: one line per day and the 오전/오후 table", () => {
-    const markup = render("pv", dayCells(["2026-10-13", "2026-10-16", "2026-10-17"]));
-    expect(markup).toContain("페이지뷰(전체) · 날짜별 비교");
-    expect(markup).toContain("10/13(화)");
-    expect(markup).toContain("오후 (12~23시)");
+  it("2-7 days: one line per day, each in its own colour, the dates in the title and legend", () => {
+    const markup = render("pv", dayCells(nDays(7)));
+    expect(markup).toContain("페이지뷰(전체) · 10/11~10/17");
+    // seven days, seven legend colours (unmeasured days keep theirs, with no line drawn)
+    for (const tone of [1, 2, 3, 5, 6, 7, 8]) expect(markup).toContain(`bg-chart-${tone}`);
+    expect(markup).not.toContain("chart-4"); // the neutral grey never stands for a day
+    expect(markup).toContain("stroke-chart-7"); // 10/16, measured
+    expect(markup).toContain("stroke-chart-8"); // 10/17
+    expect(markup).toContain(">10/11(일)<");
     expect(markup).not.toContain("min-w-[46rem]");
   });
 
-  it("5+ days, not in a row: every chosen day in the heatmap (none dropped, none added) plus the hours added up", () => {
-    const days = ["2026-10-01", "2026-10-03", "2026-10-09", "2026-10-12", "2026-10-16", "2026-10-17"];
+  it("8+ days, not in a row: every chosen day in the heatmap (none dropped, none added) plus the hours added up", () => {
+    const days = ["2026-10-01", "2026-10-03", "2026-10-09", "2026-10-11", "2026-10-12", "2026-10-14", "2026-10-16", "2026-10-17"];
     const markup = render("active", dayCells(days));
     expect(markup).toContain("min-w-[46rem]");
-    for (const label of ["10/1(목)", "10/3(토)", "10/9(금)", "10/12(월)", "10/16(금)", "10/17(토)"]) expect(markup).toContain(`>${label}</th>`);
+    for (const d of days) expect(markup).toContain(`>${Number(d.slice(5, 7))}/${Number(d.slice(8))}(`);
     expect(markup).not.toContain(">10/2(금)</th>");
-    expect(markup).toContain("10/1, 10/3, 10/9, 10/12, 10/16~10/17");
-    expect(markup).toContain("고른 6일의 시간대별 합계");
-    expect(markup).toContain("회원·시간");
-    expect(lines(markup)).toBe(0); // no tangle of six lines
+    expect(markup).toContain("10/1, 10/3, 10/9, 10/11~10/12, 10/14, 10/16~10/17");
+    expect(markup).toContain("8일의 시간대별 합계");
+    expect(markup).toContain("날짜별 오전·오후 표 (8일)"); // folded away under the charts
+    expect(lines(markup)).toBe(0);
   });
 });
 
@@ -142,15 +166,14 @@ describe("시간대 분석 summary: about the chosen metric and days only", () =
 
   it("전체 지표 보기: one summary row per metric, unmeasured ones as one short cell", () => {
     const all = render("all", dayCells(["2026-10-15", "2026-10-16", "2026-10-17"]));
-    expect(all).toContain('aria-current="page"');
-    expect(all).toMatch(/전체 지표 보기/);
+    expect(all).toContain('<option value="all" selected="">전체 지표 보기</option>');
     expect(all).toContain("고른 날짜의 지표별 요약");
     expect(all).toMatch(/비로그인 페이지뷰<\/th><td colSpan="3"|비로그인 페이지뷰<\/th><td[^>]*>[0-9]/);
   });
 });
 
 describe("시간대 분석 charts", () => {
-  it("2-4 days: a line per day, a day's colour and its 부분 측정 / to-come points kept per point", () => {
+  it("a line per day keeps its colour and its 부분 측정 / to-come points per point", () => {
     const markup = render("pv", dayCells(["2026-10-16", "2026-10-17"]));
     expect(markup).toContain("10/16(금)");
     expect(markup).toContain("10/17(토)");
@@ -161,9 +184,9 @@ describe("시간대 분석 charts", () => {
     expect(markup).toContain("속이 빈 점은 부분 측정");
   });
 
-  it("전체 지표 보기, up to 4 days: one small chart per metric, each with its own unit, the same colour per day", () => {
+  it("전체 지표 보기, up to 7 days: one small chart per metric, each with its own unit, the same colour per day", () => {
     const markup = render("all", dayCells(["2026-10-16", "2026-10-17"]));
-    for (const t of ["페이지뷰(전체)", "방문 세션(시작)", "시간대별 활성 회원", "로그인 완료"]) expect(markup).toContain(`>${t}<span class="ml-1 font-normal text-muted-foreground">(단위: `);
+    for (const t of ["페이지뷰(전체)", "방문 세션(시작)", "시간대별 활성 회원", "로그인 완료"]) expect(markup).toContain(`>${t} · 10/16~10/17<span class="ml-1 font-normal text-muted-foreground">(단위: `);
     expect(markup).toContain("(단위: 명)");
     expect(lines(markup)).toBeGreaterThanOrEqual(4);
     // 10/16 is chart-1, 10/17 chart-2 in every chart; 활성 회원 has no 10/16
@@ -173,10 +196,10 @@ describe("시간대 분석 charts", () => {
     expect(markup).toContain("md:grid-cols-2"); // stacked on a phone
   });
 
-  it("전체 지표 보기, 5+ days: the hours added up per metric instead of tangled lines", () => {
-    const markup = render("all", dayCells(["2026-10-11", "2026-10-12", "2026-10-13", "2026-10-16", "2026-10-17"]));
+  it("전체 지표 보기, 8+ days: the hours added up per metric instead of tangled lines", () => {
+    const markup = render("all", dayCells(nDays(8)));
     expect(lines(markup)).toBe(0);
-    expect(markup).toContain("방문 세션(시작) · 5일 합계");
+    expect(markup).toContain("방문 세션(시작) · 8일 합계");
     expect(markup).toContain("지표 하나를 고르세요");
   });
 });

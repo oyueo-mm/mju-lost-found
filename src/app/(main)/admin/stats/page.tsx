@@ -32,7 +32,6 @@ import { StatsPeriodPicker } from "@/components/admin/StatsPeriodPicker";
 import { UserStatsView } from "@/components/admin/UserStatsView";
 import { loadUserReport } from "@/lib/metrics/userReport";
 import { HourlyStatsView, type HourlyView } from "@/components/admin/HourlyStatsView";
-import { HourlyDayPicker } from "@/components/admin/HourlyDayPicker";
 import { HourlyExportButtons } from "@/components/admin/HourlyExportButtons";
 import { isHourlyMetric, loadHourlyCells } from "@/lib/metrics/hourly";
 import { describeDays, encodeDays, resolveSelection } from "@/lib/metrics/daySelection";
@@ -249,7 +248,6 @@ export default async function AdminStatsPage({
   }
 
   const [report, hourlyCells] = await Promise.all([loadReport(period.range), loadHourlyCells(selection.days)]);
-  const hourlyHref = (m: HourlyView) => `/admin/stats?${new URLSearchParams({ ...Object.fromEntries(new URLSearchParams(periodQuery)), d: selectedParam, m }).toString()}`;
   const { core, visit, totals, totalCoverage: cov } = report;
   const labels = report.buckets.map((b) => bucketLabel(bucketSpan(report.range, b).from, unit));
   const last = report.buckets.length - 1;
@@ -519,10 +517,8 @@ export default async function AdminStatsPage({
         <HourlyStatsView
           cells={hourlyCells}
           metric={metric}
-          hrefWith={hourlyHref}
           today={today}
           notice={selection.notice}
-          picker={<HourlyDayPicker selected={selection.days} today={today} />}
           actions={<HourlyExportButtons preset={period.selection.preset} from={period.selection.from} to={period.selection.to} days={selectedParam} />}
         />
       </div>

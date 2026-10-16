@@ -1,7 +1,8 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { GroupedBarChart, HourHeatmap, LineChart, StackedBarChart, type ChartSeries, type ChartTone } from "@/components/admin/StatsCharts";
+import { HourlyDayPopover } from "@/components/admin/HourlyDayPopover";
+import { HourlyMetricSelect } from "@/components/admin/HourlyMetricSelect";
+import { DAY_TONES, GroupedBarChart, HourHeatmap, LineChart, StackedBarChart, type ChartSeries, type ChartTone } from "@/components/admin/StatsCharts";
 import { More, Section, StatTile, SubHeading } from "@/components/admin/StatsBlocks";
 import { LAST_ACTIVE_INTERVAL_MINUTES } from "@/lib/metrics/activityTime";
 import { describeDays, MAX_SELECTED_DAYS } from "@/lib/metrics/daySelection";
@@ -22,13 +23,15 @@ import {
 import type { Coverage } from "@/lib/metrics/report";
 
 // 시간대 분석 (a section of 운영 통계): the service's use by KST hour on the
-// days chosen on the calendar (HourlyDayPicker) -- any set of days, never
+// days chosen on the calendar (HourlyDayPopover) -- any set of days, never
 // the days in between. One metric at a time, or 전체 지표 보기 (one small
-// chart per metric on the same 0-23시 axis, each with its own y axis). How
-// it is drawn follows the count: one day as its own hours, 2-4 days as one
-// line each (the same colour per day in every chart), 5 or more as a date
-// x hour heatmap plus the hours added up (no day is ever dropped). The
-// summary beside the calendar is about the chosen metric and days only.
+// chart per metric on the same 0-23시 axis, each with its own y axis). Laid
+// out top to bottom as filters (metric dropdown, date button), charts,
+// summary, 오전·오후, downloads -- so a change shows right below the
+// filters. How it is drawn follows the count: one day as its own hours,
+// 2-7 days as one line each (the same colour per day in every chart), 8 or
+// more as a date x hour heatmap plus the hours added up (no day is ever
+// dropped).
 // Server only; every number comes from lib/metrics/hourly.ts, the same
 // cells the export uses.
 
@@ -37,8 +40,8 @@ const md = (day: string) => `${Number(day.slice(5, 7))}/${Number(day.slice(8, 10
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 const dayLabel = (day: string) => `${md(day)}(${DOW[new Date(`${day}T00:00:00Z`).getUTCDay()]})`;
 const HOUR_LABELS = Array.from({ length: 24 }, (_, h) => `${h}시`);
-// Up to this many days are drawn as one line each.
-export const MAX_LINE_DAYS = 4;
+// Up to this many days are drawn as one line each (one colour each, DAY_TONES).
+export const MAX_LINE_DAYS = DAY_TONES.length;
 // 전체 지표 보기: one small chart each, never two units on one axis.
 export const SMALL_MULTIPLES: HourlyMetric[] = ["pv", "session", "active", "login"];
 export type HourlyView = HourlyMetric | "all";
@@ -100,7 +103,7 @@ function DayLines({ cells, metric, hours, title, note }: { cells: HourlyCells; m
       tickEvery={3}
       series={cells.days.map((day, d) => ({
         label: dayLabel(day),
-        tone: ((d % 4) + 1) as ChartTone,
+        tone: DAY_TONES[d % DAY_TONES.length],
         values: c.values[d].slice(0, hours),
         status: c.status[d].slice(0, hours),
       }))}
@@ -271,18 +274,13 @@ function AllMetricsSummary({ cells }: { cells: HourlyCells }) {
 export function HourlyStatsView({
   cells,
   metric,
-  hrefWith,
   today,
-  picker,
   actions,
   notice,
 }: {
   cells: HourlyCells; // the chosen days, in order
   metric: HourlyView;
-  // this page's URL with the metric (or 전체 지표 보기) replaced, days and period kept
-  hrefWith: (metric: HourlyView) => string;
   today: string;
-  picker: ReactNode; // the calendar
   actions?: ReactNode; // downloads of the same days
   notice?: string | null;
 }) {
@@ -291,26 +289,21 @@ export function HourlyStatsView({
   const onlyToday = n > 0 && cells.days.every((d) => d === today);
   const hours = onlyToday ? cells.nowHour + 1 : 24;
   const hasToday = cells.days.includes(today);
+  const daysText = n ? describeDays(cells.days) : "";
   const sinceLine = HOURLY_METRICS.filter((x) => x.key !== "pv")
     .map((x) => `${x.short} ${cells.metrics[x.key].since ? `${cells.metrics[x.key].since}부터` : "수집 전"}`)
     .join(" · ");
   const todayNote = hasToday ? `오늘(${md(today)})은 ${cells.nowHour}시까지의 값입니다.` : undefined;
   const lineNote = `선 하나가 하루입니다(같은 날짜는 모든 그래프에서 같은 색). 속이 빈 점은 부분 측정, 끊긴 구간은 미측정이며 0으로 잇지 않습니다.${todayNote ? ` ${todayNote}` : ""}`;
   const sumNote = (key: HourlyMetric) => (key === "active" ? "여러 날을 더한 값이라 사람 수가 아닌 '회원·시간' 수입니다." : undefined);
-  const chip = (active: boolean) =>
-    `rounded-full border px-3 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
-      active ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground"
-    }`;
+  const options = [...HOURLY_METRICS.map((x) => ({ value: x.key, label: x.label })), { value: "all", label: "전체 지표 보기" }];
 
   return (
     <Section
       title="시간대 분석"
       description={
         <>
-          <p>
-            달력에서 고른 날짜만 한국 시간 0~23시별로 집계합니다. 떨어진 날짜도 함께 고를 수 있어, 축제·홍보 글·사건 전후의 시간대별 이용량을 비교할 때
-            씁니다. 위 조회 기간과는 별개이며, 회원별 기록이 아닌 시간대별 합계만 쓰고 관리자의 이용은 포함하지 않습니다.
-          </p>
+          <p>고른 날짜만 한국 시간 0~23시별로 비교합니다(위 조회 기간과 별개, 관리자 이용 제외, 시간대별 합계만 사용).</p>
           <More label="지표 정의와 측정 범위">
             <ul className="flex list-disc flex-col gap-1 pl-4">
               <li>
@@ -332,8 +325,8 @@ export function HourlyStatsView({
                 측정입니다. 미측정 기간의 시간대별 수치는 추정·복원하지 않습니다.
               </li>
               <li>
-                1일은 그날의 시간대별 막대, 2~{MAX_LINE_DAYS}일은 날짜별 선, 5일 이상은 선이 겹치지 않도록 날짜 × 시간대 히트맵과 시간대별 합계로 보여
-                줍니다. &lsquo;전체 지표 보기&rsquo;는 지표마다 작은 그래프를 같은 0~23시 축으로 나란히 놓고, 세로축은 지표마다 따로 둡니다. 고른 날짜는 모두
+                1일은 시간대별 막대, 2~{MAX_LINE_DAYS}일은 날짜별 선, {MAX_LINE_DAYS + 1}일 이상은 날짜 × 시간대 히트맵과 시간대별 합계로 보여 줍니다.
+                &lsquo;전체 지표 보기&rsquo;는 지표마다 작은 그래프를 같은 0~23시 축으로 나란히 놓고, 세로축은 지표마다 따로 둡니다. 고른 날짜는 모두
                 반영하며, 고르지 않은 날짜는 집계하지 않습니다. 최대 {MAX_SELECTED_DAYS}일.
               </li>
               <li>
@@ -345,94 +338,89 @@ export function HourlyStatsView({
         </>
       }
     >
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
-        {picker}
-        <div className="flex min-w-0 flex-col gap-4">
-          {notice && (
-            <p role="alert" className="text-xs text-destructive">
-              {notice}
-            </p>
-          )}
-          <nav className="flex flex-wrap gap-2" aria-label="분석 지표">
-            {HOURLY_METRICS.map((x) => (
-              <Link key={x.key} href={hrefWith(x.key)} scroll={false} aria-current={x.key === metric ? "page" : undefined} className={chip(x.key === metric)}>
-                {x.label}
-              </Link>
-            ))}
-            <Link href={hrefWith("all")} scroll={false} aria-current={metric === "all" ? "page" : undefined} className={chip(metric === "all")}>
-              전체 지표 보기
-            </Link>
-          </nav>
-          {n === 0 ? (
-            <p className="text-xs text-muted-foreground">달력에서 날짜를 골라 주세요.</p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              <SubHeading basis={`${n}일 · ${metric === "all" ? "모든 지표" : metricInfo(metric).label}`}>고른 날짜: {describeDays(cells.days)}</SubHeading>
-              {metric === "all" ? <AllMetricsSummary cells={cells} /> : <MetricSummary cells={cells} metric={metric} />}
-            </div>
-          )}
-          {actions}
+      {/* the filters, right above the charts they drive */}
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <HourlyMetricSelect value={metric} options={options} />
+          <HourlyDayPopover selected={cells.days} today={today} />
         </div>
+        {notice && (
+          <p role="alert" className="text-xs text-destructive">
+            {notice}
+          </p>
+        )}
       </div>
 
+      {n === 0 && <p className="text-xs text-muted-foreground">날짜 선택에서 날짜를 골라 주세요.</p>}
+
+      {/* 1. charts */}
       {n > 0 && metric === "all" && (
         <div className="flex flex-col gap-2">
-          <SubHeading basis={n <= MAX_LINE_DAYS ? "날짜별 선 · 0~23시 공통 · 세로축은 지표마다 따로" : `고른 ${n}일의 시간대별 합계 · 세로축은 지표마다 따로`}>
-            지표별 그래프
-          </SubHeading>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             {SMALL_MULTIPLES.map((key) =>
               n <= MAX_LINE_DAYS ? (
-                <DayLines key={key} cells={cells} metric={key} hours={hours} title={metricInfo(key).label} />
+                <DayLines key={key} cells={cells} metric={key} hours={hours} title={`${metricInfo(key).label} · ${daysText}`} />
               ) : (
                 <HourTotals key={key} cells={cells} metric={key} title={`${metricInfo(key).label} · ${n}일 합계`} hours={24} inProgress={hasToday} note={sumNote(key)} />
               ),
             )}
           </div>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            {n <= MAX_LINE_DAYS ? lineNote : "날짜별로 나눠 보려면 지표 하나를 고르세요(날짜 × 시간대 히트맵)."}
+            {n <= MAX_LINE_DAYS ? lineNote : `${n}일을 시간대별로 더한 값입니다(세로축은 지표마다 따로). 날짜별로 나눠 보려면 지표 하나를 고르세요(날짜 × 시간대 히트맵).`}
           </p>
         </div>
       )}
 
-      {metric !== "all" && n === 1 && (
+      {n === 1 && metric !== "all" && (
+        <HourTotals cells={cells} metric={metric} title={`${metricInfo(metric).label} · ${dayLabel(cells.days[0])}`} hours={hours} inProgress={onlyToday} note={todayNote} />
+      )}
+
+      {n >= 2 && n <= MAX_LINE_DAYS && metric !== "all" && (
+        <DayLines cells={cells} metric={metric} hours={hours} title={`${metricInfo(metric).label} · ${daysText}`} note={lineNote} />
+      )}
+
+      {n > MAX_LINE_DAYS && metric !== "all" && (
         <>
-          <HourTotals cells={cells} metric={metric} title={`${dayLabel(cells.days[0])} ${metricInfo(metric).label} · 시간대별`} hours={hours} inProgress={onlyToday} note={todayNote} />
-          <DayTable cells={cells} metric={metric} />
+          <HourHeatmap
+            title={`${metricInfo(metric).label} · ${n}일`}
+            unit={metricInfo(metric).unit}
+            extraLabels={["오전", "오후", "합계"]}
+            rows={cells.days.map((day, d) => {
+              const c = cells.metrics[metric];
+              const half = halves(c, d);
+              return {
+                label: dayLabel(day),
+                values: c.values[d],
+                status: c.status[d],
+                extras: [half.am, half.pm, half.day].map((x) => valueText(x.value, x.status, "")),
+              };
+            })}
+            note={metric === "active" ? "칸마다 그 시간의 서로 다른 회원 수입니다. 오전·오후·합계는 시간별 수를 더한 '회원·시간' 수입니다." : todayNote}
+          />
+          <HourTotals cells={cells} metric={metric} title={`${metricInfo(metric).label} · ${n}일의 시간대별 합계`} hours={24} inProgress={hasToday} note={sumNote(metric)} />
         </>
       )}
 
-      {metric !== "all" && n >= 2 && n <= MAX_LINE_DAYS && (
-        <>
-          <DayLines cells={cells} metric={metric} hours={hours} title={`${metricInfo(metric).label} · 날짜별 비교`} note={lineNote} />
+      {/* 2. the chosen metric's summary, 3. 오전 · 오후 */}
+      {n > 0 && (
+        <div className="flex flex-col gap-2">
+          <SubHeading basis={`${n}일 · ${daysText}`}>{metric === "all" ? "지표별 요약" : `${metricInfo(metric).label} 요약`}</SubHeading>
+          {metric === "all" ? <AllMetricsSummary cells={cells} /> : <MetricSummary cells={cells} metric={metric} />}
+        </div>
+      )}
+      {n > 0 && metric !== "all" && (n <= MAX_LINE_DAYS ? (
+        <div className="flex flex-col gap-2">
+          <SubHeading>날짜별 오전·오후</SubHeading>
           <DayTable cells={cells} metric={metric} />
-        </>
-      )}
+        </div>
+      ) : (
+        <More label={`날짜별 오전·오후 표 (${n}일)`}>
+          <DayTable cells={cells} metric={metric} />
+        </More>
+      ))}
 
-      {metric !== "all" && n > MAX_LINE_DAYS && (
-        <>
-          <div className="flex flex-col gap-2">
-            <SubHeading basis={`${n}일 · 고른 날짜만, 날짜 순`}>{describeDays(cells.days)}</SubHeading>
-            <HourHeatmap
-              title={metricInfo(metric).label}
-              unit={metricInfo(metric).unit}
-              extraLabels={["오전", "오후", "합계"]}
-              rows={cells.days.map((day, d) => {
-                const c = cells.metrics[metric];
-                const half = halves(c, d);
-                return {
-                  label: dayLabel(day),
-                  values: c.values[d],
-                  status: c.status[d],
-                  extras: [half.am, half.pm, half.day].map((x) => valueText(x.value, x.status, "")),
-                };
-              })}
-              note={metric === "active" ? "칸마다 그 시간의 서로 다른 회원 수입니다. 오전·오후·합계는 시간별 수를 더한 '회원·시간' 수입니다." : todayNote}
-            />
-          </div>
-          <HourTotals cells={cells} metric={metric} title={`${metricInfo(metric).label} · 고른 ${n}일의 시간대별 합계`} hours={24} inProgress={hasToday} note={sumNote(metric)} />
-        </>
-      )}
+      {/* 4. downloads of the same days */}
+      {actions}
     </Section>
   );
 }
