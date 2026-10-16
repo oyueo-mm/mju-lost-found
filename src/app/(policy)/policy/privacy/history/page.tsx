@@ -57,9 +57,13 @@ export default function PrivacyPolicyHistoryPage() {
       </details>
 
       <div className="space-y-2 text-muted-foreground">
+        <Link href="/policy/privacy/history/f21e596" className="inline-block font-medium text-primary hover:opacity-80">
+          2026-10-16 시행 개인정보처리방침 전문 보기
+        </Link>
+        <p className="text-xs">2026-10-17 개정 직전까지 적용된 처리방침의 보관본입니다.</p>
         <p className="text-xs">문서 간소화는 구성·표현만 정리한 것으로, 개인정보 처리 정책은 동일합니다.</p>
         <Link href="/policy/privacy/history/b46ba45" className="inline-block font-medium text-primary hover:opacity-80">
-          이전 개인정보처리방침 전문 보기
+          간소화 전 개인정보처리방침 전문 보기
         </Link>
         <p className="text-xs">2026-10-16 시행 문서의 간소화 전 보관본입니다. 개정별 전문을 대신하지 않습니다.</p>
       </div>

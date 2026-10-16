@@ -38,6 +38,17 @@ export type PrivacyPolicyRevision = {
 // Production -- set it at the release.
 export const PRIVACY_POLICY_REVISIONS: readonly PrivacyPolicyRevision[] = [
   {
+    date: "2026-10-17",
+    summary:
+      "관리자 사용자 상세에 최근 이용 시각(로그인 상태의 가장 최근 활동 시각 1개, 최대 5분 간격으로 덮어씀, 회원탈퇴 시 삭제)을 표시하고, 시간대별 이용 회원 수 합계와 변경 안내를 닫은 기록(쿠키, 1년)을 안내에 추가했습니다.",
+    consent: "notice",
+    history: {
+      summary: "최근 이용 시각·시간대별 이용 회원 수·안내 닫기 쿠키 안내",
+      before: "관리자 사용자 상세에 최근 이용일(날짜)만 표시, 시간대별 로그인 횟수·조회 수 합계",
+      after: "최근 이용 시각 1개 저장·관리자 상세 표시(탈퇴 시 삭제), 시간대별 이용 회원 수 합계, 안내 닫기 쿠키(1년)",
+    },
+  },
+  {
     date: "2026-10-16",
     summary: "회원별 이용 일자 통계(400일 보관, 회원탈퇴 시 삭제)를 안내하고, 처리방침을 간소화했습니다. 개인정보 문의처·처리 지역·백업 안내와 추가 이용 판단 기준을 보완했습니다.",
     consent: "notice",

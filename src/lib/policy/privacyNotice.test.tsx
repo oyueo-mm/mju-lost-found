@@ -29,7 +29,8 @@ describe("개인정보처리방침 변경 안내", () => {
     const notice = privacyNotice(PRIVACY_POLICY_EFFECTIVE_DATE)!;
     expect(notice.id).toBe(PRIVACY_POLICY_EFFECTIVE_DATE);
     expect(notice.href).toBe("/policy/privacy#changes");
-    expect(notice.summary).toContain("400일 보관, 회원탈퇴 시 삭제");
+    expect(notice.summary).toContain("최근 이용 시각");
+    expect(notice.summary).toContain("회원탈퇴 시 삭제");
   });
 
   it("renders a non-blocking bar: text, link and a close button, no dialog", () => {
