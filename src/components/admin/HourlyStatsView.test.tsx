@@ -26,19 +26,20 @@ const rows = [
 ];
 const cells = buildCells(["2026-10-16", "2026-10-17"], rows, starts, NOW);
 
-function render(metric: "pv" | "active" = "pv", compare = cells) {
+const dayCells = (days: string[]) => buildCells(days, rows, starts, NOW);
+function render(metric: "pv" | "active" = "pv", c = cells) {
   return renderToStaticMarkup(
     <HourlyStatsView
-      range={cells}
-      compare={compare}
+      cells={c}
       metric={metric}
-      compareDays={[]}
-      hrefWith={({ m, d }) => `/admin/stats?tab=hourly&m=${m ?? metric}${(d ?? []).map((x) => `&d=${x}`).join("")}`}
-      hiddenFields={[{ name: "tab", value: "hourly" }, { name: "period", value: "week" }]}
+      hrefWith={(m) => `/admin/stats?period=week&d=x&m=${m}`}
       today="2026-10-17"
+      picker={<div data-testid="picker" />}
+      actions={<div data-testid="actions" />}
     />,
   );
 }
+const lines = (markup: string) => (markup.match(/<polyline/g) ?? []).length;
 
 describe("HourHeatmap", () => {
   it("draws 미측정, 부분 측정, a measured 0 and hours still to come differently, as a readable table", () => {
@@ -70,36 +71,54 @@ describe("HourHeatmap", () => {
   });
 });
 
-describe("시간대 분석 view", () => {
-  it("shows totals by login state, the busiest hour, and the metric switch", () => {
+describe("시간대 분석 view: drawn by how many days are chosen", () => {
+  it("shows totals by login state, the busiest hour, the metric switch, the calendar and the downloads", () => {
     const markup = render();
     expect(markup).toContain("시간대 분석");
     expect(markup).toContain('aria-current="page"');
-    expect(markup).toContain("/admin/stats?tab=hourly&amp;m=active");
-    expect(markup).toContain("10시"); // the busiest hour
-    // the period total keeps the unmeasured part visible
-    expect(markup).toContain("(부분)");
-    // compare form keeps the period and tab
-    expect(markup).toContain('name="period" value="week"');
-    expect(markup.split('name="d"').length - 1).toBe(4);
+    expect(markup).toContain("/admin/stats?period=week&amp;d=x&amp;m=active");
+    expect(markup).toContain('data-testid="picker"');
+    expect(markup).toContain('data-testid="actions"');
+    expect(markup).toContain("(부분)"); // the unmeasured part stays visible
   });
 
-  it("explains that hourly active members added up are member-hours, not people", () => {
-    const markup = render("active");
-    expect(markup).toContain("회원·시간");
-    expect(markup).toContain("시간대별 활성 회원");
+  it("asks for days when none is chosen", () => {
+    expect(render("pv", dayCells([]))).toContain("달력에서 날짜를 골라 주세요.");
   });
 
-  it("compares chosen days with 오전/오후 totals and says when today is still running", () => {
-    const markup = render("pv");
-    expect(markup).toContain("오전 (0~11시)");
-    expect(markup).toContain("오후 (12~23시)");
+  it("one day: its own hours as bars, up to the current hour when it is today, with 오전/오후", () => {
+    const markup = render("pv", dayCells(["2026-10-17"]));
+    expect(markup).toContain("10/17(토) 페이지뷰(전체) · 시간대별");
     expect(markup).toContain("오늘(10/17)은 14시까지의 값입니다.");
+    expect(markup).toContain("오전 (0~11시)");
+    expect(markup).not.toContain("15시</span>"); // hours to come are left off the axis
+    expect(lines(markup)).toBe(0);
+    expect(markup).not.toContain("<table class=\"w-full min-w-[46rem]"); // no heatmap
+  });
+
+  it("2-4 days: one line per day and the 오전/오후 table", () => {
+    const markup = render("pv", dayCells(["2026-10-13", "2026-10-16", "2026-10-17"]));
+    expect(markup).toContain("페이지뷰(전체) · 날짜별 비교");
+    expect(markup).toContain("10/13(화)");
+    expect(markup).toContain("오후 (12~23시)");
+    expect(markup).not.toContain("min-w-[46rem]");
+  });
+
+  it("5+ days, not in a row: every chosen day in the heatmap (none dropped, none added) plus the hours added up", () => {
+    const days = ["2026-10-01", "2026-10-03", "2026-10-09", "2026-10-12", "2026-10-16", "2026-10-17"];
+    const markup = render("active", dayCells(days));
+    expect(markup).toContain("min-w-[46rem]");
+    for (const label of ["10/1(목)", "10/3(토)", "10/9(금)", "10/12(월)", "10/16(금)", "10/17(토)"]) expect(markup).toContain(`>${label}</th>`);
+    expect(markup).not.toContain(">10/2(금)</th>");
+    expect(markup).toContain("10/1, 10/3, 10/9, 10/12, 10/16~10/17");
+    expect(markup).toContain("고른 6일의 시간대별 합계");
+    expect(markup).toContain("회원·시간");
+    expect(lines(markup)).toBe(0); // no tangle of six lines
   });
 });
 
 describe("one basis for the compare chart, the heatmap and the export", () => {
-  it("gives a day the same cells whether it is loaded with the period or alone, and the export the same numbers", async () => {
+  it("gives a day the same cells whether it is chosen with others or alone, and the export the same numbers", async () => {
     const { halves, HOURLY_METRICS } = await import("@/lib/metrics/hourly");
     const alone = buildCells(["2026-10-17"], rows, starts, NOW);
     const rowsOut = hourlyDataset(cells).tables[0].rows.filter((r) => r[0] === "2026-10-17");

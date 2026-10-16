@@ -2,19 +2,23 @@
 
 import Link from "next/link";
 
+import { dismissPrivacyNoticeAction } from "@/app/privacyNoticeActions";
 import { InfoIcon, XIcon } from "@/components/icons";
 import { PRIVACY_NOTICE_STORAGE_KEY, type PrivacyNotice } from "@/lib/policy/privacyNotice";
 
 // 개인정보처리방침 변경 안내 bar (lib/policy/privacyNotice.ts): never blocks
-// anything, closes for this 시행일 in this browser.
+// anything, closes for this 시행일 in this browser -- hidden at once, then
+// remembered in localStorage and in a cookie the server sets (the layout
+// leaves the bar out from the next page on).
 export function PrivacyPolicyNotice({ notice }: { notice: NonNullable<PrivacyNotice> }) {
   const close = () => {
     document.documentElement.setAttribute("data-privacy-notice", "closed");
     try {
       window.localStorage.setItem(PRIVACY_NOTICE_STORAGE_KEY, notice.id);
     } catch {
-      // no storage: hidden for this page only
+      // no storage: the cookie below still holds it
     }
+    dismissPrivacyNoticeAction(notice.id).catch(() => {});
   };
   return (
     <div data-privacy-notice-bar role="note" className="border-b border-border bg-primary-muted/60">

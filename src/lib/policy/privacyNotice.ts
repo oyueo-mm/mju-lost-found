@@ -5,13 +5,23 @@ import { LATEST_PRIVACY_POLICY_REVISION, PRIVACY_POLICY_EFFECTIVE_DATE } from "@
 // re-consented (auth/terms.ts) is shown as one non-blocking bar above the
 // page (components/layout/PrivacyPolicyNotice.tsx) -- before its 시행일 as
 // upcoming, then for NOTICE_DAYS after it -- with a link to the policy's
-// change history. Closing it is remembered per 시행일 in this browser
-// (localStorage, applied before first paint by privacyNoticeInitScript, so
-// a closed bar never flashes or shifts the page); the next change shows
-// again. No account data, no new notice system.
+// change history. Closing it is remembered per 시행일 in this browser, two
+// ways: a first-party cookie set by the server (PRIVACY_NOTICE_COOKIE --
+// the layout then doesn't render the bar at all, and a server-set cookie
+// outlives the 7-day cap some browsers put on script-written storage) and
+// localStorage (applied before first paint by privacyNoticeInitScript, so
+// a closed bar never flashes; it also copies an earlier close into the
+// cookie). The next change shows again. No account data, no new notice
+// system. A close is per site address: another of the service's domains
+// asks again.
 
 export const PRIVACY_NOTICE_DAYS = 30;
 export const PRIVACY_NOTICE_STORAGE_KEY = "mju-find:privacy-notice";
+export const PRIVACY_NOTICE_COOKIE = "mju-find-privacy-notice";
+export const PRIVACY_NOTICE_COOKIE_MAX_AGE = 365 * 24 * 60 * 60;
+
+// The bar was closed for this 시행일 (the cookie's value).
+export const privacyNoticeDismissed = (cookieValue: string | undefined, effective = PRIVACY_POLICY_EFFECTIVE_DATE) => cookieValue === effective;
 export const PRIVACY_NOTICE_HREF = "/policy/privacy#changes";
 
 // What changed: the newest revision's summary (policy §11 shows the same).
@@ -36,5 +46,7 @@ export function privacyNotice(today: string, effective = PRIVACY_POLICY_EFFECTIV
 // Before first paint: a bar closed for this 시행일 stays hidden
 // (html[data-privacy-notice="closed"], globals.css).
 export function privacyNoticeInitScript(effective = PRIVACY_POLICY_EFFECTIVE_DATE): string {
-  return `(function(){try{if(localStorage.getItem(${JSON.stringify(PRIVACY_NOTICE_STORAGE_KEY)})===${JSON.stringify(effective)})document.documentElement.setAttribute("data-privacy-notice","closed");}catch(e){}})();`;
+  const cookie = `${PRIVACY_NOTICE_COOKIE}=${effective}`;
+  const setCookie = `${cookie}; path=/; max-age=${PRIVACY_NOTICE_COOKIE_MAX_AGE}; samesite=lax`;
+  return `(function(){try{if(localStorage.getItem(${JSON.stringify(PRIVACY_NOTICE_STORAGE_KEY)})===${JSON.stringify(effective)}){document.documentElement.setAttribute("data-privacy-notice","closed");if(("; "+document.cookie).indexOf(${JSON.stringify(`; ${cookie}`)})<0)document.cookie=${JSON.stringify(setCookie)}+(location.protocol==="https:"?"; secure":"");}}catch(e){}})();`;
 }

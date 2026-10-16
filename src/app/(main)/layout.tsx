@@ -7,7 +7,8 @@ import { DraftJanitor } from "@/components/post/DraftJanitor";
 import { ActivityBeacon } from "@/components/layout/ActivityBeacon";
 import { PrivacyPolicyNotice } from "@/components/layout/PrivacyPolicyNotice";
 import { kstDay } from "@/lib/metrics/record";
-import { privacyNotice } from "@/lib/policy/privacyNotice";
+import { cookies } from "next/headers";
+import { PRIVACY_NOTICE_COOKIE, privacyNotice, privacyNoticeDismissed } from "@/lib/policy/privacyNotice";
 import { getCurrentUser, getRejoinIdentityId, hasRequiredConsents } from "@/lib/auth/session";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { countUnreadMessagesForUser } from "@/lib/chat/service";
@@ -100,7 +101,8 @@ export default async function MainLayout({ children }: { children: React.ReactNo
   }
 
   // 개인정보처리방침 변경 안내 (announced, no re-consent): for everyone, signed in or not.
-  const notice = privacyNotice(kstDay());
+  // ... unless closed for this 시행일 in this browser (cookie)
+  const notice = privacyNoticeDismissed((await cookies()).get(PRIVACY_NOTICE_COOKIE)?.value) ? null : privacyNotice(kstDay());
 
   return (
     <div className="flex flex-1 flex-col">

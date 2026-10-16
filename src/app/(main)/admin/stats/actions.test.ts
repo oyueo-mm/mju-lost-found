@@ -40,8 +40,8 @@ describe("운영 통계 내보내기 action", () => {
       expect.objectContaining({ hourly: true }),
     );
     expect(loadUserReport).toHaveBeenLastCalledWith({ from: "2026-10-12", until: "2026-10-17", unit: "day" });
-    // 날짜·시간대별: every KST day of the same period
-    expect(loadHourlyCells).toHaveBeenLastCalledWith(["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16"]);
+    // 날짜·시간대별 without chosen days: the page's default, the last 7 days
+    expect(loadHourlyCells).toHaveBeenLastCalledWith(["2026-10-10", "2026-10-11", "2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16"]);
 
     await exportStatsAction({ format: "csv", preset: "year", dataset: "visits" });
     expect(loadReport).toHaveBeenLastCalledWith({ from: "2026-01-01", until: "2026-10-17", unit: "month" });
@@ -57,6 +57,15 @@ describe("운영 통계 내보내기 action", () => {
     const custom = await exportStatsAction({ format: "csv", preset: "custom", from: "2026-10-01", to: "2026-10-15", dataset: "server" });
     expect(loadReport).toHaveBeenLastCalledWith({ from: "2026-10-01", until: "2026-10-16", unit: "day" });
     expect(custom).toMatchObject({ ok: true, filename: "mju-find-stats-server_20261001-20261015.csv" });
+  });
+
+  it("exports the calendar's days for 날짜·시간대별 -- only those, named after them", async () => {
+    const csv = await exportStatsAction({ format: "csv", preset: "month", dataset: "hourly", days: "2026-10-01,2026-10-03~2026-10-04,2026-10-20" });
+    // a day after today is not a day that can be chosen
+    expect(loadHourlyCells).toHaveBeenLastCalledWith(["2026-10-01", "2026-10-03", "2026-10-04"]);
+    expect(csv).toMatchObject({ ok: true, filename: "mju-find-stats-hourly_20261001-20261004_3d.csv" });
+    await exportStatsAction({ format: "xlsx", preset: "month", days: "" });
+    expect(loadHourlyCells).toHaveBeenLastCalledWith([]);
   });
 
   it("rejects bad or oversized ranges without querying", async () => {

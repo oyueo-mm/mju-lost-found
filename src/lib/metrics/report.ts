@@ -17,6 +17,7 @@ import {
 import { ACTIVITY_RETENTION_DAYS, API_METRIC_RETENTION_DAYS } from "@/lib/retention/policy";
 import { PERIOD_PRESETS, type PeriodPreset } from "./exportOptions";
 import { kstDay } from "./record";
+import { EARLIEST_SELECTABLE_DAY } from "./daySelection";
 import { DURATION_BUCKETS, PAGES_BUCKETS, type DurationBucket, type PagesBucket } from "./flow";
 import { DEVICE_KINDS, PAGE_KINDS, type DeviceKind, type PageKind } from "./visits";
 
@@ -139,7 +140,7 @@ export function daysBetween(from: string, until: string): number {
 export { PERIOD_PRESETS, type PeriodPreset };
 export type PeriodSelection = { preset: PeriodPreset; from?: string; to?: string };
 export const MAX_CUSTOM_DAYS = 366;
-export const EARLIEST_DAY = "2024-01-01";
+export const EARLIEST_DAY = EARLIEST_SELECTABLE_DAY;
 
 export function autoUnit(from: string, until: string): Granularity {
   const days = daysBetween(from, until);

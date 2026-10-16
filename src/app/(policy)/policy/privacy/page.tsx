@@ -166,7 +166,7 @@ const SECTIONS: Section[] = [
           </li>
           <li>
             <strong className="font-medium text-foreground">쿠키</strong>: 로그인 유지·보안용 쿠키(세션은 30일 미이용 시
-            만료, 로그아웃 시 삭제), 언어 설정(locale, 1년), 비로그인 게시글 조회수 중복 방지 식별값(anon_uid, 1년)을 사용합니다.
+            만료, 로그아웃 시 삭제), 언어 설정(locale, 1년), 비로그인 게시글 조회수 중복 방지 식별값(anon_uid, 1년), 변경 안내를 닫은 시행일(1년)을 사용합니다.
           </li>
           <li>
             <strong className="font-medium text-foreground">방문 통계·브라우저 저장소</strong>: 방문 시각·화면 종류 등 방문

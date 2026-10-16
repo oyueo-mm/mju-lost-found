@@ -17,6 +17,7 @@ import {
 import { describeRoute } from "./apiRoutes";
 import { NEW_MEMBER_DAYS, RETURN_WINDOW_DAYS, windowNote, type UserReport } from "./userReport";
 import { byHour, HOURLY_METRICS, type CellStatus, type HourlyCells } from "./hourly";
+import { describeDays } from "./daySelection";
 import { DURATION_BUCKETS, DURATION_LABELS, PAGES_BUCKETS, PAGES_LABELS } from "./flow";
 import { DEVICE_KINDS, DEVICE_LABELS, PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "./visits";
 import { buildCsv, buildXlsx, columnName, type Cell, type Sheet } from "./xlsx";
@@ -35,7 +36,9 @@ type Kind = "text" | "int" | "pct" | "period" | "ms";
 // A value: a number, text, or null = 미측정 (not recorded then -- never 0).
 type Value = number | string | null;
 type Table = { title?: string; columns: { label: string; kind: Kind }[]; rows: Value[][]; total?: Value[] };
-type Dataset = { key: DatasetKey; name: string; tables: Table[]; notes: string[]; widths: number[] };
+// `period`: what the data covers when it is not the report's period
+// (날짜·시간대별: the days chosen on the calendar).
+type Dataset = { key: DatasetKey; name: string; tables: Table[]; notes: string[]; widths: number[]; period?: string };
 
 const UNIT_LABEL = { day: "일별", week: "주별(월요일 시작)", month: "월별" } as const;
 
@@ -91,6 +94,9 @@ export function hourlyDataset(h: HourlyCells): Dataset {
   return {
     key: "hourly",
     name: "날짜·시간대별",
+    period: h.days.length
+      ? `시간대 분석에서 고른 날짜 ${h.days.length}일 (${h.days[0]} ~ ${h.days[h.days.length - 1]} 중 ${describeDays(h.days)}) · 고르지 않은 날짜는 제외`
+      : "고른 날짜 없음",
     widths: [12, 8, 14, 16, 16, 14, 16, 12, 14],
     tables: [
       {
@@ -653,7 +659,7 @@ export function toSheets(report: Report, label?: string, datasets = datasetsOf(r
       merges.push(`A${rows.length}:${columnName(width - 1)}${rows.length}`);
     };
     wide(`MJU Find 운영 통계 — ${ds.name}`, "title");
-    wide(`통계 기간: ${periodLabel(report, label)}`, "meta");
+    wide(`통계 기간: ${ds.period ?? periodLabel(report, label)}`, "meta");
     wide(`생성 일시: ${report.generatedAt} (KST) · 출처: MJU Find 관리자 운영 통계`, "meta");
     if (notice) wide(`주의: ${notice}`, "meta");
     rows.push([]);
@@ -694,7 +700,7 @@ export function toCsv(report: Report, key: DatasetKey, label?: string, users?: U
   // option skips each one whole even when it holds a comma.
   const meta = [
     `# MJU Find 운영 통계 - ${ds.name}`,
-    `# 통계 기간: ${periodLabel(report, label)}`,
+    `# 통계 기간: ${ds.period ?? periodLabel(report, label)}`,
     `# 생성 일시: ${report.generatedAt} (KST)`,
     ...(notice ? [`# 주의: ${notice}`] : []),
     ...ds.notes.map((n) => `# 주의: ${n}`),
@@ -712,7 +718,9 @@ export function toCsv(report: Report, key: DatasetKey, label?: string, users?: U
   return `\ufeff${meta.join("\r\n")}\r\n${buildCsv(rows).slice(1)}`;
 }
 
-export const exportFileName = (report: Report, ext: "xlsx" | "csv", key?: DatasetKey) => {
+export const exportFileName = (report: Report, ext: "xlsx" | "csv", key?: DatasetKey, days?: string[]) => {
+  // 날짜·시간대별 alone: named after its own days
+  if (key === "hourly" && days?.length) return `mju-find-stats-hourly_${days[0].replaceAll("-", "")}-${days[days.length - 1].replaceAll("-", "")}_${days.length}d.${ext}`;
   const last = new Date(Date.parse(`${report.range.until}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
   return `mju-find-stats${key ? `-${key}` : ""}_${report.range.from.replaceAll("-", "")}-${last.replaceAll("-", "")}.${ext}`;
 };

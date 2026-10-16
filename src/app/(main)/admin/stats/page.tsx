@@ -8,7 +8,6 @@ import { kstDay } from "@/lib/metrics/record";
 import {
   apiCoverage,
   bucketSpan,
-  EARLIEST_DAY,
   isInternalRoute,
   KEYWORD_BASIS_CHANGED_AT,
   loadReport,
@@ -32,8 +31,11 @@ import { StatsExportPanel } from "@/components/admin/StatsExportPanel";
 import { StatsPeriodPicker } from "@/components/admin/StatsPeriodPicker";
 import { UserStatsView } from "@/components/admin/UserStatsView";
 import { loadUserReport } from "@/lib/metrics/userReport";
-import { HourlyStatsView, MAX_COMPARE_DAYS } from "@/components/admin/HourlyStatsView";
-import { daysFrom, isHourlyMetric, loadHourlyCells, type HourlyMetric } from "@/lib/metrics/hourly";
+import { HourlyStatsView } from "@/components/admin/HourlyStatsView";
+import { HourlyDayPicker } from "@/components/admin/HourlyDayPicker";
+import { HourlyExportButtons } from "@/components/admin/HourlyExportButtons";
+import { isHourlyMetric, loadHourlyCells, type HourlyMetric } from "@/lib/metrics/hourly";
+import { describeDays, encodeDays, resolveSelection } from "@/lib/metrics/daySelection";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
 import { AlertIcon, ChevronRightIcon, InfoIcon } from "@/components/icons";
 
@@ -157,7 +159,15 @@ export default async function AdminStatsPage({
   const period = "error" in asked ? (resolvePeriod({ preset: "month" }, today) as Exclude<typeof asked, { error: string }>) : asked;
   const periodError = "error" in asked ? asked.error : null;
   const unit = period.range.unit;
-  const tab: "ops" | "users" | "hourly" = params.tab === "users" ? "users" : params.tab === "hourly" ? "hourly" : "ops";
+  // (시간대 분석 is a section of 운영 통계; an old ?tab=hourly link opens 운영 통계)
+  const tab: "ops" | "users" = params.tab === "users" ? "users" : "ops";
+  // 시간대 분석: the calendar's days (`d`) and metric (`m`), kept across
+  // period changes on 운영 통계
+  const dParam = params.d === undefined ? null : [params.d].flat().join(",");
+  const selection = resolveSelection(dParam, today);
+  const selectedParam = encodeDays(selection.days);
+  const metric: HourlyMetric = isHourlyMetric(params.m) ? params.m : "pv";
+  const hourlyQuery = new URLSearchParams({ d: selectedParam, m: metric }).toString();
   const periodQuery =
     period.selection.preset === "custom"
       ? `period=custom&from=${period.selection.from}&to=${period.selection.to}`
@@ -192,9 +202,6 @@ export default async function AdminStatsPage({
         <Link href={`/admin/stats?tab=users&${periodQuery}`} aria-current={tab === "users" ? "page" : undefined} className={tabClass(tab === "users")}>
           사용자 통계
         </Link>
-        <Link href={`/admin/stats?tab=hourly&${periodQuery}`} aria-current={tab === "hourly" ? "page" : undefined} className={tabClass(tab === "hourly")}>
-          시간대 분석
-        </Link>
       </nav>
       <div className="flex flex-col gap-2">
         <StatsPeriodPicker
@@ -204,6 +211,7 @@ export default async function AdminStatsPage({
           today={today}
           openByDefault={period.selection.preset === "custom" || !!periodError}
           tab={tab}
+          keep={tab === "ops" ? hourlyQuery : undefined}
         />
         {periodError && (
           <p role="alert" className="text-xs text-destructive">
@@ -217,43 +225,18 @@ export default async function AdminStatsPage({
           <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
         </summary>
         <div className="border-t border-border px-4 py-3">
-          <StatsExportPanel preset={period.selection.preset} from={period.selection.from} to={period.selection.to} periodLabel={period.label} />
+          <StatsExportPanel
+            preset={period.selection.preset}
+            from={period.selection.from}
+            to={period.selection.to}
+            periodLabel={period.label}
+            days={selectedParam}
+            daysLabel={selection.days.length ? `${selection.days.length}일: ${describeDays(selection.days)}` : "고른 날짜 없음"}
+          />
         </div>
       </details>
     </div>
   );
-
-  if (tab === "hourly") {
-    const metric: HourlyMetric = isHourlyMetric(params.m) ? params.m : "pv";
-    const days = daysFrom(period.range.from, period.range.until);
-    // 비교할 날짜 (?d=YYYY-MM-DD, up to 4): real KST days up to today, in
-    // order; none chosen -> the period's last 3 days
-    const realDay = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && new Date(Date.parse(`${d}T00:00:00Z`) || 0).toISOString().slice(0, 10) === d;
-    const asked = [params.d ?? []].flat().filter((d) => realDay(d) && d >= EARLIEST_DAY && d <= today);
-    const chosen = [...new Set(asked)].sort().slice(0, MAX_COMPARE_DAYS);
-    const compareDays = chosen.length ? chosen : days.slice(-3);
-    const [rangeCells, compareCells] = await Promise.all([loadHourlyCells(days), loadHourlyCells(compareDays)]);
-    const periodParams = new URLSearchParams(periodQuery);
-    const hrefWith = ({ m = metric, d = chosen }: { m?: HourlyMetric; d?: string[] }) => {
-      const q = new URLSearchParams({ tab: "hourly", ...Object.fromEntries(periodParams), m });
-      for (const day of d) q.append("d", day);
-      return `/admin/stats?${q.toString()}`;
-    };
-    return (
-      <div className="flex flex-col gap-6">
-        {header}
-        <HourlyStatsView
-          range={rangeCells}
-          compare={compareCells}
-          metric={metric}
-          compareDays={chosen}
-          hrefWith={hrefWith}
-          hiddenFields={[{ name: "tab", value: "hourly" }, ...[...periodParams].map(([name, value]) => ({ name, value })), { name: "m", value: metric }]}
-          today={today}
-        />
-      </div>
-    );
-  }
 
   if (tab === "users") {
     const users = await loadUserReport(period.range);
@@ -265,7 +248,8 @@ export default async function AdminStatsPage({
     );
   }
 
-  const report = await loadReport(period.range);
+  const [report, hourlyCells] = await Promise.all([loadReport(period.range), loadHourlyCells(selection.days)]);
+  const hourlyHref = (m: HourlyMetric) => `/admin/stats?${new URLSearchParams({ ...Object.fromEntries(new URLSearchParams(periodQuery)), d: selectedParam, m }).toString()}`;
   const { core, visit, totals, totalCoverage: cov } = report;
   const labels = report.buckets.map((b) => bucketLabel(bucketSpan(report.range, b).from, unit));
   const last = report.buckets.length - 1;
@@ -530,6 +514,18 @@ export default async function AdminStatsPage({
           )}
         </div>
       </Section>
+
+      <div id="hourly" className="scroll-mt-20">
+        <HourlyStatsView
+          cells={hourlyCells}
+          metric={metric}
+          hrefWith={hourlyHref}
+          today={today}
+          notice={selection.notice}
+          picker={<HourlyDayPicker selected={selection.days} today={today} />}
+          actions={<HourlyExportButtons preset={period.selection.preset} from={period.selection.from} to={period.selection.to} days={selectedParam} />}
+        />
+      </div>
 
       <Section
         title="방문 시간·이탈 분석"

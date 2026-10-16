@@ -23,16 +23,19 @@ export function StatsPeriodPicker({
   today,
   openByDefault,
   tab = "ops",
+  keep,
 }: {
   active: PeriodPreset;
   from: string;
   to: string;
   today: string;
   openByDefault: boolean;
-  // keeps the 운영 / 사용자 통계 / 시간대 분석 tab when the period changes
-  tab?: "ops" | "users" | "hourly";
+  // keeps the 운영 / 사용자 통계 tab when the period changes
+  tab?: "ops" | "users";
+  // other params to keep (시간대 분석's days and metric), as a query string
+  keep?: string;
 }) {
-  const tabQuery = tab === "ops" ? "" : `&tab=${tab}`;
+  const tabQuery = `${tab === "ops" ? "" : `&tab=${tab}`}${keep ? `&${keep}` : ""}`;
   const [open, setOpen] = useState(openByDefault);
   return (
     <div className="flex flex-col gap-2">
@@ -57,6 +60,9 @@ export function StatsPeriodPicker({
         <form id="stats-custom-period" action="/admin/stats" className="flex flex-wrap items-end gap-2 text-xs text-muted-foreground">
           <input type="hidden" name="period" value="custom" />
           {tab !== "ops" && <input type="hidden" name="tab" value={tab} />}
+          {[...new URLSearchParams(keep ?? "")].map(([name, value]) => (
+            <input key={name} type="hidden" name={name} value={value} />
+          ))}
           <label className="flex flex-col gap-1">
             시작일
             <input type="date" name="from" required max={today} defaultValue={from} className={field} />

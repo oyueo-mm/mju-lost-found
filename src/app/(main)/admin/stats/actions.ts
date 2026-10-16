@@ -8,7 +8,8 @@ import { PERIOD_PRESETS } from "@/lib/metrics/exportOptions";
 import { kstDay } from "@/lib/metrics/record";
 import { loadReport, resolvePeriod, testDataNotice } from "@/lib/metrics/report";
 import { loadUserReport } from "@/lib/metrics/userReport";
-import { daysFrom, loadHourlyCells } from "@/lib/metrics/hourly";
+import { loadHourlyCells } from "@/lib/metrics/hourly";
+import { resolveSelection } from "@/lib/metrics/daySelection";
 
 // 운영 통계 내보내기 (Excel / CSV). A Server Action rather than a download
 // route: the Hobby plan's function cap is used up (see next.config.ts), and
@@ -26,6 +27,9 @@ const inputSchema = z.object({
   from: z.string().max(10).optional(),
   to: z.string().max(10).optional(),
   dataset: z.enum(DATASETS.map((d) => d.key) as [string, ...string[]]).default("summary"),
+  // 날짜·시간대별: the calendar's days, encoded as in the URL's `d`
+  // (absent: the same default the page shows)
+  days: z.string().max(4000).optional(),
 });
 export type StatsExportInput = z.input<typeof inputSchema>;
 export type StatsExportResult = { ok: true; filename: string; mime: string; base64: string } | { ok: false; error: string };
@@ -34,16 +38,18 @@ export async function exportStatsAction(input: StatsExportInput): Promise<StatsE
   await requireAdmin();
   const parsed = inputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "내보내기 조건을 확인해 주세요." };
-  const { format, preset, from, to, dataset } = parsed.data;
+  const { format, preset, from, to, dataset, days } = parsed.data;
 
-  const period = resolvePeriod({ preset: preset as (typeof PERIOD_PRESETS)[number]["key"], from, to }, kstDay());
+  const today = kstDay();
+  const period = resolvePeriod({ preset: preset as (typeof PERIOD_PRESETS)[number]["key"], from, to }, today);
   if ("error" in period) return { ok: false, error: period.error };
+  const selection = resolveSelection(days, today);
 
   try {
     const [report, users, hourly] = await Promise.all([
       loadReport(period.range),
       loadUserReport(period.range),
-      loadHourlyCells(daysFrom(period.range.from, period.range.until)),
+      loadHourlyCells(selection.days),
     ]);
     if (format === "xlsx") {
       return {
@@ -56,7 +62,7 @@ export async function exportStatsAction(input: StatsExportInput): Promise<StatsE
     const key = dataset as (typeof DATASETS)[number]["key"];
     return {
       ok: true,
-      filename: exportFileName(report, "csv", key),
+      filename: exportFileName(report, "csv", key, selection.days),
       mime: "text/csv;charset=utf-8",
       base64: Buffer.from(toCsv(report, key, period.label, users, testDataNotice(), hourly), "utf8").toString("base64"),
     };

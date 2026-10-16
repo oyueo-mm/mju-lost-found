@@ -3,13 +3,29 @@
 import { useState, useTransition } from "react";
 
 import { exportStatsAction } from "@/app/(main)/admin/stats/actions";
+import { saveExport } from "@/components/admin/saveExport";
 import { DATASETS, type PeriodPreset } from "@/lib/metrics/exportOptions";
 
 // 운영 통계 내보내기 (/admin/stats): always the period chosen on the page
-// (passed in), so the file holds the screen's numbers. The file is built by
-// an admin-only Server Action and handed back here to save; nothing is kept
-// on the server.
-export function StatsExportPanel({ preset, from, to, periodLabel }: { preset: PeriodPreset; from?: string; to?: string; periodLabel: string }) {
+// (passed in), so the file holds the screen's numbers; 날짜·시간대별 holds
+// the days chosen on the 시간대 분석 calendar (`days`, encoded as in the
+// URL). The file is built by an admin-only Server Action and handed back
+// here to save; nothing is kept on the server.
+export function StatsExportPanel({
+  preset,
+  from,
+  to,
+  periodLabel,
+  days,
+  daysLabel,
+}: {
+  preset: PeriodPreset;
+  from?: string;
+  to?: string;
+  periodLabel: string;
+  days: string;
+  daysLabel: string;
+}) {
   const [format, setFormat] = useState<"xlsx" | "csv">("xlsx");
   const [dataset, setDataset] = useState<string>("summary");
   const [message, setMessage] = useState<{ kind: "error" | "ok"; text: string } | null>(null);
@@ -19,21 +35,7 @@ export function StatsExportPanel({ preset, from, to, periodLabel }: { preset: Pe
     setMessage(null);
     startTransition(async () => {
       try {
-        const result = await exportStatsAction({ format, preset, from, to, dataset });
-        if (!result.ok) {
-          setMessage({ kind: "error", text: result.error });
-          return;
-        }
-        const bytes = Uint8Array.from(atob(result.base64), (c) => c.charCodeAt(0));
-        const url = URL.createObjectURL(new Blob([bytes], { type: result.mime }));
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = result.filename;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 10_000);
-        setMessage({ kind: "ok", text: `${result.filename} 파일을 저장했습니다.` });
+        setMessage(saveExport(await exportStatsAction({ format, preset, from, to, dataset, days })));
       } catch {
         setMessage({ kind: "error", text: "파일을 만들지 못했습니다. 잠시 후 다시 시도해 주세요." });
       }
@@ -44,7 +46,8 @@ export function StatsExportPanel({ preset, from, to, periodLabel }: { preset: Pe
   return (
     <div className="flex flex-col gap-3 text-xs text-muted-foreground">
       <p>
-        기간: <b className="font-semibold text-foreground">{periodLabel}</b> — 위에서 고른 조회 기간과 같습니다.
+        기간: <b className="font-semibold text-foreground">{periodLabel}</b> — 위에서 고른 조회 기간과 같습니다. 날짜·시간대별은 시간대 분석 달력에서 고른
+        날짜(<b className="font-semibold text-foreground">{daysLabel}</b>)입니다.
       </p>
       <fieldset className="flex flex-col gap-1.5">
         <legend className="mb-1.5 font-medium text-foreground">형식</legend>
