@@ -18,9 +18,11 @@ describe("개인정보처리방침 개정 이력", () => {
     }
   });
 
-  it("is what §11 shows, entry by entry", () => {
-    const text = renderToStaticMarkup(PrivacyPolicyPage()).replace(/<[^>]+>/g, "").replace(/\s+/g, " ");
-    const s11 = text.slice(text.indexOf("11. 시행일 및 변경"));
-    for (const r of PRIVACY_POLICY_REVISIONS) expect(s11).toContain(`${formatEffectiveDate(r.date)}: ${r.summary}`);
+  it("shows every registry entry in the collapsible history", () => {
+    const html = renderToStaticMarkup(PrivacyPolicyPage());
+    const history = html.match(/<details\b[^>]*>([\s\S]*?)<\/details>/)?.[1];
+    expect(history).toBeDefined();
+    const text = history!.replace(/<[^>]+>/g, "").replace(/\s+/g, " ");
+    for (const r of PRIVACY_POLICY_REVISIONS) expect(text).toContain(`${formatEffectiveDate(r.date)}: ${r.summary}`);
   });
 });

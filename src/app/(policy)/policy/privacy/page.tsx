@@ -1,402 +1,198 @@
-import Link from "next/link";
-
-import { formatEffectiveDate } from "@/lib/auth/terms";
+﻿import { formatEffectiveDate } from "@/lib/auth/terms";
 import { LATEST_PRIVACY_POLICY_REVISION, PRIVACY_POLICY_EFFECTIVE_DATE, PRIVACY_POLICY_REVISIONS } from "@/lib/policy/privacyPolicy";
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 
-// Phase 9: mirrors the exact items/purposes shown at consent time
-// (src/app/(auth)/privacy-consent/page.tsx's own COLLECTED_ITEMS) so the
-// two never drift apart in what they claim is collected -- both are drawn
-// from the same real schema/OAuth scope investigation. This is a full
-// standalone version of that same notice, not a different one. See that
-// page's own comment for the same ground rules: no fabricated legal
-// review, no retention period more specific than the code guarantees, no
-// third-party sharing that doesn't actually happen.
-//
-// Phase 10B: updated against the Phase 10A audit's findings -- §6/§7
-// previously said no withdrawal feature existed and no purge logic ran
-// anywhere; both are now wrong on their own terms (auth/user.ts's
-// withdrawUser, and chat/service.ts's self-delete image cleanup), so this
-// revision brings the wording back in line with what the code actually
-// does, nothing more. Still no invented retention period, no third-party
-// sharing that doesn't happen, no legal-review claim.
-//
-// 회원탈퇴·보유정책: §6/§7 now describe both ways to leave exactly as
-// auth/user.ts::withdrawUser (deactivation) and auth/withdrawal.ts::
-// withdrawAccount (회원탈퇴) behave, and the retention periods applied by
-// lib/retention (policy.ts / service.ts, daily Vercel Cron).
-//
-// 처리위탁·자동수집 정정: §1/§2 list exactly what Google sign-in returns
-// for scope "openid email profile" (sub, email, email_verified, and the
-// name, used only for 실명·소속 -- see below; the
-// internal User.name is the e-mail local part, auth/user.ts), §5 names
-// each processor with its task (no transfer country is stated: not yet
-// confirmed), §8 describes the IP/User-Agent/cookie handling the code
-// actually does (rateLimit/index.ts, posts/views.ts, i18n locale cookie,
-// Auth.js session cookie), §10 the privacy contact.
-//
-// §11 shows the 시행일 from auth/terms.ts's PRIVACY_POLICY_EFFECTIVE_DATE,
-// the same value the consent versions follow.
-// 이용 통계 (2026-10-16, a new consent version): §1 lists the 이용 일자
-// record, §3 the statistics purpose, §7 its deletion at 회원탈퇴
-// (auth/withdrawal.ts deleteActivityMarks, repeated daily by lib/retention)
-// and the 400-day keeping otherwise (retention/policy.ts
-// ACTIVITY_RETENTION_DAYS), §8 how the marks are made (metrics/record.ts
-// activityActor: an HMAC of the member id under a server key) and matched
-// back to member ids in memory for counts (metrics/userReport.ts) -- so they
-// are pseudonymous, re-linkable personal data, never called anonymous --
-// and that the hourly totals carry no member data, have no deletion date
-// (MetricDaily is not cleaned up) and stay after 회원탈퇴. Announced (§11
-// and the in-service notice, lib/policy/privacyNotice.ts); existing consents
-// stay valid (auth/terms.ts ACCEPTED_PRIVACY_VERSIONS).
-// 처리 목적·항목 정리 (same revision): §1 lists every kind of data the code
-// stores (also 단체 신청, 키워드 알림, 서비스 개선 제안, 외부 관계자 승인,
-// 신고·조치 기록), §3 the purposes by area (AI 검색·추천 vectors; search
-// input not stored), §8 the hosting request log (may hold search words) and
-// the server run log. §11 is generated from lib/policy/privacyPolicy.ts.
-// 이름·소속 필수 수집 (2026-10-16): 이름·소속 are required items of the
-// 개인정보 동의; §1, §3, §4, §6, §7, §9 describe it. Consent withdrawal of a
-// required item is 회원탈퇴 (§6), as for the rest of this consent.
-// 실명·소속 자동 수집 (2026-10-15): §1-§7 describe the optional consent and
-// the automatic collection from the school Workspace display name
-// (identity/googleHints.ts, identity/service.ts syncIdentityFromHints), the
-// read-only values and 정정 요청, and the typed-in exception path.
-// Earlier: §1-§7 add the member-entered real name and department
-// (UserIdentityInfo) exactly as the code handles them -- collected with a
-// separate consent on /me/identity, needed only to post or chat, never
-// shown to other members, viewable by an admin only for a report with a
-// logged reason (identity/service.ts), deleted at 회원탈퇴. Whether they
-// may be required at all is a legal question still open (see the report).
-// `id`: an anchor the in-service change notice links to (#changes).
-type Section = { title: string; body: React.ReactNode; id?: string };
+type Section = { title: string; body: React.ReactNode };
 
-// §11 from the revision history (lib/policy/privacyPolicy.ts).
 const CONSENT_NOTE = {
   notice: "이 개정은 서비스 안의 변경 안내로 알리며, 기존 회원에게 별도의 재동의를 요청하지 않습니다.",
   reconsent: "기존 회원은 시행일 이후 처음 로그인할 때 변경된 내용을 확인하고 다시 동의해야 회원 기능을 이용할 수 있습니다.",
 } as const;
 const REVISION_NOTE = { notice: "(변경 안내로 시행)", reconsent: "(기존 회원 재동의)" } as const;
 
+// 실제 보유정책은 lib/retention/policy.ts·service.ts, 탈퇴 처리는
+// auth/withdrawal.ts를 따릅니다. 문서 편집으로 동의 버전을 바꾸지 않습니다.
+const RETENTION_ROWS = [
+  ["채팅 메시지 본문", "상대방의 대화 기록 유지를 위해 탈퇴 후 90일"],
+  ["신고·제재·이의신청 기록과 관련 증거(게시글·댓글·채팅·사진)", "처리 중에는 보관하며, 처리 완료 후 1년. 이용 정지나 재가입 보류 사유가 남으면 계속 보관"],
+  ["재가입 보류 식별값", "원래 계정 식별자로 되돌릴 수 없는 값으로 보관하며, 이용 정지·미처리 신고 등 보류 사유가 모두 끝나면 즉시 삭제"],
+  ["재가입 요청·처리 기록", "처리 후 1년"],
+  ["관리자의 채팅 및 이름·소속 열람 기록", "최소 1년"],
+] as const;
+
 const SECTIONS: Section[] = [
   {
-    title: "1. 수집하는 개인정보 항목",
+    title: "1. 수집 항목과 방법",
     body: (
-      <ul className="flex list-disc flex-col gap-1 pl-5">
-        <li>Google 계정 식별 정보(Google 로그인 시 발급되는 고유 식별자)</li>
-        <li>이메일 주소 및 이메일 인증 여부(인증 여부는 로그인 허용 여부 확인에만 쓰고 저장하지 않습니다)</li>
+      <ul className="flex list-disc flex-col gap-2 pl-5">
         <li>
-          직접 설정한 닉네임. 다른 이용자에게 표시되는 이름이며, 아래 이름과는 별개입니다. 계정의 내부 이름 값은 이메일
-          주소의 @ 앞부분으로 저장되며, Google 계정 이름은 여기에 저장하지 않습니다.
+          <strong className="font-medium text-foreground">회원 정보</strong>: Google 계정 식별자, 이메일, 닉네임,
+          동의·로그인 기록. Google 로그인으로 계정 정보를 받고, 이메일 인증 여부는 로그인 확인에만 사용합니다.
+          내부 계정 이름은 이메일의 @ 앞부분으로 저장합니다.
         </li>
         <li>
-          이름, 소속(학과·단과대학) (필수): 개인정보 수집·이용 동의의 필수 항목입니다. 명지대 Google Workspace
-          계정(로그인 정보의 도메인 값이 mju.ac.kr인 계정)의 표시 이름이 &lsquo;이름/신분/소속&rsquo; 형식이면, 동의한 뒤 이름과
-          소속 부분을 자동으로 추출해 저장하고, 이후 로그인할 때마다 Google 계정 정보와 비교해 바뀐 경우 갱신합니다.
-          신분(학생·교수 등)은 저장하지 않습니다. 소속은 학과가 아닌 단과대학 등 상위 소속일 수 있으며, 이 정보는 학교 학적
-          시스템에서 확인된 정보가 아닙니다. 표시 이름에서 가져올 수 없는 계정(학교 Google 계정이 아니거나 형식이 다른
-          경우)은 게시글 등록·채팅 전에 이용자가 직접 입력하며, 형식이 맞지 않으면 어떤 값도 추측해 저장하지 않습니다.
-          이름·소속은 본인과, 신고·분쟁을 처리하는 관리자(아래 5조)만 볼 수 있습니다.
+          <strong className="font-medium text-foreground">이름·소속(학과·단과대학, 필수)</strong>: 회원 확인과 신고·분쟁
+          처리를 위해 수집합니다. 동의 후 명지대 Google 계정 이름에서 가져오거나 직접 입력받으며, 다른 이용자에게 공개하지 않습니다.
         </li>
         <li>
-          Google 계정 이름: Google 로그인 시 전달받아 위 이름·소속 자동 추출에만 씁니다. 동의 전에는 로그인 세션 쿠키에
-          암호화된 상태로만 보관되고 서버에 저장하지 않으며, 저장한 뒤에는 세션에서 지웁니다.
+          <strong className="font-medium text-foreground">이용자가 작성·제공한 정보</strong>: 게시글(제목·내용·장소·날짜·사진),
+          댓글·답글, 채팅 메시지·사진, 신고·이의신청·재가입 요청, 알림 설정·개선 제안, 단체 신청 정보(단체·연락처·신청 사유 등).
+          외부 관계자 이용 승인 시에는 관리자가 이메일·이름·소속·캠퍼스를 입력합니다.
         </li>
-        <li>작성한 게시글(제목, 내용, 장소, 날짜, 첨부 이미지)</li>
-        <li>작성한 댓글 및 답글</li>
-        <li>주고받은 채팅 메시지 및 채팅으로 전송한 사진</li>
-        <li>신고·이의신청·재가입 요청에 작성한 내용, 이용 정지 등 관리자 조치 기록</li>
-        <li>키워드 알림 설정(알림 받을 단어와 게시판·캠퍼스·분류 조건), 서비스 개선 제안의 내용</li>
-        <li>단체 등록·가입을 신청할 때 입력한 단체 정보, 연락처 이메일, 신청 사유·메시지</li>
-        <li>외부 관계자의 이용 승인을 위해 관리자가 입력한 이메일 주소, 이름, 소속, 캠퍼스</li>
-        <li>로그인 일시, 게시글 조회 기록, 신고/알림 등 서비스 이용 기록</li>
         <li>
-          로그인한 상태로 서비스를 이용한 날짜(이용 일자 기록, 하루 한 번): 이용 통계(아래 3조)에만 쓰며, 회원 번호를 비밀 키로
-          변환한 값과 함께 저장합니다(아래 7조·8조)
+          <strong className="font-medium text-foreground">운영·보안 과정에서 생성되는 기록</strong>: 조회·알림 등 이용 내역,
+          관리자 조치·열람 기록, 회원별 이용 일자, 접속 정보·쿠키. 자동 수집 정보는 5항에서 안내합니다.
         </li>
-        <li>서비스 이용 과정에서 자동으로 생성·수집되는 정보(IP 주소, User-Agent, 쿠키): 아래 8조 참고</li>
       </ul>
     ),
   },
   {
-    title: "2. 수집 방법",
-    body: (
-      <>
-        Google 로그인(OAuth)을 통해 Google 계정 고유 식별자, 이메일 주소, 이메일 인증 여부를 전달받습니다. 이때
-        요청하는 권한 범위(scope)는
-        <span className="font-medium text-foreground"> openid, email, profile</span>입니다. profile로 전달되는
-        정보 중 이름만 위 1조의 용도(동의 후 이름·소속 자동 추출)로 쓰며, 프로필 사진 등 나머지 정보는 쓰거나
-        저장하지 않습니다. 그 외 항목은 이용자가 서비스를 이용하는 과정에서
-        직접 입력하거나(닉네임, 게시글, 댓글, 채팅 등) 서비스 이용에 따라 자동으로 생성됩니다(로그인
-        일시 등).
-      </>
-    ),
-  },
-  {
-    title: "3. 이용 목적",
-    body: (
-      <>
-        <p>수집한 개인정보는 다음 목적에만 이용합니다.</p>
-        <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
-          <li>회원 가입·식별·관리: Google 로그인, 동의 기록, 계정 비활성화·회원탈퇴, 외부 관계자 이용 승인</li>
-          <li>
-            분실물·습득물 서비스 제공: 게시글·사진의 등록과 공개, 키워드·자연어(AI)·사진 검색, 비슷한 게시글 추천, 댓글·채팅·알림·키워드
-            알림, 단체 기능. AI 검색과 추천을 위해 게시글의 글과 사진을 서버 안에서 숫자 값(벡터)으로 바꿔 함께 저장하며, 검색할 때
-            입력한 문장이나 사진은 검색 결과를 만드는 데에만 쓰고 저장하지 않습니다.
-          </li>
-          <li>
-            이용자 보호와 부정 이용 방지: 신고·제재·이의신청 처리, 재가입 보류, 이용량 제한, 관리자 열람 기록. 이름·소속은 게시글·채팅으로
-            실제 물건을 주고받을 때의 본인 확인과 신고·분쟁 처리에만 이용하며, 다른 이용자에게 공개하지 않습니다(게시글·댓글·채팅에는
-            닉네임만 표시됩니다).
-          </li>
-          <li>
-            서비스 운영과 개선: 이용 통계 작성(가입·탈퇴 회원 수, 활성 회원 수, 가입 후 재방문, 게시글·채팅에 참여한 회원 수, 방문·검색
-            이용량 등), 장애·오류 분석과 보안, 서비스 개선 제안 처리. 통계는 합계로만 만들어 관리자 통계 화면과 관리자가 내려받는
-            파일에만 표시하며, 회원별 이용 기록은 표시하지 않습니다. 회원탈퇴 시 그 회원의 이용 일자 기록은 삭제되므로 지난 기간의 활성
-            회원 수·재방문 통계도 그만큼 줄어들 수 있습니다(아래 7조·8조).
-          </li>
-        </ul>
-        <p className="mt-2">위 목적 외의 용도로 이용하거나 마케팅·광고에 이용하지 않으며, 목적이 바뀌는 경우에는 미리 알리고 필요한 동의를 받습니다.</p>
-      </>
-    ),
-  },
-  {
-    title: "4. 보유 및 이용 기간",
-    body: (
-      <>
-        계정 정보는 회원 계정이 유지되는 동안 보유합니다. 회원 비활성화 시에도 기존 데이터는 보존되며,
-        계정을 재활성화하면 이어서 이용할 수 있습니다(아래 6조 참고). 게시글, 댓글·답글, 채팅 메시지 및
-        첨부 정보는 이용자가 직접 삭제하거나 서비스 운영상 삭제 사유가 발생할 때까지 보유될 수 있습니다.
-        신고·제재 기록 등 이용자 보호, 서비스 운영 및 분쟁 대응에 필요한 정보는 필요한 범위에서 보관될
-        수 있습니다. 관계 법령에 따라 일정 기간 보존이 필요한 정보가 있는 경우에는 해당 법령에서 정한
-        기간 동안 보관합니다. 이름·소속은 회원 계정이 유지되는 동안 보유하며(계정 비활성화 중 포함), 회원탈퇴 시 즉시
-        삭제합니다. 이용 통계를 위한 로그인 회원의 이용 일자 기록은 이용한 날로부터 400일 동안 보관하고(회원탈퇴 시 즉시 삭제), 회원
-        정보가 들어 있지 않은 날짜·시간대별 합계는 기한을 두지 않고 보관합니다(아래 8조). 회원탈퇴 시 삭제되는 정보와 탈퇴 후
-        보유기간은 아래 6조·7조를 따릅니다.
-      </>
-    ),
-  },
-  {
-    title: "5. 개인정보의 처리 위탁, 제3자 제공, 내부 접근",
-    body: (
-      <>
-        <p>서비스 운영을 위해 다음 업체에 개인정보 처리 업무를 위탁합니다.</p>
-        <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
-          <li>
-            <span className="font-medium text-foreground">Vercel</span>: 웹 서비스 호스팅, 서버 함수 실행, 정기
-            보유기간 정리 작업 실행
-          </li>
-          <li>
-            <span className="font-medium text-foreground">Supabase</span>: PostgreSQL 데이터베이스 저장,
-            Storage 파일(게시글·채팅 이미지) 저장, Realtime 채팅 알림 전달
-          </li>
-        </ul>
-        <p className="mt-2">
-          각 업체가 공개한 하위 수탁자 목록은{" "}
-          <a href="https://vercel.com/legal/sub-processors" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:opacity-80">
-            Vercel
-          </a>
-          ,{" "}
-          <a
-            href="https://supabase.com/legal/customer-resources/subprocessor-list"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium text-primary hover:opacity-80"
-          >
-            Supabase
-          </a>
-          에서 확인할 수 있습니다.
-        </p>
-        <p className="mt-2">
-          이 서비스가 직접 마케팅이나 광고 등 다른 목적으로 개인정보를 제3자에게 제공하지는 않습니다. 다만 서비스
-          운영(신고 처리, 이용자 관리)을 위해 관리자 권한을 가진 운영자는 이용자의 이메일 주소를 조회할 수
-          있습니다. 이름·소속은 관리자가 처리 중인 신고의 신고자 또는 피신고자에 한해, 열람 사유를 입력한 경우에만 조회할
-          수 있으며, 열람할 때마다 열람한 관리자, 대상, 신고, 사유, 시각이 기록됩니다.
-        </p>
-      </>
-    ),
-  },
-  {
-    title: "6. 이용자의 권리, 계정 비활성화 및 회원탈퇴",
+    title: "2. 이용 목적과 동의",
     body: (
       <>
         <p>
-          이용자는 내 정보 화면에서 닉네임을 변경하고 이름·소속을 확인할 수 있습니다. Google 계정에서 자동으로 가져온
-          이름·소속은 직접 수정할 수 없으며, 학교에서 Google 계정 이름을 고친 뒤 다시 로그인하면 자동으로 반영되고, 그 밖의
-          오류는 같은 화면의 정정 요청으로 고칠 수 있습니다. 본인이 작성한 게시글·댓글·채팅 메시지를
-          직접 수정하거나 삭제할 수 있습니다. 내 정보의 &lsquo;계정 비활성화 · 회원탈퇴&rsquo; 화면에서 아래 두
-          가지 중 하나를 선택할 수 있습니다. 활성 단체의 유일한 대표 관리자는 대표 관리자 권한을 먼저
-          위임해야 합니다.
+          회원 가입·관리, 분실물·습득물 게시·검색·추천과 소통, 신고·분쟁 처리 및 부정 이용 방지, 이용 통계 작성과
+          서비스 개선·보안을 위해 사용합니다. 마케팅·광고에는 이용하지 않으며, 목적이 바뀌면 미리 알리고 필요한 동의를 받습니다.
         </p>
         <p className="mt-2">
-          <span className="font-medium text-foreground">계정 비활성화(복구 가능)</span>: 계정 정보와
-          게시글·댓글·채팅 등 데이터는 삭제되지 않고 그대로 보존되며, 그 계정으로는 로그인할 수 없게
-          됩니다(알림 내역은 함께 삭제됩니다). 같은 Google 계정으로 다시 로그인하면 같은 계정이
-          재활성화되어 기존 데이터를 그대로 이어서 사용할 수 있습니다.
+          AI 검색·추천을 위해 게시글의 글과 사진을 서버 안에서 변환해 저장합니다. 검색에 입력한 문장·사진은 결과를 만드는 데만
+          사용하고 저장하지 않습니다. 다만 요청 주소에 포함된 검색어는 호스팅 접속 기록에 남을 수 있습니다.
         </p>
         <p className="mt-2">
-          <span className="font-medium text-foreground">회원탈퇴(복구 불가)</span>: 이메일, Google 계정
-          식별자, 내부 이름 값, 닉네임, 이름·소속과 그 동의 기록, 개인정보·약관 동의 기록, 최근 로그인 기록 등 계정을 직접 식별할 수 있는
-          정보가 즉시 삭제됩니다. 다른 이용자의 댓글·채팅·신고 기록과의 연결을 유지하기 위해 계정 자체는
-          식별정보가 제거된 가명 상태(&lsquo;탈퇴한 사용자&rsquo;)로만 남습니다. 탈퇴한 계정은 복구할 수
-          없으며, 같은 Google 계정으로 다시 가입하면 새 계정이 만들어지고 이전 게시글·댓글·채팅과
-          연결되지 않습니다. 다만 이용 정지 중이거나 처리 중인 신고·제재 절차 또는 검토 전 이의신청이
-          있는 상태에서 탈퇴한 경우에는, 다시 가입할 때 관리자의 재가입 승인이 필요합니다.
-        </p>
-        <p className="mt-2">
-          개인정보 수집·이용 동의는 서비스 이용에 필수인 동의이므로, 동의를 철회하면 회원탈퇴로
-          처리됩니다. 동의 철회도 같은 화면에서 할 수 있습니다.
+          Google 로그인과 별도로 동의 화면에서 직접 동의해야 회원 기능을 이용할 수 있습니다. 동의하지 않아도 공개 게시글
+          열람·검색은 가능합니다. 필수 동의(이름·소속 포함)를 철회하면 회원탈퇴로 처리됩니다.
         </p>
       </>
     ),
   },
   {
-    title: "7. 개인정보의 파기 및 탈퇴 후 보유기간",
+    title: "3. 보관기간과 파기",
     body: (
       <>
         <p>
-          계정 비활성화 시에는 개인정보를 파기하지 않습니다(위 6조). 이용자가 직접 삭제한 채팅 메시지에
-          첨부된 사진은 저장소에서도 함께 삭제됩니다.
+          회원 정보는 계정 유지 중 보관하며, 작성한 콘텐츠는 직접 삭제하거나 운영상 삭제 사유가 생길 때까지 보관합니다.
+          계정 비활성화는 데이터를 보존하는 기능으로, 같은 Google 계정으로 로그인하면 복구됩니다(알림 내역은 삭제).
         </p>
-        <p className="mt-2">회원탈퇴 시 다음 정보는 즉시 삭제됩니다.</p>
-        <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
-          <li>계정의 직접 식별정보(위 6조), 알림, 키워드 알림, 게시글 조회 기록, 단체 구성원 정보, 외부 관계자 승인 정보, 서비스 개선 제안</li>
-          <li>채팅으로 보낸 사진</li>
-          <li>
-            로그인 회원의 이용 일자 기록(아래 8조). 탈퇴 처리와 동시에 기록되는 등 남은 기록이 있으면 매일 자동 정리 때 삭제합니다.
-            이에 따라 탈퇴 전 기간의 활성 회원 수와 가입 후 재방문 통계도 줄어들 수 있습니다.
-          </li>
-          <li>게시글의 내용과 이미지(다른 이용자의 댓글이 달린 게시글은 내용을 지운 비공개 상태로 남습니다)</li>
-          <li>댓글(다른 이용자의 답글이 달린 댓글은 내용을 지운 &lsquo;삭제된 댓글&rsquo;로 남습니다)</li>
-        </ul>
-        <p className="mt-2">다음 정보는 아래 기간 동안 보관한 뒤 삭제됩니다.</p>
-        <ul className="mt-1 flex list-disc flex-col gap-1 pl-5">
-          <li>
-            채팅 메시지 본문: 상대방의 대화 기록이므로 탈퇴 후 90일(그동안 보낸 사람은 &lsquo;탈퇴한
-            사용자&rsquo;로 표시됩니다)
-          </li>
-          <li>처리 중인 신고의 대상이 된 게시글·댓글·채팅 메시지와 사진: 신고 처리가 끝날 때까지</li>
-          <li>
-            처리가 끝난 신고·제재·이의신청 기록과 관련 증거(신고와 연결된 채팅 사진 포함): 처리 완료 후
-            1년. 다만 이용 정지가 계속되거나 아래 재가입 보류 사유가 남아 있는 동안에는 보관합니다.
-          </li>
-          <li>
-            재가입 보류 식별값(Google 계정 식별자를 원래 값으로 되돌릴 수 없게 변환한 값): 이용 정지,
-            미처리 신고·제재 절차, 검토 전 이의신청 등 보관 사유가 모두 끝나는 즉시 삭제. 재가입 요청과 그
-            처리 기록은 처리 후 1년.
-          </li>
-          <li>관리자의 채팅 열람 기록, 이름·소속 열람 기록: 최소 1년</li>
-        </ul>
         <p className="mt-2">
-          보관 기간이 지난 정보는 매일 자동으로 삭제됩니다. 회원 정보가 들어 있지 않은 시간대별 로그인·이용 합계(아래 8조)는 특정
-          회원의 것을 골라낼 수 없어 탈퇴와 관계없이 남습니다.
+          회원탈퇴 시 계정 식별정보·이름·소속·동의 기록, 알림·조회·이용 일자 기록, 단체 구성원·외부 승인 정보, 개선 제안,
+          작성한 게시글·사진·댓글을 즉시 삭제합니다. 다른 이용자의 댓글·답글과 연결된 글은 내용을 지운 상태로 남고,
+          계정은 식별정보를 제거한 &lsquo;탈퇴한 사용자&rsquo;로 남습니다. 채팅 사진도 삭제합니다.
+          다만 아래 표의 신고·분쟁 관련 정보는 예외로 보관합니다.
+        </p>
+        <div className="mt-3 overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-left text-sm">
+            <caption className="border-b border-border bg-muted/40 px-3 py-2 text-left font-medium text-foreground">
+              탈퇴 후에도 보관하는 정보
+            </caption>
+            <thead className="border-b border-border">
+              <tr>
+                <th scope="col" className="w-2/5 px-3 py-2 font-medium text-foreground">정보</th>
+                <th scope="col" className="px-3 py-2 font-medium text-foreground">기간·사유</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {RETENTION_ROWS.map(([item, period]) => (
+                <tr key={item}>
+                  <th scope="row" className="px-3 py-2 align-top font-normal">{item}</th>
+                  <td className="px-3 py-2 align-top">{period}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2">
+          보관기간이 지난 정보는 매일 자동 정리하며, 전자 기록은 데이터베이스·파일 저장소에서 삭제합니다.
+          탈퇴와 동시에 생성돼 남은 이용 일자 기록도 이때 삭제합니다. 법령상 보존 의무가 있으면 해당 기간을 따릅니다.
+          자동 수집 정보의 보관기간은 5항과 같습니다.
         </p>
       </>
     ),
   },
   {
-    title: "8. 자동으로 수집되는 정보와 쿠키",
+    title: "4. 처리 위탁과 제3자 제공",
     body: (
       <>
-        <ul className="flex list-disc flex-col gap-1 pl-5">
+        <ul className="flex list-disc flex-col gap-2 pl-5">
+          <li>Vercel: 웹 호스팅, 서버 실행, 정기 보유기간 정리 작업</li>
+          <li>Supabase: 데이터베이스·이미지 저장, 실시간 채팅 알림 전달</li>
+        </ul>
+        <p className="mt-2">
+          하위 수탁자는 각 업체의 공개 목록(
+          <a href="https://vercel.com/legal/sub-processors" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:opacity-80">Vercel</a>,{" "}
+          <a href="https://supabase.com/legal/customer-resources/subprocessor-list" target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:opacity-80">Supabase</a>
+          )에서 확인할 수 있습니다. 서비스가 직접 마케팅·광고 등 다른 목적으로 개인정보를 제3자에게 제공하지는 않습니다.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: "5. 자동 수집 정보와 쿠키",
+    body: (
+      <>
+        <ul className="flex list-disc flex-col gap-2 pl-5">
           <li>
-            <span className="font-medium text-foreground">IP 주소</span>: 로그인하지 않은 상태의 AI 검색 이용량을
-            제한하기 위해, IP 주소를 원래 값으로 되돌릴 수 없는 해시 값으로 바꾼 뒤 이용 횟수와 함께 저장합니다(IP
-            주소 자체는 저장하지 않으며, 2일이 지난 기록은 수시로 삭제됩니다). 또한 호스팅 업체(Vercel)의 요청
-            기록에 접속 IP 주소, User-Agent, 요청한 주소(검색어가 들어 있을 수 있음)가 포함될 수 있습니다.
+            <strong className="font-medium text-foreground">접속·보안 기록</strong>: 비로그인 AI 검색 이용량 제한을 위해
+            IP를 되돌릴 수 없는 값으로 변환해 저장하고, 2일이 지난 기록을 수시로 삭제합니다. Vercel 접속·운영 기록에는
+            IP, 브라우저·기기 정보(User-Agent), 요청 주소·오류, 회원 번호와 이름·소속 확인 결과(값 제외)가 포함될 수 있으며,
+            업체의 보관기간에 따라 삭제됩니다. API 응답 시간·오류율은 회원 정보 없는 합계로 90일간 보관합니다.
           </li>
           <li>
-            <span className="font-medium text-foreground">서버 운영 기록</span>: 장애·오류 분석과 보안을 위해 서버 실행 기록에 요청
-            경로, 오류 내용, 로그인 시 이름·소속 확인 결과(회원 번호와 함께 남으며 이름·소속 값은 남기지 않음)가 남을 수 있고, 호스팅
-            업체의 기록 보관 기간이 지나면 삭제됩니다. API 응답 시간·오류율은 회원 정보 없이 시간대별 합계로만 90일 동안 보관합니다.
+            <strong className="font-medium text-foreground">쿠키</strong>: 로그인 유지·보안용 쿠키(세션은 30일 미이용 시
+            만료, 로그아웃 시 삭제), 언어 설정(locale, 1년), 비로그인 게시글 조회수 중복 방지 식별값(anon_uid, 1년)을 사용합니다.
           </li>
           <li>
-            <span className="font-medium text-foreground">User-Agent(브라우저·기기 정보)</span>: 이 서비스는 직접
-            저장하지 않으며, 위 호스팅 업체의 요청 기록에만 포함될 수 있습니다. 아래 방문 통계에서는 접속 기기의
-            종류(모바일·PC·태블릿·기타)를 구분하는 데에만 쓰고, 원래 값이나 기기를 식별할 수 있는 정보는 저장하지
-            않습니다.
+            <strong className="font-medium text-foreground">방문 통계·브라우저 저장소</strong>: 방문 시각·화면 종류 등 방문
+            요약과 미전송 조회 기록, 변경 안내를 닫은 시행일을 브라우저에 저장합니다. 방문 요약은 다음 방문 때 교체하며,
+            7일이 지난 요약은 통계에 반영하지 않습니다. 서버에는 조회·방문 수, 로그인 여부·기기 종류·유입 경로·캠페인,
+            방문 시간대·체류 시간·첫 화면·마지막 화면 등의 개인을 식별할 수 없는 날짜별 합계만 저장합니다.
           </li>
           <li>
-            <span className="font-medium text-foreground">로그인 세션 쿠키</span>: 로그인 상태를 유지하기 위한
-            암호화된 쿠키입니다. 30일 동안 이용하지 않으면 만료되며, 로그아웃하면 삭제됩니다. 로그인 과정에는 보안을
-            위한 보조 쿠키(요청 위조 방지 등)도 함께 쓰입니다.
+            <strong className="font-medium text-foreground">회원별 이용 일자</strong>: 로그인 상태로 이용한 날짜를 하루
+            한 번 기록해 활성 회원·재방문 통계를 만듭니다. 회원과 대조할 수 있는 개인정보로 취급하며, 이용한 날로부터
+            400일간 보관합니다(탈퇴 시 삭제는 3항 참고). 관리자 화면·다운로드 파일에는 합계만 표시하며 회원별 이용 기록은
+            표시하지 않습니다. 탈퇴하면 지난 기간의 활성 회원·재방문 통계도 줄어들 수 있습니다.
           </li>
           <li>
-            <span className="font-medium text-foreground">locale 쿠키</span>: 선택한 화면 언어를 기억합니다(1년).
-          </li>
-          <li>
-            <span className="font-medium text-foreground">anon_uid 쿠키</span>: 로그인하지 않은 상태로 게시글을 볼 때
-            같은 브라우저의 조회가 중복 집계되지 않도록 무작위 식별값을 저장합니다(1년).
-          </li>
-          <li>
-            <span className="font-medium text-foreground">로그인 회원의 이용 일자</span>: 활성 회원 수, 가입 후 재방문 등 이용
-            통계(위 3조)를 내기 위해, 로그인한 상태로 이용한 날마다 한 번 회원 번호를 서비스 운영자만 접근할 수 있는 비밀 키로 변환한 값과 날짜를
-            저장합니다. 이용한 날로부터 400일이 지나면 매일 자동으로 삭제하고, 회원탈퇴 시에는 그 회원의 기록을 즉시 삭제합니다(위
-            7조). 이 값에는 이름·이메일이
-            들어 있지 않지만, 서비스는 같은 키로 회원 번호를 다시 변환해 어느 회원의 기록인지 대조할 수 있으므로 익명 정보가
-            아니라 개인정보로 취급합니다. 대조는 통계를 계산할 때 서버 안에서만 하며, 관리자 통계 화면과 내려받는 파일에는 대조한
-            결과의 합계(활성 회원 수, 가입 후 재방문 수, 게시글·채팅에 참여한 회원 수 등)만 표시하고 회원별 이용 기록은 표시하지
-            않습니다.
-          </li>
-          <li>
-            <span className="font-medium text-foreground">시간대별 로그인·이용 합계</span>: Google 로그인을 마친 횟수와 로그인
-            상태에서 본 화면 수를 날짜·시간대별 합계로만 저장합니다. 회원 번호 등 회원 정보는 함께 저장하지 않으며, 이 합계는
-            따로 삭제 기한을 두지 않고 보관하며 회원탈퇴 후에도 남습니다.
-          </li>
-          <li>
-            <span className="font-medium text-foreground">방문 통계용 브라우저 저장소</span>: 로그인 여부와 관계없이
-            서비스 이용량을 파악하기 위해, 같은 브라우저의 방문을 하나의 방문으로 묶는 데 필요한 마지막 방문 시각과
-            날짜, 현재 방문의 요약(시작·마지막 활동 시각, 처음·마지막 화면 종류, 본 화면 수), 아직 보내지 않은 조회
-            기록(화면 종류)만 브라우저 저장소(localStorage·sessionStorage)에 저장하며 식별값은 만들지 않습니다. 서버에는
-            개인을 알아볼 수 없는 날짜별 합계(화면 종류별 조회 수, 방문 수, 로그인 여부, 접속 기기 종류, 유입 경로 분류,
-            홍보 링크의 캠페인 이름, 방문 시작·마지막 활동 시간대, 체류 시간 구간, 처음·마지막 화면 종류)만 저장하고, IP 주소·검색어·방문한 주소·회원 정보는
-            저장하지 않습니다. 서버로는 요약이 속한 구간(시간대·체류 시간 구간 등)이 바뀐 사실만 보내 날짜별 합계에 더하고 방문별
-            기록으로 보관하지 않으며, 브라우저의 요약은 다음 방문 때(7일이 지난 것은 반영하지 않음) 새 방문의 요약으로
-            바뀝니다. 개인정보처리방침 변경 안내를 닫으면 닫은 안내의 시행일만 같은 브라우저 저장소에 저장합니다. 브라우저 저장소를 삭제하거나
-            차단해도 서비스 이용에는 영향이 없습니다.
+            <strong className="font-medium text-foreground">회원과 연결되지 않는 집계</strong>: 날짜·시간대별 로그인 횟수·조회 수와
+            위 방문 통계 합계에는 회원 정보가 없으며, 보관 기한 없이 탈퇴 후에도 남습니다.
           </li>
         </ul>
         <p className="mt-2">
-          쿠키는 이용자의 브라우저에 저장되며, 브라우저 설정에서 저장을 거부하거나 삭제할 수 있습니다. 다만 로그인
-          세션 쿠키를 거부하면 로그인이 필요한 기능을 이용할 수 없고, locale 쿠키를 거부하면 언어 선택이 유지되지
-          않습니다.
+          브라우저 설정에서 쿠키·브라우저 저장소를 삭제하거나 차단할 수 있습니다. 로그인 쿠키를 거부하면 회원 기능을 이용할 수 없고,
+          언어 쿠키를 거부하면 언어 선택이 유지되지 않습니다. 방문 통계·변경 안내용 저장소를 차단해도 서비스는 이용할 수 있습니다.
         </p>
       </>
     ),
   },
   {
-    title: "9. 동의",
-    body: "이 개인정보 수집·이용에 대한 동의(이름·소속 포함)는 로그인 후 표시되는 동의 화면에서 이용자가 직접 체크박스를 선택하고 버튼을 눌렀을 때만 기록되며, 이름·소속은 이 동의가 기록된 뒤에만 저장됩니다. Google 로그인 자체는 이 동의를 의미하지 않습니다. 이 동의는 서비스 이용에 필수이므로, 동의하지 않으면 회원 기능(게시글 등록, 댓글, 채팅 등)을 이용할 수 없습니다. 로그인하지 않은 상태에서 공개 게시글을 둘러보거나 검색하는 것은 동의 없이 가능합니다.",
-  },
-  {
-    title: "10. 개인정보 보호 문의",
+    title: "6. 이용자의 권리와 행사 방법",
     body: (
       <>
-        개인정보 처리와 관련한 문의, 열람·정정·삭제·처리정지 요청은 개인정보 문의 담당(
-        <a href={SUPPORT_MAILTO} className="font-medium text-primary hover:opacity-80">
-          {SUPPORT_EMAIL}
-        </a>
-        )으로 연락해주세요. 특정 게시물·메시지·사용자와 관련된 문제는 해당 화면의{" "}
-        <Link href="/policy/community" className="font-medium text-primary hover:opacity-80">
-          신고 기능
-        </Link>
-        을 이용해주세요.
+        <p>
+          내 정보에서 닉네임 변경, 이름·소속 확인과 정정 요청, 계정 비활성화·회원탈퇴·동의 철회를 할 수 있습니다.
+          Google에서 가져온 이름·소속은 계정 정보를 고친 뒤 다시 로그인하면 반영됩니다. 작성한 콘텐츠는 해당 화면에서
+          수정·삭제할 수 있으며, 개인정보 열람·정정·삭제·처리정지는 아래 문의처로 요청할 수 있습니다.
+        </p>
+        <p className="mt-2">
+          탈퇴한 계정은 복구되지 않습니다. 다시 가입해도 이전 콘텐츠와 연결되지 않으며, 이용 정지·미처리 신고·제재·검토 전
+          이의신청이 있으면 재가입 승인이 필요합니다. 활성 단체의 유일한 대표 관리자는 탈퇴·비활성화 전에 권한을 위임해야 합니다.
+        </p>
       </>
     ),
   },
   {
-    title: "11. 시행일 및 변경",
-    id: "changes",
+    title: "7. 개인정보 보호와 문의",
     body: (
       <>
-        이 개인정보처리방침은 {formatEffectiveDate(PRIVACY_POLICY_EFFECTIVE_DATE)}부터 시행합니다.{" "}
-        {CONSENT_NOTE[LATEST_PRIVACY_POLICY_REVISION.consent]}
-        <ul className="mt-2 flex flex-col gap-1">
-          {PRIVACY_POLICY_REVISIONS.map((r) => (
-            <li key={`${r.date}:${r.summary}`}>
-              {formatEffectiveDate(r.date)}: {r.summary} {REVISION_NOTE[r.consent]}
-            </li>
-          ))}
-        </ul>
+        <p>
+          운영상 개인정보 조회는 관리자 권한으로 제한합니다. 운영자는 이용자 관리·신고 처리를 위해 이메일을 조회할 수 있으며,
+          이름·소속은 처리 중인 신고의 당사자에 한해 사유를 입력해야 열람할 수 있습니다. 열람자·대상·신고·사유·시각을 기록합니다.
+        </p>
+        <p className="mt-2">
+          개인정보 관련 문의와 권리 행사 요청은 개인정보 문의 담당(
+          <a href={SUPPORT_MAILTO} className="break-all font-medium text-primary hover:opacity-80">{SUPPORT_EMAIL}</a>
+          )으로 연락해주세요.
+        </p>
       </>
     ),
   },
@@ -410,17 +206,29 @@ export default function PrivacyPolicyPage() {
         <h1 className="text-xl font-semibold text-foreground">개인정보처리방침</h1>
       </div>
 
-      <div className="flex flex-col gap-5 rounded-card border border-border bg-card p-5 text-sm text-foreground">
+      <div className="flex flex-col gap-5 rounded-card border border-border bg-card p-5 text-sm leading-relaxed text-foreground">
         {SECTIONS.map((section, i) => (
-          <section
-            key={section.title}
-            id={section.id}
-            className={`flex scroll-mt-24 flex-col gap-1.5 ${i > 0 ? "border-t border-border pt-5" : ""}`}
-          >
+          <section key={section.title} className={`flex flex-col gap-2 ${i > 0 ? "border-t border-border pt-5" : ""}`}>
             <h2 className="font-semibold">{section.title}</h2>
             <div className="text-muted-foreground">{section.body}</div>
           </section>
         ))}
+      </div>
+
+      {/* 변경 안내 바의 /policy/privacy#changes 링크를 유지합니다. */}
+      <div id="changes" className="scroll-mt-24 space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <p>시행일: {formatEffectiveDate(PRIVACY_POLICY_EFFECTIVE_DATE)}</p>
+        <details className="rounded-card border border-border bg-card p-4">
+          <summary className="cursor-pointer font-medium text-foreground">개정 이력 보기</summary>
+          <p className="mt-3">{CONSENT_NOTE[LATEST_PRIVACY_POLICY_REVISION.consent]}</p>
+          <ul className="mt-3 flex flex-col gap-3">
+            {PRIVACY_POLICY_REVISIONS.map((r) => (
+              <li key={`${r.date}:${r.summary}`}>
+                {formatEffectiveDate(r.date)}: {r.summary} {REVISION_NOTE[r.consent]}
+              </li>
+            ))}
+          </ul>
+        </details>
       </div>
     </div>
   );

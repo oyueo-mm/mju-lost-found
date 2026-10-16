@@ -31,9 +31,11 @@ describe("동의 화면 문구와 동의 버전", () => {
     expect(ACTIVITY_RECORD_RETENTION).toContain(`${ACTIVITY_RETENTION_DAYS}일 동안 보관`);
     expect(ACTIVITY_RECORD_RETENTION).toContain("회원탈퇴 시에는 즉시 삭제");
     const policy = renderToStaticMarkup(PrivacyPolicyPage()).replace(/<[^>]+>/g, "").replace(/\s+/g, " ");
-    expect(policy).toContain(`이용한 날로부터 ${ACTIVITY_RETENTION_DAYS}일이 지나면 매일 자동으로 삭제하고, 회원탈퇴 시에는 그 회원의 기록을 즉시 삭제합니다`);
+    expect(policy).toContain(`이용한 날로부터 ${ACTIVITY_RETENTION_DAYS}일간 보관합니다`);
+    expect(policy).toContain("보관기간이 지난 정보는 매일 자동 정리");
+    expect(policy).toMatch(/회원탈퇴 시[^。]*이용 일자 기록[^。]*즉시 삭제합니다/);
     // every item the screen lists is one the policy names too
-    for (const label of ["Google 계정", "이메일 주소", "닉네임", "이름, 소속", "게시글", "댓글", "채팅 메시지", "이용 일자 기록"]) {
+    for (const label of ["Google 계정", "이메일", "닉네임", "이름·소속", "게시글", "댓글", "채팅 메시지", "이용 일자 기록"]) {
       expect(policy).toContain(label);
     }
   });
