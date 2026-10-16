@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const user = { findMany: vi.fn(), count: vi.fn(), findUnique: vi.fn(), update: vi.fn() };
 // Phase F-2: suspend now runs inside a $transaction alongside a
@@ -33,9 +33,10 @@ const lostPost = { count: vi.fn() };
 const foundPost = { count: vi.fn() };
 const comment = { count: vi.fn(), findMany: vi.fn() };
 const report = { count: vi.fn() };
+const activityDay = { findFirst: vi.fn() };
 
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { user, notification, moderationAction, adminActionProposal, adminActionAuditLog, lostPost, foundPost, comment, report, $transaction },
+  prisma: { user, notification, moderationAction, adminActionProposal, adminActionAuditLog, lostPost, foundPost, comment, report, activityDay, $transaction },
 }));
 // isAdmin() is a one-line `return user.isAdmin` in moderation/service.ts,
 // but that module also pulls in report/service.ts and report/targets.ts --
@@ -63,10 +64,11 @@ vi.mock("@/generated/prisma/client", () => ({
     REVOKE_ADMIN: "REVOKE_ADMIN",
   },
   AdminActionAuditEvent: { CREATED: "CREATED", EXECUTED: "EXECUTED" },
-  Prisma: { sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values }) },
+  Prisma: { sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values }), raw: (value: string) => value },
 }));
 
 const { listUsersForAdmin, updateUserByAdmin, getUserDetailForAdmin } = await import("./users");
+const { activityActor } = await import("@/lib/metrics/record");
 
 const admin = { id: 1, isAdmin: true };
 const nonAdmin = { id: 2, isAdmin: false };
@@ -84,6 +86,7 @@ const baseRow = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  activityDay.findFirst.mockReset().mockResolvedValue(null);
 });
 
 describe("listUsersForAdmin", () => {
@@ -549,10 +552,18 @@ describe("updateUserByAdmin", () => {
   });
 
   describe("getUserDetailForAdmin", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-10-16T15:30:00Z")); // Oct 17 in KST
+      comment.findMany.mockResolvedValue([]);
+    });
+    afterEach(() => vi.useRealTimers());
+
     it("rejects a non-admin caller", async () => {
       const result = await getUserDetailForAdmin(nonAdmin as never, 5);
       expect(result).toEqual({ kind: "forbidden" });
       expect(user.findUnique).not.toHaveBeenCalled();
+      expect(activityDay.findFirst).not.toHaveBeenCalled();
     });
 
     it("returns not_found for a missing target user", async () => {
@@ -561,6 +572,46 @@ describe("updateUserByAdmin", () => {
       const result = await getUserDetailForAdmin(admin as never, 999);
 
       expect(result).toEqual({ kind: "not_found" });
+      expect(activityDay.findFirst).not.toHaveBeenCalled();
+    });
+
+    it("reads the latest retained KST day for the target actor, independently of login time", async () => {
+      user.findUnique.mockResolvedValueOnce({ ...baseRow, lastLoginAt: new Date("2026-10-17T00:00:00Z") });
+      activityDay.findFirst.mockResolvedValueOnce({ day: new Date("2026-10-16T00:00:00Z") });
+      const result = await getUserDetailForAdmin(admin as never, 5);
+      expect(result.kind).toBe("ok");
+      if (result.kind !== "ok") return;
+      expect(result.data.lastActivityDay).toBe("2026-10-16");
+      expect(result.data.lastLoginAt).toEqual(new Date("2026-10-17T00:00:00Z"));
+      expect(activityDay.findFirst).toHaveBeenCalledWith({
+        where: { actor: activityActor(5), day: { gte: new Date("2026-10-15T00:00:00Z"), lte: new Date("2026-10-17T00:00:00Z") } },
+        orderBy: { day: "desc" }, select: { day: true },
+      });
+    });
+
+    it("does not infer activity from a login when no day was measured", async () => {
+      user.findUnique.mockResolvedValueOnce({ ...baseRow, lastLoginAt: new Date("2026-10-17T00:00:00Z") });
+      const result = await getUserDetailForAdmin(admin as never, 5);
+      expect(result.kind === "ok" && result.data.lastActivityDay).toBeNull();
+    });
+
+    it("never queries or returns activity for a withdrawn account, even with residual marks", async () => {
+      user.findUnique.mockResolvedValueOnce({ ...baseRow, withdrawnAt: new Date("2026-10-16T12:00:00Z") });
+      activityDay.findFirst.mockResolvedValueOnce({ day: new Date("2026-10-16T00:00:00Z") });
+      const result = await getUserDetailForAdmin(admin as never, 5);
+      expect(result.kind === "ok" && result.data.lastActivityDay).toBeNull();
+      expect(activityDay.findFirst).not.toHaveBeenCalled();
+    });
+
+    it("keeps deactivation distinct from withdrawal and respects the retention boundary", async () => {
+      vi.setSystemTime(new Date("2028-01-01T15:30:00Z"));
+      user.findUnique.mockResolvedValueOnce({ ...baseRow, deletedAt: new Date("2027-12-01"), withdrawnAt: null });
+      activityDay.findFirst.mockResolvedValueOnce({ day: new Date("2027-12-01T00:00:00Z") });
+      const result = await getUserDetailForAdmin(admin as never, 5);
+      expect(result.kind === "ok" && result.data.lastActivityDay).toBe("2027-12-01");
+      expect(activityDay.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+        where: { actor: activityActor(5), day: { gte: new Date("2026-11-28T00:00:00Z"), lte: new Date("2028-01-02T00:00:00Z") } },
+      }));
     });
 
     it("returns grouped detail info, including counts and lastLoginAt, for a real target user", async () => {

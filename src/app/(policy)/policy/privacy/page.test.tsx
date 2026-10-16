@@ -45,6 +45,7 @@ describe("개인정보처리방침: 이용 통계", () => {
 
   it("treats re-linkable activity records as personal data", () => {
     expect(section(5)).toContain("회원과 대조할 수 있는 개인정보로 취급하며");
+    expect(section(5)).toContain("관리자 사용자 상세 보기에서는 보관 중인 기록의 최근 이용일(날짜만)");
   });
 
   it("preserves retention exceptions, cookie choices and rights contact", () => {

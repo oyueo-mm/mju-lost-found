@@ -7,6 +7,8 @@ import { UserActionButtons } from "@/components/admin/UserActionButtons";
 import { AuthorLink } from "@/components/user/AuthorLink";
 import { MyCommentList } from "@/components/comment/MyCommentList";
 import { ShieldIcon } from "@/components/icons";
+import { COLLECTION_SINCE } from "@/lib/metrics/report";
+import { ACTIVITY_RETENTION_DAYS } from "@/lib/retention/policy";
 
 // Vercel's Node runtime defaults to UTC (no TZ env var set), so formatting
 // without an explicit timeZone renders 9 hours behind actual KST -- same
@@ -63,6 +65,7 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
     name,
     googleLinked,
     lastLoginAt,
+    lastActivityDay,
     lostPostCount,
     foundPostCount,
     commentCount,
@@ -117,13 +120,19 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
           <Field label="관리자 권한" value={user.isAdmin ? "있음" : "없음"} />
         </Section>
 
-        {/* Phase P-1: lastLoginAt only -- "현재 접속 중" is deliberately not
-            shown here (see AdminUserDetailDTO's own comment: a valid JWT
-            session doesn't mean the user is actually active right now, and
-            this app has no presence/heartbeat signal to tell the two apart
-            without a larger change). */}
+        {/* Login time and the last recorded KST activity day are distinct;
+            neither establishes presence or an exact visit time. */}
         <Section title="접속 정보">
           <Field label="마지막 로그인" value={formatDateTime(lastLoginAt)} />
+          <Field label="최근 이용일" value={lastActivityDay ? `${lastActivityDay} (KST)` : "기록 없음"} />
+          <div className="sm:col-span-2 text-xs leading-relaxed text-muted-foreground">
+            <dt className="sr-only">이용일 측정 기준</dt>
+            <dd>
+              로그인 상태의 이용 날짜만 기록하며 정확한 방문 시각은 측정하지 않습니다.
+              {COLLECTION_SINCE.ops.replace("T", " ")}(KST) 이후 수집된 최근 {ACTIVITY_RETENTION_DAYS}일 보관 범위의 기록입니다.
+              기록이 없어도 서비스를 이용하지 않았다는 뜻은 아닙니다.
+            </dd>
+          </div>
         </Section>
 
         <Section title="활동 정보">

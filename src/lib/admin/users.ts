@@ -10,6 +10,8 @@ import { isAdmin } from "@/lib/moderation/service";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { UUID_PATTERN } from "@/lib/user/service";
 import { listCommentsByUser, type MyCommentDTO } from "@/lib/comment/service";
+import { activityActor, kstDay } from "@/lib/metrics/record";
+import { activityRetainedFrom, COLLECTION_SINCE } from "@/lib/metrics/report";
 import { createAdminActionProposal, type AdminActionProposalDTO } from "./proposals";
 import type { AdminUserAction, AdminActionProposalTypeValue } from "./schema";
 
@@ -105,8 +107,10 @@ export type AdminUserDetailDTO = {
   // presence would need either a heartbeat endpoint hit on every page view
   // or a Realtime presence channel outside chat's existing per-room one --
   // both a bigger change than this phase's "최소 변경" scope, so this phase
-  // reports lastLoginAt only and leaves presence for a dedicated phase.
+  // keeps lastLoginAt separate from the recorded activity day below.
   lastLoginAt: Date | null;
+  // KST calendar day from existing ActivityDay marks, never a visit timestamp.
+  lastActivityDay: string | null;
   lostPostCount: number;
   foundPostCount: number;
   commentCount: number;
@@ -140,7 +144,9 @@ export async function getUserDetailForAdmin(
   });
   if (!row) return { kind: "not_found" };
 
-  const [lostPostCount, foundPostCount, commentCount, reportsFiledCount, reportsAgainstCount, comments] =
+  const today = kstDay();
+  const activityFrom = [activityRetainedFrom(today), COLLECTION_SINCE.ops.slice(0, 10)].sort().at(-1)!;
+  const [lostPostCount, foundPostCount, commentCount, reportsFiledCount, reportsAgainstCount, comments, activity] =
     await Promise.all([
       prisma.lostPost.count({ where: { userId: targetUserId } }),
       prisma.foundPost.count({ where: { userId: targetUserId } }),
@@ -148,6 +154,16 @@ export async function getUserDetailForAdmin(
       prisma.report.count({ where: { reporterUserId: targetUserId } }),
       prisma.report.count({ where: { targetType: ReportTargetType.USER, targetId: targetUserId } }),
       listCommentsByUser(targetUserId),
+      // A withdrawn account's marks must never be surfaced, even if cleanup
+      // is pending. Deactivation alone does not mean withdrawal.
+      row.withdrawnAt ? Promise.resolve(null) : prisma.activityDay.findFirst({
+        where: {
+          actor: activityActor(targetUserId),
+          day: { gte: new Date(`${activityFrom}T00:00:00Z`), lte: new Date(`${today}T00:00:00Z`) },
+        },
+        orderBy: { day: "desc" },
+        select: { day: true },
+      }),
     ]);
 
   return {
@@ -157,6 +173,7 @@ export async function getUserDetailForAdmin(
       name: row.name,
       googleLinked: row.googleId !== null,
       lastLoginAt: row.lastLoginAt,
+      lastActivityDay: activity?.day.toISOString().slice(0, 10) ?? null,
       lostPostCount,
       foundPostCount,
       commentCount,
