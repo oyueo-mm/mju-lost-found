@@ -360,7 +360,8 @@ export function datasetsOf(report: Report): Dataset[] {
 export const FLOW_CAVEATS = [
   "체류 시간·이탈은 추정치입니다. 방문의 첫 화면부터 마지막으로 확인된 활동(화면 조회, 또는 화면이 보이는 동안의 입력)까지이며, 탭이 백그라운드에 있거나 입력이 없으면 늘지 않습니다. 브라우저를 닫은 정확한 시각은 알 수 없습니다.",
   "방문 시작은 기존 방문 세션 기준(30분 넘게 조회가 없거나 날짜가 바뀌면 새 방문)이며 화면 이동·새로고침은 새 방문이 아닙니다.",
-  "같은 브라우저가 다음 방문을 시작하면 '종료 확인', 그 전까지는 '종료 미확인'(이용 중이거나 다시 오지 않음)입니다. 오늘 수치에는 진행 중인 방문이 포함됩니다.",
+  "종료 확인: 같은 브라우저가 나중에 다시 방문해 앞의 방문이 끝난 것이 확인된 방문. 종료 미확인: 그 뒤 다시 오지 않아 끝난 시점을 확인할 수 없는 방문으로, 대부분은 이미 떠난 방문입니다('지금 이용 중'이라는 뜻이 아님). 오늘 수치에는 진행 중인 방문이 그 순간까지의 상태로 포함됩니다.",
+  "종료율 = 그 화면에서 끝난 방문 ÷ 같은 기간 그 화면의 조회 수(체류·이탈 집계를 시작한 날부터, 첫날은 일부). 한 화면만 보고 끝난 방문 비율 = 화면을 1개만 본 방문 ÷ 체류·이탈 집계 방문. 보고가 늦거나 빠지면 수치가 조금 다를 수 있습니다(정확히 1회 처리를 보장하지 않음).",
   "평균 체류 시간에는 방문당 최대 60분만 넣으며, 중앙값은 정확한 값 대신 그 값이 속한 구간입니다. 세션은 날짜가 바뀌면 끝나므로 요일별 이탈은 시작한 날의 요일로 셉니다.",
   "개인별 이동 기록이나 정확한 접속·종료 시각은 저장하지 않고, 시간대·구간별 익명 합계만 저장합니다. 관리자 방문은 제외됩니다.",
 ];
@@ -377,8 +378,7 @@ function flowDataset(report: Report): Dataset {
   const pageRows: Value[][] = [...new Set([...Object.keys(flow.firstPage), ...Object.keys(flow.exitPage)])]
     .map((kind) => {
       const k = kind as PageKind;
-      const views = report.breakdown.pages.find((p) => p.kind === kind);
-      const pageViews = views ? views.anon + views.member : 0;
+      const pageViews = flow.pageViewsSinceFlow[k] ?? 0;
       const exits = flow.exitPage[k] ?? 0;
       return [
         PAGE_KIND_LABELS[k] ?? kind,
@@ -404,21 +404,21 @@ function flowDataset(report: Report): Dataset {
           ["평균 체류 시간 (추정)", v(flowOn, formatSeconds(meanDuration(flow)))],
           ["평균 체류 시간 (초)", v(flowOn, meanDuration(flow))],
           ["체류 시간 중앙값 (구간)", v(flowOn, median ? DURATION_LABELS[median] : "-")],
-          ["한 화면만 본 방문", v(flowOn, flow.pages["1"])],
-          ["한 화면만 본 방문 비율", v(flowOn, flowSessions ? `${((flow.pages["1"] / flowSessions) * 100).toFixed(1)}%` : "-")],
+          ["한 화면만 보고 끝난 방문", v(flowOn, flow.pages["1"])],
+          ["한 화면만 보고 끝난 방문 비율 (÷ 체류·이탈 집계 방문)", v(flowOn, flowSessions ? `${((flow.pages["1"] / flowSessions) * 100).toFixed(1)}%` : "-")],
           ["방문당 평균 페이지뷰", starts && pv !== null ? (pv / starts).toFixed(2) : null],
           ["종료 확인 방문", v(flowOn, flow.closed)],
-          ["종료 미확인 방문 (이용 중이거나 다시 오지 않음)", v(flowOn, flow.open)],
+          ["종료 미확인 방문 (다시 오지 않아 끝을 확인 못 함, 대부분 이미 떠남)", v(flowOn, flow.open)],
         ],
       },
       {
-        title: "시간대별 방문 시작·추정 이탈 (KST)",
-        columns: [{ label: "시간대", kind: "text" }, { label: "방문 시작", kind: "int" }, { label: "추정 이탈(마지막 활동)", kind: "int" }],
+        title: "시간대별 방문 시작·추정 종료 (KST)",
+        columns: [{ label: "시간대", kind: "text" }, { label: "방문 시작", kind: "int" }, { label: "추정 종료(마지막 활동)", kind: "int" }],
         rows: flow.startHour.map((n, h) => [`${String(h).padStart(2, "0")}시`, v(startOn, n), v(flowOn, flow.endHour[h])]),
       },
       {
-        title: "요일별 방문 시작·추정 이탈",
-        columns: [{ label: "요일", kind: "text" }, { label: "방문 시작", kind: "int" }, { label: "추정 이탈", kind: "int" }],
+        title: "요일별 방문 시작·추정 종료",
+        columns: [{ label: "요일", kind: "text" }, { label: "방문 시작", kind: "int" }, { label: "추정 종료", kind: "int" }],
         rows: ["월", "화", "수", "목", "금", "토", "일"].map((d, i) => [d, flow.startDow[i], v(flowOn, flow.endDow[i])]),
       },
       {
@@ -433,13 +433,13 @@ function flowDataset(report: Report): Dataset {
         rows: PAGES_BUCKETS.map((b) => [PAGES_LABELS[b], v(flowOn, flow.pages[b])]),
       },
       {
-        title: "화면별 첫 화면·마지막 화면(추정 이탈)",
+        title: "화면별 첫 화면·마지막 화면(추정 종료)",
         columns: [
           { label: "화면", kind: "text" },
           { label: "첫 화면(방문 시작)", kind: "int" },
-          { label: "마지막 화면(추정 이탈)", kind: "int" },
-          { label: "페이지뷰", kind: "int" },
-          { label: "추정 이탈률", kind: "pct" },
+          { label: "마지막 화면(추정 종료)", kind: "int" },
+          { label: "조회 수(체류·이탈 집계 기간)", kind: "int" },
+          { label: "추정 종료율", kind: "pct" },
           ...DEVICE_KINDS.map((d) => ({ label: `이탈(${DEVICE_LABELS[d]})`, kind: "int" as const })),
         ],
         rows: pageRows,
@@ -452,7 +452,7 @@ function flowDataset(report: Report): Dataset {
     ],
     notes: [
       ...FLOW_CAVEATS,
-      `방문 시작(시간대·첫 화면)은 ${flow.startSince ?? "수집 전"}부터, 체류·이탈은 ${flow.since ?? "수집 전"}부터 집계되며 그 전은 미측정입니다. 이탈률 = 그 화면에서 끝난 방문 ÷ 그 화면 페이지뷰.`,
+      `방문 시작(시간대·첫 화면)은 ${flow.startSince ?? "수집 전"}부터, 체류·이탈은 ${flow.since ?? "수집 전"}부터 집계되며 그 전은 미측정입니다.`,
     ],
   };
 }

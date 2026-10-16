@@ -189,6 +189,9 @@ export type FlowReport = {
   endDow: number[]; // Mon..Sun, flow sessions (a session ends on its start day)
   firstPage: Partial<Record<PageKind, number>>;
   exitPage: Partial<Record<PageKind, number>>;
+  // page views of each screen over the days that have flow counts (the
+  // 종료율 denominator: same days as its numerator)
+  pageViewsSinceFlow: Partial<Record<PageKind, number>>;
   exitByDevice: Record<DeviceKind, Partial<Record<PageKind, number>>>;
   paths: { first: PageKind; last: PageKind; sessions: number }[];
   duration: Record<DurationBucket, number>;
@@ -401,12 +404,12 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
     totals,
     totalCoverage,
     breakdown: totalCoverage.pvAnon === "none" ? breakdownOf(new Map()) : breakdownOf(visitTotals),
-    flow: flowReportOf(visitTotals, perDay, {
+    flow: await withPageViewsSinceFlow(flowReportOf(visitTotals, perDay, {
       startSince: flowFirsts[0]?.start_day ? asDay(flowFirsts[0].start_day) : null,
       since: flowFirsts[0]?.flow_day ? asDay(flowFirsts[0].flow_day) : null,
       from,
       until,
-    }),
+    }), from, until),
     device: {
       since: deviceSince,
       coverage: deviceCoverage,
@@ -516,6 +519,7 @@ export function flowReportOf(
     endDow: Array.from({ length: 7 }, () => 0),
     firstPage: {},
     exitPage: {},
+    pageViewsSinceFlow: {},
     exitByDevice: Object.fromEntries(DEVICE_KINDS.map((d) => [d, {}])) as FlowReport["exitByDevice"],
     paths: [],
     duration: zeroOf(DURATION_BUCKETS),
@@ -585,5 +589,24 @@ export function formatSeconds(seconds: number | null): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return s ? `${m}분 ${s}초` : `${m}분`;
+}
+
+// The 종료율 denominator: page views of each screen on the days that have
+// flow counts (from the first flow day; that first day is partial).
+async function withPageViewsSinceFlow(flow: FlowReport, from: string, until: string): Promise<FlowReport> {
+  if (!flow.since || flow.coverage === "none") return flow;
+  const start = flow.since > from ? flow.since : from;
+  const rows = await prisma.$queryRaw<{ metric: string; n: bigint | number }[]>`
+    SELECT "metric", sum("value") AS n FROM "MetricDaily"
+    WHERE "metric" LIKE 'visit.page.%' AND "day" >= ${start}::date AND "day" < ${until}::date
+    GROUP BY 1`.catch(() => []);
+  for (const r of rows) {
+    const m = /^visit\.page\.([a-z_]+)\.(anon|member)$/.exec(r.metric);
+    if (m && (PAGE_KINDS as readonly string[]).includes(m[1])) {
+      const kind = m[1] as PageKind;
+      flow.pageViewsSinceFlow[kind] = (flow.pageViewsSinceFlow[kind] ?? 0) + Number(r.n);
+    }
+  }
+  return flow;
 }
 

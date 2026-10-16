@@ -124,10 +124,20 @@ export function StackedBarChart({ labels, series, title }: { labels: string[]; s
 }
 
 // Horizontal bars for a breakdown (유입 경로, 검색 유형 ...).
-export function BarList({ rows, empty = "아직 기록이 없습니다." }: { rows: { label: string; value: number; note?: string }[]; empty?: string }) {
+// `total`: the percentages' denominator when the rows are only the top few
+// (otherwise the rows' own sum).
+export function BarList({
+  rows,
+  empty = "아직 기록이 없습니다.",
+  total: denominator,
+}: {
+  rows: { label: string; value: number; note?: string }[];
+  empty?: string;
+  total?: number;
+}) {
   if (rows.length === 0) return <p className="text-xs text-muted-foreground">{empty}</p>;
   const max = Math.max(1, ...rows.map((r) => r.value));
-  const total = rows.reduce((a, r) => a + r.value, 0);
+  const total = denominator ?? rows.reduce((a, r) => a + r.value, 0);
   return (
     <ul className="flex flex-col gap-1.5">
       {rows.map((r) => (

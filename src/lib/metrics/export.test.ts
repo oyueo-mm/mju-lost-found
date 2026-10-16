@@ -72,6 +72,7 @@ function fakeReport(): Report {
       endDow: [0, 0, 0, 0, 4, 0, 0],
       firstPage: { home: 3, lost: 2 },
       exitPage: { post: 2, home: 1, found: 1 },
+      pageViewsSinceFlow: { post: 4, home: 5, found: 2, lost: 3 },
       exitByDevice: { mobile: { post: 2, home: 1 }, pc: { found: 1 }, tablet: {}, other: {} },
       paths: [
         { first: "home", last: "post", sessions: 2 },
@@ -162,8 +163,11 @@ describe("운영 통계 내보내기", () => {
     const summary = Object.fromEntries(flow.tables[0].rows.map((r) => [r[0], r[1]]));
     expect(summary["평균 체류 시간 (초)"]).toBe(73); // (250 + 40) / 4
     expect(summary["체류 시간 중앙값 (구간)"]).toBe("30초~1분");
-    expect(summary["한 화면만 본 방문 비율"]).toBe("25.0%");
-    expect(summary["종료 미확인 방문 (이용 중이거나 다시 오지 않음)"]).toBe(3);
+    expect(summary["한 화면만 보고 끝난 방문 비율 (÷ 체류·이탈 집계 방문)"]).toBe("25.0%");
+    expect(summary["종료 미확인 방문 (다시 오지 않아 끝을 확인 못 함, 대부분 이미 떠남)"]).toBe(3);
+    // 종료율: exits ÷ page views of the same days (post: 2 ÷ 4)
+    const post = flow.tables[5].rows.find((r) => r[0] === "게시글 상세")!;
+    expect(post.slice(0, 5)).toEqual(["게시글 상세", 0, 2, 4, 0.5]);
     expect(flow.tables[1].rows[10]).toEqual(["10시", 3, 2]);
     expect(flow.tables[1].rows[22]).toEqual(["22시", 0, 2]);
     expect(flow.tables[2].rows[4]).toEqual(["금", 5, 4]);

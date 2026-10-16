@@ -484,8 +484,12 @@ export default async function AdminStatsPage({
                   백그라운드에 있거나 아무 입력이 없으면 늘지 않고, 브라우저를 닫은 정확한 시각은 알 수 없습니다. 평균에는 한 방문당 최대 60분만 넣습니다.
                 </li>
                 <li>
-                  이탈 화면은 방문의 마지막 화면, 이탈 시간대는 마지막 활동 시각입니다. 같은 브라우저가 다음 방문을 시작하면 &lsquo;종료 확인&rsquo;, 그
-                  전까지는 &lsquo;종료 미확인&rsquo;(아직 이용 중이거나 다시 오지 않음)입니다. 오늘 수치에는 진행 중인 방문이 포함됩니다.
+                  마지막 화면은 방문이 끝난 것으로 추정되는 화면, 종료 시간대는 마지막 활동 시각입니다. 오늘 수치에는 아직 진행 중인 방문이 그 순간까지의
+                  상태로 포함됩니다.
+                </li>
+                <li>
+                  종료율 = 그 화면에서 끝난 방문 ÷ 같은 기간 그 화면의 조회 수(체류·이탈 집계를 시작한 날부터, 첫날은 일부). 한 화면만 보고 끝난 방문
+                  비율 = 화면을 1개만 본 방문 ÷ 체류·이탈 집계 방문.
                 </li>
                 <li>
                   브라우저가 마지막 활동을 보내기 전에 닫히면 다음 방문 때(7일 이내) 보내며, 끝내 오지 않으면 그 전까지 확인된 활동까지만 반영됩니다.
@@ -513,10 +517,10 @@ export default async function AdminStatsPage({
                 sub="정확한 중앙값 대신 구간"
               />
               <StatCard
-                label="한 화면만 본 방문"
+                label="한 화면만 보고 끝난 방문"
                 value={null}
                 display={flowSessions ? `${Math.round((flow.pages["1"] / flowSessions) * 100)}%` : "-"}
-                sub={`${fmt(flow.pages["1"])}회 / ${fmt(flowSessions)}회`}
+                sub={`${fmt(flow.pages["1"])}회 / 체류·이탈 집계 방문 ${fmt(flowSessions)}회`}
               />
               <StatCard
                 label="방문당 평균 페이지뷰"
@@ -524,24 +528,34 @@ export default async function AdminStatsPage({
                 display={sessionsTotal ? (pvTotal / sessionsTotal).toFixed(1) : "-"}
                 sub="페이지뷰 ÷ 방문 세션"
               />
-              <StatCard label="종료 미확인 방문" value={flow.coverage === "none" ? null : flow.open} sub={`종료 확인 ${fmt(flow.closed)}회`} />
+              <StatCard
+                label="종료 미확인 방문"
+                value={flow.coverage === "none" ? null : flow.open}
+                sub={`다시 오지 않아 끝을 확인 못 함 · 종료 확인 ${fmt(flow.closed)}회`}
+              />
             </div>
+            <p className="rounded-card border border-border bg-muted/40 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+              <b className="font-semibold text-foreground">종료 확인</b>: 같은 브라우저가 나중에 다시 방문해서, 앞의 방문이 끝났다는 것이 확인된 방문.{" "}
+              <b className="font-semibold text-foreground">종료 미확인</b>: 그 뒤 다시 오지 않아 끝난 시점을 확인할 수 없는 방문으로, 대부분은 이미
+              떠난 방문입니다. &lsquo;지금 이용 중&rsquo;이라는 뜻이 아니며, 오늘 방문 중 일부만 실제로 이용 중일 수 있습니다. 두 경우 모두 체류
+              시간·마지막 화면은 마지막으로 확인된 활동 기준입니다.
+            </p>
             <div className="grid gap-5 md:grid-cols-2">
               <GroupedBarChart
-                title="시간대별 방문 시작·추정 이탈 (KST, 시)"
+                title="시간대별 방문 시작·추정 종료 (KST, 시)"
                 labels={Array.from({ length: 24 }, (_, h) => String(h))}
                 tickEvery={3}
                 series={[
                   { label: "방문 시작", values: flow.startHour, className: "fill-primary", swatch: "bg-primary" },
-                  { label: "추정 이탈(마지막 활동)", values: flow.endHour, className: "fill-primary/35", swatch: "bg-primary/35" },
+                  { label: "추정 종료(마지막 활동)", values: flow.endHour, className: "fill-primary/35", swatch: "bg-primary/35" },
                 ]}
               />
               <GroupedBarChart
-                title="요일별 방문 시작·추정 이탈"
+                title="요일별 방문 시작·추정 종료"
                 labels={["월", "화", "수", "목", "금", "토", "일"]}
                 series={[
                   { label: "방문 시작", values: flow.startDow, className: "fill-primary", swatch: "bg-primary" },
-                  { label: "추정 이탈", values: flow.endDow, className: "fill-primary/35", swatch: "bg-primary/35" },
+                  { label: "추정 종료", values: flow.endDow, className: "fill-primary/35", swatch: "bg-primary/35" },
                 ]}
               />
             </div>
@@ -558,6 +572,7 @@ export default async function AdminStatsPage({
                   {fmt(Object.values(flow.firstPage).reduce((a, v) => a + (v ?? 0), 0))}회
                 </p>
                 <BarList
+                  total={Object.values(flow.firstPage).reduce<number>((a, v) => a + (v ?? 0), 0)}
                   rows={Object.entries(flow.firstPage)
                     .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
                     .slice(0, 8)
@@ -566,17 +581,18 @@ export default async function AdminStatsPage({
               </div>
               <div className="flex flex-col gap-2">
                 <p className="text-[11px] text-muted-foreground">
-                  <span className="text-xs font-semibold text-foreground">마지막 화면 (추정 이탈)</span> · 이탈률 = 그 화면에서 끝난 방문 ÷ 그 화면 페이지뷰
+                  <span className="text-xs font-semibold text-foreground">마지막 화면 (추정 종료)</span> · 비중: 체류·이탈 집계 방문 중 · 종료율: 그
+                  화면에서 끝난 방문 ÷ 같은 기간 그 화면 조회 수
                 </p>
                 <BarList
+                  total={flowSessions}
                   rows={Object.entries(flow.exitPage)
                     .filter(([, n]) => (n ?? 0) > 0)
                     .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
                     .slice(0, 8)
                     .map(([kind, n]) => {
-                      const views = report.breakdown.pages.find((p) => p.kind === kind);
-                      const pv = views ? views.anon + views.member : 0;
-                      return { label: PAGE_KIND_LABELS[kind as PageKind] ?? kind, value: n ?? 0, note: pv ? `이탈률 ${Math.round(((n ?? 0) / pv) * 100)}%` : undefined };
+                      const pv = flow.pageViewsSinceFlow[kind as PageKind] ?? 0;
+                      return { label: PAGE_KIND_LABELS[kind as PageKind] ?? kind, value: n ?? 0, note: pv ? `종료율 ${Math.round(((n ?? 0) / pv) * 100)}%` : undefined };
                     })}
                 />
               </div>

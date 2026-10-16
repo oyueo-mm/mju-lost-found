@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
 import { recordVisitsAction } from "@/app/visitActions";
-import { ACTIVITY_THROTTLE_MS, markSent, pendingUpdate, type FlowRecord, type FlowUpdate } from "@/lib/metrics/flow";
+import { ACTIVITY_THROTTLE_MS, changesBuckets, markSent, pendingUpdate, type FlowRecord, type FlowUpdate } from "@/lib/metrics/flow";
 import { pageKindOf, refSourceOf, sanitizeUtm, SESSION_IDLE_MS, MAX_EVENTS_PER_CALL, type PageKind, type VisitEvent } from "@/lib/metrics/visits";
 
 // 방문 통계 beacon (운영 통계). One event per page the browser actually shows
@@ -14,8 +14,10 @@ import { pageKindOf, refSourceOf, sanitizeUtm, SESSION_IDLE_MS, MAX_EVENTS_PER_C
 // navigations is one server call. The queue lives in sessionStorage: a full
 // page load (a refresh, a plain link) that cuts the wait short leaves it
 // for the next page in the same tab to send, and backgrounding the tab
-// sends it at once. An event is taken off the queue just before it is sent,
-// so it can be lost (a tab closed within the wait) but never sent twice.
+// sends it at once. An event is taken off the queue just before it is sent
+// and put back if the request fails, so it is lost only when the tab closes
+// with it in flight; it is sent twice only if the server handled a request
+// whose reply never arrived (rare).
 //
 // Visit session: kept only in this browser (localStorage: the last view's
 // time and KST day). Nothing identifying is sent -- just whether this view
@@ -131,29 +133,56 @@ function noteActivity() {
   writeFlow(store);
 }
 
-// Changes to report, marked as sent right away (lost rather than counted twice).
-function takeFlowUpdates(): FlowUpdate[] {
+// One flow report in flight at a time (per tab), so a failed one can be
+// taken back safely: nothing else was marked on top of it.
+let flowInFlightSince = 0;
+const FLOW_IN_FLIGHT_MAX_MS = 20_000;
+
+type FlowTaken = { updates: FlowUpdate[]; closing: FlowRecord | null; before: FlowRecord | null; after: FlowRecord | null };
+
+// Changes to report, marked as sent when taken (see restoreFlow for a
+// failed request). `bucketsOnly`: a report the tab sends on its own (it was
+// backgrounded, no page views waiting) goes only if a session moves between
+// buckets -- seconds alone wait for the next report.
+function takeFlowUpdates(bucketsOnly: boolean): FlowTaken | null {
+  if (flowInFlightSince && Date.now() - flowInFlightSince < FLOW_IN_FLIGHT_MAX_MS) return null;
   const store = readFlow();
-  const updates: FlowUpdate[] = [];
+  const taken: FlowTaken = { updates: [], closing: null, before: null, after: null };
   if (store.closing) {
     const update = pendingUpdate(store.closing, true);
-    if (update) updates.push(update);
+    if (update) taken.updates.push(update);
+    taken.closing = store.closing;
     store.closing = null;
   }
   if (store.current && !store.current.closed) {
     const update = pendingUpdate(store.current);
-    if (update) {
-      updates.push(update);
+    if (update && (!bucketsOnly || changesBuckets(update) || taken.updates.length)) {
+      taken.updates.push(update);
+      taken.before = store.current;
       store.current = markSent(store.current, update);
+      taken.after = store.current;
     }
   }
-  if (updates.length) writeFlow(store);
-  return updates;
+  if (!taken.updates.length && !taken.closing) return null;
+  writeFlow(store);
+  return taken;
+}
+
+// The request failed: take the marks back, so the next report starts from
+// what the server really has (unless this browser moved on meanwhile).
+function restoreFlow(taken: FlowTaken) {
+  const store = readFlow();
+  if (taken.closing && !store.closing) store.closing = taken.closing;
+  if (taken.before && taken.after && store.current?.start === taken.after.start && store.current.sentDur === taken.after.sentDur) {
+    store.current = { ...store.current, sent: taken.before.sent, sentDur: taken.before.sentDur };
+  }
+  writeFlow(store);
 }
 
 function hasPendingFlow(): boolean {
   const store = readFlow();
-  return !!store.closing || (!!store.current && !store.current.closed && pendingUpdate(store.current) !== null);
+  const update = store.current && !store.current.closed ? pendingUpdate(store.current) : null;
+  return !!store.closing || (!!update && changesBuckets(update));
 }
 
 function readQueue(): VisitEvent[] {
@@ -180,17 +209,28 @@ function send() {
   if (timer) clearTimeout(timer);
   timer = null;
   const queue = readQueue();
-  const flow = takeFlowUpdates();
-  if (queue.length === 0 && flow.length === 0) return;
+  const taken = takeFlowUpdates(queue.length === 0);
+  if (queue.length === 0 && !taken) return;
   const batch = queue.slice(0, MAX_EVENTS_PER_CALL);
   writeQueue(queue.slice(MAX_EVENTS_PER_CALL));
+  if (taken) flowInFlightSince = Date.now();
   // touch: whether this browser has a touch screen -- the one detail the
   // server can't see, needed to tell an iPad (Mac User-Agent) from a Mac.
-  recordVisitsAction(batch, { optedOut: optedOut(), touch: navigator.maxTouchPoints > 1, flow })
+  recordVisitsAction(batch, { optedOut: optedOut(), touch: navigator.maxTouchPoints > 1, flow: taken?.updates ?? [] })
     .then((reply) => {
+      if (taken) flowInFlightSince = 0;
       if (reply?.admin) defaultOptOutForAdmin();
     })
-    .catch(() => {});
+    .catch(() => {
+      // The request failed (offline, timed out): put the views back in front
+      // of the queue and take the flow marks back, so both go with the next
+      // report -- together, so sessions and their flow stay in step.
+      writeQueue([...batch, ...readQueue()]);
+      if (taken) {
+        restoreFlow(taken);
+        flowInFlightSince = 0;
+      }
+    });
   if (queue.length > MAX_EVENTS_PER_CALL) timer = setTimeout(send, SEND_DELAY_MS);
 }
 

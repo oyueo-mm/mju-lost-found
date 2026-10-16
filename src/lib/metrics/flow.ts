@@ -12,8 +12,12 @@ import { DEVICE_KINDS, isPageKind, PAGE_KINDS, type DeviceKind, type PageKind } 
 // bucket B". The server adds -1 to A and +1 to B in MetricDaily. The first
 // report of a session is "init" (+1 everywhere). So at any time each
 // distribution holds every reported session once, at its latest known
-// state. The browser marks a state as sent *before* sending it, so a lost
-// request can make a session look shorter than it was, never count it twice.
+// state. One report is in flight at a time; the browser marks it sent when
+// sending and takes the mark back if the request fails, so the next report
+// starts from what the server really has. Not exactly-once: a request the
+// server handled but whose reply was lost is sent again (counted twice), and
+// one cut off by the page closing is not taken back (that change is lost,
+// and the session's buckets can drift by one) -- both rare.
 //
 // Ends are estimates: a session's end is its last confirmed activity (a
 // page view, or input while the tab is visible), not the moment the tab
@@ -99,6 +103,13 @@ export function pendingUpdate(record: FlowRecord, close = false): FlowUpdate | n
   if (!record.sent) return { day: record.day, init: true, to, ...(durSec ? { durSec } : {}), ...(close ? { close: true } : {}) };
   if (sameState(record.sent, to) && !durSec && !close) return null;
   return { day: record.day, from: record.sent, to, ...(durSec ? { durSec } : {}), ...(close ? { close: true } : {}) };
+}
+
+// Does the update move the session between buckets (or open / close it)?
+// A report that only adds seconds can wait for the next one: the time is
+// kept and goes with it (the mean is the only thing it changes).
+export function changesBuckets(update: FlowUpdate): boolean {
+  return !!update.init || !!update.close || !update.from || !sameState(update.from, update.to);
 }
 
 export function markSent(record: FlowRecord, update: FlowUpdate | null): FlowRecord {

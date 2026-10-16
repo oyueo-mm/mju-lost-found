@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { durationBucket, flowCounterChanges, markSent, pagesBucket, parseFlowUpdate, pendingUpdate, type FlowRecord } from "./flow";
+import { changesBuckets, durationBucket, flowCounterChanges, markSent, pagesBucket, parseFlowUpdate, pendingUpdate, type FlowRecord } from "./flow";
 
 const T0 = Date.UTC(2026, 9, 16, 1, 0, 0); // 10:00 KST
 const record = (over: Partial<FlowRecord> = {}): FlowRecord => ({
@@ -75,6 +75,13 @@ describe("each session counted once, at its latest known state", () => {
       "visit.flow.endhour.10": 1,
       "visit.flow.dursec.pc": 5,
     });
+  });
+
+  it("tells a bucket move from seconds alone (a backgrounded tab sends only the former)", () => {
+    const sent = markSent(record(), pendingUpdate(record()));
+    expect(changesBuckets(pendingUpdate({ ...sent, active: T0 + 5_000 })!)).toBe(false); // still under 10s: seconds only
+    expect(changesBuckets(pendingUpdate({ ...sent, active: T0 + 15_000 })!)).toBe(true); // 10~30s now
+    expect(changesBuckets(pendingUpdate(record())!)).toBe(true); // init
   });
 
   it("caps a session's share of the duration total at 60 minutes", () => {
