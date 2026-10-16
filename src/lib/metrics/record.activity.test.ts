@@ -33,10 +33,10 @@ async function pendingCounters(): Promise<Record<string, number>> {
 }
 
 beforeEach(async () => {
-  queries.length = 0;
   wrote = 1;
   fail = false;
   await pendingCounters(); // start each test with nothing pending
+  queries.length = 0;
 });
 
 describe("최근 활동 감지 시각: when a write happens (activityStep)", () => {
@@ -101,6 +101,20 @@ describe("recordMemberActivity", () => {
     wrote = 0;
     expect(await recordMemberActivity({ ...member, lastActiveAt: null }, new Date("2026-10-17T00:00:00Z"))).toBe(false);
     expect(await pendingCounters()).toEqual({});
+  });
+
+  it("an admin-only write still gets this environment's collection start recorded", async () => {
+    vi.resetModules();
+    const fresh = await import("./record");
+    const { prisma: p } = await import("@/lib/db/prisma");
+    const markers: unknown[][] = [];
+    const db = p as unknown as Record<string, unknown>;
+    db.$executeRaw = vi.fn((_s: TemplateStringsArray, ...values: unknown[]) => (markers.push(values), Promise.resolve(1)));
+    db.$transaction = vi.fn(async (ops: unknown[]) => ops);
+    expect(await fresh.recordMemberActivity({ id: 1, isAdmin: true, lastActiveAt: null }, new Date("2026-10-17T00:00:00Z"))).toBe(true);
+    // the scheduled flush (after() is a no-op here): run it by hand
+    await fresh.flushTimings();
+    expect(markers.some((v) => v.includes(fresh.TRAFFIC_HOURLY_SINCE_METRIC))).toBe(true);
   });
 
   it("keeps admins' time but leaves them out of the hourly count", async () => {

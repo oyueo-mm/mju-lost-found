@@ -135,7 +135,13 @@ export type AdminUserDetailDTO = {
   reportsAgainstCount: number;
 };
 
-const hhmm = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+// KST "YYYY-MM-DD HH:mm" when lastActiveAt began here: the marker (KST day
+// + minute of day) or the earliest stored time, whichever is earlier.
+function recordingSince(marker: { day: Date; value: number } | null, earliest: Date | null): string | null {
+  const fromMarker = marker ? new Date(marker.day.getTime() + marker.value * 60_000 - 9 * 3_600_000) : null;
+  const start = [fromMarker, earliest].filter((d): d is Date => d !== null).sort((a, b) => a.getTime() - b.getTime())[0];
+  return start ? new Date(start.getTime() + 9 * 3_600_000).toISOString().slice(0, 16).replace("T", " ") : null;
+}
 
 export async function getUserDetailForAdmin(
   admin: User,
@@ -151,7 +157,7 @@ export async function getUserDetailForAdmin(
 
   const today = kstDay();
   const activityFrom = [activityRetainedFrom(today), COLLECTION_SINCE.ops.slice(0, 10)].sort().at(-1)!;
-  const [lostPostCount, foundPostCount, commentCount, reportsFiledCount, reportsAgainstCount, comments, activity, since] =
+  const [lostPostCount, foundPostCount, commentCount, reportsFiledCount, reportsAgainstCount, comments, activity, since, earliest] =
     await Promise.all([
       prisma.lostPost.count({ where: { userId: targetUserId } }),
       prisma.foundPost.count({ where: { userId: targetUserId } }),
@@ -173,6 +179,9 @@ export async function getUserDetailForAdmin(
       prisma.metricDaily
         .findFirst({ where: { metric: TRAFFIC_HOURLY_SINCE_METRIC }, orderBy: { day: "asc" }, select: { day: true, value: true } })
         .catch(() => null),
+      // ... or the earliest time still stored, if that is earlier (the
+      // marker is written with a metrics batch, which may come later)
+      prisma.user.aggregate({ _min: { lastActiveAt: true } }).catch(() => null),
     ]);
 
   return {
@@ -184,7 +193,7 @@ export async function getUserDetailForAdmin(
       lastLoginAt: row.lastLoginAt,
       lastActivityDay: activity?.day.toISOString().slice(0, 10) ?? null,
       lastActiveAt: row.withdrawnAt ? null : row.lastActiveAt,
-      lastActiveSince: since ? `${since.day.toISOString().slice(0, 10)} ${hhmm(since.value)}` : null,
+      lastActiveSince: recordingSince(since, earliest?._min.lastActiveAt ?? null),
       lostPostCount,
       foundPostCount,
       commentCount,

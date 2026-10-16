@@ -98,6 +98,24 @@ describe("시간대 분석 view", () => {
   });
 });
 
+describe("one basis for the compare chart, the heatmap and the export", () => {
+  it("gives a day the same cells whether it is loaded with the period or alone, and the export the same numbers", async () => {
+    const { halves, HOURLY_METRICS } = await import("@/lib/metrics/hourly");
+    const alone = buildCells(["2026-10-17"], rows, starts, NOW);
+    const rowsOut = hourlyDataset(cells).tables[0].rows.filter((r) => r[0] === "2026-10-17");
+    HOURLY_METRICS.forEach((m, k) => {
+      expect(alone.metrics[m.key].values[0]).toEqual(cells.metrics[m.key].values[1]);
+      expect(alone.metrics[m.key].status[0]).toEqual(cells.metrics[m.key].status[1]);
+      // export columns follow HOURLY_METRICS after 날짜·시간; hours to come are left out
+      expect(rowsOut.map((r) => r[2 + k])).toEqual(cells.metrics[m.key].values[1].slice(0, 15));
+      // the heatmap's / compare table's 합계 = the export's hours added up
+      const day = halves(cells.metrics[m.key], 1).day.value;
+      const sum = rowsOut.reduce<number | null>((a, r) => (r[2 + k] === null ? a : (a ?? 0) + (r[2 + k] as number)), null);
+      expect(day).toBe(sum);
+    });
+  });
+});
+
 describe("내보내기: 날짜·시간대별", () => {
   it("writes one row per past hour, 미측정 as blank (never 0), and the totals by hour", () => {
     const ds = hourlyDataset(cells);

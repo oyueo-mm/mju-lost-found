@@ -228,6 +228,10 @@ export async function recordMemberActivity(user: ActiveMember, now: Date = new D
     const wrote = Number(rows[0]?.n ?? 0) > 0;
     if (wrote && step.newHour && !user.isAdmin) {
       addDailyCount(`${ACTIVE_MEMBER_HOUR_PREFIX}${String(kstHour(now)).padStart(2, "0")}`, 1, day);
+    } else if (wrote && !hourlySinceMarked) {
+      // nothing counted (an admin): still record this environment's
+      // collection start, so the time never predates its own start note
+      noteObservation();
     }
     return wrote;
   } catch (error) {
@@ -309,7 +313,7 @@ function noteObservation() {
 }
 
 export async function flushTimings(): Promise<void> {
-  if (pending.size === 0 && pendingDaily.size === 0) return;
+  if (pending.size === 0 && pendingDaily.size === 0 && hourlySinceMarked) return;
   const rows = [...pending.values()];
   pending.clear();
   const daily = [...pendingDaily.entries()];

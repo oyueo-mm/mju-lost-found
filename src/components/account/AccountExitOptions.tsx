@@ -32,7 +32,7 @@ export function AccountExitOptions() {
         </div>
         <ul className="flex list-disc flex-col gap-1.5 pl-5 text-muted-foreground">
           <li>
-            이메일, Google 계정 정보, 이름, 닉네임, 동의 기록, 최근 로그인 기록이 삭제되며{" "}
+            이메일, Google 계정 정보, 이름, 닉네임, 동의 기록, 최근 로그인·이용 기록이 삭제되며{" "}
             <span className="font-medium text-foreground">계정을 다시 복구할 수 없습니다.</span>
           </li>
           <li>

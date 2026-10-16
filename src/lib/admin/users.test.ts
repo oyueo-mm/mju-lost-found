@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const user = { findMany: vi.fn(), count: vi.fn(), findUnique: vi.fn(), update: vi.fn() };
+const user = { findMany: vi.fn(), count: vi.fn(), findUnique: vi.fn(), update: vi.fn(), aggregate: vi.fn() };
 // Phase F-2: suspend now runs inside a $transaction alongside a
 // notification.create -- mocked the same interactive-callback shape as
 // comment/service.test.ts's own $transaction mock, handing the tx object
@@ -90,6 +90,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   activityDay.findFirst.mockReset().mockResolvedValue(null);
   metricDaily.findFirst.mockReset().mockResolvedValue(null);
+  user.aggregate.mockReset().mockResolvedValue({ _min: { lastActiveAt: null } });
 });
 
 describe("listUsersForAdmin", () => {
@@ -606,6 +607,20 @@ describe("updateUserByAdmin", () => {
       expect(result.data.lastActiveAt).toEqual(new Date("2026-10-17T02:04:12.345Z"));
       expect(result.data.lastActiveSince).toBe("2026-10-17 09:05");
       expect(metricDaily.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { metric: "meta.since.traffic_hourly" } }));
+    });
+
+    it("never states a recording start later than a time already stored (the marker may come later, or not yet)", async () => {
+      user.findUnique.mockResolvedValue({ ...baseRow, lastActiveAt: new Date("2026-10-16T16:28:40.385Z") });
+      user.aggregate.mockResolvedValue({ _min: { lastActiveAt: new Date("2026-10-16T16:28:40.385Z") } }); // 01:28 KST
+      const noMarker = await getUserDetailForAdmin(admin as never, 5);
+      expect(noMarker.kind === "ok" && noMarker.data.lastActiveSince).toBe("2026-10-17 01:28");
+      metricDaily.findFirst.mockResolvedValueOnce({ day: new Date("2026-10-17T00:00:00Z"), value: 2 * 60 }); // 02:00 KST
+      const laterMarker = await getUserDetailForAdmin(admin as never, 5);
+      expect(laterMarker.kind === "ok" && laterMarker.data.lastActiveSince).toBe("2026-10-17 01:28");
+      metricDaily.findFirst.mockResolvedValueOnce({ day: new Date("2026-10-17T00:00:00Z"), value: 60 + 20 }); // 01:20 KST
+      const earlierMarker = await getUserDetailForAdmin(admin as never, 5);
+      expect(earlierMarker.kind === "ok" && earlierMarker.data.lastActiveSince).toBe("2026-10-17 01:20");
+      user.findUnique.mockReset();
     });
 
     it("reports no detected activity (null) rather than estimating one, and hides it for a withdrawn account", async () => {
