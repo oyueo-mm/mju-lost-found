@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 
 import { decideSignIn } from "@/lib/auth/access";
-import { CURRENT_IDENTITY_CONSENT_VERSION } from "@/lib/auth/terms";
+import { isAcceptedIdentityConsentVersion } from "@/lib/auth/terms";
 import { resolveSignIn } from "@/lib/auth/user";
 import { recordSignIn } from "@/lib/metrics/record";
 import {
@@ -154,7 +154,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
               user: resolved.user.id,
               ...describeSignInIdentity(profile, user.email),
               structured: fromName.nameSource === "google_display_name",
-              consent: resolved.user.identityConsentVersion === CURRENT_IDENTITY_CONSENT_VERSION ? "current" : resolved.user.identityConsentVersion ? "outdated" : "none",
+              consent: isAcceptedIdentityConsentVersion(resolved.user.identityConsentVersion) ? "current" : resolved.user.identityConsentVersion ? "outdated" : "none",
               sync,
             }),
           );

@@ -82,6 +82,12 @@
   );
 }
 
+/* 개인정보처리방침 변경 안내 (lib/policy/privacyNotice.ts): closed for this
+   시행일 in this browser -- set before first paint, so no flash. */
+html[data-privacy-notice="closed"] [data-privacy-notice-bar] {
+  display: none;
+}
+
 /* 게시판 반응형 배치 (PostCard variant="board", BOARD_RESULTS_GRID_CLASS).
    Phones choose 목록형 (default) or 격자형 -- <html data-board-view>, set
    before first paint from localStorage (lib/boardView.ts); without a saved

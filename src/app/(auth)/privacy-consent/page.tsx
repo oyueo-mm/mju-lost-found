@@ -2,13 +2,12 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 
 import { hasRequiredConsents, requireUser, sanitizeCallbackUrl } from "@/lib/auth/session";
-import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
+import { CURRENT_TERMS_VERSION, isAcceptedPrivacyVersion } from "@/lib/auth/terms";
 import { signOut } from "@/lib/auth/auth";
 import { LogoMark } from "@/components/layout/Logo";
 import { ShieldIcon, ChevronRightIcon, BookIcon } from "@/components/icons";
 import { PrivacyConsentButton } from "./PrivacyConsentButton";
 import { hasCurrentIdentityConsent } from "@/lib/identity/service";
-import { ACTIVITY_RECORD_ITEM, ACTIVITY_RECORD_RETENTION, STATISTICS_PURPOSE } from "./consentText";
 
 // Phase 8: the actual items/purposes below are drawn directly from this
 // app's real schema and features (see prisma/schema.prisma, and this
@@ -32,8 +31,6 @@ import { ACTIVITY_RECORD_ITEM, ACTIVITY_RECORD_RETENTION, STATISTICS_PURPOSE } f
 // phase's own design put them: /policy/terms and /policy/community are
 // only linked from here, never reproduced inline (that content lives in
 // its own pages, same as this one never repeats a URL's real content).
-//
-// 이용 통계 (consent version 2026-10-16): consentText.ts.
 const COLLECTED_ITEMS: { label: string; detail: string }[] = [
   { label: "Google 계정 식별 정보", detail: "Google 계정의 고유 식별자(구글 로그인 시 발급)" },
   { label: "이메일 주소", detail: "Google 계정의 이메일 주소(이메일 인증 여부는 로그인 확인에만 쓰고 저장하지 않음)" },
@@ -51,7 +48,6 @@ const COLLECTED_ITEMS: { label: string; detail: string }[] = [
   { label: "댓글/답글", detail: "게시글에 작성한 댓글 및 답글 내용" },
   { label: "채팅 메시지", detail: "다른 이용자와 주고받은 채팅 메시지, 채팅으로 전송한 사진" },
   { label: "서비스 이용 기록", detail: "로그인 일시, 게시글 조회 기록, 신고/알림 등 서비스 이용 내역" },
-  ACTIVITY_RECORD_ITEM,
   { label: "자동 수집 정보", detail: "해시 처리된 IP(비로그인 AI 검색 이용량 제한), 로그인 세션·언어 설정·조회수 집계용 쿠키" },
 ];
 
@@ -78,7 +74,7 @@ export default async function PrivacyConsentPage({
   // earlier optional) 이름·소속 consent ticks the privacy box again.
   const needsPrivacy =
     user.privacyConsentAt === null ||
-    user.privacyConsentVersion !== CURRENT_PRIVACY_VERSION ||
+    !isAcceptedPrivacyVersion(user.privacyConsentVersion) ||
     !hasCurrentIdentityConsent(user);
   // Someone who agreed before is told why they see this again.
   const isReconsent = user.privacyConsentAt !== null || user.termsAcceptedAt !== null;
@@ -132,7 +128,7 @@ export default async function PrivacyConsentPage({
           <div className="flex flex-col gap-2">
             <p>Google 계정 · 이름·소속 · 닉네임 · 게시글 · 이미지 · 댓글 · 채팅</p>
             <p className="text-muted-foreground">
-              분실물을 등록하고 검색하고 연락하기 위해 사용됩니다. {STATISTICS_PURPOSE}
+              분실물을 등록하고 검색하고 연락하기 위해 사용됩니다.
             </p>
           </div>
 
@@ -170,7 +166,7 @@ export default async function PrivacyConsentPage({
                   메시지 본문은 탈퇴 후 90일, 처리가 끝난 신고·제재·이의신청 기록과 관련 증거는 처리 완료 후
                   1년간 보관한 뒤 삭제합니다(처리 중인 신고의 대상 정보는 처리가 끝날 때까지 보관). 관계
                   법령에 따라 일정 기간 보존이 필요한 정보가 있는 경우에는 해당 법령에서 정한 기간 동안
-                  보관합니다. {ACTIVITY_RECORD_RETENTION} 자세한 내용은{" "}
+                  보관합니다. 자세한 내용은{" "}
                   <Link href="/policy/privacy" target="_blank" className="font-medium text-primary hover:opacity-80">
                     개인정보처리방침
                   </Link>

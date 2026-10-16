@@ -5,6 +5,9 @@ import { Footer } from "@/components/layout/Footer";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { DraftJanitor } from "@/components/post/DraftJanitor";
 import { ActiveDayBeacon } from "@/components/layout/ActiveDayBeacon";
+import { PrivacyPolicyNotice } from "@/components/layout/PrivacyPolicyNotice";
+import { kstDay } from "@/lib/metrics/record";
+import { privacyNotice } from "@/lib/policy/privacyNotice";
 import { getCurrentUser, getRejoinIdentityId, hasRequiredConsents } from "@/lib/auth/session";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { countUnreadMessagesForUser } from "@/lib/chat/service";
@@ -96,9 +99,13 @@ export default async function MainLayout({ children }: { children: React.ReactNo
     }
   }
 
+  // 개인정보처리방침 변경 안내 (announced, no re-consent): for everyone, signed in or not.
+  const notice = privacyNotice(kstDay());
+
   return (
     <div className="flex flex-1 flex-col">
       <Header />
+      {notice && <PrivacyPolicyNotice notice={notice} />}
       <DraftJanitor userId={user?.id ?? null} />
       {user && <ActiveDayBeacon userId={user.id} />}
       {/* Phase 9: BottomNav-clearance padding (pb-20/no-pb on md+) moved

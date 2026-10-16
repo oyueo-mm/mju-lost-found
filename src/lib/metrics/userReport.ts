@@ -1,6 +1,6 @@
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db/prisma";
-import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
+import { CURRENT_TERMS_VERSION, isAcceptedPrivacyVersion } from "@/lib/auth/terms";
 import { addPeriods, periodStart } from "./dashboard";
 import { activityActor, kstDay, USER_HOURLY_SINCE_METRIC } from "./record";
 import {
@@ -264,7 +264,7 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
 
   // ---- accounts and sign-ups
   const admins = new Set(members.filter((m) => m.isAdmin).map((m) => m.id));
-  const onboarded = (m: MemberRow) => !!m.nickname && m.privacyConsentVersion === CURRENT_PRIVACY_VERSION && m.termsVersion === CURRENT_TERMS_VERSION;
+  const onboarded = (m: MemberRow) => !!m.nickname && isAcceptedPrivacyVersion(m.privacyConsentVersion) && m.termsVersion === CURRENT_TERMS_VERSION;
   const current = members.filter((m) => !m.withdrawnAt);
   const available = current.filter((m) => !m.deletedAt);
   const accounts = {

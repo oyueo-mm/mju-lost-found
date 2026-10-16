@@ -45,8 +45,9 @@ import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 // back to member ids in memory for counts (metrics/userReport.ts) -- so they
 // are pseudonymous, re-linkable personal data, never called anonymous --
 // and that the hourly totals carry no member data, have no deletion date
-// (MetricDaily is not cleaned up) and stay after 회원탈퇴. The consent
-// screen (privacy-consent/page.tsx) says the same in short.
+// (MetricDaily is not cleaned up) and stay after 회원탈퇴. Announced (§11
+// and the in-service notice, lib/policy/privacyNotice.ts), not re-consented:
+// the consent version (auth/terms.ts) and the consent screen are unchanged.
 // 이름·소속 필수 수집 (2026-10-16): 이름·소속 are required items of the
 // 개인정보 동의; §1, §3, §4, §6, §7, §9 describe it. Consent withdrawal of a
 // required item is 회원탈퇴 (§6), as for the rest of this consent.
@@ -60,7 +61,8 @@ import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
 // shown to other members, viewable by an admin only for a report with a
 // logged reason (identity/service.ts), deleted at 회원탈퇴. Whether they
 // may be required at all is a legal question still open (see the report).
-type Section = { title: string; body: React.ReactNode };
+// `id`: an anchor the in-service change notice links to (#changes).
+type Section = { title: string; body: React.ReactNode; id?: string };
 
 const SECTIONS: Section[] = [
   {
@@ -314,7 +316,7 @@ const SECTIONS: Section[] = [
             홍보 링크의 캠페인 이름, 방문 시작·마지막 활동 시간대, 체류 시간 구간, 처음·마지막 화면 종류)만 저장하고, IP 주소·검색어·방문한 주소·회원 정보는
             저장하지 않습니다. 서버로는 요약이 속한 구간(시간대·체류 시간 구간 등)이 바뀐 사실만 보내 날짜별 합계에 더하고 방문별
             기록으로 보관하지 않으며, 브라우저의 요약은 다음 방문 때(7일이 지난 것은 반영하지 않음) 새 방문의 요약으로
-            바뀝니다. 브라우저 저장소를 삭제하거나
+            바뀝니다. 개인정보처리방침 변경 안내를 닫으면 닫은 안내의 시행일만 같은 브라우저 저장소에 저장합니다. 브라우저 저장소를 삭제하거나
             차단해도 서비스 이용에는 영향이 없습니다.
           </li>
         </ul>
@@ -348,15 +350,15 @@ const SECTIONS: Section[] = [
   },
   {
     title: "11. 시행일 및 변경",
+    id: "changes",
     body: (
       <>
         이 개인정보처리방침은 {formatEffectiveDate(PRIVACY_POLICY_EFFECTIVE_DATE)}부터 시행합니다. 이번 변경으로 서비스 이용 통계
-        작성 목적(위 3조)과 로그인 회원의 이용 일자 기록(위 1조·8조), 그 기록을 회원탈퇴 시 삭제하는 기준(위 7조)을 안내하고
-        개인정보 수집·이용 동의 내용에 포함했으며, 기존 회원은 시행일 이후 처음 로그인할 때 변경된 내용을 확인하고 다시
-        동의해야 회원 기능을 이용할 수 있습니다.
+        작성 목적(위 3조)과 로그인 회원의 이용 일자 기록(위 1조·8조), 그 기록의 보관기간과 회원탈퇴 시 삭제 기준(위 7조·8조)을
+        안내합니다. 이번 변경은 서비스 안의 변경 안내로 알리며, 기존 회원에게 별도의 재동의를 요청하지 않습니다.
         <span className="mt-2 block">
           2026년 10월 14일: 이름, 소속(학과·단과대학)을 필수 수집 항목에 추가했습니다(위 1조). 기존 회원은 그 시행일 이후 처음
-          로그인할 때 다시 동의했습니다.
+          로그인할 때 다시 동의하도록 했습니다.
         </span>
         <span className="mt-2 block">
           2026년 10월 15일: 8조에 방문 통계용 브라우저 저장소 안내를 추가했습니다. 수집하는 개인정보 항목과 이용
@@ -375,7 +377,7 @@ const SECTIONS: Section[] = [
         <span className="mt-2 block">
           {formatEffectiveDate(PRIVACY_POLICY_EFFECTIVE_DATE)}: 1조에 이용 일자 기록을, 3조에 이용 통계 작성 목적을 추가하고, 7조에
           회원탈퇴 시 이용 일자 기록 삭제를, 8조에 이용 일자 기록과 시간대별 로그인·이용 합계를 어떻게 저장·대조·보관하는지
-          안내했습니다. 동의 내용이 바뀌어 다시 동의가 필요합니다.
+          안내했습니다. 변경 안내로 시행하며 별도의 재동의는 요청하지 않습니다.
         </span>
       </>
     ),
@@ -394,7 +396,8 @@ export default function PrivacyPolicyPage() {
         {SECTIONS.map((section, i) => (
           <section
             key={section.title}
-            className={`flex flex-col gap-1.5 ${i > 0 ? "border-t border-border pt-5" : ""}`}
+            id={section.id}
+            className={`flex scroll-mt-24 flex-col gap-1.5 ${i > 0 ? "border-t border-border pt-5" : ""}`}
           >
             <h2 className="font-semibold">{section.title}</h2>
             <div className="text-muted-foreground">{section.body}</div>

@@ -22,7 +22,7 @@ const {
   syncIdentityFromHints,
   viewIdentityForReport,
 } = await import("./service");
-const { CURRENT_IDENTITY_CONSENT_VERSION } = await import("@/lib/auth/terms");
+const { ACCEPTED_IDENTITY_CONSENT_VERSIONS, CURRENT_IDENTITY_CONSENT_VERSION } = await import("@/lib/auth/terms");
 
 const admin = { id: 9, isAdmin: true };
 const REASON = "습득물 반환 분쟁 확인";
@@ -57,7 +57,7 @@ describe("own 실명·학과", () => {
     expect(await hasIdentityInfo(5)).toBe(false);
     expect(await hasIdentityInfo(5)).toBe(true);
     expect(userIdentityInfo.count).toHaveBeenCalledWith({
-      where: { userId: 5, user: { identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION } },
+      where: { userId: 5, user: { identityConsentVersion: { in: [...ACCEPTED_IDENTITY_CONSENT_VERSIONS] } } },
     });
   });
 });
@@ -162,6 +162,14 @@ describe("automatic collection", () => {
     expect(await syncIdentityFromHints(consented, { ...fromDisplayName, departmentSource: "google_people" })).toBe("skipped");
     expect(userIdentityInfo.findUnique).not.toHaveBeenCalled();
     expect(userIdentityInfo.create).not.toHaveBeenCalled();
+  });
+
+  // A consent on another accepted version (Preview's 2026-10-16) still
+  // collects, and the member's own version is kept, never re-stamped.
+  it("keeps the version the member consented to", async () => {
+    userIdentityInfo.findUnique.mockResolvedValueOnce(null);
+    expect(await syncIdentityFromHints({ id: 5, identityConsentVersion: "2026-10-16" }, fromDisplayName, now)).toBe("created");
+    expect(userIdentityInfo.create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: 5, consentVersion: "2026-10-16" }) });
   });
 
   it("creates the values from the display name the first time", async () => {

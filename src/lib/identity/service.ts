@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { CURRENT_IDENTITY_CONSENT_VERSION } from "@/lib/auth/terms";
+import { ACCEPTED_IDENTITY_CONSENT_VERSIONS, CURRENT_IDENTITY_CONSENT_VERSION, isAcceptedIdentityConsentVersion } from "@/lib/auth/terms";
 import { resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "@/lib/report/targets";
 import type { User } from "@/generated/prisma/client";
 import type { IdentityHints, IdentityValueSource } from "./googleHints";
@@ -31,13 +31,13 @@ export async function getOwnIdentityInfo(userId: number): Promise<OwnIdentityInf
 export async function hasIdentityInfo(userId: number): Promise<boolean> {
   return (
     (await prisma.userIdentityInfo.count({
-      where: { userId, user: { identityConsentVersion: CURRENT_IDENTITY_CONSENT_VERSION } },
+      where: { userId, user: { identityConsentVersion: { in: [...ACCEPTED_IDENTITY_CONSENT_VERSIONS] } } },
     })) > 0
   );
 }
 
 export function hasCurrentIdentityConsent(user: { identityConsentVersion: string | null }): boolean {
-  return user.identityConsentVersion === CURRENT_IDENTITY_CONSENT_VERSION;
+  return isAcceptedIdentityConsentVersion(user.identityConsentVersion);
 }
 
 export type IdentitySyncResult = "created" | "updated" | "unchanged" | "skipped";
@@ -68,7 +68,8 @@ export async function syncIdentityFromHints(
     department: hints.department,
     realNameSource: "google_display_name",
     departmentSource: "google_display_name",
-    consentVersion: CURRENT_IDENTITY_CONSENT_VERSION,
+    // the version this member consented to (accepted above), never re-stamped
+    consentVersion: user.identityConsentVersion ?? CURRENT_IDENTITY_CONSENT_VERSION,
     consentedAt: now,
   };
   if (!current) {

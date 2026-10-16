@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/auth";
 import { hasOngoingExternalAccess } from "@/lib/auth/access";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
-import { CURRENT_IDENTITY_CONSENT_VERSION, CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
+import { CURRENT_TERMS_VERSION, isAcceptedIdentityConsentVersion, isAcceptedPrivacyVersion } from "@/lib/auth/terms";
 import { prisma } from "@/lib/db/prisma";
 import type { User } from "@/generated/prisma/client";
 
@@ -162,10 +162,10 @@ export function hasRequiredConsents(
 ): boolean {
   return (
     user.privacyConsentAt !== null &&
-    user.privacyConsentVersion === CURRENT_PRIVACY_VERSION &&
+    isAcceptedPrivacyVersion(user.privacyConsentVersion) &&
     user.termsAcceptedAt !== null &&
     user.termsVersion === CURRENT_TERMS_VERSION &&
-    user.identityConsentVersion === CURRENT_IDENTITY_CONSENT_VERSION
+    isAcceptedIdentityConsentVersion(user.identityConsentVersion)
   );
 }
 

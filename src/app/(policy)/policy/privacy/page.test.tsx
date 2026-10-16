@@ -31,9 +31,11 @@ describe("개인정보처리방침: 이용 통계", () => {
     expect(section(3)).toContain("지난 기간의 활성 회원 수·재방문 통계도");
   });
 
-  it("dates the change by the consent version it asks for (§11)", () => {
+  it("dates the change by its own 시행일 and announces it without re-consent (§11)", () => {
     expect(section(11)).toContain(`${formatEffectiveDate(PRIVACY_POLICY_EFFECTIVE_DATE)}부터 시행합니다`);
-    expect(section(11)).toContain("동의 내용이 바뀌어 다시 동의가 필요합니다");
+    expect(section(11)).toContain("기존 회원에게 별도의 재동의를 요청하지 않습니다");
+    expect(section(11)).not.toContain("다시 동의해야 회원 기능을");
+    expect(text).toContain("변경 안내를 닫으면 닫은 안내의 시행일만"); // §8: the notice's own storage
   });
 
   it("never calls the re-linkable marks anonymous (§8)", () => {

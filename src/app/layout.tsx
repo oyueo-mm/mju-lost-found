@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { themeInitScript } from "@/lib/theme/constants";
 import { boardViewInitScript } from "@/lib/boardView";
+import { privacyNoticeInitScript } from "@/lib/policy/privacyNotice";
 import { LOCALE_HTML_LANG } from "@/lib/i18n/config";
 import { getLocale, getTranslator } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/messages";
@@ -102,6 +103,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         {/* 게시판 보기 방식(목록형/격자형): same reason -- the saved phone
             board layout applies before first paint (lib/boardView.ts). */}
         <script dangerouslySetInnerHTML={{ __html: boardViewInitScript() }} />
+        {/* 개인정보처리방침 변경 안내: a bar closed for this 시행일 stays hidden from the first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: privacyNoticeInitScript() }} />
       </head>
       <body className="min-h-full flex flex-col">
         <I18nProvider locale={locale} messages={getDictionary(locale)}>
