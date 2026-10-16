@@ -15,12 +15,14 @@ import {
   type Report,
 } from "./report";
 import { describeRoute } from "./apiRoutes";
+import { NEW_MEMBER_DAYS, RETURN_WINDOW_DAYS, type UserReport } from "./userReport";
 import { DURATION_BUCKETS, DURATION_LABELS, PAGES_BUCKETS, PAGES_LABELS } from "./flow";
 import { DEVICE_KINDS, DEVICE_LABELS, PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "./visits";
 import { buildCsv, buildXlsx, columnName, type Cell, type Sheet } from "./xlsx";
 
 // 운영 통계 내보내기: the same Report the dashboard shows, laid out as the
-// seven sheets of the Excel file or one of seven CSV files. Aggregates only --
+// eight sheets of the Excel file or one of eight CSV files (the last one,
+// 사용자 통계, from a UserReport of the same period). Aggregates only --
 // no names, e-mails, member ids, IPs, search text or audit logs exist in a
 // Report to begin with.
 
@@ -58,7 +60,11 @@ function coverageNote(coverage: Coverage, key: MetricKey | VisitSeriesKey): stri
   return coverage === "none" ? `미측정(${sinceLabel(source)}부터 집계)` : `${sinceLabel(source)} 이후만 집계(이전은 미측정)`;
 }
 
-export function datasetsOf(report: Report): Dataset[] {
+export function datasetsOf(report: Report, users?: UserReport): Dataset[] {
+  return [...opsDatasets(report), ...(users ? [userDataset(users)] : [])];
+}
+
+function opsDatasets(report: Report): Dataset[] {
   const { totals, totalCoverage: cov, buckets } = report;
   const at = (key: MetricKey, i: number) => report.core[key][i];
   const vat = (key: VisitSeriesKey, i: number) => report.visit[key][i];
@@ -366,6 +372,93 @@ export const FLOW_CAVEATS = [
   "개인별 이동 기록이나 정확한 접속·종료 시각은 저장하지 않고, 시간대·구간별 익명 합계만 저장합니다. 관리자 방문은 제외됩니다.",
 ];
 
+export const USER_NOTES = [
+  "가입 = 처음 Google 로그인으로 계정이 만들어진 시각(User.created_at, KST 변환). 동의·닉네임 완료 시각은 따로 기록되지 않아(재동의 때 덮어씀) 현재 완료 여부만 셉니다. 가입 수에는 관리자·탈퇴 회원도 포함됩니다.",
+  "로그인 완료 = Google 로그인을 마친 횟수(시간대별, 관리자 제외). 로그인 상태가 유지되는 동안은 다시 세지 않으므로 이용량이 아닙니다.",
+  "활동 = 그날 로그인한 상태로 사이트를 이용한 회원(하루 한 번, 방문 도중 로그인해도 포함, 관리자 제외). 기간·DAU·WAU·MAU는 서로 다른 회원 수입니다.",
+  "시간대별 로그인 회원 이용량 = 로그인 상태에서 본 화면 수(각 화면을 볼 때의 로그인 여부 기준). 시간대별로 서로 다른 회원 수는 저장하지 않습니다.",
+  `신규 회원 = 가입한 날부터 ${NEW_MEMBER_DAYS}일 이내. 재방문 = 가입 다음 날부터 ${RETURN_WINDOW_DAYS}일 안에 다시 활동(그 ${RETURN_WINDOW_DAYS}일이 다 지난 가입자만 산출).`,
+  "회원 단위 비율은 실제 기록을 회원별로 대조한 값이며, 합계로 추정한 전환율이 아닙니다. 회원별 검색 이용은 기록하지 않아 제공하지 않습니다.",
+  "실명·이메일·학과·학번·회원 식별자·회원별 접속 기록은 포함하지 않습니다. 모든 날짜·시간은 한국 시간(KST)입니다.",
+];
+
+function userDataset(u: UserReport): Dataset {
+  const a = u.activity;
+  const startOf = (b: string) => bucketSpan(u.range, b).from;
+  const period = { label: u.range.unit === "day" ? "날짜" : u.range.unit === "week" ? "주(시작일)" : "월", kind: "period" as const };
+  const measured = (v: number | null): Value => v;
+  const ratio = (part: number | null, whole: number | null): Value => (part === null || !whole ? null : part / whole);
+  const dows = ["월", "화", "수", "목", "금", "토", "일"];
+  return {
+    key: "users",
+    name: "사용자 통계",
+    widths: [30, 16, 16, 12, 14, 16, 16],
+    tables: [
+      {
+        title: "요약",
+        columns: [{ label: "항목", kind: "text" }, { label: "값", kind: "int" }, { label: "기준", kind: "text" }],
+        rows: [
+          ["가입 회원 (현재, 탈퇴 제외)", u.accounts.current, `누적 ${u.accounts.total} · 탈퇴 ${u.accounts.withdrawn}`],
+          ["동의·닉네임 완료 회원", u.accounts.onboarded, "현재 기준"],
+          ["동의 미완료·재동의 필요 회원", u.accounts.notOnboarded, "현재 기준"],
+          ["기간 신규 가입", u.signups.inRange, "계정 생성 시각 기준"],
+          ["기간 탈퇴", u.withdrawals.inRange, "탈퇴 처리 시각 기준"],
+          ["기간 활성 회원 (서로 다른 회원)", measured(a.unique), a.coverage === "partial" ? `${a.since}부터 집계` : ""],
+          ["DAU", measured(a.dau), a.refDay ? `${a.refDay} 기준` : "미측정"],
+          ["WAU", measured(a.wau), "기준일 포함 7일"],
+          ["MAU", measured(a.mau), "기준일 포함 30일"],
+          ["2일 이상 활동한 회원", a.repeat ? a.repeat.multiDay : null, a.repeat ? `기간 활성 ${a.repeat.active}명 중` : ""],
+          [`가입 후 ${RETURN_WINDOW_DAYS}일 내 재방문`, a.retention && a.retention.eligible ? a.retention.returned : null, a.retention ? `산출 가능 가입자 ${a.retention.eligible}명 중 (제외 ${a.retention.excluded}명)` : "이 기간 가입자 없음"],
+          ["가장 많이 가입한 날", u.signups.peakDay ? u.signups.peakDay.n : null, u.signups.peakDay?.day ?? "-"],
+          ["가장 많이 가입한 요일", u.signups.peakDow ? u.signups.peakDow.n : null, u.signups.peakDow ? dows[u.signups.peakDow.dow] : "-"],
+          ["가장 많이 가입한 시간대", u.signups.peakHour ? u.signups.peakHour.n : null, u.signups.peakHour ? `${u.signups.peakHour.hour}시` : "-"],
+        ],
+      },
+      {
+        title: "기간별 가입·탈퇴·활성 회원",
+        columns: [
+          period,
+          { label: "신규 가입", kind: "int" },
+          { label: "누적 가입(탈퇴 포함)", kind: "int" },
+          { label: "탈퇴", kind: "int" },
+          { label: "활성 회원", kind: "int" },
+          { label: `활성: 신규(${NEW_MEMBER_DAYS}일 이내)`, kind: "int" },
+          { label: "활성: 기존 회원", kind: "int" },
+        ],
+        rows: u.buckets.map((b, i) => [startOf(b), u.signups.perBucket[i], u.signups.cumulative[i], u.withdrawals.perBucket[i], a.perBucket[i], a.newPerBucket[i], a.existingPerBucket[i]]),
+        total: ["합계", u.signups.inRange, null, u.withdrawals.inRange, a.unique, null, null],
+      },
+      {
+        title: "시간대별 (KST)",
+        columns: [{ label: "시간대", kind: "text" }, { label: "가입", kind: "int" }, { label: "로그인 회원 페이지뷰", kind: "int" }, { label: "로그인 완료", kind: "int" }],
+        rows: u.signups.byHour.map((n, h) => [`${String(h).padStart(2, "0")}시`, n, u.hourly.memberPv ? u.hourly.memberPv[h] : null, u.hourly.logins ? u.hourly.logins[h] : null]),
+      },
+      {
+        title: "요일별",
+        columns: [{ label: "요일", kind: "text" }, { label: "가입", kind: "int" }, { label: "활성 회원-일 합계", kind: "int" }, { label: "측정 일수", kind: "int" }, { label: "하루 평균 활성 회원", kind: "text" }],
+        rows: dows.map((d, i) => [d, u.signups.byDow[i], a.coverage === "none" ? null : a.memberDaysByDow[i], a.daysByDow[i], a.daysByDow[i] ? (a.memberDaysByDow[i] / a.daysByDow[i]).toFixed(1) : "-"]),
+      },
+      {
+        title: "회원 참여 (관리자 제외)",
+        columns: [{ label: "항목", kind: "text" }, { label: "회원 수", kind: "int" }, { label: "분모", kind: "int" }, { label: "비율", kind: "pct" }],
+        rows: [
+          ["기간에 게시글을 등록한 회원", u.participation.posters, null, null],
+          ["기간에 채팅 메시지를 보낸 회원", u.participation.chatters, null, null],
+          ["활성 회원 중 게시글 등록", u.participation.activeWithPost, a.unique, ratio(u.participation.activeWithPost, a.unique)],
+          ["활성 회원 중 채팅 참여", u.participation.activeWithChat, a.unique, ratio(u.participation.activeWithChat, a.unique)],
+          ["기간 신규 가입 회원 중 활동(로그인 상태 이용)", u.participation.newActive, u.participation.newSignups, ratio(u.participation.newActive, u.participation.newSignups)],
+          ["기간 신규 가입 회원 중 게시글 등록(조회 시점까지)", u.participation.newPosted, u.participation.newSignups, ratio(u.participation.newPosted, u.participation.newSignups)],
+          ["기간 신규 가입 회원 중 채팅(조회 시점까지)", u.participation.newChatted, u.participation.newSignups, ratio(u.participation.newChatted, u.participation.newSignups)],
+        ],
+      },
+    ],
+    notes: [
+      ...USER_NOTES,
+      `활성 회원은 ${a.since}부터, 시간대별 로그인 회원 페이지뷰는 ${u.hourly.memberPvSince ?? "수집 전"}부터, 로그인 완료는 ${u.hourly.loginSince ?? "수집 전"}부터 집계되며 그 전은 미측정입니다.`,
+    ],
+  };
+}
+
 function flowDataset(report: Report): Dataset {
   const flow = report.flow;
   const flowOn = flow.coverage !== "none";
@@ -508,14 +601,15 @@ export function toSheets(report: Report, label?: string, datasets = datasetsOf(r
   });
 }
 
-export function toXlsx(report: Report, label?: string): Buffer {
-  return buildXlsx(toSheets(report, label), { title: "MJU Find 운영 통계", createdAt: new Date() });
+export function toXlsx(report: Report, label?: string, users?: UserReport): Buffer {
+  return buildXlsx(toSheets(report, label, datasetsOf(report, users)), { title: "MJU Find 운영 통계", createdAt: new Date() });
 }
 
 // One CSV per data kind: "#" lines (service, period, time, caveats) on top
 // -- skipped by most tools with a comment option -- then plain tables.
-export function toCsv(report: Report, key: DatasetKey, label?: string): string {
-  const ds = datasetsOf(report).find((d) => d.key === key)!;
+export function toCsv(report: Report, key: DatasetKey, label?: string, users?: UserReport): string {
+  const ds = datasetsOf(report, users).find((d) => d.key === key);
+  if (!ds) throw new Error(`no data for ${key}`);
   // "#" lines are written as they are (never quoted), so a reader's comment
   // option skips each one whole even when it holds a comma.
   const meta = [

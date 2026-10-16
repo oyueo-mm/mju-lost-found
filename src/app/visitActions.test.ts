@@ -107,7 +107,8 @@ describe("방문 통계 server action", () => {
 
     // not opted out: counted as usual, and the reply says "not an admin"
     expect(await recordVisitsAction([{ kind: "home", sessionStart: false }])).toEqual({ admin: false });
-    expect(Object.fromEntries(counts)).toEqual({ "visit.pv.member": 1, "visit.page.home.member": 1, "visit.device.mobile.pv": 1 });
+    expect(Object.fromEntries([...counts].filter(([k]) => !k.startsWith("visit.member.hour.")))).toEqual({ "visit.pv.member": 1, "visit.page.home.member": 1, "visit.device.mobile.pv": 1 });
+    expect([...counts.keys()].filter((k) => k.startsWith("visit.member.hour."))).toHaveLength(1); // 사용자 통계: by hour
   });
 
   it("caps one client at 60 events a minute, without affecting another client", async () => {

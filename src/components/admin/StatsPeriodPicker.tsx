@@ -22,19 +22,23 @@ export function StatsPeriodPicker({
   to,
   today,
   openByDefault,
+  tab = "ops",
 }: {
   active: PeriodPreset;
   from: string;
   to: string;
   today: string;
   openByDefault: boolean;
+  // keeps the 운영 / 사용자 통계 tab when the period changes
+  tab?: "ops" | "users";
 }) {
+  const tabQuery = tab === "users" ? "&tab=users" : "";
   const [open, setOpen] = useState(openByDefault);
   return (
     <div className="flex flex-col gap-2">
       <nav className="flex flex-wrap gap-2" aria-label="조회 기간">
         {PERIOD_PRESETS.filter((p) => p.key !== "custom").map((p) => (
-          <Link key={p.key} href={`/admin/stats?period=${p.key}`} aria-current={active === p.key ? "page" : undefined} className={chip(active === p.key)}>
+          <Link key={p.key} href={`/admin/stats?period=${p.key}${tabQuery}`} aria-current={active === p.key ? "page" : undefined} className={chip(active === p.key)}>
             {p.label}
           </Link>
         ))}
@@ -52,6 +56,7 @@ export function StatsPeriodPicker({
       {open && (
         <form id="stats-custom-period" action="/admin/stats" className="flex flex-wrap items-end gap-2 text-xs text-muted-foreground">
           <input type="hidden" name="period" value="custom" />
+          {tab === "users" && <input type="hidden" name="tab" value="users" />}
           <label className="flex flex-col gap-1">
             시작일
             <input type="date" name="from" required max={today} defaultValue={from} className={field} />

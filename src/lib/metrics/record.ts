@@ -131,6 +131,13 @@ async function countByAudience(metric: string): Promise<void> {
   }
 }
 
+// 사용자 통계: a completed Google sign-in, counted by KST hour only
+// (auth.login.hour.<HH>; no user id). Admins are left out by the caller.
+export function recordSignIn(at: Date = new Date()): void {
+  const hour = String(new Date(at.getTime() + KST_OFFSET_MS).getUTCHours()).padStart(2, "0");
+  addDailyCount(`auth.login.hour.${hour}`, 1, kstDay(at));
+}
+
 // Active member: one row per member per KST day, keyed by an HMAC of the id.
 export function activityActor(userId: number, secret = process.env.AUTH_SECRET ?? ""): string {
   return createHmac("sha256", `activity-day:v1:${secret}`).update(String(userId)).digest("base64url").slice(0, 22);

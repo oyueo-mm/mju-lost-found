@@ -177,6 +177,33 @@ describe("운영 통계 내보내기", () => {
     expect(toCsv(fakeReport(), "flow")).toContain("# MJU Find 운영 통계 - 방문 시간·이탈");
   });
 
+  it("adds 사용자 통계 when a UserReport is given, with its numbers and definitions", async () => {
+    const users = {
+      range: { from: "2026-10-14", until: "2026-10-17", unit: "day" },
+      buckets: ["2026-10-14", "2026-10-15", "2026-10-16"],
+      generatedAt: "2026-10-16 09:30",
+      today: "2026-10-16",
+      accounts: { total: 6, current: 5, withdrawn: 1, onboarded: 4, notOnboarded: 1, admins: 1, suspended: 0, external: 0 },
+      signups: { inRange: 3, perBucket: [1, 2, 0], cumulative: [4, 6, 6], byHour: Array.from({ length: 24 }, (_, h) => (h === 21 ? 3 : 0)), byDow: [0, 0, 1, 2, 0, 0, 0], peakDay: { day: "2026-10-15", n: 2 }, peakDow: { dow: 3, n: 2 }, peakHour: { hour: 21, n: 3 } },
+      withdrawals: { inRange: 1, perBucket: [0, 0, 1] },
+      activity: { since: "2026-10-15 03:35", coverage: "partial", perBucketCoverage: ["none", "partial", "full"], refDay: "2026-10-16", dau: 2, wau: 3, mau: 3, unique: 3, perBucket: [null, 2, 2], newPerBucket: [null, 1, 1], existingPerBucket: [null, 1, 1], memberDaysByDow: [0, 0, 0, 2, 2, 0, 0], daysByDow: [0, 0, 0, 1, 1, 0, 0], repeat: { active: 3, multiDay: 1 }, retention: { cohort: 3, eligible: 0, returned: 0, excluded: 3 } },
+      hourly: { memberPvSince: null, memberPvCoverage: "none", memberPv: null, loginSince: null, loginCoverage: "none", logins: null },
+      participation: { posters: 2, chatters: 1, activeWithPost: 1, activeWithChat: 1, newSignups: 3, newActive: 2, newPosted: 1, newChatted: 0 },
+    } as unknown as import("./userReport").UserReport;
+    const sets = datasetsOf(fakeReport(), users);
+    expect(sets.map((s) => s.name).at(-1)).toBe("사용자 통계");
+    const u = sets.at(-1)!;
+    const summary = Object.fromEntries(u.tables[0].rows.map((r) => [r[0], r[1]]));
+    expect(summary["기간 신규 가입"]).toBe(3);
+    expect(summary["MAU"]).toBe(3);
+    expect(u.tables[1].rows[0]).toEqual(["2026-10-14", 1, 4, 0, null, null, null]); // activity 미측정 before it began
+    expect(u.tables[2].rows[21]).toEqual(["21시", 3, null, null]); // hourly activity not collected yet
+    expect(u.tables[4].rows[2]).toEqual(["활성 회원 중 게시글 등록", 1, 3, 1 / 3]);
+    expect(u.notes.join(" ")).toContain("실명·이메일·학과·학번");
+    expect(toCsv(fakeReport(), "users", undefined, users)).toContain("# MJU Find 운영 통계 - 사용자 통계");
+    expect(datasetsOf(fakeReport()).some((d) => d.key === "users")).toBe(false);
+  });
+
   it("states the required caveats in every file", () => {
     const text = CAVEATS.join("\n");
     expect(text).toContain("고유 방문자 수가 아닙니다");

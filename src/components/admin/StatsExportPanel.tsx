@@ -81,7 +81,7 @@ export function StatsExportPanel({ preset, from, to, periodLabel }: { preset: Pe
       )}
       <p className="leading-relaxed">
         {format === "xlsx"
-          ? "운영 요약·방문 통계·유입 분석·서비스 이용·완료 처리·서버 운영·방문 시간·이탈 7개 시트로 저장됩니다."
+          ? "운영 요약·방문 통계·유입 분석·서비스 이용·완료 처리·서버 운영·방문 시간·이탈·사용자 통계 8개 시트로 저장됩니다."
           : "CSV는 시트가 없어 고른 데이터 1종류만 저장됩니다. 맨 위 # 줄은 기간·주의사항입니다."}{" "}
         개인정보(실명·이메일·회원 식별자·IP·검색어)는 포함되지 않습니다.
       </p>

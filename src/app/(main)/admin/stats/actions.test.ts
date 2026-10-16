@@ -6,6 +6,8 @@ vi.mock("@/lib/auth/session", () => ({ requireAdmin }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: {} }));
 vi.mock("@/lib/metrics/record", () => ({ kstDay: () => "2026-10-16" }));
 vi.mock("@/lib/metrics/report", async (importOriginal) => ({ ...(await importOriginal<object>()), loadReport }));
+const loadUserReport = vi.fn(async (range: unknown) => ({ users: true, range }));
+vi.mock("@/lib/metrics/userReport", async (importOriginal) => ({ ...(await importOriginal<object>()), loadUserReport }));
 const toXlsx = vi.fn(() => Buffer.from("xlsx"));
 const toCsv = vi.fn(() => "csv");
 vi.mock("@/lib/metrics/export", async (importOriginal) => ({ ...(await importOriginal<object>()), toXlsx, toCsv }));
@@ -28,11 +30,12 @@ describe("운영 통계 내보내기 action", () => {
     const xlsx = await exportStatsAction({ format: "xlsx", preset: "week" });
     expect(loadReport).toHaveBeenLastCalledWith({ from: "2026-10-12", until: "2026-10-17", unit: "day" });
     expect(xlsx).toMatchObject({ ok: true, filename: "mju-find-stats_20261012-20261016.xlsx", base64: Buffer.from("xlsx").toString("base64") });
-    expect(toXlsx).toHaveBeenLastCalledWith(expect.anything(), "이번 주 (2026-10-12 ~ 2026-10-16)");
+    expect(toXlsx).toHaveBeenLastCalledWith(expect.anything(), "이번 주 (2026-10-12 ~ 2026-10-16)", expect.objectContaining({ users: true }));
+    expect(loadUserReport).toHaveBeenLastCalledWith({ from: "2026-10-12", until: "2026-10-17", unit: "day" });
 
     await exportStatsAction({ format: "csv", preset: "year", dataset: "visits" });
     expect(loadReport).toHaveBeenLastCalledWith({ from: "2026-01-01", until: "2026-10-17", unit: "month" });
-    expect(toCsv).toHaveBeenLastCalledWith(expect.anything(), "visits", "올해 (2026-01-01 ~ 2026-10-16)");
+    expect(toCsv).toHaveBeenLastCalledWith(expect.anything(), "visits", "올해 (2026-01-01 ~ 2026-10-16)", expect.objectContaining({ users: true }));
 
     const custom = await exportStatsAction({ format: "csv", preset: "custom", from: "2026-10-01", to: "2026-10-15", dataset: "server" });
     expect(loadReport).toHaveBeenLastCalledWith({ from: "2026-10-01", until: "2026-10-16", unit: "day" });
@@ -47,7 +50,7 @@ describe("운영 통계 내보내기 action", () => {
       { format: "xlsx", preset: "custom", from: "2025-01-01", to: "2026-10-01" },
       { format: "pdf", preset: "today" },
       { format: "xlsx", preset: "decade" },
-      { format: "csv", preset: "today", dataset: "users" },
+      { format: "csv", preset: "today", dataset: "members" },
       { format: "xlsx", preset: "custom", from: "2026-13-01", to: "2026-10-01" },
     ] as const) {
       const result = await exportStatsAction(input as never);

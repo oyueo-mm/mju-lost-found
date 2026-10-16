@@ -4,6 +4,7 @@ import Google from "next-auth/providers/google";
 import { decideSignIn } from "@/lib/auth/access";
 import { CURRENT_IDENTITY_CONSENT_VERSION } from "@/lib/auth/terms";
 import { resolveSignIn } from "@/lib/auth/user";
+import { recordSignIn } from "@/lib/metrics/record";
 import {
   describeSignInIdentity,
   fetchDepartmentHint,
@@ -116,6 +117,8 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           delete token.rejoinIdentityId;
           token.userId = resolved.user.id;
           token.nickname = resolved.user.nickname;
+          // 사용자 통계: one anonymous count per completed sign-in, by hour.
+          if (!resolved.user.isAdmin) recordSignIn();
         }
         if (resolved.kind === "held") {
           delete token.identityHints;

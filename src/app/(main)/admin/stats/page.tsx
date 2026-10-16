@@ -28,6 +28,8 @@ import { BarList, GroupedBarChart, Meter, Sparkline, StackedBarChart } from "@/c
 import { DURATION_BUCKETS, DURATION_LABELS, PAGES_BUCKETS, PAGES_LABELS } from "@/lib/metrics/flow";
 import { StatsExportPanel } from "@/components/admin/StatsExportPanel";
 import { StatsPeriodPicker } from "@/components/admin/StatsPeriodPicker";
+import { UserStatsView } from "@/components/admin/UserStatsView";
+import { loadUserReport } from "@/lib/metrics/userReport";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
 import { AlertIcon, ChevronRightIcon, InfoIcon } from "@/components/icons";
 
@@ -168,7 +170,7 @@ function SeriesTable({ report, columns }: { report: Report; columns: { label: st
 export default async function AdminStatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string }>;
 }) {
   await requireAdmin();
   const params = await searchParams;
@@ -179,6 +181,71 @@ export default async function AdminStatsPage({
   const period = "error" in asked ? (resolvePeriod({ preset: "month" }, today) as Exclude<typeof asked, { error: string }>) : asked;
   const periodError = "error" in asked ? asked.error : null;
   const unit = period.range.unit;
+  const tab: "ops" | "users" = params.tab === "users" ? "users" : "ops";
+  const periodQuery =
+    period.selection.preset === "custom"
+      ? `period=custom&from=${period.selection.from}&to=${period.selection.to}`
+      : `period=${period.selection.preset}`;
+  const tabClass = (active: boolean) =>
+    `rounded-t-lg border-b-2 px-3 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+      active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+    }`;
+
+  const header = (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <Link href="/admin" className="text-xs text-muted-foreground hover:text-foreground">
+          ← 관리자
+        </Link>
+        <h1 className="text-xl font-semibold text-foreground">운영 통계</h1>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {period.label} · {UNIT_TEXT[unit]} 집계 · 한국 시간 기준(진행 중인 기간은 오늘 현재까지) · 개인정보와 검색어 원문은 수집하지 않습니다.
+        </p>
+      </div>
+      <nav className="flex gap-1 border-b border-border" aria-label="통계 종류">
+        <Link href={`/admin/stats?${periodQuery}`} aria-current={tab === "ops" ? "page" : undefined} className={tabClass(tab === "ops")}>
+          운영 통계
+        </Link>
+        <Link href={`/admin/stats?tab=users&${periodQuery}`} aria-current={tab === "users" ? "page" : undefined} className={tabClass(tab === "users")}>
+          사용자 통계
+        </Link>
+      </nav>
+      <div className="flex flex-col gap-2">
+        <StatsPeriodPicker
+          active={period.selection.preset}
+          from={period.selection.from ?? period.range.from}
+          to={period.selection.to ?? today}
+          today={today}
+          openByDefault={period.selection.preset === "custom" || !!periodError}
+          tab={tab}
+        />
+        {periodError && (
+          <p role="alert" className="text-xs text-destructive">
+            {periodError} 이번 달 기준으로 보여 줍니다.
+          </p>
+        )}
+      </div>
+      <details className="group rounded-card border border-border bg-card">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-card px-4 py-3 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+          운영·사용자 통계 내보내기 (Excel · CSV)
+          <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
+        </summary>
+        <div className="border-t border-border px-4 py-3">
+          <StatsExportPanel preset={period.selection.preset} from={period.selection.from} to={period.selection.to} periodLabel={period.label} />
+        </div>
+      </details>
+    </div>
+  );
+
+  if (tab === "users") {
+    const users = await loadUserReport(period.range);
+    return (
+      <div className="flex flex-col gap-6">
+        {header}
+        <UserStatsView report={users} />
+      </div>
+    );
+  }
 
   const report = await loadReport(period.range);
   const { core, visit, totals, totalCoverage: cov } = report;
@@ -220,38 +287,7 @@ export default async function AdminStatsPage({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1">
-          <Link href="/admin" className="text-xs text-muted-foreground hover:text-foreground">
-            ← 관리자
-          </Link>
-          <h1 className="text-xl font-semibold text-foreground">운영 통계</h1>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {period.label} · {UNIT_TEXT[unit]} 집계 · 한국 시간 기준(진행 중인 기간은 오늘 현재까지) · 개인정보와 검색어 원문은 수집하지 않습니다.
-          </p>
-        </div>
-        <div className="flex flex-col gap-2">
-          <StatsPeriodPicker
-            active={period.selection.preset}
-            from={period.selection.from ?? period.range.from}
-            to={period.selection.to ?? today}
-            today={today}
-            openByDefault={period.selection.preset === "custom" || !!periodError}
-          />
-          {periodError && (
-            <p role="alert" className="text-xs text-destructive">
-              {periodError} 이번 달 기준으로 보여 줍니다.
-            </p>
-          )}
-        </div>
-        <details className="group rounded-card border border-border bg-card">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-card px-4 py-3 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-            운영 통계 내보내기 (Excel · CSV)
-            <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
-          </summary>
-          <div className="border-t border-border px-4 py-3">
-            <StatsExportPanel preset={period.selection.preset} from={period.selection.from} to={period.selection.to} periodLabel={period.label} />
-          </div>
-        </details>
+        {header}
         {hasUnmeasured && (
           <p className="flex gap-2 rounded-card border border-border bg-muted/50 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
             <InfoIcon className="mt-0.5 size-4 shrink-0" />
