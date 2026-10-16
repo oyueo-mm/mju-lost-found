@@ -53,11 +53,12 @@
 
   /* 운영 통계 chart series (StatsCharts): fixed, not accent-driven, so a
      green/amber accent never collides with a series hue. Blue / orange /
-     aqua validated as a categorical set (CVD-separated, light and dark);
+     aqua validated as a categorical set (CVD-separated, light and dark,
+     each >= 3:1 on its card surface);
      chart-4 is the neutral "기타". */
   --chart-1: #006ec7;
   --chart-2: #eb6834;
-  --chart-3: #1baf7a;
+  --chart-3: #16a173;
   --chart-4: #9ca3af;
 
   --radius: 0.875rem;

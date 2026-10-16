@@ -401,7 +401,7 @@ export default async function AdminStatsPage({
           <div className="flex flex-col gap-2">
             <h3 className="text-xs font-semibold text-foreground">UTM (홍보 링크 태그, 방문 세션)</h3>
             {report.breakdown.utmSources.length === 0 && report.breakdown.utmCampaigns.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
                 {cov.sessionAnon === "none"
                   ? "미측정 기간입니다."
                   : "아직 기록이 없습니다. 홍보 링크에 ?utm_source=everytime&utm_campaign=launch 처럼 붙이면 캠페인별로 집계됩니다."}

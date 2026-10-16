@@ -43,6 +43,8 @@ describe("niceRange", () => {
   it("falls back to a 0 baseline near 0 or for a flat line", () => {
     expect(niceRange(0, 5).bottom).toBe(0);
     expect(niceRange(2, 40).bottom).toBe(0);
+    expect(niceRange(1, 4).bottom).toBe(0);
+    expect(niceRange(12, 21).bottom).toBe(12);
     expect(niceRange(23, 23).bottom).toBe(0);
   });
 });

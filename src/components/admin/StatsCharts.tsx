@@ -184,6 +184,11 @@ function Frame({
           {unit && <span className="ml-1 font-normal text-muted-foreground">(단위: {unit})</span>}
         </span>
         <Legend series={series} status={status} zero={zero} unit={unit} />
+        {scale.bottom > 0 && (
+          <span className="text-[11px] text-muted-foreground">
+            세로축은 <b className="font-semibold text-foreground">{`${formatTick(scale.bottom, scale.decimals)}${unit}`}</b>부터 (0부터 아님)
+          </span>
+        )}
       </figcaption>
       <div className="grid grid-cols-[2rem_minmax(0,1fr)] gap-x-1.5" aria-hidden>
         <div className="relative h-36">
@@ -242,7 +247,7 @@ function Frame({
       {/* sr-only on the wrapper: a table ignores its 1px clip box */}
       <div className="sr-only">
         <table>
-          <caption>{`${title}${unit ? ` (단위: ${unit})` : ""}`}</caption>
+          <caption>{`${title}${unit ? ` (단위: ${unit})` : ""}${scale.bottom > 0 ? ` 세로축 ${formatTick(scale.bottom, scale.decimals)}부터` : ""}`}</caption>
           <thead>
             <tr>
               <th scope="col">구간</th>
@@ -274,20 +279,31 @@ function Frame({
 
 const isInteger = (series: ChartSeries[]) => series.every((s) => s.values.every((v) => v === null || Number.isInteger(v)));
 
-// Which periods get a number on their cap: every one when they fit (12 or
-// fewer), otherwise only the highest.
-function labelled(values: (number | null)[]): Set<number> {
-  if (values.length <= 12) return new Set(values.flatMap((v, i) => (v === null ? [] : [i])));
+// Which periods get a number on their cap (index -> extra class): every
+// one up to 7 periods; up to 12 only from md up (a phone's columns are too
+// narrow, so it keeps the highest); beyond that only the highest.
+function labelled(values: (number | null)[]): Map<number, string> {
   let best = -1;
   values.forEach((v, i) => {
     if (v !== null && v > 0 && (best < 0 || v > values[best]!)) best = i;
   });
-  return new Set(best < 0 ? [] : [best]);
+  const shown = new Map<number, string>();
+  values.forEach((v, i) => {
+    if (v === null) return;
+    if (i === best || values.length <= 7) shown.set(i, "");
+    else if (values.length <= 12) shown.set(i, "max-md:hidden");
+  });
+  return shown;
 }
 
-const ValueLabel = ({ v, bottom }: { v: number; bottom: string }) => (
-  <span className="pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 pb-0.5 text-[10px] leading-none font-medium tabular-nums text-foreground" style={{ bottom }}>
-    {formatValue(v)}
+// Cap labels follow the axis format (1.4만 from 10,000) so they stay narrow;
+// the hover card keeps the exact value.
+const ValueLabel = ({ v, bottom, className = "" }: { v: number; bottom: string; className?: string }) => (
+  <span
+    className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 pb-0.5 text-[10px] leading-none font-medium whitespace-nowrap tabular-nums text-foreground ${className}`}
+    style={{ bottom }}
+  >
+    {formatTick(v, 1)}
   </span>
 );
 
@@ -317,7 +333,7 @@ export function StackedBarChart(props: ChartProps) {
           return (
             <>
               <ZeroTick />
-              {shown.has(i) && <ValueLabel v={0} bottom="2px" />}
+              {shown.has(i) && <ValueLabel v={0} bottom="2px" className={shown.get(i)} />}
             </>
           );
         const h = `${(t / scale.top) * 100}%`;
@@ -330,7 +346,7 @@ export function StackedBarChart(props: ChartProps) {
               ))}
               {status[i] === "partial" && <div className="chart-hatch-on absolute inset-0" />}
             </div>
-            {shown.has(i) && <ValueLabel v={t} bottom={h} />}
+            {shown.has(i) && <ValueLabel v={t} bottom={h} className={shown.get(i)} />}
           </>
         );
       }}
@@ -344,7 +360,7 @@ export function GroupedBarChart(props: ChartProps) {
   const { labels, series, coverage } = props;
   const status = labels.map((_, i) => statusOf(i, series, coverage));
   const scale = niceScale(Math.max(0, ...series.flatMap((s) => s.values.map((v) => v ?? 0))), { integer: isInteger(series) });
-  const shown = series.length === 1 ? labelled(series[0].values) : new Set<number>();
+  const shown = series.length === 1 ? labelled(series[0].values) : new Map<number, string>();
   return (
     <Frame
       {...props}
@@ -361,14 +377,14 @@ export function GroupedBarChart(props: ChartProps) {
                 return (
                   <div key={s.label} className="relative flex max-w-4 flex-1 flex-col justify-end">
                     <ZeroTick className="w-full" />
-                    {shown.has(i) && <ValueLabel v={0} bottom="2px" />}
+                    {shown.has(i) && <ValueLabel v={0} bottom="2px" className={shown.get(i)} />}
                   </div>
                 );
               const h = `${(v / scale.top) * 100}%`;
               return (
                 <div key={s.label} className="relative h-full max-w-4 flex-1">
                   <div className={`absolute inset-x-0 bottom-0 min-h-0.5 rounded-t-[3px] ${TONE[s.tone].bg} ${status[i] === "partial" ? "chart-hatch-on opacity-60" : ""}`} style={{ height: h }} />
-                  {shown.has(i) && <ValueLabel v={v} bottom={h} />}
+                  {shown.has(i) && <ValueLabel v={v} bottom={h} className={shown.get(i)} />}
                 </div>
               );
             })}
@@ -501,7 +517,7 @@ export function BarList({
       {rows.map((r) => (
         <li key={r.label} className="flex flex-col gap-1 text-xs">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="min-w-0 truncate text-foreground">{r.label}</span>
+            <span className="min-w-0 break-keep text-foreground [overflow-wrap:anywhere]">{r.label}</span>
             <span className="shrink-0 tabular-nums text-muted-foreground">
               <span className="font-semibold text-foreground">
                 {fmt(r.value)}

@@ -25,11 +25,12 @@ export function niceScale(max: number, { integer = true }: { integer?: boolean }
   return { bottom: 0, top: ticks[ticks.length - 1], ticks, step, decimals };
 }
 
-// A level that never nears 0 (누적 가입 19 -> 23): ticks over the values'
-// own span, so growth isn't flattened against a distant 0. Only for lines;
-// a bar's length always starts at 0.
+// A level far from 0 (누적 가입 19 -> 23): ticks over the values' own span,
+// so growth isn't flattened against a distant 0 -- only when the lowest
+// value exceeds the span (1 -> 4 keeps its 0). Only for lines; a bar's
+// length always starts at 0.
 export function niceRange(min: number, max: number, opts: { integer?: boolean } = {}): Scale {
-  if (!(min > 0) || max <= min) return niceScale(max, opts);
+  if (!(min > 0) || max <= min || min <= max - min) return niceScale(max, opts);
   const { step, decimals } = niceScale(max - min, opts);
   const bottom = Math.floor(min / step + 1e-9) * step;
   if (bottom <= 0) return niceScale(max, opts);

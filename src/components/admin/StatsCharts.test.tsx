@@ -57,6 +57,26 @@ describe("StatsCharts", () => {
     expect(count(two, "size-2.5 shrink-0 rounded-[3px] bg-chart-2")).toBeGreaterThan(0);
   });
 
+  it("says where a line's axis starts when it isn't 0", () => {
+    const markup = renderToStaticMarkup(
+      <LineChart title="누적 가입" unit="명" labels={["10/1", "10/2", "10/3"]} series={[{ label: "누적 가입", values: [19, 21, 23], tone: 1 }]} />,
+    );
+    expect(ticks(markup)).toEqual(["19", "20", "21", "22", "23"]);
+    expect(markup).toContain("19명</b>부터 (0부터 아님)");
+    // no area fill: it would read as a size measured from 0
+    expect(markup).not.toContain("<polygon");
+    const fromZero = renderToStaticMarkup(<LineChart title="누적" labels={["a", "b"]} series={[{ label: "누적", values: [1, 4], tone: 1 }]} />);
+    expect(fromZero).not.toContain("0부터 아님");
+  });
+
+  it("keeps cap labels narrow and, for 8-12 periods, only the highest on phones", () => {
+    const values = [9000, 12345, 3000, 4000, 5000, 6000, 7000, 8000];
+    const markup = renderToStaticMarkup(<StackedBarChart title="월별" labels={values.map((_, i) => `${i + 1}월`)} series={[{ label: "pv", values, tone: 1 }]} />);
+    const caps = [...markup.matchAll(/font-medium whitespace-nowrap tabular-nums text-foreground ([^"]*)"[^>]*>([^<]+)</g)].map((m) => [m[2], m[1].trim()]);
+    expect(caps).toContainEqual(["1.2만", ""]);
+    expect(caps.filter(([, cls]) => cls === "max-md:hidden")).toHaveLength(7);
+  });
+
   it("marks the period still running in its hover card", () => {
     const markup = renderToStaticMarkup(
       <LineChart title="누적 가입" labels={["10/1", "10/2"]} inProgress series={[{ label: "누적 가입", values: [4, 5], tone: 1 }]} />,
