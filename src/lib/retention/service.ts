@@ -43,8 +43,9 @@ import { AdminActionProposalStatus, ReportStatus, ReportTargetType, RejoinReques
 //    withdrawal; repeated here for every withdrawn account, for a mark
 //    written while the withdrawal was committing and for accounts withdrawn
 //    before the withdrawal deleted them. Exact HMAC matches only.
-//  - 관리자 활동 기록 (AdminActivityLog): 1 year after the task, for every
-//    admin (the other admin records follow their own rows above).
+//  - 관리자 활동 기록 (AdminActivityLog: tasks and sign-ins; AdminVisit:
+//    visits): 1 year after the task / sign-in / the visit's last activity,
+//    for every admin (the other admin records follow their own rows above).
 
 export const EXPIRED_MESSAGE_TEXT = "(보유기간이 지나 삭제된 메시지)";
 
@@ -63,6 +64,7 @@ export type RetentionResult = {
   metricsDeleted: number;
   withdrawnActivityDeleted: number;
   adminActivityDeleted: number;
+  adminVisitsDeleted: number;
 };
 
 const key = (type: ReportTargetType, id: number) => `${type}:${id}`;
@@ -82,6 +84,7 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
     rejoinRequestsDeleted: 0,
     metricsDeleted: 0,
     adminActivityDeleted: 0,
+    adminVisitsDeleted: 0,
     withdrawnActivityDeleted: 0,
   };
   const recordCutoff = daysBefore(now, RECORD_RETENTION_DAYS);
@@ -252,6 +255,7 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
   }
   try {
     result.adminActivityDeleted = (await prisma.adminActivityLog.deleteMany({ where: { createdAt: { lte: recordCutoff } } })).count;
+    result.adminVisitsDeleted = (await prisma.adminVisit.deleteMany({ where: { lastActiveAt: { lte: recordCutoff } } })).count;
   } catch (error) {
     console.error("Admin activity clean-up skipped:", error instanceof Error ? error.name : "unknown");
   }

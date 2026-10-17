@@ -37,7 +37,8 @@ import { isHourlyMetric, loadHourlyCells } from "@/lib/metrics/hourly";
 import { describeDays, encodeDays, resolveSelection } from "@/lib/metrics/daySelection";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
 import { AdminActivityView } from "@/components/admin/AdminActivityView";
-import { loadAdminActivity, STRIP_DAYS } from "@/lib/metrics/adminActivity";
+import { CategoryStats } from "@/components/admin/CategoryStats";
+import { isTimelineKind, loadAdminActivity, STRIP_DAYS } from "@/lib/metrics/adminActivity";
 import { canViewAllAdminActivity } from "@/lib/admin/activityLog";
 import { AlertIcon, ChevronRightIcon, InfoIcon } from "@/components/icons";
 
@@ -150,7 +151,7 @@ function SeriesTable({ report, columns }: { report: Report; columns: { label: st
 export default async function AdminStatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[]; a?: string }>;
+  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[]; a?: string; day?: string; k?: string }>;
 }) {
   const admin = await requireAdmin();
   const params = await searchParams;
@@ -253,12 +254,17 @@ export default async function AdminStatsPage({
     // 관리자별 상세 기록: every admin's only for the viewers named in
     // ADMIN_ACTIVITY_VIEWER_IDS; any other admin sees only their own
     const all = canViewAllAdminActivity(admin);
-    const focus = all && /^\d+$/.test(params.a ?? "") ? Number(params.a) : null;
-    const activity = await loadAdminActivity({ viewer: admin.id, all, focus });
+    // timeline filter: admin (only for those viewers), KST day, kind
+    const filter = {
+      admin: all && /^\d+$/.test(params.a ?? "") ? Number(params.a) : null,
+      day: /^\d{4}-\d{2}-\d{2}$/.test(params.day ?? "") ? params.day! : null,
+      kind: isTimelineKind(params.k) ? params.k : null,
+    };
+    const activity = await loadAdminActivity({ viewer: admin.id, all, filter });
     return (
       <div className="flex flex-col gap-6">
         {header}
-        <AdminActivityView report={activity} viewer={admin.id} all={all} focus={focus} />
+        <AdminActivityView report={activity} viewer={admin.id} all={all} />
       </div>
     );
   }
@@ -841,6 +847,8 @@ export default async function AdminStatsPage({
           </ul>
         </More>
       </Section>
+
+      <CategoryStats rows={report.categories} periodLabel={period.label} />
 
       <Section
         title="서버 상태"

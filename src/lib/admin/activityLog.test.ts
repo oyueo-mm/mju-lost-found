@@ -4,7 +4,8 @@ const create = vi.fn();
 const $executeRaw = vi.fn();
 vi.mock("@/lib/db/prisma", () => ({ prisma: { adminActivityLog: { create }, $executeRaw } }));
 
-const { canViewAllAdminActivity, recordAdminActivity, ADMIN_ACTIVITY_FAILED_METRIC } = await import("./activityLog");
+const { canViewAllAdminActivity, recordAdminActivity, recordAdminVisit, ADMIN_ACTIVITY_FAILED_METRIC, ADMIN_VISIT_FAILED_METRIC, ADMIN_VISIT_GAP_MINUTES } = await import("./activityLog");
+const { Prisma } = await import("@/generated/prisma/client");
 
 describe("canViewAllAdminActivity (관리자별 상세 기록 전체 보기)", () => {
   it("only an admin whose id is listed", () => {
@@ -54,6 +55,48 @@ describe("recordAdminActivity", () => {
     $executeRaw.mockRejectedValueOnce(new Error("db down"));
     await expect(recordAdminActivity(13, "settings.update")).resolves.toBe(false);
     expect(error).toHaveBeenCalledWith("[admin-activity] failure count not recorded", "Error");
+    create.mockReset();
+    error.mockRestore();
+  });
+});
+
+describe("recordAdminVisit (관리자 활동 > 방문)", () => {
+  it("one statement: extend the latest visit active within 30 minutes, else open a new one, in UTC", async () => {
+    $executeRaw.mockReset();
+    await recordAdminVisit(13, new Date("2026-10-17T03:00:00Z"));
+    expect(ADMIN_VISIT_GAP_MINUTES).toBe(30);
+    expect($executeRaw).toHaveBeenCalledTimes(1);
+    const [strings, ...values] = $executeRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+    const q = Prisma.sql(strings, ...values);
+    expect(q.sql).toContain('"last_active_at" > ');
+    expect(q.sql).toContain("make_interval(mins => ");
+    expect(q.sql).toContain('UPDATE "AdminVisit"');
+    expect(q.sql).toContain('INSERT INTO "AdminVisit"');
+    expect(q.sql).toContain("WHERE NOT EXISTS (SELECT 1 FROM extended)");
+    expect(q.sql).toContain("::timestamptz AT TIME ZONE 'UTC'");
+    expect(q.values).toContain("2026-10-17T03:00:00.000Z");
+    expect(q.values).toContain(30);
+    expect(q.values.filter((v) => v === 13)).toHaveLength(2);
+  });
+
+  it("a failed write is logged and counted, never thrown", async () => {
+    $executeRaw.mockReset();
+    $executeRaw.mockRejectedValueOnce(new Error("db down"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await expect(recordAdminVisit(13)).resolves.toBeUndefined();
+    expect(error).toHaveBeenCalledWith("[admin-activity] visit failed", JSON.stringify({ adminUserId: 13, error: "Error" }));
+    expect($executeRaw.mock.calls[1][2]).toBe(ADMIN_VISIT_FAILED_METRIC);
+    error.mockRestore();
+  });
+
+  it("an admin's sign-in is recorded as auth.sign_in; its failure counts as a visit/sign-in failure", async () => {
+    create.mockReset();
+    $executeRaw.mockReset();
+    create.mockRejectedValue(new Error("db down"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    await recordAdminActivity(13, "auth.sign_in");
+    expect(create.mock.calls[0][0].data.action).toBe("auth.sign_in");
+    expect($executeRaw.mock.calls[0][2]).toBe(ADMIN_VISIT_FAILED_METRIC);
     create.mockReset();
     error.mockRestore();
   });

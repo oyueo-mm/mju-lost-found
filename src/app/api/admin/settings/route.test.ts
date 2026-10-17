@@ -10,7 +10,7 @@ vi.mock("@/lib/moderation/http", async () => {
   const response = await import("@/lib/posts/response");
   return { ...response, requireAdminForApi };
 });
-const recordAdminActivity = vi.fn();
+const { recordAdminActivity } = vi.hoisted(() => ({ recordAdminActivity: vi.fn() }));
 vi.mock("@/lib/admin/activityLog", () => ({ recordAdminActivity }));
 
 const { GET, PATCH } = await import("./route");

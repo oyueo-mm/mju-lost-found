@@ -8,6 +8,8 @@ import archive1016 from "@/lib/policy/archives/f21e596.json";
 import Archived20261016Page from "./f21e596/page";
 import archive1017 from "@/lib/policy/archives/634900f.json";
 import Archived20261017Page from "./634900f/page";
+import archive1017b from "@/lib/policy/archives/5abb77e.json";
+import Archived20261017bPage from "./5abb77e/page";
 import PrivacyPolicyHistoryPage from "./page";
 
 describe("이전 개인정보처리방침과 변경 내역", () => {
@@ -17,6 +19,7 @@ describe("이전 개인정보처리방침과 변경 내역", () => {
     expect(html).toContain('href="/policy/privacy/history/b46ba45"');
     expect(html).toContain('href="/policy/privacy/history/f21e596"');
     expect(html).toContain('href="/policy/privacy/history/634900f"');
+    expect(html).toContain('href="/policy/privacy/history/5abb77e"');
     const table = html.match(/<table\b[^>]*>([\s\S]*?)<\/table>/)![1];
     expect([...html.matchAll(/<table\b/g)]).toHaveLength(1);
     expect([...table.matchAll(/<tr\b/g)]).toHaveLength(PRIVACY_POLICY_REVISIONS.length + 1);
@@ -47,6 +50,17 @@ describe("이전 개인정보처리방침과 변경 내역", () => {
     expect(details).toContain("400일 보관·탈퇴 시 삭제");
   });
 
+  it("serves the second 2026-10-17 policy (5abb77e, before the 관리자 로그인·방문 revision) as a frozen, sourced archive", () => {
+    const html = renderToStaticMarkup(Archived20261017bPage());
+    expect(archive1017b.sourceCommit).toBe("5abb77e7e013211451d6cb6cf60628c3b471d15e");
+    expect(archive1017b.sourceBlob).toBe("990c8a8d634016a41565f46c2052b3b1db749bc8");
+    expect(archive1017b.effectiveDate).toBe("2026-10-17");
+    expect(html).toContain(archive1017b.sectionsHtml);
+    expect([...html.matchAll(/<section\b/g)]).toHaveLength(7);
+    expect(archive1017b.sectionsHtml).toContain("운영 작업 기록");
+    expect(archive1017b.sectionsHtml).not.toContain("로그인·방문 기록");
+  });
+
   it("serves the first 2026-10-17 policy (634900f, before the 관리자 운영 작업 기록 revision) as a frozen, sourced archive", () => {
     const html = renderToStaticMarkup(Archived20261017Page());
     expect(archive1017.sourceCommit).toBe("634900f55de04deb225fabccb8157b552de5d499");
@@ -71,7 +85,7 @@ describe("이전 개인정보처리방침과 변경 내역", () => {
     expect(html).toContain("회원별 이용 일자");
     expect(html).not.toContain("최근 이용일(날짜만)"); // added after that release (450f78a)
     expect(html).not.toContain("최근 이용 시각");
-    expect(PRIVACY_POLICY_REVISIONS[0].date).toBe("2026-10-17");
+    expect(PRIVACY_POLICY_REVISIONS[2].date).toBe("2026-10-17");
   });
 
   it("serves a frozen, sourced archive with all eleven original sections", () => {

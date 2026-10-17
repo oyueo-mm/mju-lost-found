@@ -1,6 +1,13 @@
 import { prisma } from "@/lib/db/prisma";
 import { Prisma } from "@/generated/prisma/client";
-import { ADMIN_ACTIVITY_ACTIONS, ADMIN_ACTIVITY_FAILED_METRIC, type AdminTaskCategory } from "@/lib/admin/activityLog";
+import {
+  ADMIN_ACTIVITY_ACTIONS,
+  ADMIN_ACTIVITY_FAILED_METRIC,
+  ADMIN_SIGN_IN_ACTION,
+  ADMIN_TASK_CATEGORIES,
+  ADMIN_VISIT_FAILED_METRIC,
+  type AdminTaskCategory,
+} from "@/lib/admin/activityLog";
 import { recordingSince } from "./activityTime";
 import { addPeriods } from "./dashboard";
 import { activityActor, kstDay, TRAFFIC_HOURLY_SINCE_METRIC } from "./record";
@@ -16,10 +23,18 @@ import { activityRetainedFrom, COLLECTION_SINCE, type Coverage } from "./report"
 //   plus AdminActivityLog for the tasks that stored neither. Tasks of
 //   those kinds before the log began were never recorded: the categories
 //   they belong to are marked 일부 미측정 for any span before that.
+// - 방문 / 로그인: AdminVisit (a visit = signed-in use without a 30-minute
+//   gap, admin/activityLog.ts recordAdminVisit) and the admin's sign-ins in
+//   AdminActivityLog (never counted as tasks). Days before they began to be
+//   recorded are 미측정.
 
 export const ADMIN_ACTIVITY_SINCE_METRIC = "meta.since.admin_activity";
+// when visits and sign-ins began to be recorded here (same marker scheme)
+export const ADMIN_PRESENCE_SINCE_METRIC = "meta.since.admin_presence";
 export const STRIP_DAYS = 30;
-export const HISTORY_LIMIT = 200;
+export const TIMELINE_LIMIT = 200;
+// tasks read for one timeline (a safety cap; the page says when it is hit)
+const TIMELINE_TASK_CAP = 2000;
 
 // One row per completed task: admin, UTC wall time, kind, target. `kind`
 // is mapped to a category and label by describeKind() below.
@@ -53,7 +68,7 @@ const EVENTS = Prisma.sql`
   UNION ALL
   SELECT "admin_user_id", "accessed_at", 'access.identity', 'report', "report_id" FROM "IdentityAccessLog"
   UNION ALL
-  SELECT "admin_user_id", "created_at", 'log.' || "action", "target_type", "target_id" FROM "AdminActivityLog"`;
+  SELECT "admin_user_id", "created_at", 'log.' || "action", "target_type", "target_id" FROM "AdminActivityLog" WHERE "action" <> ${ADMIN_SIGN_IN_ACTION}`;
 
 const MODERATION_LABELS: Record<string, string> = {
   delete_post: "게시글 삭제",
@@ -165,9 +180,38 @@ export type AdminActivityRow = {
   strip: ("active" | "inactive" | "none")[];
   tasks30: CategoryCounts;
   tasksAll: CategoryCounts;
+  // 방문 / 로그인 per day of `days` (null: not recorded yet that day)
+  visits: (number | null)[];
+  signIns: (number | null)[];
+  // totals over the measured days of the last 7 / 30 (null: none measured)
+  visits7: number | null;
+  visits30: number | null;
+  signIns7: number | null;
+  signIns30: number | null;
+  // the latest recorded visit: when it began, its last recorded activity
+  lastVisit: { start: Date; last: Date } | null;
 };
 
-export type AdminActivityEvent = { at: Date; adminId: number; nickname: string; category: AdminTaskCategory; label: string; target: string | null };
+export type TimelineKind = "login" | "visit" | AdminTaskCategory;
+export const TIMELINE_KINDS: { key: TimelineKind; label: string }[] = [
+  { key: "login", label: "로그인" },
+  { key: "visit", label: "방문" },
+  ...ADMIN_TASK_CATEGORIES,
+];
+export const isTimelineKind = (v: unknown): v is TimelineKind => TIMELINE_KINDS.some((k) => k.key === v);
+
+export type TimelineItem = {
+  at: Date;
+  adminId: number;
+  nickname: string;
+  kind: TimelineKind;
+  label: string;
+  target: string | null;
+  // a visit's last recorded activity
+  until?: Date;
+};
+
+export type TimelineFilter = { admin: number | null; day: string | null; kind: TimelineKind | null };
 
 export type AdminActivityReport = {
   today: string;
@@ -181,31 +225,40 @@ export type AdminActivityReport = {
   taskCoverage: Coverage[];
   // current admins with an 활동일 mark that day (null: 미측정)
   dailyActiveAdmins: (number | null)[];
+  // per day of `days`: visits / sign-ins (null: 미측정), and their coverage
+  dailyVisits: (number | null)[];
+  dailySignIns: (number | null)[];
+  presenceStatus: Coverage[];
+  presenceDays7: number;
+  presenceDays30: number;
   admins: AdminActivityRow[];
-  history: AdminActivityEvent[];
-  historyFrom: string;
-  // KST "YYYY-MM-DD HH:mm" the AdminActivityLog / lastActiveAt began here
+  timeline: TimelineItem[];
+  // items matching the filter before TIMELINE_LIMIT; tasks hit their cap
+  timelineMatched: number;
+  timelineCapped: boolean;
+  filter: TimelineFilter;
+  // KST "YYYY-MM-DD HH:mm" the AdminActivityLog / visits / lastActiveAt began here
   logSince: string | null;
-  // completed tasks whose log write failed (all admins), per day of `days`
+  presenceSince: string | null;
+  // completed tasks / visits or sign-ins whose write failed (all admins), per day
   recordFailures: number[];
+  visitFailures: number[];
   lastActiveSince: string | null;
 };
 
 const dayDate = (day: string) => new Date(`${day}T00:00:00Z`);
+const kstMidnight = (day: string) => new Date(dayDate(day).getTime() - 9 * 3_600_000);
 
 // KST minute this environment first served the 관리자 활동 tab, which runs
-// only where the log is written: the log's start if no task was logged
-// before it. Written once (best-effort; a lost write only means a later start).
-async function logStartMarker(now: Date): Promise<{ day: Date; value: number } | null> {
+// only where the record is written: the record's start if nothing was
+// recorded before it. Written once (best-effort; a lost write only means a
+// later start).
+async function startMarker(metric: string, now: Date): Promise<{ day: Date; value: number } | null> {
   try {
-    const found = await prisma.metricDaily.findFirst({
-      where: { metric: ADMIN_ACTIVITY_SINCE_METRIC },
-      orderBy: { day: "asc" },
-      select: { day: true, value: true },
-    });
+    const found = await prisma.metricDaily.findFirst({ where: { metric }, orderBy: { day: "asc" }, select: { day: true, value: true } });
     if (found) return found;
     const kst = new Date(now.getTime() + 9 * 3_600_000);
-    const row = { day: dayDate(kstDay(now)), metric: ADMIN_ACTIVITY_SINCE_METRIC, value: kst.getUTCHours() * 60 + kst.getUTCMinutes() };
+    const row = { day: dayDate(kstDay(now)), metric, value: kst.getUTCHours() * 60 + kst.getUTCMinutes() };
     await prisma.metricDaily.createMany({ data: [row], skipDuplicates: true });
     return row;
   } catch {
@@ -213,43 +266,72 @@ async function logStartMarker(now: Date): Promise<{ day: Date; value: number } |
   }
 }
 
+const perDay = (days: string[], rows: { day: Date; value: number }[]) =>
+  days.map((d) => rows.filter((f) => f.day.toISOString().slice(0, 10) === d).reduce((a, f) => a + f.value, 0));
+
+const VISITS = Prisma.sql`SELECT "admin_user_id" AS admin_id, "started_at" AS at, "last_active_at" AS last FROM "AdminVisit"`;
+const SIGN_INS = Prisma.sql`SELECT "admin_user_id" AS admin_id, "created_at" AS at FROM "AdminActivityLog" WHERE "action" = ${ADMIN_SIGN_IN_ACTION}`;
+
 // `all`: every admin's records (the viewer may see them); otherwise only
-// the viewer's own. `focus` narrows the history to one admin.
+// the viewer's own. `filter` narrows the timeline (its admin only when `all`).
 export async function loadAdminActivity({
   viewer,
   all,
-  focus = null,
+  filter = { admin: null, day: null, kind: null },
   now = new Date(),
 }: {
   viewer: number;
   all: boolean;
-  focus?: number | null;
+  filter?: TimelineFilter;
   now?: Date;
 }): Promise<AdminActivityReport> {
   const today = kstDay(now);
   const days = Array.from({ length: STRIP_DAYS }, (_, i) => addPeriods(today, "day", i - STRIP_DAYS + 1));
-  const fromAt = new Date(dayDate(days[0]).getTime() - 9 * 3_600_000); // KST midnight
+  const fromAt = kstMidnight(days[0]);
   const scope: Scope = { adminId: all ? null : viewer };
-  const historyScope: Scope = { adminId: all ? focus : viewer };
+  const f: TimelineFilter = {
+    admin: all ? filter.admin : null,
+    day: filter.day && days.includes(filter.day) ? filter.day : null,
+    kind: filter.kind,
+  };
+  const timelineScope: Scope = { adminId: all ? f.admin : viewer };
+  const dayFrom = f.day ? kstMidnight(f.day) : fromAt;
+  const dayUntil = f.day ? kstMidnight(addPeriods(f.day, "day", 1)) : null;
+  const untilFilter = dayUntil ? Prisma.sql`AND e.at < ${utcParam(dayUntil)}` : Prisma.empty;
+  const wantTasks = f.kind === null || (f.kind !== "login" && f.kind !== "visit");
 
-  const [daily, totals, recent, marker, earliestLog, activeMarker, earliestActive, failures] = await Promise.all([
+  const [daily, totals, recent, visitRows, signInRows, marker, presenceMarker, earliest, activeMarker, earliestActive, failures] = await Promise.all([
     prisma.$queryRaw<{ admin_id: number; kind: string; day: string; n: number }[]>`
       SELECT e.admin_id, e.kind, to_char(e.at + interval '9 hours', 'YYYY-MM-DD') AS day, count(*)::int AS n
       FROM (${EVENTS}) e WHERE e.at >= ${utcParam(fromAt)} ${scopeFilter(scope)} GROUP BY 1, 2, 3`,
     prisma.$queryRaw<{ admin_id: number; kind: string; n: number; last: string }[]>`
       SELECT e.admin_id, e.kind, count(*)::int AS n, ${isoText(Prisma.sql`max(e.at)`)} AS last
       FROM (${EVENTS}) e WHERE TRUE ${scopeFilter(scope)} GROUP BY 1, 2`,
-    prisma.$queryRaw<{ admin_id: number; at: string; kind: string; target_type: string | null; target_id: number | null }[]>`
-      SELECT e.admin_id, ${isoText(Prisma.sql`e.at`)} AS at, e.kind, e.target_type, e.target_id
-      FROM (${EVENTS}) e WHERE e.at >= ${utcParam(fromAt)} ${scopeFilter(historyScope)} ORDER BY e.at DESC LIMIT ${HISTORY_LIMIT}`,
-    logStartMarker(now),
-    prisma.adminActivityLog.aggregate({ _min: { createdAt: true } }).catch(() => null),
+    wantTasks
+      ? prisma.$queryRaw<{ admin_id: number; at: string; kind: string; target_type: string | null; target_id: number | null }[]>`
+          SELECT e.admin_id, ${isoText(Prisma.sql`e.at`)} AS at, e.kind, e.target_type, e.target_id
+          FROM (${EVENTS}) e WHERE e.at >= ${utcParam(dayFrom)} ${untilFilter} ${scopeFilter(timelineScope)}
+          ORDER BY e.at DESC LIMIT ${TIMELINE_TASK_CAP}`
+      : Promise.resolve([]),
+    prisma.$queryRaw<{ admin_id: number; at: string; last: string }[]>`
+      SELECT e.admin_id, ${isoText(Prisma.sql`e.at`)} AS at, ${isoText(Prisma.sql`e.last`)} AS last
+      FROM (${VISITS}) e WHERE e.at >= ${utcParam(fromAt)} ${scopeFilter(scope)}`,
+    prisma.$queryRaw<{ admin_id: number; at: string }[]>`
+      SELECT e.admin_id, ${isoText(Prisma.sql`e.at`)} AS at FROM (${SIGN_INS}) e WHERE e.at >= ${utcParam(fromAt)} ${scopeFilter(scope)}`,
+    startMarker(ADMIN_ACTIVITY_SINCE_METRIC, now),
+    startMarker(ADMIN_PRESENCE_SINCE_METRIC, now),
+    prisma.$queryRaw<{ log: string | null; presence: string | null }[]>`
+      SELECT ${isoText(Prisma.sql`(SELECT min("created_at") FROM "AdminActivityLog" WHERE "action" <> ${ADMIN_SIGN_IN_ACTION})`)} AS log,
+             ${isoText(Prisma.sql`LEAST((SELECT min("started_at") FROM "AdminVisit"), (SELECT min("created_at") FROM "AdminActivityLog" WHERE "action" = ${ADMIN_SIGN_IN_ACTION}))`)} AS presence`,
     prisma.metricDaily
       .findFirst({ where: { metric: TRAFFIC_HOURLY_SINCE_METRIC }, orderBy: { day: "asc" }, select: { day: true, value: true } })
       .catch(() => null),
     prisma.user.aggregate({ _min: { lastActiveAt: true } }).catch(() => null),
     prisma.metricDaily
-      .findMany({ where: { metric: ADMIN_ACTIVITY_FAILED_METRIC, day: { gte: dayDate(days[0]) } }, select: { day: true, value: true } })
+      .findMany({
+        where: { metric: { in: [ADMIN_ACTIVITY_FAILED_METRIC, ADMIN_VISIT_FAILED_METRIC] }, day: { gte: dayDate(days[0]) } },
+        select: { metric: true, day: true, value: true },
+      })
       .catch(() => []),
   ]);
 
@@ -281,11 +363,18 @@ export async function loadAdminActivity({
     activeOn.set(id, (activeOn.get(id) ?? new Set<string>()).add(m.day.toISOString().slice(0, 10)));
   }
 
-  const logSince = recordingSince(marker, earliestLog?._min.createdAt ?? null);
-  // a day is fully covered only once the log had begun before it
-  // ... and had no failed write that day
-  const recordFailures = days.map((d) => failures.filter((f) => f.day.toISOString().slice(0, 10) === d).reduce((a, f) => a + f.value, 0));
+  const first = earliest[0];
+  const logSince = recordingSince(marker, first?.log ? new Date(first.log) : null);
+  const presenceSince = recordingSince(presenceMarker, first?.presence ? new Date(first.presence) : null);
+  const recordFailures = perDay(days, failures.filter((x) => x.metric === ADMIN_ACTIVITY_FAILED_METRIC));
+  const visitFailures = perDay(days, failures.filter((x) => x.metric === ADMIN_VISIT_FAILED_METRIC));
+  // a day is fully covered only once the log had begun before it, and had
+  // no failed write that day
   const taskCoverage: Coverage[] = days.map((d, i) => (logSince !== null && d > logSince.slice(0, 10) && recordFailures[i] === 0 ? "full" : "partial"));
+  // 방문·로그인: nothing before the day recording began; that day partial
+  const presenceStatus: Coverage[] = days.map((d, i) =>
+    presenceSince === null || d < presenceSince.slice(0, 10) ? "none" : d === presenceSince.slice(0, 10) || visitFailures[i] > 0 ? "partial" : "full",
+  );
 
   const dailyTasks = days.map(() => zeroCounts());
   const tasks30 = new Map<number, CategoryCounts>();
@@ -311,13 +400,27 @@ export async function loadAdminActivity({
     if (!prev || at > prev) lastTask.set(r.admin_id, at);
   }
 
-  const measured = (span: number) => dayStatus.slice(-span).filter((s) => s !== "none").length;
-  const measuredDays7 = measured(7);
-  const measuredDays30 = measured(STRIP_DAYS);
+  // 방문 / 로그인 per admin and KST day (a visit counts on the day it began)
+  const countPerDay = (rows: { admin_id: number; at: string }[], id: number | null) =>
+    days.map((d, i) => (presenceStatus[i] === "none" ? null : rows.filter((r) => (id === null || r.admin_id === id) && kstDay(new Date(r.at)) === d).length));
+  const sumLast = (values: (number | null)[], span: number) =>
+    values.slice(-span).every((v) => v === null) ? null : values.slice(-span).reduce<number>((a, v) => a + (v ?? 0), 0);
+  const lastVisitOf = new Map<number, { start: Date; last: Date }>();
+  for (const v of visitRows) {
+    const start = new Date(v.at);
+    const prev = lastVisitOf.get(v.admin_id);
+    if (!prev || start > prev.start) lastVisitOf.set(v.admin_id, { start, last: new Date(v.last) });
+  }
+
+  const measured = (statuses: Coverage[], span: number) => statuses.slice(-span).filter((s) => s !== "none").length;
+  const measuredDays7 = measured(dayStatus, 7);
+  const measuredDays30 = measured(dayStatus, STRIP_DAYS);
   const admins: AdminActivityRow[] = users.map((u) => {
     const active = (!u.withdrawnAt && activeOn.get(u.id)) || new Set<string>();
     const strip = days.map((d, i): AdminActivityRow["strip"][number] => (dayStatus[i] === "none" ? "none" : active.has(d) ? "active" : "inactive"));
     const count = (span: number, m: number) => (m === 0 ? null : strip.slice(-span).filter((s) => s === "active").length);
+    const visits = countPerDay(visitRows, u.id);
+    const signIns = countPerDay(signInRows, u.id);
     return {
       id: u.id,
       nickname: u.nickname ?? `회원 #${u.id}`,
@@ -330,24 +433,38 @@ export async function loadAdminActivity({
       strip,
       tasks30: tasks30.get(u.id) ?? zeroCounts(),
       tasksAll: tasksAll.get(u.id) ?? zeroCounts(),
+      visits,
+      signIns,
+      visits7: sumLast(visits, 7),
+      visits30: sumLast(visits, STRIP_DAYS),
+      signIns7: sumLast(signIns, 7),
+      signIns30: sumLast(signIns, STRIP_DAYS),
+      lastVisit: lastVisitOf.get(u.id) ?? null,
     };
   });
   // current admins first, then by most recent task
   admins.sort((a, b) => Number(b.isAdmin) - Number(a.isAdmin) || (b.lastTaskAt?.getTime() ?? 0) - (a.lastTaskAt?.getTime() ?? 0) || a.id - b.id);
 
+  // timeline: tasks, sign-ins and visits, newest first, narrowed by `f`
   const names = new Map(admins.map((a) => [a.id, a.nickname]));
-  const history: AdminActivityEvent[] = [];
+  const nameOf = (id: number) => names.get(id) ?? `회원 #${id}`;
+  const inFilter = (adminId: number, at: Date) =>
+    (timelineScope.adminId === null || adminId === timelineScope.adminId) && at >= dayFrom && (dayUntil === null || at < dayUntil);
+  const items: TimelineItem[] = [];
   for (const r of recent) {
     const kind = describeKind(r.kind);
-    if (!kind) continue;
-    history.push({
-      at: new Date(r.at),
-      adminId: r.admin_id,
-      nickname: names.get(r.admin_id) ?? `회원 #${r.admin_id}`,
-      ...kind,
-      target: describeTarget(r.target_type, r.target_id),
-    });
+    if (!kind || !inFilter(r.admin_id, new Date(r.at))) continue;
+    items.push({ at: new Date(r.at), adminId: r.admin_id, nickname: nameOf(r.admin_id), kind: kind.category, label: kind.label, target: describeTarget(r.target_type, r.target_id) });
   }
+  for (const r of signInRows) {
+    const at = new Date(r.at);
+    if (inFilter(r.admin_id, at)) items.push({ at, adminId: r.admin_id, nickname: nameOf(r.admin_id), kind: "login", label: "로그인", target: null });
+  }
+  for (const r of visitRows) {
+    const at = new Date(r.at);
+    if (inFilter(r.admin_id, at)) items.push({ at, adminId: r.admin_id, nickname: nameOf(r.admin_id), kind: "visit", label: "방문", target: null, until: new Date(r.last) });
+  }
+  const matched = items.filter((x) => f.kind === null || x.kind === f.kind).sort((a, b) => b.at.getTime() - a.at.getTime());
 
   return {
     today,
@@ -358,11 +475,20 @@ export async function loadAdminActivity({
     dailyTasks,
     taskCoverage,
     dailyActiveAdmins: days.map((_, i) => (dayStatus[i] === "none" ? null : admins.filter((a) => a.isAdmin && a.strip[i] === "active").length)),
+    dailyVisits: countPerDay(visitRows, null),
+    dailySignIns: countPerDay(signInRows, null),
+    presenceStatus,
+    presenceDays7: measured(presenceStatus, 7),
+    presenceDays30: measured(presenceStatus, STRIP_DAYS),
     admins,
-    history,
-    historyFrom: days[0],
+    timeline: matched.slice(0, TIMELINE_LIMIT),
+    timelineMatched: matched.length,
+    timelineCapped: recent.length === TIMELINE_TASK_CAP,
+    filter: f,
     logSince,
+    presenceSince,
     recordFailures,
+    visitFailures,
     lastActiveSince: recordingSince(activeMarker, earliestActive?._min.lastActiveAt ?? null),
   };
 }

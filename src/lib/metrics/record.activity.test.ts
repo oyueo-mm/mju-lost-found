@@ -14,6 +14,8 @@ vi.mock("@/lib/db/prisma", () => ({
   },
 }));
 vi.mock("next/server", () => ({ after: () => {} }));
+const recordAdminVisit = vi.fn();
+vi.mock("@/lib/admin/activityLog", () => ({ recordAdminVisit }));
 
 const { activityStep, LAST_ACTIVE_INTERVAL_MS } = await import("./activityTime");
 const { activityActor, recordMemberActivity } = await import("./record");
@@ -121,6 +123,20 @@ describe("recordMemberActivity", () => {
     expect(await recordMemberActivity({ id: 1, isAdmin: true, lastActiveAt: null }, new Date("2026-10-17T00:00:00Z"))).toBe(true);
     expect(queries).toHaveLength(1);
     expect(await pendingCounters()).toEqual({});
+  });
+
+  it("관리자 활동 > 방문: an admin's write extends or opens a visit; a member's or a skipped write does not", async () => {
+    recordAdminVisit.mockClear();
+    const now = new Date("2026-10-17T00:00:00Z");
+    await recordMemberActivity({ id: 1, isAdmin: true, lastActiveAt: null }, now);
+    expect(recordAdminVisit).toHaveBeenCalledWith(1, now);
+    recordAdminVisit.mockClear();
+    await recordMemberActivity({ ...member, lastActiveAt: null }, now);
+    wrote = 0;
+    await recordMemberActivity({ id: 1, isAdmin: true, lastActiveAt: null }, now);
+    // within the interval: no database call at all
+    await recordMemberActivity({ id: 1, isAdmin: true, lastActiveAt: new Date("2026-10-16T23:58:00Z") }, now);
+    expect(recordAdminVisit).not.toHaveBeenCalled();
   });
 
   it("never fails the caller when the database does", async () => {

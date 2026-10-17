@@ -11,7 +11,7 @@ vi.mock("@/lib/moderation/http", async () => {
   return { ...response, requireAdminForApi };
 });
 vi.mock("@/lib/admin/posts", () => ({ deletePostForAdmin }));
-const recordAdminActivity = vi.fn();
+const { recordAdminActivity } = vi.hoisted(() => ({ recordAdminActivity: vi.fn() }));
 vi.mock("@/lib/admin/activityLog", () => ({ recordAdminActivity }));
 
 const { DELETE } = await import("./route");

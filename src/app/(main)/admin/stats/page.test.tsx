@@ -13,7 +13,7 @@ const loadUserReport = vi.fn();
 vi.mock("@/lib/metrics/report", async (importOriginal) => ({ ...(await importOriginal<object>()), loadReport }));
 vi.mock("@/lib/metrics/userReport", async (importOriginal) => ({ ...(await importOriginal<object>()), loadUserReport }));
 vi.mock("@/components/admin/AdminActivityView", () => ({
-  AdminActivityView: ({ all, focus }: { all: boolean; focus: number | null }) => <div data-all={String(all)} data-focus={String(focus)} />,
+  AdminActivityView: ({ all }: { all: boolean }) => <div data-all={String(all)} />,
 }));
 // client components of the other tabs' header
 vi.mock("@/components/admin/StatsPeriodPicker", () => ({ StatsPeriodPicker: () => <div data-testid="period" /> }));
@@ -32,17 +32,17 @@ describe("/admin/stats?tab=admins", () => {
     vi.stubEnv("ADMIN_ACTIVITY_VIEWER_IDS", "13");
     requireAdmin.mockResolvedValue({ id: 20, isAdmin: true });
     loadAdminActivity.mockResolvedValue({});
-    const html = await render({ tab: "admins", a: "13" });
-    expect(loadAdminActivity).toHaveBeenCalledWith({ viewer: 20, all: false, focus: null });
+    const html = await render({ tab: "admins", a: "13", day: "2026-10-16", k: "login" });
+    expect(loadAdminActivity).toHaveBeenCalledWith({ viewer: 20, all: false, filter: { admin: null, day: "2026-10-16", kind: "login" } });
     expect(html).toContain('data-all="false"');
   });
 
-  it("a named viewer gets every admin, and may focus the history on one", async () => {
+  it("a named viewer gets every admin, and may narrow the timeline to one; bad filter values are dropped", async () => {
     vi.stubEnv("ADMIN_ACTIVITY_VIEWER_IDS", "13");
     requireAdmin.mockResolvedValue({ id: 13, isAdmin: true });
     loadAdminActivity.mockResolvedValue({});
-    await render({ tab: "admins", a: "20" });
-    expect(loadAdminActivity).toHaveBeenCalledWith({ viewer: 13, all: true, focus: 20 });
+    await render({ tab: "admins", a: "20", day: "2026-1-6", k: "everything" });
+    expect(loadAdminActivity).toHaveBeenCalledWith({ viewer: 13, all: true, filter: { admin: 20, day: null, kind: null } });
   });
 
   it("has no period picker or export (they belong to the other tabs), and leaves their data alone", async () => {

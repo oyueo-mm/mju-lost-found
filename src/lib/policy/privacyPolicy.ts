@@ -38,6 +38,18 @@ export type PrivacyPolicyRevision = {
 // Production -- set it at the release.
 export const PRIVACY_POLICY_REVISIONS: readonly PrivacyPolicyRevision[] = [
   {
+    // Preview: set to the actual KST day it reaches Production
+    date: "2026-10-18",
+    summary:
+      "관리자 계정의 로그인 시각과 방문(로그인 상태의 이용 구간) 시작·마지막 활동 시각 기록(1년 보관, 화면·검색어·채팅 내용은 기록하지 않음)을 3·7항에 추가했습니다.",
+    consent: "notice",
+    history: {
+      summary: "관리자 로그인·방문 기록 안내",
+      before: "관리자 운영 작업 기록만 안내",
+      after: "관리자 로그인·방문 시작·마지막 활동 시각 기록(1년 보관) 추가",
+    },
+  },
+  {
     date: "2026-10-17",
     summary:
       "관리자가 완료한 운영 작업 기록(작업 관리자·종류·대상 번호·시각, 1년 보관)과 관리자 활동 화면에서 관리자 계정의 이용 기록을 관리자별로 표시하는 범위(본인·지정된 상위 관리자)를 3·5·7항에 추가했습니다.",

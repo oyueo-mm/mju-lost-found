@@ -67,6 +67,11 @@ describe("개인정보처리방침: 이용 통계", () => {
     expect(s7).toContain("관리 업무 점검과 권한 오남용 방지");
     expect(s7).toContain("내용은 저장하지 않고 작업 후 1년간 보관합니다");
     expect(s7).toContain("각 관리자는 본인 기록만, 지정된 상위 관리자는 전체 관리자의 기록을 볼 수 있습니다");
+    // sign-ins and visits: times only, 1 year, no screens / clicks / search text / chat
+    expect(section(3)).toContain("관리자의 로그인·방문 기록(로그인 시각, 방문 시작·마지막 활동 시각)");
+    expect(section(3)).toContain("로그인·마지막 활동 후 1년");
+    expect(s7).toContain("로그인 시각과 방문(로그인 상태로 30분 이상 쉬지 않고 이용한 구간)의 시작·마지막 활동 시각도 1년간 기록합니다");
+    expect(s7).toContain("방문한 화면, 클릭, 검색어, 채팅 내용은 기록하지 않습니다");
   });
 
   it("preserves retention exceptions, cookie choices and rights contact", () => {

@@ -34,7 +34,7 @@ describe("개인정보처리방침 변경 안내", () => {
     const notice = privacyNotice(PRIVACY_POLICY_EFFECTIVE_DATE)!;
     expect(notice.id).toBe(PRIVACY_POLICY_EFFECTIVE_DATE);
     expect(notice.href).toBe("/policy/privacy#changes");
-    expect(notice.summary).toContain("운영 작업 기록");
+    expect(notice.summary).toContain("로그인 시각과 방문");
     expect(notice.summary).toContain("1년 보관");
   });
 

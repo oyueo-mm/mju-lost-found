@@ -8,18 +8,25 @@ const raws: Raw[] = [];
 let daily: unknown[] = [];
 let totals: unknown[] = [];
 let recent: unknown[] = [];
+let visits: unknown[] = [];
+let signIns: unknown[] = [];
+let earliest: { log: string | null; presence: string | null } = { log: null, presence: null };
 const $queryRaw = vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
   const q = Prisma.sql(strings, ...values);
   raws.push({ sql: q.sql, values: q.values });
-  return q.sql.includes("GROUP BY 1, 2, 3") ? daily : q.sql.includes("max(e.at)") ? totals : recent;
+  if (q.sql.includes("LEAST(")) return [earliest];
+  if (q.sql.includes("GROUP BY 1, 2, 3")) return daily;
+  if (q.sql.includes("max(e.at)")) return totals;
+  if (q.sql.includes('"AdminVisit"')) return visits;
+  if (q.sql.includes('WHERE "action" = ')) return signIns;
+  return recent;
 });
 const user = { findMany: vi.fn(), aggregate: vi.fn() };
 const metricDaily = { findFirst: vi.fn(), createMany: vi.fn(), findMany: vi.fn() };
-const adminActivityLog = { aggregate: vi.fn() };
 const activityDay = { findMany: vi.fn() };
-vi.mock("@/lib/db/prisma", () => ({ prisma: { $queryRaw, user, metricDaily, adminActivityLog, activityDay } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { $queryRaw, user, metricDaily, activityDay } }));
 
-const { loadAdminActivity, describeKind, describeTarget, ADMIN_ACTIVITY_SINCE_METRIC } = await import("./adminActivity");
+const { loadAdminActivity, describeKind, describeTarget, ADMIN_ACTIVITY_SINCE_METRIC, ADMIN_PRESENCE_SINCE_METRIC } = await import("./adminActivity");
 const { ADMIN_ACTIVITY_ACTIONS } = await import("@/lib/admin/activityLog");
 const { activityActor } = await import("./record");
 
@@ -27,7 +34,9 @@ const { activityActor } = await import("./record");
 // began 10/15 03:35, so 10/15 is partial and earlier days 미측정
 const NOW = new Date("2026-10-17T12:00:00Z");
 const admin = (id: number, extra: object = {}) => ({ id, nickname: `관리자${id}`, isAdmin: true, lastLoginAt: null, lastActiveAt: null, withdrawnAt: null, ...extra });
-const adminFilters = () => raws.map((r) => (r.sql.includes("AND e.admin_id =") ? r.values.at(-1 - Number(r.sql.includes("LIMIT"))) : "all"));
+// the per-admin queries (all but the record-start lookup)
+const scoped = () => raws.filter((r) => !r.sql.includes("LEAST("));
+const timelineQuery = () => raws.find((r) => r.sql.includes("ORDER BY e.at DESC"));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -35,29 +44,35 @@ beforeEach(() => {
   daily = [];
   totals = [];
   recent = [];
+  visits = [];
+  signIns = [];
+  earliest = { log: null, presence: null };
   user.findMany.mockResolvedValue([admin(13), admin(20)]);
   user.aggregate.mockResolvedValue({ _min: { lastActiveAt: null } });
   metricDaily.findFirst.mockResolvedValue(null);
-  adminActivityLog.aggregate.mockResolvedValue({ _min: { createdAt: null } });
   activityDay.findMany.mockResolvedValue([]);
   metricDaily.findMany.mockResolvedValue([]);
 });
 
 describe("관리자 활동: who is shown", () => {
-  it("an admin without the viewer right gets only their own row and history", async () => {
-    await loadAdminActivity({ viewer: 13, all: false, now: NOW });
-    expect(raws).toHaveLength(3);
-    expect(raws.every((r) => r.sql.includes("AND e.admin_id ="))).toBe(true);
-    expect(adminFilters()).toEqual([13, 13, 13]);
+  it("an admin without the viewer right gets only their own rows, visits, sign-ins and timeline", async () => {
+    await loadAdminActivity({ viewer: 13, all: false, filter: { admin: 20, day: null, kind: null }, now: NOW });
+    expect(scoped()).toHaveLength(5);
+    for (const r of scoped()) {
+      expect(r.sql).toContain("AND e.admin_id =");
+      expect(r.values).toContain(13);
+      expect(r.values).not.toContain(20); // the filter's admin is ignored
+    }
     expect(user.findMany.mock.calls[0][0].where).toEqual({ id: 13 });
   });
 
-  it("a viewer sees every admin; `focus` narrows only the history", async () => {
+  it("a viewer sees every admin; the timeline filter's admin narrows only the timeline", async () => {
     await loadAdminActivity({ viewer: 13, all: true, now: NOW });
-    expect(raws.some((r) => r.sql.includes("AND e.admin_id ="))).toBe(false);
+    expect(scoped().some((r) => r.sql.includes("AND e.admin_id ="))).toBe(false);
     raws.length = 0;
-    await loadAdminActivity({ viewer: 13, all: true, focus: 20, now: NOW });
-    expect(adminFilters()).toEqual(["all", "all", 20]);
+    await loadAdminActivity({ viewer: 13, all: true, filter: { admin: 20, day: null, kind: null }, now: NOW });
+    expect(scoped().filter((r) => r.sql.includes("AND e.admin_id ="))).toEqual([timelineQuery()]);
+    expect(timelineQuery()!.values).toContain(20);
   });
 
   it("includes a former admin who has tasks on record, after the current admins", async () => {
@@ -92,6 +107,92 @@ describe("관리자 활동: 활동일", () => {
   });
 });
 
+describe("관리자 활동: 방문·로그인", () => {
+  // recording began 10/16 10:00 KST (01:00 UTC)
+  const since = () => {
+    earliest = { log: null, presence: "2026-10-16T01:00:00.000Z" };
+  };
+
+  it("counts visits and sign-ins per admin and KST day; before recording began is 미측정", async () => {
+    since();
+    visits = [
+      // 10/16 23:50 KST and 10/17 00:30 KST: two visits, two days
+      { admin_id: 13, at: "2026-10-16T14:50:00.000Z", last: "2026-10-16T15:10:00.000Z" },
+      { admin_id: 13, at: "2026-10-16T15:30:00.000Z", last: "2026-10-16T15:35:00.000Z" },
+      { admin_id: 20, at: "2026-10-17T02:00:00.000Z", last: "2026-10-17T02:00:00.000Z" },
+    ];
+    signIns = [{ admin_id: 13, at: "2026-10-16T14:49:00.000Z" }];
+    const r = await loadAdminActivity({ viewer: 13, all: true, now: NOW });
+    expect(r.presenceSince).toBe("2026-10-16 10:00");
+    expect(r.presenceStatus.slice(-3)).toEqual(["none", "partial", "full"]);
+    const a13 = r.admins.find((a) => a.id === 13)!;
+    expect(a13.visits.slice(-3)).toEqual([null, 1, 1]);
+    expect(a13.signIns.slice(-3)).toEqual([null, 1, 0]);
+    expect([a13.visits7, a13.visits30, a13.signIns7]).toEqual([2, 2, 1]);
+    expect(a13.lastVisit).toEqual({ start: new Date("2026-10-16T15:30:00.000Z"), last: new Date("2026-10-16T15:35:00.000Z") });
+    expect(r.dailyVisits.slice(-3)).toEqual([null, 1, 2]);
+    expect(r.presenceDays7).toBe(2);
+  });
+
+  it("all 미측정 (null, not 0) until recording begins", async () => {
+    const r = await loadAdminActivity({ viewer: 13, all: false, now: NOW });
+    // nothing recorded and the marker is written now: today only, partial
+    expect(r.presenceSince).toBe("2026-10-17 21:00");
+    expect(r.admins[0].visits.slice(-2)).toEqual([null, 0]);
+    expect(r.admins[0].visits30).toBe(0);
+    expect(metricDaily.createMany).toHaveBeenCalledWith({
+      data: [{ day: new Date("2026-10-17T00:00:00Z"), metric: ADMIN_PRESENCE_SINCE_METRIC, value: 21 * 60 }],
+      skipDuplicates: true,
+    });
+  });
+
+  it("a day with a failed visit write is partial and reported", async () => {
+    since();
+    metricDaily.findMany.mockResolvedValue([{ metric: "admin.visit.record_failed", day: new Date("2026-10-17T00:00:00Z"), value: 1 }]);
+    const r = await loadAdminActivity({ viewer: 13, all: true, now: NOW });
+    expect(r.visitFailures.at(-1)).toBe(1);
+    expect(r.presenceStatus.at(-1)).toBe("partial");
+    expect(r.recordFailures.at(-1)).toBe(0);
+  });
+});
+
+describe("관리자 활동: 타임라인", () => {
+  beforeEach(() => {
+    earliest = { log: null, presence: "2026-10-10T00:00:00.000Z" };
+    recent = [{ admin_id: 20, at: "2026-10-17T03:00:00.000Z", kind: "proposal.approved.grant_admin", target_type: "user", target_id: 31 }];
+    signIns = [{ admin_id: 13, at: "2026-10-16T01:00:00.000Z" }];
+    visits = [{ admin_id: 13, at: "2026-10-16T01:01:00.000Z", last: "2026-10-16T01:40:00.000Z" }];
+  });
+
+  it("merges tasks, sign-ins and visits, newest first, targets by id only", async () => {
+    const r = await loadAdminActivity({ viewer: 13, all: true, now: NOW });
+    expect(r.timeline.map((e) => [e.kind, e.nickname, e.label, e.target])).toEqual([
+      ["role", "관리자20", "관리자 지정 승인", "회원 #31"],
+      ["visit", "관리자13", "방문", null],
+      ["login", "관리자13", "로그인", null],
+    ]);
+    expect(r.timeline[1].until).toEqual(new Date("2026-10-16T01:40:00.000Z"));
+    expect(r.timelineMatched).toBe(3);
+  });
+
+  it("filters by kind (no task query for login/visit) and by KST day", async () => {
+    const logins = await loadAdminActivity({ viewer: 13, all: true, filter: { admin: null, day: null, kind: "login" }, now: NOW });
+    expect(logins.timeline.map((e) => e.kind)).toEqual(["login"]);
+    expect(timelineQuery()).toBeUndefined();
+    raws.length = 0;
+    const day = await loadAdminActivity({ viewer: 13, all: true, filter: { admin: null, day: "2026-10-16", kind: null }, now: NOW });
+    expect(day.timeline.map((e) => e.kind)).toEqual(["visit", "login"]);
+    // the task query is bounded by the KST day: 10/15 15:00 UTC .. 10/16 15:00 UTC
+    expect(timelineQuery()!.values).toContain("2026-10-15T15:00:00.000Z");
+    expect(timelineQuery()!.values).toContain("2026-10-16T15:00:00.000Z");
+  });
+
+  it("ignores a day outside the last 30 days", async () => {
+    const r = await loadAdminActivity({ viewer: 13, all: true, filter: { admin: null, day: "2025-01-01", kind: null }, now: NOW });
+    expect(r.filter.day).toBeNull();
+  });
+});
+
 describe("관리자 활동: 관리 작업", () => {
   it("sums by category per day and per admin, from KST days", async () => {
     daily = [
@@ -108,18 +209,25 @@ describe("관리자 활동: 관리 작업", () => {
     expect(raws[0].sql).toContain("e.at + interval '9 hours'");
   });
 
+  it("sign-ins are never counted as tasks", async () => {
+    await loadAdminActivity({ viewer: 13, all: true, now: NOW });
+    const events = raws.find((r) => r.sql.includes("GROUP BY 1, 2, 3"))!;
+    expect(events.sql).toContain('FROM "AdminActivityLog" WHERE "action" <> ');
+    expect(events.values).toContain("auth.sign_in");
+  });
+
   it("marks days before the log began as partial; the log start is its marker or first row", async () => {
-    adminActivityLog.aggregate.mockResolvedValue({ _min: { createdAt: new Date("2026-10-16T01:00:00Z") } });
+    earliest = { log: "2026-10-16T01:00:00.000Z", presence: null };
     const r = await loadAdminActivity({ viewer: 13, all: true, now: NOW });
     expect(r.logSince).toBe("2026-10-16 10:00");
     expect(r.taskCoverage.slice(-3)).toEqual(["partial", "partial", "full"]);
   });
 
   it("a day with a failed log write is partial, and its failures are reported", async () => {
-    adminActivityLog.aggregate.mockResolvedValue({ _min: { createdAt: new Date("2026-10-10T01:00:00Z") } });
-    metricDaily.findMany.mockResolvedValue([{ day: new Date("2026-10-16T00:00:00Z"), value: 2 }]);
+    earliest = { log: "2026-10-10T01:00:00.000Z", presence: null };
+    metricDaily.findMany.mockResolvedValue([{ metric: "admin.activity.record_failed", day: new Date("2026-10-16T00:00:00Z"), value: 2 }]);
     const r = await loadAdminActivity({ viewer: 13, all: true, now: NOW });
-    expect(metricDaily.findMany.mock.calls[0][0].where.metric).toBe("admin.activity.record_failed");
+    expect(metricDaily.findMany.mock.calls[0][0].where.metric).toEqual({ in: ["admin.activity.record_failed", "admin.visit.record_failed"] });
     expect(r.recordFailures.slice(-3)).toEqual([0, 2, 0]);
     expect(r.taskCoverage.slice(-3)).toEqual(["full", "partial", "full"]);
   });
@@ -130,25 +238,11 @@ describe("관리자 활동: 관리 작업", () => {
       data: [{ day: new Date("2026-10-17T00:00:00Z"), metric: ADMIN_ACTIVITY_SINCE_METRIC, value: 21 * 60 }],
       skipDuplicates: true,
     });
-    metricDaily.findFirst.mockImplementation(async ({ where }: { where: { metric: string } }) =>
-      where.metric === ADMIN_ACTIVITY_SINCE_METRIC ? { day: new Date("2026-10-16T00:00:00Z"), value: 600 } : null,
-    );
+    metricDaily.findFirst.mockImplementation(async ({ where }: { where: { metric: string } }) => ({ day: new Date("2026-10-16T00:00:00Z"), value: where.metric ? 600 : 0 }));
     metricDaily.createMany.mockClear();
     const r = await loadAdminActivity({ viewer: 13, all: false, now: NOW });
     expect(metricDaily.createMany).not.toHaveBeenCalled();
     expect(r.logSince).toBe("2026-10-16 10:00");
-  });
-
-  it("history: newest first as read, labelled, targets by id only", async () => {
-    recent = [
-      { admin_id: 20, at: "2026-10-17T03:00:00.000Z", kind: "proposal.approved.grant_admin", target_type: "user", target_id: 31 },
-      { admin_id: 13, at: "2026-10-16T03:00:00.000Z", kind: "moderation.delete_post", target_type: "post", target_id: -7 },
-    ];
-    const r = await loadAdminActivity({ viewer: 13, all: true, now: NOW });
-    expect(r.history.map((h) => [h.nickname, h.category, h.label, h.target])).toEqual([
-      ["관리자20", "role", "관리자 지정 승인", "회원 #31"],
-      ["관리자13", "content", "게시글 삭제", "습득물 게시글 #7"],
-    ]);
   });
 });
 
@@ -163,6 +257,7 @@ describe("describeKind / describeTarget", () => {
     // a system step (executed / expired) is not an admin's task
     expect(describeKind("proposal.executed.grant_admin")).toBeNull();
     expect(describeKind("log.constructor")).toBeNull();
+    expect(describeKind("log.auth.sign_in")).toBeNull();
   });
 
   it("never names a person or shows content", () => {

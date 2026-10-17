@@ -49,7 +49,10 @@ describe("runRetention: 관리자 활동 기록", () => {
     withdrawn = [];
     calls.length = 0;
     await runRetention(new Date("2026-10-16T18:00:00Z"));
-    const deletes = calls.filter((c) => c.model === "adminActivityLog");
-    expect(deletes).toEqual([{ model: "adminActivityLog", method: "deleteMany", args: { where: { createdAt: { lte: new Date("2025-10-16T18:00:00Z") } } } }]);
+    const deletes = calls.filter((c) => c.model === "adminActivityLog" || c.model === "adminVisit");
+    expect(deletes).toEqual([
+      { model: "adminActivityLog", method: "deleteMany", args: { where: { createdAt: { lte: new Date("2025-10-16T18:00:00Z") } } } },
+      { model: "adminVisit", method: "deleteMany", args: { where: { lastActiveAt: { lte: new Date("2025-10-16T18:00:00Z") } } } },
+    ]);
   });
 });

@@ -515,6 +515,7 @@ model User {
   postCategoryReviews          PostCategoryReview[]
   adminAccessLogs              AdminAccessLog[]
   adminActivityLogs            AdminActivityLog[]
+  adminVisits                  AdminVisit[]
   externalAccessGrantsCreated  ExternalAccessGrant[]         @relation("ExternalAccessGrantCreatedBy")
   externalAccessGrantsRevoked  ExternalAccessGrant[]         @relation("ExternalAccessGrantRevokedBy")
   withdrawnIdentities          WithdrawnIdentity[]
@@ -1753,6 +1754,26 @@ model AdminActivityLog {
   @@index([adminUserId, createdAt], map: "idx_adminactivitylog_admin_created")
   @@index([createdAt], map: "idx_adminactivitylog_created")
   @@map("AdminActivityLog")
+}
+
+// ---------- AdminVisit ----------
+// 관리자 활동 > 방문: one row per visit of an admin, a visit being signed-in
+// use with no gap of 30 minutes or more (ADMIN_VISIT_GAP_MINUTES in
+// admin/activityLog.ts). Opened and extended only by the activity beacon's
+// write (metrics/record.ts recordMemberActivity: a visible screen shown or
+// input on it, at most every few minutes) -- never by background requests,
+// so auto-refresh does not add visits. Start and last activity times only.
+// Deleted after RECORD_RETENTION_DAYS by the daily retention run.
+model AdminVisit {
+  id           Int      @id @default(autoincrement())
+  adminUserId  Int      @map("admin_user_id")
+  admin        User     @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
+  startedAt    DateTime @map("started_at")
+  lastActiveAt DateTime @map("last_active_at")
+
+  @@index([adminUserId, startedAt], map: "idx_adminvisit_admin_started")
+  @@index([startedAt], map: "idx_adminvisit_started")
+  @@map("AdminVisit")
 }
 
 // ---------- AdminAccessLog ----------

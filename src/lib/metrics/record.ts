@@ -3,6 +3,7 @@ import { after } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
 import { activityStep } from "./activityTime";
+import { recordAdminVisit } from "@/lib/admin/activityLog";
 
 // 운영 통계 recording (admin dashboard, /admin/stats). Rules:
 // - Only what the existing tables can't answer is recorded here: search
@@ -226,6 +227,8 @@ export async function recordMemberActivity(user: ActiveMember, now: Date = new D
       )
       SELECT count(*)::int AS n FROM u`;
     const wrote = Number(rows[0]?.n ?? 0) > 0;
+    // 관리자 활동 > 방문: the same write extends or opens the admin's visit
+    if (wrote && user.isAdmin) await recordAdminVisit(user.id, now);
     if (wrote && step.newHour && !user.isAdmin) {
       addDailyCount(`${ACTIVE_MEMBER_HOUR_PREFIX}${String(kstHour(now)).padStart(2, "0")}`, 1, day);
     } else if (wrote && !hourlySinceMarked) {

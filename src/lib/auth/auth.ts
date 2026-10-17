@@ -14,6 +14,7 @@ import {
   isSchoolWorkspaceAccount,
 } from "@/lib/identity/googleHints";
 import { syncIdentityFromHints } from "@/lib/identity/service";
+import { ADMIN_SIGN_IN_ACTION, recordAdminActivity } from "@/lib/admin/activityLog";
 
 // No next-auth Adapter/database session store here -- see the User.googleId
 // comment in schema.prisma. Sessions are JWT-based (a signed cookie), and
@@ -117,8 +118,10 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           delete token.rejoinIdentityId;
           token.userId = resolved.user.id;
           token.nickname = resolved.user.nickname;
-          // 사용자 통계: one anonymous count per completed sign-in, by hour.
+          // 사용자 통계: one anonymous count per completed sign-in, by hour;
+          // an admin's sign-in goes to 관리자 활동 instead (who and when).
           if (!resolved.user.isAdmin) recordSignIn();
+          else await recordAdminActivity(resolved.user.id, ADMIN_SIGN_IN_ACTION);
         }
         if (resolved.kind === "held") {
           delete token.identityHints;
