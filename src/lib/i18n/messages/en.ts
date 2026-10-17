@@ -588,7 +588,6 @@ export const en: Dictionary = {
   "form.retrying": "Retrying...",
   "form.goToEdit": "Go to the edit page",
 
-  "landing.badge": "An unofficial lost & found run by Myongji students",
   "landing.searchHeadline": "Lost something?\nLook for it here.",
   "landing.registerLost": "Post a lost item",
   "landing.registerFound": "Post a found item",
@@ -646,9 +645,6 @@ export const en: Dictionary = {
   "landing.stats.lost": "Lost items posted",
   "landing.stats.found": "Found items posted",
   "landing.stats.recent": "New in the last 7 days",
-  "landing.stats.summaryPrefix": "So far ",
-  "landing.stats.summaryCount": "{count} items",
-  "landing.stats.summarySuffix": " have been posted. Maybe yours is here too?",
   "landing.stats.browseLost": "Browse lost items",
   "landing.stats.browseFound": "Browse found items",
   "home.popular.card": "Card",

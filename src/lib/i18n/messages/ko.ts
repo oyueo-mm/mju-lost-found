@@ -616,7 +616,6 @@ export const ko = {
   "form.goToEdit": "게시물 수정 페이지로 이동",
 
   // ---------- 랜딩(로그아웃 방문자) ----------
-  "landing.badge": "명지대 학생이 운영하는 비공식 분실물 서비스",
   "landing.searchHeadline": "잃어버린 물건,\n여기서 찾아보세요.",
   "landing.registerLost": "분실물 등록하기",
   "landing.registerFound": "습득물 등록하기",
@@ -674,9 +673,6 @@ export const ko = {
   "landing.stats.lost": "등록된 분실물",
   "landing.stats.found": "등록된 습득물",
   "landing.stats.recent": "최근 7일 신규 등록",
-  "landing.stats.summaryPrefix": "지금까지 ",
-  "landing.stats.summaryCount": "{count}건",
-  "landing.stats.summarySuffix": "의 물건이 등록됐어요. 혹시 내 물건도 여기 있지 않을까요?",
   "landing.stats.browseLost": "분실물 둘러보기",
   "landing.stats.browseFound": "습득물 둘러보기",
 

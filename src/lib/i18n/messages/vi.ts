@@ -586,7 +586,6 @@ export const vi: Dictionary = {
   "form.retrying": "Đang thử lại...",
   "form.goToEdit": "Đến trang sửa bài đăng",
 
-  "landing.badge": "Dịch vụ đồ thất lạc không chính thức do sinh viên Myongji vận hành",
   "landing.searchHeadline": "Mất đồ?\nHãy tìm ở đây.",
   "landing.registerLost": "Đăng đồ thất lạc",
   "landing.registerFound": "Đăng đồ nhặt được",
@@ -644,9 +643,6 @@ export const vi: Dictionary = {
   "landing.stats.lost": "Đồ thất lạc đã đăng",
   "landing.stats.found": "Đồ nhặt được đã đăng",
   "landing.stats.recent": "Mới trong 7 ngày qua",
-  "landing.stats.summaryPrefix": "Đến nay đã có ",
-  "landing.stats.summaryCount": "{count} món",
-  "landing.stats.summarySuffix": " đồ được đăng. Biết đâu đồ của bạn cũng ở đây?",
   "landing.stats.browseLost": "Xem đồ thất lạc",
   "landing.stats.browseFound": "Xem đồ nhặt được",
   "home.popular.card": "Thẻ", "home.popular.wallet": "Ví",

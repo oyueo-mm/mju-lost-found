@@ -20,7 +20,7 @@ export async function Hero() {
   const [line1, line2 = ""] = t("landing.searchHeadline").split("\n", 2);
 
   return (
-    <section className="relative isolate -mx-4 -mt-6 flex flex-col items-center gap-4 overflow-hidden px-4 pt-8 pb-6 text-center md:-mx-6 md:-mt-10 md:gap-5 md:px-6 md:pt-14 md:pb-8">
+    <section className="relative isolate -mx-4 -mt-6 flex flex-col items-center gap-4 overflow-hidden px-4 pt-10 pb-4 text-center md:-mx-6 md:-mt-10 md:gap-5 md:px-6 md:pt-16 md:pb-6">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_90%_75%_at_50%_0%,var(--primary-muted),transparent)] md:bg-[radial-gradient(ellipse_44%_85%_at_50%_0%,var(--primary-muted),transparent)]"
@@ -29,8 +29,6 @@ export async function Hero() {
         aria-hidden
         className="pointer-events-none absolute top-0 left-1/2 -z-10 h-72 w-72 -translate-x-1/2 -translate-y-1/3 rounded-full bg-primary/10 blur-3xl md:h-96 md:w-96"
       />
-
-      <span className="rounded-full bg-primary-muted px-3 py-1 text-xs font-medium text-primary">{t("landing.badge")}</span>
 
       <h1 className="text-[1.875rem] leading-[1.22] font-extrabold tracking-[-0.03em] break-keep text-foreground sm:text-4xl md:text-[3.25rem] md:leading-[1.15]">
         <span className="block">{line1}</span>

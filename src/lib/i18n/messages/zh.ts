@@ -583,7 +583,6 @@ export const zh: Dictionary = {
   "form.retrying": "正在重试…",
   "form.goToEdit": "前往帖子编辑页面",
 
-  "landing.badge": "明知大学学生运营的非官方失物招领服务",
   "landing.searchHeadline": "丢了东西？\n来这里找找看。",
   "landing.registerLost": "登记失物",
   "landing.registerFound": "登记拾获物品",
@@ -641,9 +640,6 @@ export const zh: Dictionary = {
   "landing.stats.lost": "已登记的失物",
   "landing.stats.found": "已登记的招领",
   "landing.stats.recent": "最近 7 天新增",
-  "landing.stats.summaryPrefix": "至今已登记 ",
-  "landing.stats.summaryCount": "{count} 件",
-  "landing.stats.summarySuffix": "物品。说不定您的物品也在这里？",
   "landing.stats.browseLost": "浏览失物",
   "landing.stats.browseFound": "浏览招领",
   "home.popular.card": "卡片",

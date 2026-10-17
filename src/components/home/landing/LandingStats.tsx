@@ -24,11 +24,10 @@ export async function LandingStats() {
   if (!stats) return null;
 
   const { lostCount, foundCount, recentCount } = stats;
-  const totalCount = lostCount + foundCount;
-  if (totalCount === 0) return null;
+  if (lostCount + foundCount === 0) return null;
 
   return (
-    <section className="flex flex-col items-center gap-5 pt-6 pb-2 text-center md:gap-6 md:pt-8 md:pb-4">
+    <section className="flex flex-col items-center gap-3 pt-4 pb-2 text-center md:gap-4 md:pt-6 md:pb-4">
       <div className="grid w-full max-w-md grid-cols-3 gap-4">
         <div className="flex flex-col gap-1">
           <span className="text-2xl font-bold text-foreground md:text-3xl">{lostCount.toLocaleString()}</span>
@@ -44,17 +43,9 @@ export async function LandingStats() {
         </div>
       </div>
 
-      <p className="max-w-sm text-sm break-keep text-muted-foreground md:text-base">
-        {t("landing.stats.summaryPrefix")}
-        <span className="font-semibold text-foreground">
-          {t("landing.stats.summaryCount", { count: totalCount.toLocaleString() })}
-        </span>
-        {t("landing.stats.summarySuffix")}
-      </p>
-
       {/* Browsing the boards: plain links (with an arrow), so they never
           read as the hero's "post an item" buttons. */}
-      <nav aria-label={t("landing.stats.browseLost") + " · " + t("landing.stats.browseFound")} className="-mt-1 flex flex-wrap items-center justify-center gap-x-1 gap-y-0.5 md:gap-x-3">
+      <nav aria-label={t("landing.stats.browseLost") + " · " + t("landing.stats.browseFound")} className="flex flex-wrap items-center justify-center gap-x-1 gap-y-0.5 md:gap-x-3">
         <LinkButton href="/lost" variant="ghost" size="sm" className="h-8 gap-1 px-1.5! text-[0.8125rem] hover:bg-muted/60 md:px-2.5! md:text-sm">
           <BoxIcon className="size-4" /> {t("landing.stats.browseLost")}
           <ChevronRightIcon className="size-3.5" />

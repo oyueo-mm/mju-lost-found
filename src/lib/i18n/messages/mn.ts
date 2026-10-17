@@ -588,7 +588,6 @@ export const mn: Dictionary = {
   "form.retrying": "Дахин оролдож байна...",
   "form.goToEdit": "Нийтлэл засах хуудас руу очих",
 
-  "landing.badge": "Мёнжийн оюутнуудын ажиллуулдаг албан бус үйлчилгээ",
   "landing.searchHeadline": "Гээсэн эд зүйлээ\nэндээс хайгаарай.",
   "landing.registerLost": "Гээсэн эд зүйлээ бүртгэх",
   "landing.registerFound": "Олсон эд зүйлээ бүртгэх",
@@ -646,9 +645,6 @@ export const mn: Dictionary = {
   "landing.stats.lost": "Бүртгэгдсэн гээгдсэн эд",
   "landing.stats.found": "Бүртгэгдсэн олдсон эд",
   "landing.stats.recent": "Сүүлийн 7 хоногийн шинэ бүртгэл",
-  "landing.stats.summaryPrefix": "Өнөөг хүртэл ",
-  "landing.stats.summaryCount": "{count} ширхэг",
-  "landing.stats.summarySuffix": " эд зүйл бүртгэгдсэн байна. Магадгүй таных ч энд байж болох юм?",
   "landing.stats.browseLost": "Гээгдсэн эд үзэх",
   "landing.stats.browseFound": "Олдсон эд үзэх",
   "home.popular.card": "Карт", "home.popular.wallet": "Түрийвч",

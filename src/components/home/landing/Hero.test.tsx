@@ -37,9 +37,11 @@ describe("비로그인 홈 첫 화면", () => {
     expect(html).not.toContain("로그인 없이");
   });
 
-  it("says it is an unofficial student-run service", () => {
-    expect(html).toContain(ko["landing.badge"]);
-    expect(ko["landing.badge"]).toContain("비공식");
+  it("has no badge above the headline (the footer keeps the unofficial-service note)", () => {
+    // only the two decorative background layers come before the headline
+    expect(html.slice(0, html.indexOf("<h1"))).not.toMatch(/<span|<p\b/);
+    expect(html).not.toContain("비공식");
+    expect(ko["footer.disclaimer"]).toContain("공식 서비스가 아닌");
   });
 
   it("starts its glow right under the header: cancels <main>'s top padding, full width on phones", () => {
