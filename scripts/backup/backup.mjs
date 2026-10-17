@@ -40,12 +40,15 @@ for (const f of ["full", "public"]) fs.writeFileSync(path.join(outDir, `db/${f}.
 
 const db = new Client({ connectionString: url });
 await db.connect();
-await db.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
+// Read-only per transaction, never per session: a session setting can stay
+// on a pooled server connection and reach the app (Supabase pooler).
+await db.query("BEGIN READ ONLY");
 const counts = {};
 for (const { tablename } of (await db.query(`SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1`)).rows) {
   counts[tablename] = Number((await db.query(`SELECT count(*) FROM public."${tablename}"`)).rows[0].count);
 }
 const migrations = (await db.query(`SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY 1`)).rows.map((r) => r.migration_name);
+await db.query("COMMIT");
 await db.end();
 fs.writeFileSync(path.join(outDir, "db/rowcounts.json"), JSON.stringify({ takenAt: new Date().toISOString(), counts, migrations }, null, 1));
 console.log(`row counts: ${Object.keys(counts).length} tables, last migration ${migrations.at(-1)}`);

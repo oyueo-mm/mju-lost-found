@@ -15,7 +15,9 @@ if (!process.env.DIRECT_URL?.includes("postgres.swqvli")) throw new Error("Previ
 const db = new Client({ connectionString: process.env.DIRECT_URL });
 await db.connect();
 try {
-  await db.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
+  // Read-only per transaction, never per session: a session setting can stay
+  // on a pooled server connection and reach the app (Supabase pooler).
+  await db.query("BEGIN READ ONLY");
   const { rows: [user] } = await db.query(
     `SELECT u.id, u.privacy_consent_version, u.privacy_consent_at, u.identity_consent_version, u.identity_consent_at, u.last_login_at,
             i.user_id IS NOT NULL AS has_row, i.real_name_source, i.department_source, i.consent_version, i.consented_at, i.updated_at,
@@ -41,6 +43,7 @@ try {
     const { rows: [logs] } = await db.query(`SELECT count(*)::int AS n FROM "IdentityAccessLog" WHERE target_user_id = $1`, [user.id]);
     console.log(`  관리자 열람 기록    ${logs.n}건`);
   }
+  await db.query("COMMIT");
 } finally {
   await db.end();
 }
