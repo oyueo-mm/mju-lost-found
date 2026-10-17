@@ -1,25 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import { useSyncExternalStore } from "react";
 
 import { dismissPrivacyNoticeAction } from "@/app/privacyNoticeActions";
 import { InfoIcon, XIcon } from "@/components/icons";
-import { PRIVACY_NOTICE_STORAGE_KEY, type PrivacyNotice } from "@/lib/policy/privacyNotice";
+import { isPrivacyNoticeClosed, recordPrivacyNoticeClosed, subscribePrivacyNotice, type PrivacyNotice } from "@/lib/policy/privacyNotice";
 
 // 개인정보처리방침 변경 안내 bar (lib/policy/privacyNotice.ts): never blocks
-// anything, closes for this 시행일 in this browser -- hidden at once, then
-// remembered in localStorage and in a cookie the server sets (the layout
-// leaves the bar out from the next page on).
+// anything. Closing records it in this browser at once (localStorage and
+// cookie) and asks the server to set the same cookie; the layout then
+// leaves the bar out. Every bar on screen keeps watching the closed state,
+// so one closed in another tab, or a page restored from history, goes
+// away too (the server's first render always shows it: hydration matches,
+// then it unmounts -- before first paint the init script already hid it).
 export function PrivacyPolicyNotice({ notice }: { notice: NonNullable<PrivacyNotice> }) {
+  const closed = useSyncExternalStore(subscribePrivacyNotice, () => isPrivacyNoticeClosed(notice.id), () => false);
   const close = () => {
-    document.documentElement.setAttribute("data-privacy-notice", "closed");
-    try {
-      window.localStorage.setItem(PRIVACY_NOTICE_STORAGE_KEY, notice.id);
-    } catch {
-      // no storage: the cookie below still holds it
-    }
-    dismissPrivacyNoticeAction(notice.id).catch(() => {});
+    recordPrivacyNoticeClosed(notice.id);
+    dismissPrivacyNoticeAction(notice.id).catch(() => {}); // the browser record above already holds it
   };
+  if (closed) return null;
   return (
     <div data-privacy-notice-bar role="note" className="border-b border-border bg-primary-muted/60">
       <div className="mx-auto flex w-full max-w-4xl items-start gap-2 px-4 py-2 text-xs leading-relaxed text-foreground wide-board:max-w-6xl md:px-6">
