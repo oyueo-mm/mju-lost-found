@@ -6,6 +6,7 @@ export const DATASETS = [
   { key: "visits", name: "방문 통계" },
   { key: "referrals", name: "유입 분석" },
   { key: "usage", name: "서비스 이용" },
+  { key: "categories", name: "카테고리별 현황" },
   { key: "completed", name: "완료 처리" },
   { key: "server", name: "서버 운영" },
   { key: "flow", name: "방문 시간·이탈" },

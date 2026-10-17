@@ -5,6 +5,7 @@ vi.mock("@/lib/db/prisma", () => ({ prisma: {} }));
 
 const { datasetsOf, toCsv, toSheets, toXlsx, CAVEATS } = await import("./export");
 const { buildCsv, crc32, safeText } = await import("./xlsx");
+const { categoryRows } = await import("./categories");
 type Report = import("./report").Report;
 
 // A three-day report: 10/14 is before 방문 통계 began (미측정), 10/15 partial.
@@ -105,6 +106,12 @@ function fakeReport(): Report {
       { route: "ai:text-embed", count: 3, errors: 0, avgMs: 600, p50: "≤ 800ms", p95: "≤ 800ms", totalMs: 1800, buckets: [0, 0, 0, 0, 0, 3, 0, 0, 0, 0] },
     ],
     capacity: { day: "2026-10-16", dbMb: 17, storageMb: 13 },
+    categories: categoryRows([
+      { type: "lost", code: "wallet", n: 3 },
+      { type: "found", code: "wallet", n: 1 },
+      { type: "found", code: "phone", n: 2 },
+      { type: "lost", code: null, n: 1 },
+    ]),
   };
 }
 
@@ -133,7 +140,7 @@ describe("운영 통계 내보내기", () => {
   it("builds six sheets whose totals match the report (the dashboard's numbers)", () => {
     const report = fakeReport();
     const sets = datasetsOf(report);
-    expect(sets.map((s) => s.name)).toEqual(["운영 요약", "방문 통계", "유입 분석", "서비스 이용", "완료 처리", "서버 운영", "방문 시간·이탈"]);
+    expect(sets.map((s) => s.name)).toEqual(["운영 요약", "방문 통계", "유입 분석", "서비스 이용", "카테고리별 현황", "완료 처리", "서버 운영", "방문 시간·이탈"]);
     const summary = sets[0].tables[0].rows;
     const value = (label: string) => summary.find((r) => r[1] === label)?.[2];
     expect(value("페이지뷰 합계")).toBe(71 + 20 + 38 + 10);
@@ -286,5 +293,22 @@ describe("운영 통계 내보내기", () => {
     expect(safeText("@SUM")).toBe("'@SUM");
     expect(safeText("GET /api/posts")).toBe("GET /api/posts");
     expect(buildCsv([["=1+1", 'a,"b"', -5, null]])).toBe('﻿\'=1+1,"a,""b""",-5,\r\n');
+  });
+});
+
+describe("카테고리별 현황 내보내기", () => {
+  it("one sheet / CSV with counts, shares and ranks per category, 미분류 included, totals matching", () => {
+    const ds = datasetsOf(fakeReport()).find((d) => d.key === "categories")!;
+    expect(ds.name).toBe("카테고리별 현황");
+    const [table] = ds.tables;
+    expect(table.rows[0]).toEqual(["지갑", 3, 0.75, 1, 1, 1 / 3, 2, 4]);
+    expect(table.rows.find((r) => r[0] === "휴대폰")).toEqual(["휴대폰", 0, 0, "-", 2, 2 / 3, 1, 2]);
+    expect(table.rows.find((r) => r[0] === "미분류")).toEqual(["미분류", 1, 0.25, 2, 0, 0, "-", 1]);
+    expect(table.total).toEqual(["합계", 4, 1, "", 3, 1, "", 7]);
+    const csv = toCsv(fakeReport(), "categories");
+    expect(csv).toContain("카테고리,분실물,분실물 비율(%),분실물 순위,습득물,습득물 비율(%),습득물 순위,합계");
+    expect(csv).toContain("미분류,1,25");
+    // counts go back to the start: no cell is 미측정
+    expect(csv).not.toMatch(/(^|,)미측정(,|\r|$)/m);
   });
 });

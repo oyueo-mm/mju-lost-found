@@ -336,6 +336,7 @@ function opsDatasets(report: Report): Dataset[] {
         "검색은 첫 페이지 결과를 볼 때 한 번 세며, 같은 서버에서 10초 안에 반복된 같은 검색은 한 번으로 셉니다. 관리자 검색은 비로그인·로그인 어느 쪽에도 넣지 않습니다.",
       ],
     },
+    categoryDataset(report),
     {
       key: "completed",
       name: "완료 처리",
@@ -420,6 +421,42 @@ function opsDatasets(report: Report): Dataset[] {
     },
     flowDataset(report),
   ];
+}
+
+export const CATEGORY_NOTES = [
+  "기간 중 등록된 분실물·습득물을 대분류별로 셉니다. 운영 요약의 분실물·습득물 등록과 같은 기준입니다(관리자 임시 숨김 포함, 삭제된 게시글은 제외).",
+  "미분류: 아직 대분류가 정해지지 않은 게시글(카테고리 체계 이전에 등록된 글 등)입니다. 현재 체계에 없는 코드는 '알 수 없는 분류'로 따로 표시합니다.",
+  "비율은 같은 유형(분실물 또는 습득물) 안에서의 비율이고, 순위는 유형별 건수 순위입니다(같은 건수는 같은 순위, 0건은 순위 없음).",
+];
+
+function categoryDataset(report: Report): Dataset {
+  const rows = report.categories;
+  const lostTotal = rows.reduce((a, r) => a + r.lost, 0);
+  const foundTotal = rows.reduce((a, r) => a + r.found, 0);
+  return {
+    key: "categories",
+    name: "카테고리별 현황",
+    widths: [16, 10, 10, 10, 10, 10, 10, 10],
+    tables: [
+      {
+        title: "카테고리별 분실물·습득물 등록(기간 합계, 합계 많은 순)",
+        columns: [
+          { label: "카테고리", kind: "text" },
+          { label: "분실물", kind: "int" },
+          { label: "분실물 비율", kind: "pct" },
+          { label: "분실물 순위", kind: "int" },
+          { label: "습득물", kind: "int" },
+          { label: "습득물 비율", kind: "pct" },
+          { label: "습득물 순위", kind: "int" },
+          { label: "합계", kind: "int" },
+        ],
+        // "-": no posts of that type (never 미측정 -- these counts go back to the start)
+        rows: rows.map((r) => [r.label, r.lost, r.lostShare ?? "-", r.lostRank ?? "-", r.found, r.foundShare ?? "-", r.foundRank ?? "-", r.total]),
+        total: ["합계", lostTotal, lostTotal ? 1 : "-", "", foundTotal, foundTotal ? 1 : "-", "", lostTotal + foundTotal],
+      },
+    ],
+    notes: CATEGORY_NOTES,
+  };
 }
 
 export const FLOW_CAVEATS = [

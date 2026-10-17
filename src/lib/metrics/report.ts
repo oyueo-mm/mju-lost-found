@@ -20,6 +20,7 @@ import { kstDay } from "./record";
 import { EARLIEST_SELECTABLE_DAY } from "./daySelection";
 import { DURATION_BUCKETS, PAGES_BUCKETS, type DurationBucket, type PagesBucket } from "./flow";
 import { DEVICE_KINDS, PAGE_KINDS, type DeviceKind, type PageKind } from "./visits";
+import { loadCategoryCounts, type CategoryRow } from "./categories";
 
 // 운영 통계 for any KST date range -- the one loader behind both the
 // /admin/stats dashboard and its Excel/CSV export, so the two always show
@@ -271,6 +272,8 @@ export type Report = {
   };
   timings: TimingRow[];
   capacity: Awaited<ReturnType<typeof loadCapacity>>;
+  // 카테고리별 현황: the period's lost / found registrations by category
+  categories: CategoryRow[];
 };
 
 // created_at columns store UTC wall time without a zone.
@@ -380,7 +383,7 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
     })(),
   ]);
 
-  const [timings, capacity, firstDevice, flowFirsts, perDay] = await Promise.all([
+  const [timings, capacity, firstDevice, flowFirsts, perDay, categories] = await Promise.all([
     loadTimingsBetween(from, until),
     loadCapacity(),
     prisma.$queryRaw<{ day: Date | string | null }[]>`SELECT min("day") AS day FROM "MetricDaily" WHERE "metric" LIKE 'visit.device.%'`.catch(() => []),
@@ -396,6 +399,7 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
       WHERE "day" >= ${from}::date AND "day" < ${until}::date
         AND ("metric" IN ('visit.session.anon', 'visit.session.member') OR "metric" LIKE 'visit.flow.sessions.%')
       GROUP BY 1`.catch(() => []),
+    loadCategoryCounts(from, until),
   ]);
   deviceSince = firstDevice[0]?.day ? asDay(firstDevice[0].day) : null;
   const deviceCoverage = buckets.map((b) => {
@@ -462,6 +466,7 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
     internalSearches: [...visitTotals].reduce((a, [m, n]) => (/^search\.[a-z]+\.internal$/.test(m) ? a + n : a), 0),
     timings,
     capacity,
+    categories,
   };
 }
 
