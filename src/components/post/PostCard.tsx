@@ -10,16 +10,13 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { AttributionLink } from "@/components/user/AttributionLink";
 import { PinIcon } from "@/components/icons";
 import { useI18n } from "@/lib/i18n/client";
-import { LOCALE_INTL_TAG } from "@/lib/i18n/config";
 import { postCategoryLabel, postTypeLabelKey } from "@/lib/i18n/labels";
 import type { Locale } from "@/lib/i18n/config";
 import { categoryIconFor } from "./categoryIcons";
+import { formatKstDate } from "@/lib/i18n/formatDate";
 
 function formatDate(date: Date, locale: Locale): string {
-  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], {
-    dateStyle: "medium",
-    timeZone: "Asia/Seoul",
-  }).format(date);
+  return formatKstDate(date, locale);
 }
 
 // "찾는 중" / "보관 중": the state every post starts in, and the board's

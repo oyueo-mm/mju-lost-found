@@ -13,8 +13,9 @@ import { CommentChatButton } from "@/components/comment/CommentChatButton";
 import { applyCommentRemoval } from "@/components/comment/commentRemoval";
 import { PostAsSelector } from "@/components/organization/PostAsSelector";
 import { useI18n } from "@/lib/i18n/client";
-import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
+import { type Locale } from "@/lib/i18n/config";
 import type { Translator } from "@/lib/i18n/translate";
+import { formatKstDate } from "@/lib/i18n/formatDate";
 
 type CommentAuthor = { id: number; nickname: string | null; publicId: string; userType?: string | null };
 type CommentDTO = {
@@ -72,10 +73,7 @@ export function formatRelativeTime(date: Date, t: Translator, locale: Locale): s
   if (hours < 24) return t("time.hoursAgo", { count: hours });
   const days = Math.floor(hours / 24);
   if (days < 7) return t("time.daysAgo", { count: days });
-  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], {
-    dateStyle: "medium",
-    timeZone: "Asia/Seoul",
-  }).format(date);
+  return formatKstDate(date, locale);
 }
 
 const COMMENT_MAX_LENGTH = 1000;

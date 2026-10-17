@@ -1,5 +1,6 @@
-import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
+import { type Locale } from "@/lib/i18n/config";
 import type { Translator } from "@/lib/i18n/translate";
+import { formatKstDate } from "@/lib/i18n/formatDate";
 
 // Phase N: chat message timestamps ("방금 전", "3분 전", "2시간 전", "3일
 // 전", "2개월 전", "2년 전" -- this phase's own spec examples, verbatim).
@@ -34,11 +35,5 @@ export function formatRelativeTime(date: Date, t: Translator): string {
 // `title` tooltip on hover/long-press, per this phase's own "필요한 경우
 // 오래된 메시지는 정확한 날짜/시간을 확인할 수 있게 한다".
 export function formatAbsoluteTime(date: Date, locale: Locale): string {
-  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], {
-    dateStyle: "medium",
-    timeStyle: "short",
-    // 타임존은 언제나 Asia/Seoul -- 캠퍼스에서 실제로 일어난 일의
-    // 시각이므로 보는 사람의 언어에 따라 바뀌면 안 된다.
-    timeZone: "Asia/Seoul",
-  }).format(date);
+  return formatKstDate(date, locale, { time: true });
 }

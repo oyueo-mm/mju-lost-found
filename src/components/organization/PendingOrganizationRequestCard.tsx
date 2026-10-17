@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 
 import { cancelOrganizationCreationRequestAction } from "@/app/(main)/organizations/create/actions";
 import { Button } from "@/components/ui/Button";
-import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
+import { type Locale } from "@/lib/i18n/config";
 import { useI18n } from "@/lib/i18n/client";
+import { formatKstDate } from "@/lib/i18n/formatDate";
 
 function formatDate(date: Date, locale: Locale): string {
-  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
+  return formatKstDate(date, locale, { time: true });
 }
 
 type PendingOrganizationRequestCardProps = {

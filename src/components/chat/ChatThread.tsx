@@ -12,6 +12,7 @@ import { dispatchChatUnreadCount } from "@/components/layout/chatUnreadEvent";
 import { CameraIcon, UserIcon } from "@/components/icons";
 import { LOCALE_INTL_TAG } from "@/lib/i18n/config";
 import { isSameCalendarDay, isSameMessageGroup } from "./messageGrouping";
+import { formatKstDate } from "@/lib/i18n/formatDate";
 
 // Phase D-3: mirrors chat/service.ts's MessageReplyPreview -- no
 // createdAt/etc, just enough to render an inline quote (sender + a short
@@ -55,10 +56,7 @@ type MessageItem = {
 };
 
 function formatChatDay(date: Date, locale: keyof typeof LOCALE_INTL_TAG): string {
-  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], {
-    dateStyle: "medium",
-    timeZone: "Asia/Seoul",
-  }).format(date);
+  return formatKstDate(date, locale);
 }
 
 // All message fetching/sending happens via our own server API (never a

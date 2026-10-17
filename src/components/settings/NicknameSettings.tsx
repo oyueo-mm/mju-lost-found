@@ -7,8 +7,9 @@ import { updateNicknameAction } from "@/app/(main)/me/actions";
 import { NICKNAME_MAX_LENGTH, NICKNAME_MIN_LENGTH } from "@/lib/auth/nickname";
 import { Button } from "@/components/ui/Button";
 import { useI18n } from "@/lib/i18n/client";
-import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
+import { type Locale } from "@/lib/i18n/config";
 import type { Translator } from "@/lib/i18n/translate";
+import { formatKstDate } from "@/lib/i18n/formatDate";
 
 type NicknameSettingsProps = {
   currentNickname: string;
@@ -19,7 +20,7 @@ type NicknameSettingsProps = {
 };
 
 function formatDateTime(date: Date, locale: Locale): string {
-  return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(date);
+  return formatKstDate(date, locale, { time: true });
 }
 
 // Phase I: pulled out to a plain top-level function (not inlined in the
