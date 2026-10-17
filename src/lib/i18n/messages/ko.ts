@@ -617,12 +617,11 @@ export const ko = {
 
   // ---------- 랜딩(로그아웃 방문자) ----------
   "landing.badge": "명지대 학생이 운영하는 비공식 분실물 서비스",
-  "landing.searchHeadline": "명지대에서 잃어버린 물건, 여기서 찾아보세요.",
-  "landing.accessNote": "검색·열람은 로그인 없이 가능해요. 글 등록·채팅·알림은 로그인 후 이용할 수 있어요.",
-  "landing.registerFound": "주운 물건 등록하기",
+  "landing.searchHeadline": "잃어버린 물건,\n여기서 찾아보세요.",
+  "landing.registerLost": "분실물 등록하기",
+  "landing.registerFound": "습득물 등록하기",
   "landing.searchCta": "잃어버린 물건 찾기",
-  "landing.subtitle": "로그인 없이 등록된 분실물·습득물을 검색하고 둘러볼 수 있어요. 잃어버린 물건을 설명하거나 사진을 올리면 AI 검색이 비슷한 습득물을 찾아 보여 줘요.",
-  "landing.cta": "로그인하고 시작하기",
+  "landing.subtitle": "물건을 설명하거나 사진을 올리면\nAI가 비슷한 습득물을 보여줘요.",
   "landing.features.title": "핵심 기능",
   "landing.features.subtitle": "분실물 찾기부터 채팅까지, 필요한 기능은 다 있습니다.",
   "landing.feature.register.title": "분실물 · 습득물 등록",

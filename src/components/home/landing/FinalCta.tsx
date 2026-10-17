@@ -18,11 +18,15 @@ export async function FinalCta() {
       <p className="max-w-sm text-sm text-muted-foreground md:text-base">
         {t("landing.finalCta.description")}
       </p>
-      <div className="flex flex-wrap items-center justify-center gap-2">
-        <LinkButton href="/search" size="md" className="px-8 hover:shadow-md motion-safe:hover:-translate-y-0.5">
-          {t("landing.searchCta")}
+      <LinkButton href="/search" size="md" className="px-8 hover:shadow-md motion-safe:hover:-translate-y-0.5">
+        {t("landing.searchCta")}
+      </LinkButton>
+      {/* posting stays second, as in the hero */}
+      <div className="grid w-full max-w-xs grid-cols-2 gap-2 sm:max-w-sm">
+        <LinkButton href="/lost/new" variant="secondary" size="sm" className="h-auto min-h-9 px-3 py-1.5 text-[0.8125rem] leading-tight whitespace-normal">
+          {t("landing.registerLost")}
         </LinkButton>
-        <LinkButton href="/found/new" variant="secondary" size="md">
+        <LinkButton href="/found/new" variant="secondary" size="sm" className="h-auto min-h-9 px-3 py-1.5 text-[0.8125rem] leading-tight whitespace-normal">
           {t("landing.registerFound")}
         </LinkButton>
       </div>

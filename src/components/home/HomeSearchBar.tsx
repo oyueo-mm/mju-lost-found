@@ -7,6 +7,11 @@ import { useI18n } from "@/lib/i18n/client";
 
 export const HOME_POPULAR_SEARCHES = ["카드", "지갑", "무선 이어폰", "휴대폰"] as const;
 
+// landing hero: the bar a little taller and lifted (the page's main action),
+// the popular searches small and quiet underneath
+const LANDING_CONTROLS =
+  "!gap-2.5 [&>form]:border-primary/25 [&>form]:py-2 [&>form]:shadow-md [&>form]:shadow-primary/5 [&>div]:gap-1.5 [&>div>span]:font-normal [&>div>button]:border-transparent [&>div>button]:bg-muted/70 [&>div>button]:px-2.5 [&>div>button]:py-0.5";
+
 // Home UX 단순화 Phase: 홈의 검색은 이제 고를 것이 없다 -- AI 검색으로,
 // 습득물 게시판을 대상으로 고정된다. 사용자는 검색창에 찾는 물건을
 // 문장으로 적기만 하면 된다.
@@ -35,7 +40,12 @@ export const HOME_POPULAR_SEARCHES = ["카드", "지갑", "무선 이어폰", "�
 // 사진 첨부(이미지 검색)는 공유 AISearchPanel이 이미 갖고 있는 카메라
 // 버튼을 그대로 쓴다. 인기 검색어도 선택적 prop으로만 전달하므로 이
 // 화면에서만 보이고 /search, /lost, /found의 패널은 바뀌지 않는다.
-export function HomeSearchBar() {
+// `variant="landing"` (the signed-out hero, components/home/landing/Hero):
+// the same search, minus the hint the hero's own subtitle already says, with
+// a slightly stronger bar and lighter popular-search chips. The signed-in
+// home (default) is unchanged.
+export function HomeSearchBar({ variant = "home" }: { variant?: "home" | "landing" }) {
+  const landing = variant === "landing";
   const { t, locale } = useI18n();
   const quickSearchItems = [
     { query: HOME_POPULAR_SEARCHES[0], label: t("home.popular.card") },
@@ -77,7 +87,8 @@ export function HomeSearchBar() {
       quickSearchItems={quickSearchItems}
       controlsClassName={`mx-auto w-full max-w-xl text-center [&>div]:justify-center [&>p]:text-center ${
         locale === "fr" ? "!gap-2 sm:!gap-3 [&>div]:gap-1.5 sm:[&>div]:gap-2" : ""
-      }`}
+      } ${landing ? LANDING_CONTROLS : ""}`}
+      hideHint={landing}
       animatedPlaceholders={animatedPlaceholders}
       mobileAnimatedPlaceholders={mobileAnimatedPlaceholders}
     />

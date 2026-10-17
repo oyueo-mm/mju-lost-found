@@ -34,8 +34,9 @@ const ICON_STAGGER_MS = 110;
 export async function FeatureGrid() {
   const t = await getTranslator();
 
+  // top kept short: the stats' browse links sit right above it
   return (
-    <section className="flex flex-col gap-8 py-14 md:py-20">
+    <section className="flex flex-col gap-8 pt-10 pb-14 md:pt-14 md:pb-20">
       <div className="flex flex-col items-center gap-2 text-center">
         <h2 className="text-xl font-bold text-foreground md:text-2xl">{t("landing.features.title")}</h2>
         <p className="text-sm text-muted-foreground md:text-base">{t("landing.features.subtitle")}</p>

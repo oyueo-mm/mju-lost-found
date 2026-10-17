@@ -50,6 +50,9 @@ type AISearchPanelProps = {
   // unknownTime, see periodParams.ts) appended to the search request.
   // Omitted by callers without a period control (e.g. Home).
   extraQuery?: string;
+  // The signed-out landing hero states what the search does right above
+  // it, so its "describe the item" hint would repeat it (that page only).
+  hideHint?: boolean;
 };
 
 export function resolveAiSearchQuery(currentQuery: string, quickSearchQuery?: string): string {
@@ -77,6 +80,7 @@ export function AISearchPanel({
   animatedPlaceholders,
   mobileAnimatedPlaceholders,
   extraQuery,
+  hideHint = false,
 }: AISearchPanelProps) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
@@ -254,7 +258,7 @@ export function AISearchPanel({
   // 알려준다 -- 사진을 고른 뒤나 결과가 이미 떠 있을 때는 같은 말을
   // 반복할 필요가 없어 자동으로 사라진다(섹션 2/3 요구사항: 사진을 필수
   // 입력처럼 보이게 하지 않는다).
-  const showOptionalHint = !file && results === null;
+  const showOptionalHint = !hideHint && !file && results === null;
 
   return (
     <div className="flex flex-col gap-3">

@@ -489,6 +489,22 @@ option {
   }
 }
 
+/* 비로그인 홈 제목의 강조 줄 (components/home/landing/Hero): the accent
+   colour; in dark mode lifted toward white so the large headline keeps
+   about 6:1 on the dark page instead of ~3.7:1 (the accent stays the
+   visitor's chosen one -- only mixed). */
+.text-headline-accent {
+  color: var(--primary);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .text-headline-accent {
+    color: color-mix(in srgb, var(--primary) 72%, white);
+  }
+}
+:root[data-theme="dark"] .text-headline-accent {
+  color: color-mix(in srgb, var(--primary) 72%, white);
+}
+
 /* Landing demos: the posting, AI-search, image-search and after-posting
    mockups play their "this is what happens" sequence when DemoPlayer
    (src/components/home/landing/DemoPlayer.tsx) sets data-demo="play" on
