@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
 import { updateFeedbackStatus } from "@/lib/feedback/service";
 import { updateFeedbackStatusSchema } from "@/lib/feedback/schema";
+import { recordAdminActivity } from "@/lib/admin/activityLog";
 
 export type UpdateFeedbackStatusState = { error: string } | { ok: true };
 
@@ -27,6 +28,7 @@ export async function updateFeedbackStatusAction(
   if (result.kind === "not_found") return { error: "의견을 찾을 수 없습니다." };
   if (result.kind === "locked") return { error: "반영 완료된 문의는 다른 상태로 변경할 수 없습니다." };
   if (result.kind !== "ok") return { error: "상태를 변경하지 못했습니다." };
+  await recordAdminActivity(admin.id, "feedback.status", { type: "feedback", id });
 
   revalidatePath("/admin/feedback");
   revalidatePath(`/admin/feedback/${id}`);

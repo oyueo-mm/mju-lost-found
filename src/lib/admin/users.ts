@@ -12,7 +12,9 @@ import { UUID_PATTERN } from "@/lib/user/service";
 import { listCommentsByUser, type MyCommentDTO } from "@/lib/comment/service";
 import { activityActor, kstDay, TRAFFIC_HOURLY_SINCE_METRIC } from "@/lib/metrics/record";
 import { activityRetainedFrom, COLLECTION_SINCE } from "@/lib/metrics/report";
+import { recordingSince } from "@/lib/metrics/activityTime";
 import { createAdminActionProposal, type AdminActionProposalDTO } from "./proposals";
+import { recordAdminActivity } from "./activityLog";
 import type { AdminUserAction, AdminActionProposalTypeValue } from "./schema";
 
 // Phase 관리자 승인제: the one place an AdminUserAction (this ordinary
@@ -134,14 +136,6 @@ export type AdminUserDetailDTO = {
   reportsFiledCount: number;
   reportsAgainstCount: number;
 };
-
-// KST "YYYY-MM-DD HH:mm" when lastActiveAt began here: the marker (KST day
-// + minute of day) or the earliest stored time, whichever is earlier.
-function recordingSince(marker: { day: Date; value: number } | null, earliest: Date | null): string | null {
-  const fromMarker = marker ? new Date(marker.day.getTime() + marker.value * 60_000 - 9 * 3_600_000) : null;
-  const start = [fromMarker, earliest].filter((d): d is Date => d !== null).sort((a, b) => a.getTime() - b.getTime())[0];
-  return start ? new Date(start.getTime() + 9 * 3_600_000).toISOString().slice(0, 16).replace("T", " ") : null;
-}
 
 export async function getUserDetailForAdmin(
   admin: User,
@@ -432,5 +426,10 @@ export async function updateUserByAdmin(
     data,
     include: { suspendedBy: { select: { nickname: true } } },
   });
+  // 관리자 활동: a direct 이용 제한 해제 leaves no other record (a suspend
+  // has its ModerationAction); only when a suspension was actually lifted.
+  if (action === "unsuspend" && existing.isSuspended) {
+    await recordAdminActivity(admin.id, "user.unsuspend", { type: "user", id: targetUserId });
+  }
   return { kind: "ok", data: toAdminUserDTO(updated) };
 }

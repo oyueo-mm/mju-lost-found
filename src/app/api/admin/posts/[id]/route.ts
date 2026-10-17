@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { jsonError, requireAdminForApi, withErrorHandling } from "@/lib/moderation/http";
 import { adminPostMutationResultToResponse } from "@/lib/admin/response";
 import { deletePostForAdmin } from "@/lib/admin/posts";
+import { recordAdminActivity } from "@/lib/admin/activityLog";
 import { postTypeSchema } from "@/lib/posts/schema";
 
 // DELETE /api/admin/posts/[id]?type=lost|found -- admin-only, deletes any
@@ -24,6 +25,7 @@ export const DELETE = withErrorHandling(
     }
 
     const result = await deletePostForAdmin(auth.user, typeResult.data, id);
+    if (result.kind === "ok") await recordAdminActivity(auth.user.id, "post.delete", { type: `${typeResult.data}_post`, id });
     return adminPostMutationResultToResponse(result);
   },
 );

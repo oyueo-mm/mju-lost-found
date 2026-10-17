@@ -25,3 +25,12 @@ export function activityStep(last: Date | null, now: Date): ActivityStep {
   const newHour = a !== b;
   return { write: newHour || now.getTime() - last.getTime() >= LAST_ACTIVE_INTERVAL_MS, newDay, newHour };
 }
+
+// KST "YYYY-MM-DD HH:mm" when a record began here (lastActiveAt; the
+// 관리자 활동 log): its marker (KST day + minute of day) or the earliest
+// stored time, whichever is earlier.
+export function recordingSince(marker: { day: Date; value: number } | null, earliest: Date | null): string | null {
+  const fromMarker = marker ? new Date(marker.day.getTime() + marker.value * 60_000 - 9 * 3_600_000) : null;
+  const start = [fromMarker, earliest].filter((d): d is Date => d !== null).sort((a, b) => a.getTime() - b.getTime())[0];
+  return start ? new Date(start.getTime() + 9 * 3_600_000).toISOString().slice(0, 16).replace("T", " ") : null;
+}

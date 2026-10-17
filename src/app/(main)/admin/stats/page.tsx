@@ -36,6 +36,9 @@ import { HourlyExportButtons } from "@/components/admin/HourlyExportButtons";
 import { isHourlyMetric, loadHourlyCells } from "@/lib/metrics/hourly";
 import { describeDays, encodeDays, resolveSelection } from "@/lib/metrics/daySelection";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
+import { AdminActivityView } from "@/components/admin/AdminActivityView";
+import { loadAdminActivity, STRIP_DAYS } from "@/lib/metrics/adminActivity";
+import { canViewAllAdminActivity } from "@/lib/admin/activityLog";
 import { AlertIcon, ChevronRightIcon, InfoIcon } from "@/components/icons";
 
 // 운영 통계 (admin only). Read-only aggregates: no search text, no member
@@ -147,9 +150,9 @@ function SeriesTable({ report, columns }: { report: Report; columns: { label: st
 export default async function AdminStatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[] }>;
+  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[]; a?: string }>;
 }) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const params = await searchParams;
   const today = kstDay();
   const preset = (PERIOD_PRESETS.some((p) => p.key === params.period) ? params.period : "month") as PeriodPreset;
@@ -159,7 +162,7 @@ export default async function AdminStatsPage({
   const periodError = "error" in asked ? asked.error : null;
   const unit = period.range.unit;
   // (시간대 분석 is a section of 운영 통계; an old ?tab=hourly link opens 운영 통계)
-  const tab: "ops" | "users" = params.tab === "users" ? "users" : "ops";
+  const tab: "ops" | "users" | "admins" = params.tab === "users" ? "users" : params.tab === "admins" ? "admins" : "ops";
   // 시간대 분석: the calendar's days (`d`) and metric (`m`), kept across
   // period changes on 운영 통계
   const dParam = params.d === undefined ? null : [params.d].flat().join(",");
@@ -185,7 +188,9 @@ export default async function AdminStatsPage({
         </Link>
         <h1 className="text-xl font-semibold text-foreground">운영 통계</h1>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          {period.label} · {UNIT_TEXT[unit]} 집계 · 한국 시간 기준(진행 중인 기간은 오늘 현재까지) · 개인정보와 검색어 원문은 수집하지 않습니다.
+          {tab === "admins"
+            ? `최근 ${STRIP_DAYS}일 · 한국 시간 기준 · 관리자 본인의 운영 기록만 다룹니다.`
+            : `${period.label} · ${UNIT_TEXT[unit]} 집계 · 한국 시간 기준(진행 중인 기간은 오늘 현재까지) · 개인정보와 검색어 원문은 수집하지 않습니다.`}
         </p>
       </div>
       {notice && (
@@ -201,41 +206,62 @@ export default async function AdminStatsPage({
         <Link href={`/admin/stats?tab=users&${periodQuery}`} aria-current={tab === "users" ? "page" : undefined} className={tabClass(tab === "users")}>
           사용자 통계
         </Link>
+        <Link href="/admin/stats?tab=admins" aria-current={tab === "admins" ? "page" : undefined} className={tabClass(tab === "admins")}>
+          관리자 활동
+        </Link>
       </nav>
-      <div className="flex flex-col gap-2">
-        <StatsPeriodPicker
-          active={period.selection.preset}
-          from={period.selection.from ?? period.range.from}
-          to={period.selection.to ?? today}
-          today={today}
-          openByDefault={period.selection.preset === "custom" || !!periodError}
-          tab={tab}
-          keep={tab === "ops" ? hourlyQuery : undefined}
-        />
-        {periodError && (
-          <p role="alert" className="text-xs text-destructive">
-            {periodError} 이번 달 기준으로 보여 줍니다.
-          </p>
-        )}
-      </div>
-      <details className="group rounded-card border border-border bg-card">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-card px-4 py-3 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-          운영·사용자 통계 내보내기 (Excel · CSV)
-          <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
-        </summary>
-        <div className="border-t border-border px-4 py-3">
-          <StatsExportPanel
-            preset={period.selection.preset}
-            from={period.selection.from}
-            to={period.selection.to}
-            periodLabel={period.label}
-            days={selectedParam}
-            daysLabel={selection.days.length ? `${selection.days.length}일: ${describeDays(selection.days)}` : "고른 날짜 없음"}
-          />
-        </div>
-      </details>
+      {tab !== "admins" && (
+        <>
+          <div className="flex flex-col gap-2">
+            <StatsPeriodPicker
+              active={period.selection.preset}
+              from={period.selection.from ?? period.range.from}
+              to={period.selection.to ?? today}
+              today={today}
+              openByDefault={period.selection.preset === "custom" || !!periodError}
+              tab={tab}
+              keep={tab === "ops" ? hourlyQuery : undefined}
+            />
+            {periodError && (
+              <p role="alert" className="text-xs text-destructive">
+                {periodError} 이번 달 기준으로 보여 줍니다.
+              </p>
+            )}
+          </div>
+          <details className="group rounded-card border border-border bg-card">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-card px-4 py-3 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+              운영·사용자 통계 내보내기 (Excel · CSV)
+              <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
+            </summary>
+            <div className="border-t border-border px-4 py-3">
+              <StatsExportPanel
+                preset={period.selection.preset}
+                from={period.selection.from}
+                to={period.selection.to}
+                periodLabel={period.label}
+                days={selectedParam}
+                daysLabel={selection.days.length ? `${selection.days.length}일: ${describeDays(selection.days)}` : "고른 날짜 없음"}
+              />
+            </div>
+          </details>
+        </>
+      )}
     </div>
   );
+
+  if (tab === "admins") {
+    // 관리자별 상세 기록: every admin's only for the viewers named in
+    // ADMIN_ACTIVITY_VIEWER_IDS; any other admin sees only their own
+    const all = canViewAllAdminActivity(admin);
+    const focus = all && /^\d+$/.test(params.a ?? "") ? Number(params.a) : null;
+    const activity = await loadAdminActivity({ viewer: admin.id, all, focus });
+    return (
+      <div className="flex flex-col gap-6">
+        {header}
+        <AdminActivityView report={activity} viewer={admin.id} all={all} focus={focus} />
+      </div>
+    );
+  }
 
   if (tab === "users") {
     const users = await loadUserReport(period.range);

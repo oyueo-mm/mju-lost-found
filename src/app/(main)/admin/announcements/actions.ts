@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/session";
 import { createAnnouncement, deleteAnnouncement, updateAnnouncement } from "@/lib/announcement/service";
 import { createAnnouncementSchema, updateAnnouncementSchema } from "@/lib/announcement/schema";
+import { recordAdminActivity } from "@/lib/admin/activityLog";
 
 export type AnnouncementActionState = { error: string } | { ok: true };
 
@@ -43,6 +44,7 @@ export async function updateAnnouncementAction(
   const result = await updateAnnouncement(admin, id, parsed.data);
   if (result.kind === "not_found") return { error: "공지사항을 찾을 수 없습니다." };
   if (result.kind !== "ok") return { error: "공지사항을 수정하지 못했습니다." };
+  await recordAdminActivity(admin.id, "announcement.update", { type: "announcement", id });
 
   revalidatePath("/admin/announcements");
   // The public detail page a notification links to (see resolveHref.ts) --
@@ -58,6 +60,7 @@ export async function deleteAnnouncementAction(id: number): Promise<Announcement
   const result = await deleteAnnouncement(admin, id);
   if (result.kind === "not_found") return { error: "공지사항을 찾을 수 없습니다." };
   if (result.kind !== "ok") return { error: "공지사항을 삭제하지 못했습니다." };
+  await recordAdminActivity(admin.id, "announcement.delete", { type: "announcement", id });
 
   revalidatePath("/admin/announcements");
   return { ok: true };

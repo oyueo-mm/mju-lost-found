@@ -514,6 +514,7 @@ model User {
   keywordAlerts                KeywordAlert[]
   postCategoryReviews          PostCategoryReview[]
   adminAccessLogs              AdminAccessLog[]
+  adminActivityLogs            AdminActivityLog[]
   externalAccessGrantsCreated  ExternalAccessGrant[]         @relation("ExternalAccessGrantCreatedBy")
   externalAccessGrantsRevoked  ExternalAccessGrant[]         @relation("ExternalAccessGrantRevokedBy")
   withdrawnIdentities          WithdrawnIdentity[]
@@ -1729,6 +1730,29 @@ model PostCategoryReview {
 
   @@index([status, reviewReason], map: "idx_postcategoryreview_status_reason")
   @@map("PostCategoryReview")
+}
+
+// ---------- AdminActivityLog ----------
+// 관리자 활동 (운영 통계 > 관리자 활동): one row per completed admin task that
+// no other table already records with its admin and time -- an admin's
+// direct post delete, a direct 이용 제한 해제, announcement edits/deletes,
+// feedback status, organization status, external-access edits and
+// re-approvals, app settings (admin/activityLog.ts lists them). Written
+// only after the task succeeded; never for page views or clicks. No
+// content: the action key and the target's id only. Deleted after
+// RECORD_RETENTION_DAYS by the daily retention run.
+model AdminActivityLog {
+  id          Int      @id @default(autoincrement())
+  adminUserId Int      @map("admin_user_id")
+  admin       User     @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
+  action      String   @db.Text
+  targetType  String?  @map("target_type") @db.Text
+  targetId    Int?     @map("target_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([adminUserId, createdAt], map: "idx_adminactivitylog_admin_created")
+  @@index([createdAt], map: "idx_adminactivitylog_created")
+  @@map("AdminActivityLog")
 }
 
 // ---------- AdminAccessLog ----------

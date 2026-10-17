@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireAdmin } from "@/lib/auth/session";
 import { setOrganizationStatusForAdmin } from "@/lib/organization/service";
+import { recordAdminActivity } from "@/lib/admin/activityLog";
 
 // Phase 12-6 §10/§21: requireAdmin()이 세션의 로그인/닉네임/정지 여부와
 // User.isAdmin(DB)을 이미 다시 확인하므로, 비관리자는 이 함수 본문에
@@ -24,6 +25,7 @@ export async function setOrganizationStatusAction(
   if (result.kind === "not_found") return { error: "단체를 찾을 수 없습니다." };
   if (result.kind === "invalid_state") return { error: "현재 단체 상태에서는 해당 작업을 수행할 수 없습니다." };
   if (result.kind !== "ok") return { error: "단체 상태를 변경하지 못했습니다." };
+  await recordAdminActivity(admin.id, "organization.status", { type: "organization", id: organizationId });
 
   revalidatePath("/admin/organizations");
   revalidatePath(`/admin/organizations/${organizationId}`);

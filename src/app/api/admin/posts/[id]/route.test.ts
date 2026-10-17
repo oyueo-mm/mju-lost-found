@@ -11,6 +11,8 @@ vi.mock("@/lib/moderation/http", async () => {
   return { ...response, requireAdminForApi };
 });
 vi.mock("@/lib/admin/posts", () => ({ deletePostForAdmin }));
+const recordAdminActivity = vi.fn();
+vi.mock("@/lib/admin/activityLog", () => ({ recordAdminActivity }));
 
 const { DELETE } = await import("./route");
 
@@ -68,6 +70,7 @@ describe("DELETE /api/admin/posts/[id]", () => {
     );
 
     expect(res.status).toBe(404);
+    expect(recordAdminActivity).not.toHaveBeenCalled();
   });
 
   it("deletes the post for the admin, regardless of who owns it", async () => {
@@ -83,5 +86,7 @@ describe("DELETE /api/admin/posts/[id]", () => {
     expect(res.status).toBe(200);
     expect(deletePostForAdmin).toHaveBeenCalledWith(admin, "found", 5);
     expect(json.data).toEqual({ id: 5 });
+    // 관리자 활동: recorded only after the delete succeeded
+    expect(recordAdminActivity).toHaveBeenCalledWith(1, "post.delete", { type: "found_post", id: 5 });
   });
 });

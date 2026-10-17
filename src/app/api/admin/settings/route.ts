@@ -5,6 +5,7 @@ import { jsonError, jsonOk, requireAdminForApi, withErrorHandling } from "@/lib/
 import { setGoogleTestMode } from "@/lib/settings/service";
 import { runRetention } from "@/lib/retention/service";
 import { recordCapacity } from "@/lib/metrics/record";
+import { recordAdminActivity } from "@/lib/admin/activityLog";
 
 const patchSettingsSchema = z.object({
   googleTestModeEnabled: z.boolean(),
@@ -35,6 +36,7 @@ export const PATCH = withErrorHandling(async (request: NextRequest) => {
 
   const result = await setGoogleTestMode(auth.user, parsed.data.googleTestModeEnabled);
   if (result.kind === "forbidden") return jsonError(403, "관리자 권한이 필요합니다.");
+  await recordAdminActivity(auth.user.id, "settings.update");
   return jsonOk(result.data);
 });
 

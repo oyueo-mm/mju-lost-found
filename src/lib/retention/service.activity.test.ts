@@ -5,12 +5,13 @@ import { describe, expect, it, vi } from "vitest";
 let withdrawn: { id: number }[] = [];
 const empty = (model: string, method: string) =>
   method === "findMany" ? (model === "user" ? withdrawn.map((w) => ({ ...w, withdrawnAt: new Date("2026-10-01T00:00:00Z"), isSuspended: false, suspendedUntil: null, _count: { withdrawnIdentities: 0 } })) : []) : method === "count" ? 0 : method.startsWith("find") ? null : { count: 0 };
+const calls: { model: string; method: string; args: unknown }[] = [];
 vi.mock("@/lib/db/prisma", () => ({
   prisma: new Proxy(
     {},
     {
       get: (_t, model: string) =>
-        model === "$queryRaw" || model === "$executeRaw" ? async () => [] : model === "$transaction" ? async (fn: (tx: unknown) => unknown) => fn(undefined) : new Proxy({}, { get: (_m, method: string) => async () => empty(model, method) }),
+        model === "$queryRaw" || model === "$executeRaw" ? async () => [] : model === "$transaction" ? async (fn: (tx: unknown) => unknown) => fn(undefined) : new Proxy({}, { get: (_m, method: string) => async (args: unknown) => (calls.push({ model, method, args }), empty(model, method)) }),
     },
   ),
 }));
@@ -40,5 +41,15 @@ describe("runRetention: 탈퇴 회원의 이용 일자 기록", () => {
     const result = await runRetention(new Date("2026-10-16T18:00:00Z"));
     expect(deleteActivityMarks.mock.calls[0][1]).toEqual([]);
     expect(result.withdrawnActivityDeleted).toBe(0);
+  });
+});
+
+describe("runRetention: 관리자 활동 기록", () => {
+  it("deletes every admin's task records older than one year, and nothing newer", async () => {
+    withdrawn = [];
+    calls.length = 0;
+    await runRetention(new Date("2026-10-16T18:00:00Z"));
+    const deletes = calls.filter((c) => c.model === "adminActivityLog");
+    expect(deletes).toEqual([{ model: "adminActivityLog", method: "deleteMany", args: { where: { createdAt: { lte: new Date("2025-10-16T18:00:00Z") } } } }]);
   });
 });

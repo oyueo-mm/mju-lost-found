@@ -3,13 +3,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const runRetention = vi.fn(async () => ({ messagesExpired: 0 }));
 vi.mock("@/lib/retention/service", () => ({ runRetention }));
-vi.mock("@/lib/settings/service", () => ({ setGoogleTestMode: vi.fn() }));
+const setGoogleTestMode = vi.fn();
+vi.mock("@/lib/settings/service", () => ({ setGoogleTestMode }));
+const requireAdminForApi = vi.fn();
 vi.mock("@/lib/moderation/http", async () => {
   const response = await import("@/lib/posts/response");
-  return { ...response, requireAdminForApi: vi.fn() };
+  return { ...response, requireAdminForApi };
 });
+const recordAdminActivity = vi.fn();
+vi.mock("@/lib/admin/activityLog", () => ({ recordAdminActivity }));
 
-const { GET } = await import("./route");
+const { GET, PATCH } = await import("./route");
 const call = (auth?: string) => GET(new NextRequest("http://localhost/api/admin/settings", auth ? { headers: { authorization: auth } } : {}));
 
 afterEach(() => {
@@ -36,5 +40,27 @@ describe("GET /api/admin/settings (retention cron)", () => {
     const res = await call("Bearer s3cret-value");
     expect(res.status).toBe(200);
     expect(runRetention).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("PATCH /api/admin/settings (관리자 활동)", () => {
+  const patch = (body: unknown) =>
+    PATCH(new NextRequest("http://localhost/api/admin/settings", { method: "PATCH", body: JSON.stringify(body) }));
+
+  it("records the change only after it was saved", async () => {
+    requireAdminForApi.mockResolvedValueOnce({ user: { id: 7, isAdmin: true } });
+    setGoogleTestMode.mockResolvedValueOnce({ kind: "ok", data: { googleTestModeEnabled: true } });
+    expect((await patch({ googleTestModeEnabled: true })).status).toBe(200);
+    expect(recordAdminActivity).toHaveBeenCalledWith(7, "settings.update");
+  });
+
+  it("records nothing for a refused or invalid request", async () => {
+    recordAdminActivity.mockClear();
+    requireAdminForApi.mockResolvedValueOnce({ user: { id: 7, isAdmin: true } });
+    expect((await patch({ googleTestModeEnabled: "yes" })).status).toBe(400);
+    requireAdminForApi.mockResolvedValueOnce({ user: { id: 7, isAdmin: true } });
+    setGoogleTestMode.mockResolvedValueOnce({ kind: "forbidden" });
+    expect((await patch({ googleTestModeEnabled: false })).status).toBe(403);
+    expect(recordAdminActivity).not.toHaveBeenCalled();
   });
 });

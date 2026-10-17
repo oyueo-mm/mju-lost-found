@@ -10,6 +10,7 @@ import {
   revokeExternalAccessGrant,
   updateExternalAccessGrant,
 } from "@/lib/externalAccess/service";
+import { recordAdminActivity } from "@/lib/admin/activityLog";
 
 export type ExternalAccessActionState = { error: string } | { ok: true };
 
@@ -45,6 +46,7 @@ export async function updateExternalAccessAction(
 
   const result = await updateExternalAccessGrant(admin, id, parsed.data);
   if (result.kind !== "ok") return { error: "수정하지 못했습니다." };
+  await recordAdminActivity(admin.id, "external_access.update", { type: "external_access", id });
   revalidatePath("/admin/external-access");
   return { ok: true };
 }
@@ -61,6 +63,7 @@ export async function reactivateExternalAccessAction(id: number): Promise<Extern
   const admin = await requireAdmin();
   const result = await reactivateExternalAccessGrant(admin, id);
   if (result.kind !== "ok") return { error: "다시 승인하지 못했습니다." };
+  await recordAdminActivity(admin.id, "external_access.reactivate", { type: "external_access", id });
   revalidatePath("/admin/external-access");
   return { ok: true };
 }

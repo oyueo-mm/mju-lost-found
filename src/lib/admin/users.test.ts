@@ -36,9 +36,11 @@ const report = { count: vi.fn() };
 const activityDay = { findFirst: vi.fn() };
 // 최근 활동 감지 시각: this environment's recording start (marker row)
 const metricDaily = { findFirst: vi.fn() };
+// 관리자 활동: a lifted suspension is recorded
+const adminActivityLog = { create: vi.fn() };
 
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { user, notification, moderationAction, adminActionProposal, adminActionAuditLog, lostPost, foundPost, comment, report, activityDay, metricDaily, $transaction },
+  prisma: { user, notification, moderationAction, adminActionProposal, adminActionAuditLog, lostPost, foundPost, comment, report, activityDay, metricDaily, adminActivityLog, $transaction },
 }));
 // isAdmin() is a one-line `return user.isAdmin` in moderation/service.ts,
 // but that module also pulls in report/service.ts and report/targets.ts --
@@ -481,6 +483,19 @@ describe("updateUserByAdmin", () => {
       data: { isSuspended: false, suspendedUntil: null, suspendedByUserId: null },
       include: { suspendedBy: { select: { nickname: true } } },
     });
+    expect(adminActivityLog.create).toHaveBeenCalledWith({
+      data: { adminUserId: 1, action: "user.unsuspend", targetType: "user", targetId: 5 },
+    });
+  });
+
+  it("records no 관리자 활동 when nothing was lifted, or for a demote/promote of a non-admin", async () => {
+    user.findUnique.mockResolvedValueOnce({ ...baseRow, isSuspended: false });
+    user.update.mockResolvedValueOnce({ ...baseRow });
+    await updateUserByAdmin(admin as never, 5, "unsuspend");
+    user.findUnique.mockResolvedValueOnce({ ...baseRow });
+    user.update.mockResolvedValueOnce({ ...baseRow });
+    await updateUserByAdmin(admin as never, 5, "demote");
+    expect(adminActivityLog.create).not.toHaveBeenCalled();
   });
 
   // Phase I section 2/3.
