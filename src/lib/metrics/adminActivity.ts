@@ -180,6 +180,8 @@ export type AdminActivityRow = {
   strip: ("active" | "inactive" | "none")[];
   tasks30: CategoryCounts;
   tasksAll: CategoryCounts;
+  // 관리 작업 per day of `days`, all categories (see taskCoverage)
+  tasksByDay: number[];
   // 방문 / 로그인 per day of `days` (null: not recorded yet that day)
   visits: (number | null)[];
   signIns: (number | null)[];
@@ -211,7 +213,9 @@ export type TimelineItem = {
   until?: Date;
 };
 
-export type TimelineFilter = { admin: number | null; day: string | null; kind: TimelineKind | null };
+// period: the last 7 or 30 KST days (the timeline's span when no day is chosen)
+export type ActivityPeriod = 7 | 30;
+export type TimelineFilter = { admin: number | null; day: string | null; kind: TimelineKind | null; period?: ActivityPeriod };
 
 export type AdminActivityReport = {
   today: string;
@@ -232,6 +236,10 @@ export type AdminActivityReport = {
   presenceDays7: number;
   presenceDays30: number;
   admins: AdminActivityRow[];
+  // every recorded visit start / sign-in of the last 30 days in scope, for
+  // the hour and weekday views (a visit counts once, at its start)
+  visitEvents: { adminId: number; at: Date }[];
+  signInEvents: { adminId: number; at: Date }[];
   timeline: TimelineItem[];
   // items matching the filter before TIMELINE_LIMIT; tasks hit their cap
   timelineMatched: number;
@@ -277,7 +285,7 @@ const SIGN_INS = Prisma.sql`SELECT "admin_user_id" AS admin_id, "created_at" AS 
 export async function loadAdminActivity({
   viewer,
   all,
-  filter = { admin: null, day: null, kind: null },
+  filter = { admin: null, day: null, kind: null, period: STRIP_DAYS },
   now = new Date(),
 }: {
   viewer: number;
@@ -293,9 +301,10 @@ export async function loadAdminActivity({
     admin: all ? filter.admin : null,
     day: filter.day && days.includes(filter.day) ? filter.day : null,
     kind: filter.kind,
+    period: filter.period === 7 ? 7 : STRIP_DAYS,
   };
   const timelineScope: Scope = { adminId: all ? f.admin : viewer };
-  const dayFrom = f.day ? kstMidnight(f.day) : fromAt;
+  const dayFrom = f.day ? kstMidnight(f.day) : kstMidnight(days[days.length - (f.period ?? STRIP_DAYS)]);
   const dayUntil = f.day ? kstMidnight(addPeriods(f.day, "day", 1)) : null;
   const untilFilter = dayUntil ? Prisma.sql`AND e.at < ${utcParam(dayUntil)}` : Prisma.empty;
   const wantTasks = f.kind === null || (f.kind !== "login" && f.kind !== "visit");
@@ -378,11 +387,15 @@ export async function loadAdminActivity({
 
   const dailyTasks = days.map(() => zeroCounts());
   const tasks30 = new Map<number, CategoryCounts>();
+  const tasksPerDay = new Map<number, number[]>();
   for (const r of daily) {
     const kind = describeKind(r.kind);
     const i = days.indexOf(r.day);
     if (!kind || i < 0) continue;
     dailyTasks[i][kind.category] += r.n;
+    const perDayOf = tasksPerDay.get(r.admin_id) ?? days.map(() => 0);
+    perDayOf[i] += r.n;
+    tasksPerDay.set(r.admin_id, perDayOf);
     const c = tasks30.get(r.admin_id) ?? zeroCounts();
     c[kind.category] += r.n;
     tasks30.set(r.admin_id, c);
@@ -433,6 +446,7 @@ export async function loadAdminActivity({
       strip,
       tasks30: tasks30.get(u.id) ?? zeroCounts(),
       tasksAll: tasksAll.get(u.id) ?? zeroCounts(),
+      tasksByDay: tasksPerDay.get(u.id) ?? days.map(() => 0),
       visits,
       signIns,
       visits7: sumLast(visits, 7),
@@ -481,6 +495,8 @@ export async function loadAdminActivity({
     presenceDays7: measured(presenceStatus, 7),
     presenceDays30: measured(presenceStatus, STRIP_DAYS),
     admins,
+    visitEvents: visitRows.map((v) => ({ adminId: v.admin_id, at: new Date(v.at) })),
+    signInEvents: signInRows.map((v) => ({ adminId: v.admin_id, at: new Date(v.at) })),
     timeline: matched.slice(0, TIMELINE_LIMIT),
     timelineMatched: matched.length,
     timelineCapped: recent.length === TIMELINE_TASK_CAP,

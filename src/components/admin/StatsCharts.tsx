@@ -596,12 +596,15 @@ export function HourHeatmap({
   rows,
   extraLabels = [],
   note,
+  rowLabel = "날짜",
 }: {
   title: string;
   unit: string;
   rows: { label: string; values: (number | null)[]; status: HeatmapCellStatus[]; extras?: ReactNode[] }[];
   extraLabels?: string[];
   note?: ReactNode;
+  // what the rows are (the first column's header): 날짜, 요일, 관리자 ...
+  rowLabel?: string;
 }) {
   const max = Math.max(0, ...rows.flatMap((r) => r.values.map((v) => v ?? 0)));
   const statuses = new Set(rows.flatMap((r) => r.status));
@@ -653,11 +656,11 @@ export function HourHeatmap({
       {/* relative: keeps the cells' sr-only (absolute) text inside the scroll box */}
       <div className="relative overflow-x-auto rounded-lg border border-border">
         <table className="w-full min-w-[46rem] border-separate border-spacing-0.5 text-center text-[10px] leading-none tabular-nums">
-          <caption className="sr-only">{`${title} (단위: ${unit}). 행은 날짜, 열은 0시부터 23시까지의 한국 시간`}</caption>
+          <caption className="sr-only">{`${title} (단위: ${unit}). 행은 ${rowLabel}, 열은 0시부터 23시까지의 한국 시간`}</caption>
           <thead className="text-muted-foreground">
             <tr>
               <th scope="col" className="sticky left-0 z-10 bg-card px-1.5 py-1 text-left font-medium">
-                날짜
+                {rowLabel}
               </th>
               {Array.from({ length: 24 }, (_, h) => (
                 <th key={h} scope="col" className="py-1 font-medium">

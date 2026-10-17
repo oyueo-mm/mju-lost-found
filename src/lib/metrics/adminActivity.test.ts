@@ -187,6 +187,14 @@ describe("관리자 활동: 타임라인", () => {
     expect(timelineQuery()!.values).toContain("2026-10-16T15:00:00.000Z");
   });
 
+  it("the 7-day period bounds the timeline to the last 7 KST days", async () => {
+    const r = await loadAdminActivity({ viewer: 13, all: true, filter: { admin: null, day: null, kind: null, period: 7 }, now: NOW });
+    expect(r.filter.period).toBe(7);
+    // 10/11 00:00 KST = 10/10 15:00 UTC
+    expect(timelineQuery()!.values).toContain("2026-10-10T15:00:00.000Z");
+    expect(r.timeline.length).toBe(3);
+  });
+
   it("ignores a day outside the last 30 days", async () => {
     const r = await loadAdminActivity({ viewer: 13, all: true, filter: { admin: null, day: "2025-01-01", kind: null }, now: NOW });
     expect(r.filter.day).toBeNull();

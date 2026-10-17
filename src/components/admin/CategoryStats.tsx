@@ -62,7 +62,8 @@ export function CategoryStats({ rows, periodLabel }: { rows: CategoryRow[]; peri
         </div>
       )}
 
-      <div className="overflow-x-auto">
+      {/* relative: keeps the sr-only caption inside the scroll box */}
+      <div className="relative overflow-x-auto">
         <table className="w-full min-w-[560px] text-right text-xs tabular-nums">
           <caption className="sr-only">카테고리별 분실물·습득물 등록 건수, 비율, 순위</caption>
           <thead className="text-muted-foreground">

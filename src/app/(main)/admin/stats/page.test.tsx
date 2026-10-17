@@ -33,7 +33,7 @@ describe("/admin/stats?tab=admins", () => {
     requireAdmin.mockResolvedValue({ id: 20, isAdmin: true });
     loadAdminActivity.mockResolvedValue({});
     const html = await render({ tab: "admins", a: "13", day: "2026-10-16", k: "login" });
-    expect(loadAdminActivity).toHaveBeenCalledWith({ viewer: 20, all: false, filter: { admin: null, day: "2026-10-16", kind: "login" } });
+    expect(loadAdminActivity).toHaveBeenCalledWith({ viewer: 20, all: false, filter: { admin: null, day: "2026-10-16", kind: "login", period: 30 } });
     expect(html).toContain('data-all="false"');
   });
 
@@ -41,8 +41,8 @@ describe("/admin/stats?tab=admins", () => {
     vi.stubEnv("ADMIN_ACTIVITY_VIEWER_IDS", "13");
     requireAdmin.mockResolvedValue({ id: 13, isAdmin: true });
     loadAdminActivity.mockResolvedValue({});
-    await render({ tab: "admins", a: "20", day: "2026-1-6", k: "everything" });
-    expect(loadAdminActivity).toHaveBeenCalledWith({ viewer: 13, all: true, filter: { admin: 20, day: null, kind: null } });
+    await render({ tab: "admins", a: "20", day: "2026-1-6", k: "everything", p: "7" });
+    expect(loadAdminActivity).toHaveBeenCalledWith({ viewer: 13, all: true, filter: { admin: 20, day: null, kind: null, period: 7 } });
   });
 
   it("has no period picker or export (they belong to the other tabs), and leaves their data alone", async () => {

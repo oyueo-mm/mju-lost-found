@@ -36,7 +36,7 @@ import { HourlyExportButtons } from "@/components/admin/HourlyExportButtons";
 import { isHourlyMetric, loadHourlyCells } from "@/lib/metrics/hourly";
 import { describeDays, encodeDays, resolveSelection } from "@/lib/metrics/daySelection";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
-import { AdminActivityView } from "@/components/admin/AdminActivityView";
+import { AdminActivityView, type DashboardOptions } from "@/components/admin/AdminActivityView";
 import { CategoryStats } from "@/components/admin/CategoryStats";
 import { isTimelineKind, loadAdminActivity, STRIP_DAYS } from "@/lib/metrics/adminActivity";
 import { canViewAllAdminActivity } from "@/lib/admin/activityLog";
@@ -151,7 +151,7 @@ function SeriesTable({ report, columns }: { report: Report; columns: { label: st
 export default async function AdminStatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[]; a?: string; day?: string; k?: string }>;
+  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[]; a?: string; day?: string; k?: string; p?: string; hm?: string; dm?: string }>;
 }) {
   const admin = await requireAdmin();
   const params = await searchParams;
@@ -255,16 +255,23 @@ export default async function AdminStatsPage({
     // ADMIN_ACTIVITY_VIEWER_IDS; any other admin sees only their own
     const all = canViewAllAdminActivity(admin);
     // timeline filter: admin (only for those viewers), KST day, kind
+    // dashboard: period (7 / 30 days) and the metrics of its two switches
+    const options: DashboardOptions = {
+      period: params.p === "7" ? 7 : 30,
+      hourMetric: params.hm === "login" ? "login" : "visit",
+      dayMetric: params.dm === "visit" || params.dm === "login" ? params.dm : "task",
+    };
     const filter = {
       admin: all && /^\d+$/.test(params.a ?? "") ? Number(params.a) : null,
       day: /^\d{4}-\d{2}-\d{2}$/.test(params.day ?? "") ? params.day! : null,
       kind: isTimelineKind(params.k) ? params.k : null,
+      period: options.period,
     };
     const activity = await loadAdminActivity({ viewer: admin.id, all, filter });
     return (
       <div className="flex flex-col gap-6">
         {header}
-        <AdminActivityView report={activity} viewer={admin.id} all={all} />
+        <AdminActivityView report={activity} viewer={admin.id} all={all} options={options} />
       </div>
     );
   }
