@@ -57,6 +57,10 @@ export default function PrivacyPolicyHistoryPage() {
       </details>
 
       <div className="space-y-2 text-muted-foreground">
+        <Link href="/policy/privacy/history/634900f" className="inline-block font-medium text-primary hover:opacity-80">
+          2026-10-17 시행 개인정보처리방침(관리자 활동 기록 안내 추가 전) 전문 보기
+        </Link>
+        <p className="text-xs">관리자 운영 작업 기록 안내를 추가한 같은 날 개정 직전까지 적용된 처리방침의 보관본입니다.</p>
         <Link href="/policy/privacy/history/f21e596" className="inline-block font-medium text-primary hover:opacity-80">
           2026-10-16 시행 개인정보처리방침 전문 보기
         </Link>

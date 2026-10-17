@@ -6,7 +6,7 @@ import { HISTORY_LIMIT, STRIP_DAYS, type AdminActivityReport, type AdminActivity
 import { LAST_ACTIVE_INTERVAL_MINUTES } from "@/lib/metrics/activityTime";
 import { DAY_TONES, GroupedBarChart, StackedBarChart } from "@/components/admin/StatsCharts";
 import { More, Section, Unmeasured } from "@/components/admin/StatsBlocks";
-import { InfoIcon } from "@/components/icons";
+import { AlertIcon, InfoIcon } from "@/components/icons";
 
 // 관리자 활동 tab of /admin/stats (see lib/metrics/adminActivity.ts for what
 // each figure is read from). Server-rendered; no client JS. `all` is false
@@ -148,6 +148,8 @@ export function AdminActivityView({ report, viewer, all, focus }: { report: Admi
     </>
   );
   const focused = focus !== null ? report.admins.find((a) => a.id === focus) : undefined;
+  const failed = report.recordFailures.reduce((a, n) => a + n, 0);
+  const failedDays = report.days.filter((_, i) => report.recordFailures[i] > 0);
   const chip = (active: boolean) =>
     `rounded-full border px-2.5 py-1 ${active ? "border-primary bg-primary-muted text-primary" : "border-border text-muted-foreground hover:text-foreground"}`;
 
@@ -160,6 +162,17 @@ export function AdminActivityView({ report, viewer, all, focus }: { report: Admi
           관리 작업은 서버에서 완료된 작업만 셉니다(화면 이동·클릭은 기록하지 않음).
         </span>
       </p>
+
+      {failed > 0 && (
+        <p role="alert" className="flex gap-2 rounded-card border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-foreground">
+          <AlertIcon className="mt-0.5 size-4 shrink-0" />
+          <span>
+            최근 {STRIP_DAYS}일 동안 완료된 관리 작업 {fmt(failed)}건의 활동 기록을 저장하지 못했습니다(모든 관리자 기준,{" "}
+            {failedDays.map(dayLabel).join(", ")}). 해당 날짜의 건수와 이력에는 이 작업이 빠져 있습니다. 서버 오류 로그의
+            &lsquo;[admin-activity] record failed&rsquo; 항목에서 작업 종류와 대상 번호를 확인할 수 있습니다.
+          </span>
+        </p>
+      )}
 
       <Section
         title={all ? "관리자별 현황" : "내 관리 활동"}
@@ -199,7 +212,7 @@ export function AdminActivityView({ report, viewer, all, focus }: { report: Admi
           inProgress
           coverage={report.taskCoverage}
           series={ADMIN_TASK_CATEGORIES.map((c) => ({ label: c.label, tone: TONE_OF[c.key], values: report.dailyTasks.map((d) => d[c.key]) }))}
-          note={<span>흐린 막대: 일부 작업을 아직 기록하지 않던 날(부분 측정).</span>}
+          note={<span>흐린 막대: 일부 작업을 아직 기록하지 않던 날이나 기록 저장에 실패한 날(부분 측정).</span>}
         />
         <GroupedBarChart
           title={all ? "일별 활동한 관리자 수" : "일별 활동 여부 (1 = 활동)"}

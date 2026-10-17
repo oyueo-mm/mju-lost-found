@@ -37,20 +37,37 @@ export type AdminActivityAction = keyof typeof ADMIN_ACTIVITY_ACTIONS;
 // first record these are 미측정 in part.
 export const LOGGED_CATEGORIES = [...new Set(Object.values(ADMIN_ACTIVITY_ACTIONS).map((a) => a.category))] as AdminTaskCategory[];
 
-// Best-effort: the task already succeeded, so a failed write is logged and
-// swallowed, never turned into an error for the admin.
+export const ADMIN_ACTIVITY_FAILED_METRIC = "admin.activity.record_failed";
+
+// The task already succeeded, so a failed write never turns into an error
+// for the admin -- but it is never silent either: one retry, then an error
+// log line (ids only) and a per-day failure count the 관리자 활동 tab shows,
+// so a gap reads as 기록 실패, not as "no task".
 export async function recordAdminActivity(
   adminUserId: number,
   action: AdminActivityAction,
   target?: { type: string; id: number },
-): Promise<void> {
-  try {
-    await prisma.adminActivityLog.create({
-      data: { adminUserId, action, targetType: target?.type ?? null, targetId: target?.id ?? null },
-    });
-  } catch (error) {
-    console.error("Admin activity not recorded:", error instanceof Error ? error.name : "unknown");
+): Promise<boolean> {
+  const data = { adminUserId, action, targetType: target?.type ?? null, targetId: target?.id ?? null };
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await prisma.adminActivityLog.create({ data });
+      return true;
+    } catch (error) {
+      if (attempt === 2) {
+        console.error("[admin-activity] record failed", JSON.stringify({ ...data, error: error instanceof Error ? error.name : "unknown" }));
+      }
+    }
   }
+  try {
+    const kst = new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
+    await prisma.$executeRaw`
+      INSERT INTO "MetricDaily" ("day", "metric", "value") VALUES (${kst}::date, ${ADMIN_ACTIVITY_FAILED_METRIC}, 1)
+      ON CONFLICT ("day", "metric") DO UPDATE SET "value" = "MetricDaily"."value" + 1`;
+  } catch (error) {
+    console.error("[admin-activity] failure count not recorded", error instanceof Error ? error.name : "unknown");
+  }
+  return false;
 }
 
 // Who may see every admin's records (the 관리자 활동 tab's 전체 보기): the

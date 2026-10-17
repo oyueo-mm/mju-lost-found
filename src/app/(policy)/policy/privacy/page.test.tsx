@@ -33,7 +33,7 @@ describe("개인정보처리방침: 이용 통계", () => {
     expect(s3.slice(s3.indexOf("회원탈퇴 시"), s3.indexOf("즉시 삭제합니다"))).toContain("최근 이용 시각");
     expect(section(5)).toContain("최근 이용 시각: 로그인 상태로 화면을 보거나 조작한 가장 최근 시각을 회원 계정에 하나만 저장합니다");
     expect(section(5)).toContain("최대 5분 간격으로 덮어쓰며 이력은 남기지 않음");
-    expect(section(5)).toContain("관리자 사용자 상세 보기에만 표시하며, 회원탈퇴 시 삭제합니다");
+    expect(section(5)).toContain("관리자 사용자 상세 보기에만 표시하며(관리자 계정은 7항의 관리자 활동 화면에도 표시), 회원탈퇴 시 삭제합니다");
     expect(section(5)).toContain("날짜·시간대별 로그인 횟수·조회 수·이용 회원 수");
   });
 
@@ -56,6 +56,17 @@ describe("개인정보처리방침: 이용 통계", () => {
   it("treats re-linkable activity records as personal data", () => {
     expect(section(5)).toContain("회원과 대조할 수 있는 개인정보로 취급하며");
     expect(section(5)).toContain("관리자 사용자 상세 보기에서는 보관 중인 기록의 최근 이용일(날짜만)");
+  });
+
+  it("discloses the 관리자 운영 작업 기록: what, why, 1 year, and who sees each admin's records", () => {
+    expect(section(1)).toContain("관리자 조치·열람 기록");
+    expect(section(3)).toContain("관리자의 운영 작업 기록(작업 관리자·작업 종류·대상 번호·시각)");
+    expect(section(3)).toContain("작업 후 1년");
+    expect(section(5)).toContain("관리자 계정의 기록은 7항의 관리자 활동 화면에도 표시합니다");
+    const s7 = section(7);
+    expect(s7).toContain("관리 업무 점검과 권한 오남용 방지");
+    expect(s7).toContain("내용은 저장하지 않고 작업 후 1년간 보관합니다");
+    expect(s7).toContain("각 관리자는 본인 기록만, 지정된 상위 관리자는 전체 관리자의 기록을 볼 수 있습니다");
   });
 
   it("preserves retention exceptions, cookie choices and rights contact", () => {

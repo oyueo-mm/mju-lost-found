@@ -33,6 +33,7 @@ const report = (admins: AdminActivityRow[], extra: Partial<AdminActivityReport> 
   history: [{ at: new Date("2026-10-17T03:04:00Z"), adminId: 13, nickname: "관리자13", category: "report", label: "신고 처리 (조치)", target: "신고 #9" }],
   historyFrom: days[0],
   logSince: "2026-10-17 21:00",
+  recordFailures: days.map(() => 0),
   lastActiveSince: "2026-10-17 01:39",
   ...extra,
 });
@@ -73,5 +74,15 @@ describe("관리자 활동 화면", () => {
     expect(html).toContain('title="일부 미측정"');
     expect(html).toContain("2026-10-17 21:00</b>부터 기록합니다");
     expect(html).toContain("추정하지 않음");
+    expect(html).not.toContain('role="alert"');
+  });
+
+  it("says when completed tasks could not be recorded, and on which days", () => {
+    const failures = days.map((_, i) => (i === 28 ? 2 : 0));
+    const html = renderToStaticMarkup(<AdminActivityView report={report([row(13)], { recordFailures: failures })} viewer={13} all={false} focus={null} />);
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("관리 작업 2건의 활동 기록을 저장하지 못했습니다");
+    expect(html).toContain("10/16");
+    expect(html).toContain("[admin-activity] record failed");
   });
 });

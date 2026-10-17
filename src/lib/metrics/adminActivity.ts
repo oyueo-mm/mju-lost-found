@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { Prisma } from "@/generated/prisma/client";
-import { ADMIN_ACTIVITY_ACTIONS, type AdminTaskCategory } from "@/lib/admin/activityLog";
+import { ADMIN_ACTIVITY_ACTIONS, ADMIN_ACTIVITY_FAILED_METRIC, type AdminTaskCategory } from "@/lib/admin/activityLog";
 import { recordingSince } from "./activityTime";
 import { addPeriods } from "./dashboard";
 import { activityActor, kstDay, TRAFFIC_HOURLY_SINCE_METRIC } from "./record";
@@ -186,6 +186,8 @@ export type AdminActivityReport = {
   historyFrom: string;
   // KST "YYYY-MM-DD HH:mm" the AdminActivityLog / lastActiveAt began here
   logSince: string | null;
+  // completed tasks whose log write failed (all admins), per day of `days`
+  recordFailures: number[];
   lastActiveSince: string | null;
 };
 
@@ -230,7 +232,7 @@ export async function loadAdminActivity({
   const scope: Scope = { adminId: all ? null : viewer };
   const historyScope: Scope = { adminId: all ? focus : viewer };
 
-  const [daily, totals, recent, marker, earliestLog, activeMarker, earliestActive] = await Promise.all([
+  const [daily, totals, recent, marker, earliestLog, activeMarker, earliestActive, failures] = await Promise.all([
     prisma.$queryRaw<{ admin_id: number; kind: string; day: string; n: number }[]>`
       SELECT e.admin_id, e.kind, to_char(e.at + interval '9 hours', 'YYYY-MM-DD') AS day, count(*)::int AS n
       FROM (${EVENTS}) e WHERE e.at >= ${utcParam(fromAt)} ${scopeFilter(scope)} GROUP BY 1, 2, 3`,
@@ -246,6 +248,9 @@ export async function loadAdminActivity({
       .findFirst({ where: { metric: TRAFFIC_HOURLY_SINCE_METRIC }, orderBy: { day: "asc" }, select: { day: true, value: true } })
       .catch(() => null),
     prisma.user.aggregate({ _min: { lastActiveAt: true } }).catch(() => null),
+    prisma.metricDaily
+      .findMany({ where: { metric: ADMIN_ACTIVITY_FAILED_METRIC, day: { gte: dayDate(days[0]) } }, select: { day: true, value: true } })
+      .catch(() => []),
   ]);
 
   // the admins shown: every current admin (or just the viewer), plus anyone
@@ -278,7 +283,9 @@ export async function loadAdminActivity({
 
   const logSince = recordingSince(marker, earliestLog?._min.createdAt ?? null);
   // a day is fully covered only once the log had begun before it
-  const taskCoverage: Coverage[] = days.map((d) => (logSince !== null && d > logSince.slice(0, 10) ? "full" : "partial"));
+  // ... and had no failed write that day
+  const recordFailures = days.map((d) => failures.filter((f) => f.day.toISOString().slice(0, 10) === d).reduce((a, f) => a + f.value, 0));
+  const taskCoverage: Coverage[] = days.map((d, i) => (logSince !== null && d > logSince.slice(0, 10) && recordFailures[i] === 0 ? "full" : "partial"));
 
   const dailyTasks = days.map(() => zeroCounts());
   const tasks30 = new Map<number, CategoryCounts>();
@@ -355,6 +362,7 @@ export async function loadAdminActivity({
     history,
     historyFrom: days[0],
     logSince,
+    recordFailures,
     lastActiveSince: recordingSince(activeMarker, earliestActive?._min.lastActiveAt ?? null),
   };
 }

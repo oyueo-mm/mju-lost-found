@@ -6,6 +6,8 @@ import { PRIVACY_POLICY_REVISIONS } from "@/lib/policy/privacyPolicy";
 import ArchivedPrivacyPolicyPage from "./b46ba45/page";
 import archive1016 from "@/lib/policy/archives/f21e596.json";
 import Archived20261016Page from "./f21e596/page";
+import archive1017 from "@/lib/policy/archives/634900f.json";
+import Archived20261017Page from "./634900f/page";
 import PrivacyPolicyHistoryPage from "./page";
 
 describe("이전 개인정보처리방침과 변경 내역", () => {
@@ -14,6 +16,7 @@ describe("이전 개인정보처리방침과 변경 내역", () => {
     expect(html).toContain('href="/policy/privacy"');
     expect(html).toContain('href="/policy/privacy/history/b46ba45"');
     expect(html).toContain('href="/policy/privacy/history/f21e596"');
+    expect(html).toContain('href="/policy/privacy/history/634900f"');
     const table = html.match(/<table\b[^>]*>([\s\S]*?)<\/table>/)![1];
     expect([...html.matchAll(/<table\b/g)]).toHaveLength(1);
     expect([...table.matchAll(/<tr\b/g)]).toHaveLength(PRIVACY_POLICY_REVISIONS.length + 1);
@@ -42,6 +45,19 @@ describe("이전 개인정보처리방침과 변경 내역", () => {
     expect(details).toContain("이름·소속 별도 선택 동의");
     expect(details).toContain("개인정보 수집·이용의 필수 동의에 포함");
     expect(details).toContain("400일 보관·탈퇴 시 삭제");
+  });
+
+  it("serves the first 2026-10-17 policy (634900f, before the 관리자 운영 작업 기록 revision) as a frozen, sourced archive", () => {
+    const html = renderToStaticMarkup(Archived20261017Page());
+    expect(archive1017.sourceCommit).toBe("634900f55de04deb225fabccb8157b552de5d499");
+    expect(archive1017.sourceBlob).toBe("61e8191fca79edcf0aeebf196a753fb871c21bdd");
+    expect(archive1017.effectiveDate).toBe("2026-10-17");
+    expect(html).toContain(archive1017.sectionsHtml);
+    expect([...html.matchAll(/<section\b/g)]).toHaveLength(7);
+    // its own wording: last-active time, but no admin task record yet
+    expect(archive1017.sectionsHtml).toContain("최근 이용 시각");
+    expect(archive1017.sectionsHtml).not.toContain("운영 작업 기록");
+    expect(archive1017.sectionsHtml).not.toContain("관리자 활동 화면");
   });
 
   it("serves the 2026-10-16 policy (f21e596, in force until the 2026-10-17 revision) as a frozen, sourced archive", () => {

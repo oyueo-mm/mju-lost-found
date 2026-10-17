@@ -14,7 +14,7 @@ const $queryRaw = vi.fn(async (strings: TemplateStringsArray, ...values: unknown
   return q.sql.includes("GROUP BY 1, 2, 3") ? daily : q.sql.includes("max(e.at)") ? totals : recent;
 });
 const user = { findMany: vi.fn(), aggregate: vi.fn() };
-const metricDaily = { findFirst: vi.fn(), createMany: vi.fn() };
+const metricDaily = { findFirst: vi.fn(), createMany: vi.fn(), findMany: vi.fn() };
 const adminActivityLog = { aggregate: vi.fn() };
 const activityDay = { findMany: vi.fn() };
 vi.mock("@/lib/db/prisma", () => ({ prisma: { $queryRaw, user, metricDaily, adminActivityLog, activityDay } }));
@@ -40,6 +40,7 @@ beforeEach(() => {
   metricDaily.findFirst.mockResolvedValue(null);
   adminActivityLog.aggregate.mockResolvedValue({ _min: { createdAt: null } });
   activityDay.findMany.mockResolvedValue([]);
+  metricDaily.findMany.mockResolvedValue([]);
 });
 
 describe("관리자 활동: who is shown", () => {
@@ -112,6 +113,15 @@ describe("관리자 활동: 관리 작업", () => {
     const r = await loadAdminActivity({ viewer: 13, all: true, now: NOW });
     expect(r.logSince).toBe("2026-10-16 10:00");
     expect(r.taskCoverage.slice(-3)).toEqual(["partial", "partial", "full"]);
+  });
+
+  it("a day with a failed log write is partial, and its failures are reported", async () => {
+    adminActivityLog.aggregate.mockResolvedValue({ _min: { createdAt: new Date("2026-10-10T01:00:00Z") } });
+    metricDaily.findMany.mockResolvedValue([{ day: new Date("2026-10-16T00:00:00Z"), value: 2 }]);
+    const r = await loadAdminActivity({ viewer: 13, all: true, now: NOW });
+    expect(metricDaily.findMany.mock.calls[0][0].where.metric).toBe("admin.activity.record_failed");
+    expect(r.recordFailures.slice(-3)).toEqual([0, 2, 0]);
+    expect(r.taskCoverage.slice(-3)).toEqual(["full", "partial", "full"]);
   });
 
   it("writes the start marker once, at the first view", async () => {
