@@ -2,12 +2,13 @@ import { HomeSearchBar } from "@/components/home/HomeSearchBar";
 import { LinkButton } from "@/components/ui/Button";
 import { getTranslator } from "@/lib/i18n/server";
 
-// The signed-out visitor's first screen: a two-line headline (second line in
-// the brand colour), one short line on what the search does, and the search
-// itself -- the same natural-language / photo search the signed-in home shows
+// The home's first screen, signed in or out (app/(main)/page.tsx): a two-line
+// headline (second line in the brand colour), one short line on what the
+// search does, and the search itself -- the natural-language / photo search
 // (HomeSearchBar, "landing" variant: no repeated hint). Posting a lost or a
 // found item is the second action, as two quiet outline buttons (signed out:
-// the usual sign-in, then back to the form via callbackUrl).
+// the usual sign-in, then back to the form via callbackUrl; signed in:
+// straight to the form).
 //
 // Background: the blue glow starts right under the header. The section
 // cancels <main>'s top padding (-mt) and, on phones, its side padding (-mx)
