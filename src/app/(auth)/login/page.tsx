@@ -128,6 +128,22 @@ export default async function LoginPage({
           </p>
         )}
 
+        {/* Phase H-6 section 9: this line would directly contradict the test-
+            mode banner above ("일반 Google 계정도 로그인할 수 있습니다" vs
+            "로그인할 수 없습니다" back to back on the same screen), so it's
+            suppressed only while test mode is on -- the underlying rule
+            itself (and its server-side enforcement) is unchanged, this is
+            purely about not showing two contradictory sentences at once. */}
+        {/* Login UX: the AccessDenied error box above already says exactly
+            which accounts may sign in -- repeating it here showed the same
+            restriction twice. Placed above the button, so the account rule
+            is read before choosing a Google account. */}
+        {!googleTestModeEnabled && error !== "AccessDenied" && (
+          <p className="text-xs text-muted-foreground">
+            {t("auth.login.domainNotice")}
+          </p>
+        )}
+
         <form
           className="w-full"
           action={async () => {
@@ -143,21 +159,6 @@ export default async function LoginPage({
             {t("auth.login.google")}
           </Button>
         </form>
-
-        {/* Phase H-6 section 9: this line would directly contradict the test-
-            mode banner above ("일반 Google 계정도 로그인할 수 있습니다" vs
-            "로그인할 수 없습니다" back to back on the same screen), so it's
-            suppressed only while test mode is on -- the underlying rule
-            itself (and its server-side enforcement) is unchanged, this is
-            purely about not showing two contradictory sentences at once. */}
-        {/* Login UX: the AccessDenied error box above already says exactly
-            which accounts may sign in -- repeating it here showed the same
-            restriction twice. */}
-        {!googleTestModeEnabled && error !== "AccessDenied" && (
-          <p className="text-xs text-muted-foreground">
-            {t("auth.login.domainNotice")}
-          </p>
-        )}
 
         <div className="flex w-full flex-col items-center gap-1.5 border-t border-border/60 pt-6">
           <p className="text-sm text-muted-foreground">{t("auth.login.noAccount")}</p>

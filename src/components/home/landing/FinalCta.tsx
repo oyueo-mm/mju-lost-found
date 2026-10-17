@@ -2,8 +2,8 @@ import { LinkButton } from "@/components/ui/Button";
 import { getTranslator } from "@/lib/i18n/server";
 
 // Phase K: the id lets LandingStickyCta hide its floating button while
-// this section is on screen, so the page never shows two "로그인하고
-// 시작하기" buttons at once. Styling unchanged.
+// this section is on screen, so the page never shows the same button
+// twice. Search first (no sign-in needed), posting a found item second.
 export async function FinalCta() {
   const t = await getTranslator();
 
@@ -18,9 +18,14 @@ export async function FinalCta() {
       <p className="max-w-sm text-sm text-muted-foreground md:text-base">
         {t("landing.finalCta.description")}
       </p>
-      <LinkButton href="/login" size="md" className="px-8 hover:shadow-md motion-safe:hover:-translate-y-0.5">
-        {t("landing.cta")}
-      </LinkButton>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <LinkButton href="/search" size="md" className="px-8 hover:shadow-md motion-safe:hover:-translate-y-0.5">
+          {t("landing.searchCta")}
+        </LinkButton>
+        <LinkButton href="/found/new" variant="secondary" size="md">
+          {t("landing.registerFound")}
+        </LinkButton>
+      </div>
     </section>
   );
 }

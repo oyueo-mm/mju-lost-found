@@ -30,6 +30,17 @@ beforeEach(() => {
 });
 
 describe("login page", () => {
+  it("states the account rule before the Google button: school accounts, or outside accounts an admin approved", async () => {
+    const html = await render();
+    expect(html.indexOf(ko["auth.login.domainNotice"])).toBeGreaterThan(-1);
+    expect(html.indexOf(ko["auth.login.domainNotice"])).toBeLessThan(html.indexOf(ko["auth.login.google"]));
+    expect(ko["auth.login.domainNotice"]).toContain("@mju.ac.kr");
+    expect(ko["auth.login.domainNotice"]).toMatch(/관리자 승인을 받은 외부 관계자/);
+    // signing in is not needed to search
+    expect(html).toContain(ko["auth.login.subtitle"]);
+    expect(ko["auth.login.subtitle"]).toContain("로그인 없이");
+  });
+
   it("shows the account restriction once after an AccessDenied rejection", async () => {
     const html = await render({ error: "AccessDenied" });
 

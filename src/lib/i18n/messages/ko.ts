@@ -510,9 +510,9 @@ export const ko = {
 
   // ---------- 로그인 / 온보딩 ----------
   "auth.login.title": "MJU Find",
-  "auth.login.subtitle": "캠퍼스에서 잃어버린 물건을 빠르게 찾아드려요",
-  "auth.login.google": "Google로 로그인",
-  "auth.login.domainNotice": "학교 계정(@mju.ac.kr) 또는 관리자가 승인한 외부 관계자 계정만 로그인할 수 있습니다.",
+  "auth.login.subtitle": "검색·열람은 로그인 없이 할 수 있어요. 글 등록·채팅·알림에 로그인이 필요해요.",
+  "auth.login.google": "Google 계정으로 로그인",
+  "auth.login.domainNotice": "명지대학교 Google 계정(@mju.ac.kr)으로 로그인해 주세요. 관리자 승인을 받은 외부 관계자는 승인된 Google 계정으로 로그인할 수 있어요.",
   "auth.login.noAccount": "명지대 계정이 없으신가요?",
   "auth.login.accountGuide": "명지대 계정 생성 방법 보기",
   "auth.login.troublePrompt": "로그인에 문제가 있으신가요?",
@@ -616,12 +616,12 @@ export const ko = {
   "form.goToEdit": "게시물 수정 페이지로 이동",
 
   // ---------- 랜딩(로그아웃 방문자) ----------
-  "landing.badge": "명지대학교 전용 서비스",
-  "landing.headline1": "잃어버린 물건,",
-  "landing.headlineAi": "AI",
-  "landing.headline2": "가 대신 찾아드립니다",
-  "landing.subtitle":
-    "명지대학교 캠퍼스 전용 분실물 · 습득물 서비스입니다. 등록만 하면 AI가 비슷한 물건을 자동으로 찾아 연결해드립니다.",
+  "landing.badge": "명지대 학생이 운영하는 비공식 분실물 서비스",
+  "landing.searchHeadline": "명지대에서 잃어버린 물건, 여기서 찾아보세요.",
+  "landing.accessNote": "검색·열람은 로그인 없이 가능해요. 글 등록·채팅·알림은 로그인 후 이용할 수 있어요.",
+  "landing.registerFound": "주운 물건 등록하기",
+  "landing.searchCta": "잃어버린 물건 찾기",
+  "landing.subtitle": "로그인 없이 등록된 분실물·습득물을 검색하고 둘러볼 수 있어요. 잃어버린 물건을 설명하거나 사진을 올리면 AI 검색이 비슷한 습득물을 찾아 보여 줘요.",
   "landing.cta": "로그인하고 시작하기",
   "landing.features.title": "핵심 기능",
   "landing.features.subtitle": "분실물 찾기부터 채팅까지, 필요한 기능은 다 있습니다.",
@@ -671,7 +671,7 @@ export const ko = {
   "landing.after.done.description": "새 추천이나 메시지가 오면 알려 드리고, 돌려받으면 상태를 '완료'로 바꿔요.",
   "landing.after.done.notification": "내 게시글과 비슷한 습득물이 등록됐어요",
   "landing.finalCta.title": "잃어버린 물건을 찾고 계신가요?",
-  "landing.finalCta.description": "지금 로그인하고 명지대학교 분실물 센터를 이용하실 수 있습니다.",
+  "landing.finalCta.description": "로그인 없이 바로 검색해 보세요. 주운 물건을 등록하거나 작성자와 채팅하려면 로그인이 필요해요.",
   "landing.stats.lost": "등록된 분실물",
   "landing.stats.found": "등록된 습득물",
   "landing.stats.recent": "최근 7일 신규 등록",

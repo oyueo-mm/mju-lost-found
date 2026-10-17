@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 
 import { useI18n } from "@/lib/i18n/client";
 
-// Phase K: the landing page's floating "로그인하고 시작하기".
+// Phase K: the landing page's floating "잃어버린 물건 찾기" (to /search; was
+// "로그인하고 시작하기" -- searching needs no account, so it is the action).
 //
 // The landing page is long (hero -> features -> two showcases -> how it
 // works -> final CTA) and until now the only way to act on it was to
@@ -65,13 +66,13 @@ export function LandingStickyCta() {
       }`}
     >
       <Link
-        href="/login"
+        href="/search"
         tabIndex={visible ? undefined : -1}
         className={`inline-flex h-11 w-full max-w-sm items-center justify-center rounded-full bg-primary px-6 text-sm font-medium text-primary-foreground shadow-lg transition-opacity hover:opacity-90 md:w-auto ${
           visible ? "pointer-events-auto" : ""
         }`}
       >
-        {t("landing.cta")}
+        {t("landing.searchCta")}
       </Link>
     </div>
   );
