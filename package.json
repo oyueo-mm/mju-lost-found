@@ -5,7 +5,7 @@
   "scripts": {
     "predev": "node scripts/downloadModel.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/downloadModel.mjs",
+    "prebuild": "node scripts/downloadModel.mjs && node scripts/pruneOnnxRuntime.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

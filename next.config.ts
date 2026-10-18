@@ -65,13 +65,31 @@ const nextConfig: NextConfig = {
   // Xenova/siglip-base-patch16-224 too, since it's fetched into the same
   // models/ directory -- see scripts/downloadModel.mjs). No new
   // Serverless Function was needed for image search at all.
+  //
+  // 함수 용량 (Functions Storage). What a Linux Turbopack build actually
+  // does with these keys (checked file by file in the .nft.json traces):
+  // - A plain key is a route prefix: "/api/posts" also covers every route
+  //   under it (comments, [commentId], image). The old "/api/posts/[id]" key
+  //   matched nothing ("[id]" is a glob character class).
+  // - Only a plain key brings in files under node_modules (the dlopen()ed
+  //   libonnxruntime.so.1); keys with glob syntax add files outside
+  //   node_modules only.
+  // - outputFileTracingExcludes is not applied at all.
+  // So: the onnxruntime runtime (~34MB) goes to everything under
+  // /api/posts via the plain key, and the ~200MB of models only to the two
+  // routes that load them -- "!(/**)" = nothing after the route, brackets
+  // escaped. Before, every route under /api/posts carried the models
+  // (about 2.17GB per deployment).
+  // Only linux/x64: Vercel functions run on x86_64 (the build installs
+  // sharp's linux-x64 binary only, and image processing works), and
+  // onnxruntime-node loads bin/napi-v6/<platform>/<arch>. The unused CUDA /
+  // TensorRT providers (~300MB) its install downloads into linux/x64 are
+  // deleted before the build (scripts/pruneOnnxRuntime.mjs), since an
+  // include glob cannot leave single files out.
   outputFileTracingIncludes: {
-    "/api/posts": ["./node_modules/onnxruntime-node/bin/napi-v6/linux/**", "./models/**"],
-    "/api/posts/[id]": ["./node_modules/onnxruntime-node/bin/napi-v6/linux/**", "./models/**"],
-    "/api/posts/[id]/matches/candidates": [
-      "./node_modules/onnxruntime-node/bin/napi-v6/linux/**",
-      "./models/**",
-    ],
+    "/api/posts": ["./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**"],
+    "/api/posts!(/**)": ["./models/**"],
+    "/api/posts/\\[id\\]!(/**)": ["./models/**"],
   },
   images: {
     // 운영 비용 (Hobby: 5,000 image transformations a month): fewer width
