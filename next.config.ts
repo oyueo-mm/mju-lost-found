@@ -51,9 +51,10 @@ const nextConfig: NextConfig = {
   // the shared bundle once its included-files config differs), which
   // exceeds the cap regardless of which single route is added. The actual
   // fix (see src/app/(main)/lost/page.tsx, found/page.tsx, search/page.tsx)
-  // is for those three pages to reach the embedding path via a
-  // server-side fetch to /api/posts instead of importing it in-process, so
-  // none of their own functions need these files at all.
+  // is for those three pages to reach the embedding path via /api/posts
+  // instead of importing it in-process, so none of their own functions
+  // need these files at all. SemanticSearchResults now makes that request
+  // in the browser, preserving its normal Deployment Protection session.
   // Phase 15-2 note: /api/posts/[id]/image (image attach/detach) was tried
   // as a new key here first -- confirmed via a real Vercel deployment to
   // push the Hobby plan's 12-Serverless-Function cap, the exact same class

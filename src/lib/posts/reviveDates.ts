@@ -1,9 +1,8 @@
 import type { PostDTO } from "./service";
 
-// Phase 32: split out of searchApiClient.ts (which imports next/headers,
-// a server-only module) so a Client Component can import this one pure
-// function without pulling that server-only import into the client
-// bundle. Behavior is unchanged from before the split -- raw JSON has no
+// Pure date revival shared by browser search clients. The former server
+// searchApiClient has also moved to browser fetches; keep this helper
+// independent of transport. Raw JSON has no
 // Date type, so createdAt/updatedAt/lostAt/foundAt come back as ISO
 // strings and must be revived into real Date objects (PostCard's
 // formatDate() requires an actual Date, not a string).

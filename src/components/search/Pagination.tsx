@@ -1,6 +1,8 @@
+"use client";
+
 import Link from "next/link";
 
-import { getTranslator } from "@/lib/i18n/server";
+import { useI18n } from "@/lib/i18n/client";
 
 import { getPaginationItems } from "./paginationItems";
 
@@ -11,12 +13,11 @@ type PaginationProps = {
   totalPages: number;
 };
 
-// Server Component: URL query params are the only source of truth for
-// page state (see Phase 6 spec section 13), so page links are plain
-// <Link>s that preserve every other current filter, not client state.
-export async function Pagination({ basePath, currentSearchParams, page, totalPages }: PaginationProps) {
+// Shared by server-rendered keyword results and browser-loaded semantic
+// results. Page links continue to preserve the URL's filters.
+export function Pagination({ basePath, currentSearchParams, page, totalPages }: PaginationProps) {
+  const { t } = useI18n();
   if (totalPages <= 1) return null;
-  const t = await getTranslator();
 
   function hrefFor(targetPage: number): string {
     const params = new URLSearchParams();

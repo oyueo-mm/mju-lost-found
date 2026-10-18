@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Lost112Notice } from "@/components/search/Lost112Notice";
 import { searchPosts } from "@/lib/posts/service";
 import { recordDaily } from "@/lib/metrics/record";
-import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
+import { SemanticSearchResults } from "@/components/search/SemanticSearchResults";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, listQuerySchema } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
 import { getTranslator } from "@/lib/i18n/server";
@@ -35,13 +35,8 @@ export default async function SearchPage({
     : { type: "found" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
   const mode = parsed.success ? parsed.data.mode : "keyword";
 
-  // See searchApiClient.ts's comment (also linked from lost/found's pages)
-  // -- semantic mode fetches /api/posts instead of calling searchPosts()
-  // in-process, since only /api/posts's function bundle carries the
-  // embedding model on Vercel. `raw.type` can be "lost", "found", or
-  // (Phase 11-2) "all" -- aiService.ts's searchPosts() merges both
-  // boards' semantic results itself when it's "all", so this page doesn't
-  // need to know or care which case it is.
+  // Semantic results load in the browser with its normal same-origin
+  // session; models remain exclusively in the existing API functions.
   // 운영 통계: a keyword search made on this page (search words, first page)
   // -- the same rule /api/posts' searchPosts applies to its own requests.
   // That path and this one never overlap (this page calls the keyword-only
@@ -54,7 +49,7 @@ export default async function SearchPage({
 
   let results;
   try {
-    results = mode === "semantic" ? await fetchPostsFromApi(raw) : await searchPosts(query);
+    results = mode === "semantic" ? null : await searchPosts(query);
   } catch (error) {
     console.error("Failed to search posts", error);
     return (
@@ -75,8 +70,11 @@ export default async function SearchPage({
           (ImageSearchPanel owns the results area then instead) -- see that
           component's own comment. Harmless for every other mode: rendered
           exactly as before, just one level deeper in the tree. */}
-      <SearchFilterBar basePath="/search" showTypeFilter imageSearchEnabled resultCount={results.total}>
+      <SearchFilterBar basePath="/search" showTypeFilter imageSearchEnabled defaultMode={mode === "semantic" ? "keyword" : "ai"} resultCount={results?.total}>
         <SemanticSearchNotice mode={mode} />
+        {results === null ? (
+          <SemanticSearchResults params={{ type: "found", ...raw }} basePath="/search" />
+        ) : <>
         {results.items.length === 0 ? (
           <div className="flex flex-col gap-4">
             <EmptyState title={t("search.empty.title")} description={t("search.empty.description")} />
@@ -95,6 +93,7 @@ export default async function SearchPage({
           page={results.page}
           totalPages={results.totalPages}
         />
+        </>}
       </SearchFilterBar>
     </div>
   );

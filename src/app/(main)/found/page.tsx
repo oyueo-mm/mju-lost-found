@@ -9,7 +9,7 @@ import { BoardHeader } from "@/components/search/BoardHeader";
 import { BOARD_RESULTS_GRID_CLASS } from "@/components/search/resultsLayout";
 import { searchPosts } from "@/lib/posts/service";
 import { recordDaily } from "@/lib/metrics/record";
-import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
+import { SemanticSearchResults } from "@/components/search/SemanticSearchResults";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, FOUND_STATUSES, listQuerySchema } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
 import { getTranslator } from "@/lib/i18n/server";
@@ -39,8 +39,7 @@ export default async function FoundListPage({
   // status filter defaults to "보관 중" (still in-progress) rather than
   // every status ever recorded.
   const query = { ...baseQuery, status: rawStatus === "" ? undefined : (rawStatus ?? FOUND_STATUSES[0]) };
-  // Phase 13-2: see the matching comment in lost/page.tsx -- previously
-  // listFoundPosts() ignored `mode=semantic` entirely.
+  // Semantic results use the browser's session, not a server self-fetch.
   const mode = parsed.success ? parsed.data.mode : "keyword";
 
   // 운영 통계: a keyword search made on this page (search words, first page)
@@ -57,7 +56,7 @@ export default async function FoundListPage({
   try {
     posts =
       mode === "semantic"
-        ? await fetchPostsFromApi({ ...parseInput, type: "found" })
+        ? null
         : await searchPosts(query);
   } catch (error) {
     console.error("Failed to load found posts", error);
@@ -91,9 +90,12 @@ export default async function FoundListPage({
         // 서버가 불러온 게시글 목록(children)이 바로 보여야 한다 -- AI
         // 검색은 여전히 토글로 켤 수 있지만 기본은 키워드다.
         defaultMode="keyword"
-        resultCount={posts.total}
+        resultCount={posts?.total}
       >
         <SemanticSearchNotice mode={mode} />
+        {posts === null ? (
+          <SemanticSearchResults params={{ ...parseInput, type: "found" }} basePath="/found" board />
+        ) : <>
         {posts.items.length === 0 ? (
           <div className="flex flex-col gap-4">
             <EmptyState
@@ -127,6 +129,7 @@ export default async function FoundListPage({
           </div>
         )}
         <Pagination basePath="/found" currentSearchParams={raw} page={posts.page} totalPages={posts.totalPages} />
+        </>}
       </SearchFilterBar>
     </div>
   );

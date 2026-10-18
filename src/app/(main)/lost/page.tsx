@@ -9,7 +9,7 @@ import { BoardHeader } from "@/components/search/BoardHeader";
 import { BOARD_RESULTS_GRID_CLASS } from "@/components/search/resultsLayout";
 import { searchPosts } from "@/lib/posts/service";
 import { recordDaily } from "@/lib/metrics/record";
-import { fetchPostsFromApi } from "@/lib/posts/searchApiClient";
+import { SemanticSearchResults } from "@/components/search/SemanticSearchResults";
 import { DEFAULT_LIMIT, DEFAULT_PAGE, LOST_STATUSES, listQuerySchema } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
 import { getTranslator } from "@/lib/i18n/server";
@@ -45,13 +45,8 @@ export default async function LostListPage({
   // (see its own definition). Only applied when `status` is absent from
   // the URL -- an explicit ?status=찾음 still works exactly as before.
   const query = { ...baseQuery, status: rawStatus === "" ? undefined : (rawStatus ?? LOST_STATUSES[0]) };
-  // Phase 13-2: previously called listLostPosts() directly, which silently
-  // ignored `mode=semantic` (the SearchFilterBar toggle had no effect on
-  // this page -- see Phase 13-1's finding). Keyword mode reuses the same
-  // searchPosts() every other caller goes through; semantic mode fetches
-  // /api/posts instead of calling searchPosts() in-process -- see
-  // searchApiClient.ts's comment for why (Vercel Hobby-plan function-count
-  // limit).
+  // Browser-loaded semantic results keep the visitor's normal session
+  // and leave the models in the API functions, without a server self-fetch.
   const mode = parsed.success ? parsed.data.mode : "keyword";
 
   // 운영 통계: a keyword search made on this page (search words, first page)
@@ -68,7 +63,7 @@ export default async function LostListPage({
   try {
     posts =
       mode === "semantic"
-        ? await fetchPostsFromApi({ ...parseInput, type: "lost" })
+        ? null
         : await searchPosts(query);
   } catch (error) {
     console.error("Failed to load lost posts", error);
@@ -102,9 +97,12 @@ export default async function LostListPage({
         // 서버가 불러온 게시글 목록(children)이 바로 보여야 한다 -- AI
         // 검색은 여전히 토글로 켤 수 있지만 기본은 키워드다.
         defaultMode="keyword"
-        resultCount={posts.total}
+        resultCount={posts?.total}
       >
         <SemanticSearchNotice mode={mode} />
+        {posts === null ? (
+          <SemanticSearchResults params={{ ...parseInput, type: "lost" }} basePath="/lost" board />
+        ) : <>
         {posts.items.length === 0 ? (
           <div className="flex flex-col gap-4">
             <EmptyState
@@ -138,6 +136,7 @@ export default async function LostListPage({
           </div>
         )}
         <Pagination basePath="/lost" currentSearchParams={raw} page={posts.page} totalPages={posts.totalPages} />
+        </>}
       </SearchFilterBar>
     </div>
   );

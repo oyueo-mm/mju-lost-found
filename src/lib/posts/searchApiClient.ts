@@ -1,22 +1,11 @@
-import { headers } from "next/headers";
-
 import type { PostDTO } from "./service";
 import { reviveDates } from "./reviveDates";
 
-// Phase 13-2: /lost, /found, and /search need mode=semantic to actually
-// work in production, but their own Server Component functions can't
-// import searchPosts() for that path -- see next.config.ts's comment.
-// Vercel's Hobby-plan 12-Serverless-Function cap has no room for three
-// more routes to each carry their own copy of the ~110MB embedding model +
-// onnxruntime native addon (outputFileTracingIncludes), which only
-// /api/posts (and the two other pre-existing AI routes) are scoped to.
-// So instead of importing searchPosts() in-process for a semantic search,
-// these pages fetch the already-deployed /api/posts route -- the exact
-// same search logic, running in the one function bundle that actually has
-// the model files, with zero duplication of the search implementation
-// itself. Keyword-mode searches are unaffected: they never touch the
-// embedding path, so those pages keep calling searchPosts() directly (see
-// each page's own mode check), with no added network hop.
+// Browser-only caller: keep inference in /api/posts's existing AI bundle.
+// A server self-fetch loses the visitor's Deployment Protection session
+// and follows the SSO redirect to HTML. A relative browser request uses
+// the normal same-origin session without a protection bypass or model
+// copies in the page functions.
 export type ApiPagedResult = {
   items: PostDTO[];
   page: number;
@@ -28,15 +17,19 @@ export type ApiPagedResult = {
 // `params` is the page's own already-validated raw search params (plus a
 // forced `type`) -- /api/posts re-validates them itself via the same
 // listQuerySchema, so this is never a second, divergent source of truth.
-export async function fetchPostsFromApi(params: Record<string, string>): Promise<ApiPagedResult> {
-  const requestHeaders = await headers();
-  const host = requestHeaders.get("host") ?? "localhost:3000";
-  const proto = requestHeaders.get("x-forwarded-proto") ?? "http";
-
+export async function fetchPostsFromApi(params: Record<string, string>, signal?: AbortSignal): Promise<ApiPagedResult> {
   const query = new URLSearchParams(params).toString();
-  const res = await fetch(`${proto}://${host}/api/posts?${query}`, { cache: "no-store" });
+  const res = await fetch(`/api/posts?${query}`, {
+    cache: "no-store",
+    credentials: "same-origin",
+    redirect: "error",
+    signal,
+  });
   if (!res.ok) {
     throw new Error(`/api/posts request failed with status ${res.status}`);
+  }
+  if (!res.headers.get("content-type")?.includes("application/json")) {
+    throw new Error("/api/posts returned a non-JSON response");
   }
 
   const json = (await res.json()) as {
