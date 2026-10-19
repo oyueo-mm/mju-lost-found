@@ -18,6 +18,7 @@ import { describeRoute } from "./apiRoutes";
 import { NEW_MEMBER_DAYS, RETURN_WINDOW_DAYS, windowNote, type UserReport } from "./userReport";
 import { byHour, HOURLY_METRICS, type CellStatus, type HourlyCells } from "./hourly";
 import { describeDays } from "./daySelection";
+import { changeOf, type DayVisitReport } from "./dayVisits";
 import { DURATION_BUCKETS, DURATION_LABELS, PAGES_BUCKETS, PAGES_LABELS } from "./flow";
 import { DEVICE_KINDS, DEVICE_LABELS, PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "./visits";
 import { buildCsv, buildXlsx, columnName, type Cell, type Sheet } from "./xlsx";
@@ -64,8 +65,80 @@ function coverageNote(coverage: Coverage, key: MetricKey | VisitSeriesKey): stri
   return coverage === "none" ? `미측정(${sinceLabel(source)}부터 집계)` : `${sinceLabel(source)} 이후만 집계(이전은 미측정)`;
 }
 
-export function datasetsOf(report: Report, users?: UserReport, hourly?: HourlyCells): Dataset[] {
-  return [...opsDatasets(report), ...(users ? [userDataset(users)] : []), ...(hourly ? [hourlyDataset(hourly)] : [])];
+export function datasetsOf(report: Report, users?: UserReport, hourly?: HourlyCells, dayVisits?: DayVisitReport): Dataset[] {
+  return [
+    ...opsDatasets(report),
+    ...(users ? [userDataset(users)] : []),
+    ...(hourly ? [hourlyDataset(hourly)] : []),
+    ...(dayVisits ? [dayVisitsDataset(dayVisits)] : []),
+  ];
+}
+
+// 날짜별 방문 분석: the chosen day next to the day before (today: the same
+// finished hours), then its hours. null = 미측정, never 0.
+export function dayVisitsDataset(r: DayVisitReport): Dataset {
+  const hours = r.isToday ? r.nowHour + 1 : 24;
+  const m = r.hourly.metrics;
+  const sumOf2 = (a: number | null, b: number | null) => (a === null && b === null ? null : (a ?? 0) + (b ?? 0));
+  const compareLabels = r.basis === "hours" ? [`오늘 0~${r.hours - 1}시`, `어제 같은 시간`] : [r.day, r.previous];
+  return {
+    key: "dayVisits",
+    name: "날짜별 방문 상세",
+    period: `${r.day} (비교: ${r.basis === "hours" ? `${r.previous} 같은 시간` : r.previous})${r.isToday ? ` · 오늘 ${r.nowHour}시 현재` : ""}`,
+    widths: [22, 16, 16, 14, 12, 18],
+    tables: [
+      {
+        title: "로그인·비로그인 비교 (선택한 날짜 하루)",
+        columns: [
+          { label: "지표", kind: "text" },
+          { label: "로그인", kind: "int" },
+          { label: "비로그인", kind: "int" },
+          { label: "합계", kind: "int" },
+        ],
+        rows: [
+          // 비로그인 방문자 수는 수집하지 않음 (미측정과 다름)
+          ["방문자(서로 다른 회원, 명)", r.current.members, "수집하지 않음", "-"],
+          ["방문 세션(회)", r.current.sessionMember, r.current.sessionAnon, sumOf2(r.current.sessionMember, r.current.sessionAnon)],
+          ["페이지뷰(회)", r.current.pvMember, r.current.pvAnon, sumOf2(r.current.pvMember, r.current.pvAnon)],
+        ],
+      },
+      {
+        title: "이전 날짜와 비교",
+        columns: [
+          { label: "지표", kind: "text" },
+          { label: compareLabels[0], kind: "int" },
+          { label: compareLabels[1], kind: "int" },
+          { label: "증감", kind: "int" },
+          { label: "증감률", kind: "pct" },
+          { label: "비고", kind: "text" },
+        ],
+        rows: r.rows.map((row) => {
+          const c = changeOf(row.current, row.previous);
+          // not compared (a note says why): "-", never 미측정
+          if (row.note) return [`${row.label}(${row.unit})`, "-", "-", "-", "-", row.note];
+          return [`${row.label}(${row.unit})`, row.current, row.previous, c.diff, c.rate ?? (c.diff === null ? null : "-"), row.partial ? "부분 측정 포함" : ""];
+        }),
+      },
+      {
+        title: "시간대별 (한국 시간)",
+        columns: [
+          { label: "시간", kind: "text" },
+          { label: "페이지뷰 로그인", kind: "int" },
+          { label: "페이지뷰 비로그인", kind: "int" },
+          { label: "방문 세션 시작", kind: "int" },
+          { label: "활성 회원(그 시간, 명)", kind: "int" },
+          { label: `${r.previous} 페이지뷰`, kind: "int" },
+        ],
+        rows: Array.from({ length: hours }, (_, h) => [`${h}시`, m.pvMember.values[1][h], m.pvAnon.values[1][h], m.session.values[1][h], m.active.values[1][h], m.pv.values[0][h]]),
+      },
+    ],
+    notes: [
+      "방문자는 그날 로그인 상태로 이용한 서로 다른 회원 수입니다(관리자 제외, 탈퇴 회원 기록은 삭제되어 빠짐). 비로그인 이용자는 식별하지 않아 방문자 수를 수집하지 않으며 추정하지 않습니다.",
+      "방문 세션은 방문 횟수(사람 수 아님)이고 첫 화면을 볼 때의 로그인 여부로 나눕니다. 페이지뷰는 화면이 열린 횟수입니다. 관리자의 이용은 포함하지 않습니다.",
+      "오늘을 고르면 어제의 같은 시간(0시부터 지금 시각 직전의 정시까지)과 비교하며, 시간별로 저장하지 않는 값(로그인 구분 방문 세션, 방문자)은 비교하지 않습니다. 증감률은 이전 값이 0이면 비워 둡니다.",
+      "관리자 활동 탭의 날짜별 방문 기록(관리자 본인의 접속)과는 다른 데이터입니다. 모든 날짜와 시각은 한국 시간(KST) 기준입니다.",
+    ],
+  };
 }
 
 // 시간대 분석: one row per KST day and hour (hours not reached yet left
@@ -724,14 +797,14 @@ export function toSheets(report: Report, label?: string, datasets = datasetsOf(r
   });
 }
 
-export function toXlsx(report: Report, label?: string, users?: UserReport, notice?: string | null, hourly?: HourlyCells): Buffer {
-  return buildXlsx(toSheets(report, label, datasetsOf(report, users, hourly), notice), { title: "MJU Find 운영 통계", createdAt: new Date() });
+export function toXlsx(report: Report, label?: string, users?: UserReport, notice?: string | null, hourly?: HourlyCells, dayVisits?: DayVisitReport): Buffer {
+  return buildXlsx(toSheets(report, label, datasetsOf(report, users, hourly, dayVisits), notice), { title: "MJU Find 운영 통계", createdAt: new Date() });
 }
 
 // One CSV per data kind: "#" lines (service, period, time, caveats) on top
 // -- skipped by most tools with a comment option -- then plain tables.
-export function toCsv(report: Report, key: DatasetKey, label?: string, users?: UserReport, notice?: string | null, hourly?: HourlyCells): string {
-  const ds = datasetsOf(report, users, hourly).find((d) => d.key === key);
+export function toCsv(report: Report, key: DatasetKey, label?: string, users?: UserReport, notice?: string | null, hourly?: HourlyCells, dayVisits?: DayVisitReport): string {
+  const ds = datasetsOf(report, users, hourly, dayVisits).find((d) => d.key === key);
   if (!ds) throw new Error(`no data for ${key}`);
   // "#" lines are written as they are (never quoted), so a reader's comment
   // option skips each one whole even when it holds a comma.
@@ -755,7 +828,8 @@ export function toCsv(report: Report, key: DatasetKey, label?: string, users?: U
   return `\ufeff${meta.join("\r\n")}\r\n${buildCsv(rows).slice(1)}`;
 }
 
-export const exportFileName = (report: Report, ext: "xlsx" | "csv", key?: DatasetKey, days?: string[]) => {
+export const exportFileName = (report: Report, ext: "xlsx" | "csv", key?: DatasetKey, days?: string[], visitDay?: string) => {
+  if (key === "dayVisits" && visitDay) return `mju-find-stats-day-visits_${visitDay.replaceAll("-", "")}.${ext}`;
   // 날짜·시간대별 alone: named after its own days
   if (key === "hourly" && days?.length) return `mju-find-stats-hourly_${days[0].replaceAll("-", "")}-${days[days.length - 1].replaceAll("-", "")}_${days.length}d.${ext}`;
   const last = new Date(Date.parse(`${report.range.until}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);

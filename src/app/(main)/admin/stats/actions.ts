@@ -9,7 +9,8 @@ import { kstDay } from "@/lib/metrics/record";
 import { loadReport, resolvePeriod, testDataNotice } from "@/lib/metrics/report";
 import { loadUserReport } from "@/lib/metrics/userReport";
 import { loadHourlyCells } from "@/lib/metrics/hourly";
-import { resolveSelection } from "@/lib/metrics/daySelection";
+import { addDays, resolveSelection } from "@/lib/metrics/daySelection";
+import { loadDayVisits, resolveVisitDay } from "@/lib/metrics/dayVisits";
 
 // 운영 통계 내보내기 (Excel / CSV). A Server Action rather than a download
 // route: the Hobby plan's function cap is used up (see next.config.ts), and
@@ -30,6 +31,9 @@ const inputSchema = z.object({
   // 날짜·시간대별: the calendar's days, encoded as in the URL's `d`
   // (absent: the same default the page shows)
   days: z.string().max(4000).optional(),
+  // 날짜별 방문 상세: the day chosen on the page (absent or invalid: the
+  // period's last day, as the page shows)
+  visitDay: z.string().max(10).optional(),
 });
 export type StatsExportInput = z.input<typeof inputSchema>;
 export type StatsExportResult = { ok: true; filename: string; mime: string; base64: string } | { ok: false; error: string };
@@ -38,33 +42,35 @@ export async function exportStatsAction(input: StatsExportInput): Promise<StatsE
   await requireAdmin();
   const parsed = inputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "내보내기 조건을 확인해 주세요." };
-  const { format, preset, from, to, dataset, days } = parsed.data;
+  const { format, preset, from, to, dataset, days, visitDay } = parsed.data;
 
   const today = kstDay();
   const period = resolvePeriod({ preset: preset as (typeof PERIOD_PRESETS)[number]["key"], from, to }, today);
   if ("error" in period) return { ok: false, error: period.error };
   const selection = resolveSelection(days, today);
+  const day = resolveVisitDay(visitDay, addDays(period.range.until, -1), today);
 
   try {
-    const [report, users, hourly] = await Promise.all([
+    const [report, users, hourly, dayVisits] = await Promise.all([
       loadReport(period.range),
       loadUserReport(period.range),
       loadHourlyCells(selection.days),
+      loadDayVisits(day),
     ]);
     if (format === "xlsx") {
       return {
         ok: true,
         filename: exportFileName(report, "xlsx"),
         mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        base64: toXlsx(report, period.label, users, testDataNotice(), hourly).toString("base64"),
+        base64: toXlsx(report, period.label, users, testDataNotice(), hourly, dayVisits).toString("base64"),
       };
     }
     const key = dataset as (typeof DATASETS)[number]["key"];
     return {
       ok: true,
-      filename: exportFileName(report, "csv", key, selection.days),
+      filename: exportFileName(report, "csv", key, selection.days, day),
       mime: "text/csv;charset=utf-8",
-      base64: Buffer.from(toCsv(report, key, period.label, users, testDataNotice(), hourly), "utf8").toString("base64"),
+      base64: Buffer.from(toCsv(report, key, period.label, users, testDataNotice(), hourly, dayVisits), "utf8").toString("base64"),
     };
   } catch {
     return { ok: false, error: "파일을 만들지 못했습니다. 잠시 후 다시 시도해 주세요." };

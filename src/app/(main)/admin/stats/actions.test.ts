@@ -10,6 +10,8 @@ const loadUserReport = vi.fn(async (range: unknown) => ({ users: true, range }))
 vi.mock("@/lib/metrics/userReport", async (importOriginal) => ({ ...(await importOriginal<object>()), loadUserReport }));
 const loadHourlyCells = vi.fn(async (days: string[]) => ({ hourly: true, days }));
 vi.mock("@/lib/metrics/hourly", async (importOriginal) => ({ ...(await importOriginal<object>()), loadHourlyCells }));
+const loadDayVisits = vi.fn(async (day: string) => ({ dayVisits: true, day }));
+vi.mock("@/lib/metrics/dayVisits", async (importOriginal) => ({ ...(await importOriginal<object>()), loadDayVisits }));
 const toXlsx = vi.fn(() => Buffer.from("xlsx"));
 const toCsv = vi.fn(() => "csv");
 vi.mock("@/lib/metrics/export", async (importOriginal) => ({ ...(await importOriginal<object>()), toXlsx, toCsv }));
@@ -38,6 +40,7 @@ describe("운영 통계 내보내기 action", () => {
       expect.objectContaining({ users: true }),
       expect.stringContaining("실제 이용자 통계가 아닙니다"),
       expect.objectContaining({ hourly: true }),
+      expect.objectContaining({ dayVisits: true }),
     );
     expect(loadUserReport).toHaveBeenLastCalledWith({ from: "2026-10-12", until: "2026-10-17", unit: "day" });
     // 날짜·시간대별 without chosen days: the page's default, the last 7 days
@@ -52,6 +55,7 @@ describe("운영 통계 내보내기 action", () => {
       expect.objectContaining({ users: true }),
       expect.stringContaining("실제 이용자 통계가 아닙니다"),
       expect.objectContaining({ hourly: true }),
+      expect.objectContaining({ dayVisits: true }),
     );
 
     const custom = await exportStatsAction({ format: "csv", preset: "custom", from: "2026-10-01", to: "2026-10-15", dataset: "server" });
@@ -66,6 +70,21 @@ describe("운영 통계 내보내기 action", () => {
     expect(csv).toMatchObject({ ok: true, filename: "mju-find-stats-hourly_20261001-20261004_3d.csv" });
     await exportStatsAction({ format: "xlsx", preset: "month", days: "" });
     expect(loadHourlyCells).toHaveBeenLastCalledWith([]);
+  });
+
+  it("exports 날짜별 방문 상세 for the page's day: `visitDay`, else the period's last day", async () => {
+    await exportStatsAction({ format: "xlsx", preset: "week" });
+    expect(loadDayVisits).toHaveBeenLastCalledWith("2026-10-16");
+    await exportStatsAction({ format: "xlsx", preset: "custom", from: "2026-10-01", to: "2026-10-05" });
+    expect(loadDayVisits).toHaveBeenLastCalledWith("2026-10-05");
+    const csv = await exportStatsAction({ format: "csv", preset: "month", dataset: "dayVisits", visitDay: "2026-10-09" });
+    expect(loadDayVisits).toHaveBeenLastCalledWith("2026-10-09");
+    expect(csv).toMatchObject({ ok: true, filename: "mju-find-stats-day-visits_20261009.csv" });
+    // a day after today, or not a day at all: the default
+    for (const visitDay of ["2026-10-17", "2026-02-30", "x"]) {
+      await exportStatsAction({ format: "xlsx", preset: "month", visitDay });
+      expect(loadDayVisits).toHaveBeenLastCalledWith("2026-10-16");
+    }
   });
 
   it("rejects bad or oversized ranges without querying", async () => {

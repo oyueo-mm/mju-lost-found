@@ -34,7 +34,9 @@ import { loadUserReport } from "@/lib/metrics/userReport";
 import { HourlyStatsView, type HourlyView } from "@/components/admin/HourlyStatsView";
 import { HourlyExportButtons } from "@/components/admin/HourlyExportButtons";
 import { isHourlyMetric, loadHourlyCells } from "@/lib/metrics/hourly";
-import { describeDays, encodeDays, resolveSelection } from "@/lib/metrics/daySelection";
+import { addDays, describeDays, encodeDays, resolveSelection } from "@/lib/metrics/daySelection";
+import { loadDayVisits, resolveVisitDay } from "@/lib/metrics/dayVisits";
+import { DayVisitsView } from "@/components/admin/DayVisitsView";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
 import { AdminActivityView, type DashboardOptions } from "@/components/admin/AdminActivityView";
 import { CategoryStats } from "@/components/admin/CategoryStats";
@@ -151,7 +153,7 @@ function SeriesTable({ report, columns }: { report: Report; columns: { label: st
 export default async function AdminStatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[]; a?: string; day?: string; k?: string; p?: string; hm?: string; dm?: string }>;
+  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[]; a?: string; day?: string; k?: string; p?: string; hm?: string; dm?: string; vd?: string }>;
 }) {
   const admin = await requireAdmin();
   const params = await searchParams;
@@ -171,6 +173,10 @@ export default async function AdminStatsPage({
   const selectedParam = encodeDays(selection.days);
   const metric: HourlyView = params.m === "all" ? "all" : isHourlyMetric(params.m) ? params.m : "pv";
   const hourlyQuery = new URLSearchParams({ d: selectedParam, m: metric }).toString();
+  // 날짜별 방문 분석: the day in `vd`, else the last day of the period; a
+  // chosen day is kept when the period changes
+  const visitDay = resolveVisitDay(params.vd, addDays(period.range.until, -1), today);
+  const keepQuery = params.vd === visitDay ? `${hourlyQuery}&vd=${visitDay}` : hourlyQuery;
   const periodQuery =
     period.selection.preset === "custom"
       ? `period=custom&from=${period.selection.from}&to=${period.selection.to}`
@@ -221,7 +227,7 @@ export default async function AdminStatsPage({
               today={today}
               openByDefault={period.selection.preset === "custom" || !!periodError}
               tab={tab}
-              keep={tab === "ops" ? hourlyQuery : undefined}
+              keep={tab === "ops" ? keepQuery : undefined}
             />
             {periodError && (
               <p role="alert" className="text-xs text-destructive">
@@ -242,6 +248,7 @@ export default async function AdminStatsPage({
                 periodLabel={period.label}
                 days={selectedParam}
                 daysLabel={selection.days.length ? `${selection.days.length}일: ${describeDays(selection.days)}` : "고른 날짜 없음"}
+                visitDay={visitDay}
               />
             </div>
           </details>
@@ -286,7 +293,7 @@ export default async function AdminStatsPage({
     );
   }
 
-  const [report, hourlyCells] = await Promise.all([loadReport(period.range), loadHourlyCells(selection.days)]);
+  const [report, hourlyCells, dayVisits] = await Promise.all([loadReport(period.range), loadHourlyCells(selection.days), loadDayVisits(visitDay)]);
   const { core, visit, totals, totalCoverage: cov } = report;
   const labels = report.buckets.map((b) => bucketLabel(bucketSpan(report.range, b).from, unit));
   const last = report.buckets.length - 1;
@@ -409,7 +416,7 @@ export default async function AdminStatsPage({
       >
         {!trend && (
           <p className="rounded-card border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            하루만 고른 경우 추이 그래프 없이 합계만 보여 줍니다. 방문·검색 통계는 하루 단위로만 저장되어 시간별 그래프는 만들지 않습니다.
+            하루만 고른 경우 추이 그래프 없이 합계만 보여 줍니다. 그날의 시간대별 방문과 전날 비교는 아래 날짜별 방문 분석에서 볼 수 있습니다.
           </p>
         )}
         {trend && (
@@ -551,6 +558,10 @@ export default async function AdminStatsPage({
           )}
         </div>
       </Section>
+
+      <div id="day-visits" className="scroll-mt-20">
+        <DayVisitsView report={dayVisits} />
+      </div>
 
       <div id="hourly" className="scroll-mt-20">
         <HourlyStatsView

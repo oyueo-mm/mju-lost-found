@@ -12,6 +12,7 @@ export const DATASETS = [
   { key: "flow", name: "방문 시간·이탈" },
   { key: "users", name: "사용자 통계" },
   { key: "hourly", name: "날짜·시간대별" },
+  { key: "dayVisits", name: "날짜별 방문 상세" },
 ] as const;
 export type DatasetKey = (typeof DATASETS)[number]["key"];
 
