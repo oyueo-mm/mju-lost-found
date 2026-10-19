@@ -349,11 +349,23 @@ function CommitList({ shas, commits, limit = 30 }: { shas: string[]; commits: Ma
   );
 }
 
-function ChangeText({ change, commits, githubOk }: { change: Change; commits: Map<string, DevCommit>; githubOk: boolean }) {
+// "release": a release against the one before it. "pending": the Preview
+// URL's version against Production's -- there a Preview behind Production
+// is not a rollback, only nothing waiting to be released.
+function ChangeText({ change, commits, githubOk, context = "release" }: { change: Change; commits: Map<string, DevCommit>; githubOk: boolean; context?: "release" | "pending" }) {
   if (change.status === "unknown") return <p className="text-[11px] text-muted-foreground">{githubOk ? change.reason : "GitHub에 연결하지 못해 확인할 수 없습니다."}</p>;
-  if (change.kind === "same") return <p className="text-[11px] text-muted-foreground">같은 커밋을 다시 배포했습니다(새 변경 없음).</p>;
-  const head =
-    change.kind === "rollback"
+  const pending = context === "pending";
+  if (change.kind === "same")
+    return <p className="text-[11px] text-muted-foreground">{pending ? "Preview와 Production이 같은 커밋입니다(출시를 기다리는 변경 없음)." : "같은 커밋을 다시 배포했습니다(새 변경 없음)."}</p>;
+  if (pending && change.kind === "rollback")
+    return (
+      <p className="text-[11px] text-muted-foreground">
+        출시를 기다리는 변경이 없습니다. Preview가 Production보다 이전 커밋입니다(Production에만 있는 커밋 {fmt(change.removed)}개).
+      </p>
+    );
+  const head = pending
+    ? `Preview에만 있는 커밋 ${fmt(change.commits.length)}개${change.kind === "diverged" ? ` (Production에만 있는 커밋 ${fmt(change.removed)}개도 있음)` : ""}`
+    : change.kind === "rollback"
       ? `이전 버전으로 되돌림: 커밋 ${fmt(change.removed)}개가 빠졌습니다.`
       : `새 커밋 ${fmt(change.commits.length)}개${change.kind === "diverged" ? ` (갈라진 기록 — 빠진 커밋 ${fmt(change.removed)}개)` : ""}`;
   return (
@@ -567,7 +579,7 @@ export function DevStatsView({ dash, options }: { dash: DevDashboard; options: D
           {!pending ? (
             <p className="text-[11px] text-muted-foreground">두 버전 중 하나의 커밋을 확인할 수 없어 비교하지 않았습니다.</p>
           ) : (
-            <ChangeText change={pending} commits={dash.commits} githubOk={feed.ok} />
+            <ChangeText change={pending} commits={dash.commits} githubOk={feed.ok} context="pending" />
           )}
         </div>
       </Section>
