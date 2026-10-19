@@ -37,6 +37,9 @@ import { isHourlyMetric, loadHourlyCells } from "@/lib/metrics/hourly";
 import { addDays, describeDays, encodeDays, resolveSelection } from "@/lib/metrics/daySelection";
 import { loadDayVisits, resolveVisitDay } from "@/lib/metrics/dayVisits";
 import { DayVisitsView } from "@/components/admin/DayVisitsView";
+import { DevStatsView, TIMELINE_STEP, type DevOptions } from "@/components/admin/DevStatsView";
+import { loadCommitFeed } from "@/lib/devstats/github";
+import { buildDevReport, isDevPeriod, isDevUnit } from "@/lib/devstats/stats";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
 import { AdminActivityView, type DashboardOptions } from "@/components/admin/AdminActivityView";
 import { CategoryStats } from "@/components/admin/CategoryStats";
@@ -153,7 +156,7 @@ function SeriesTable({ report, columns }: { report: Report; columns: { label: st
 export default async function AdminStatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[]; a?: string; day?: string; k?: string; p?: string; hm?: string; dm?: string; vd?: string }>;
+  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[]; a?: string; day?: string; k?: string; p?: string; hm?: string; dm?: string; vd?: string; dp?: string; du?: string; da?: string; dn?: string }>;
 }) {
   const admin = await requireAdmin();
   const params = await searchParams;
@@ -165,7 +168,8 @@ export default async function AdminStatsPage({
   const periodError = "error" in asked ? asked.error : null;
   const unit = period.range.unit;
   // (시간대 분석 is a section of 운영 통계; an old ?tab=hourly link opens 운영 통계)
-  const tab: "ops" | "users" | "admins" = params.tab === "users" ? "users" : params.tab === "admins" ? "admins" : "ops";
+  const tab: "ops" | "users" | "admins" | "dev" =
+    params.tab === "users" ? "users" : params.tab === "admins" ? "admins" : params.tab === "dev" ? "dev" : "ops";
   // 시간대 분석: the calendar's days (`d`) and metric (`m`), kept across
   // period changes on 운영 통계
   const dParam = params.d === undefined ? null : [params.d].flat().join(",");
@@ -197,7 +201,9 @@ export default async function AdminStatsPage({
         <p className="text-xs leading-relaxed text-muted-foreground">
           {tab === "admins"
             ? `최근 ${STRIP_DAYS}일 · 한국 시간 기준 · 관리자 본인의 운영 기록만 다룹니다.`
-            : `${period.label} · ${UNIT_TEXT[unit]} 집계 · 한국 시간 기준(진행 중인 기간은 오늘 현재까지) · 개인정보와 검색어 원문은 수집하지 않습니다.`}
+            : tab === "dev"
+              ? "서비스 GitHub 저장소의 커밋 기록 · 한국 시간 기준 · 이용자 통계와는 별개입니다."
+              : `${period.label} · ${UNIT_TEXT[unit]} 집계 · 한국 시간 기준(진행 중인 기간은 오늘 현재까지) · 개인정보와 검색어 원문은 수집하지 않습니다.`}
         </p>
       </div>
       {notice && (
@@ -216,8 +222,11 @@ export default async function AdminStatsPage({
         <Link href="/admin/stats?tab=admins" aria-current={tab === "admins" ? "page" : undefined} className={tabClass(tab === "admins")}>
           관리자 활동
         </Link>
+        <Link href="/admin/stats?tab=dev" aria-current={tab === "dev" ? "page" : undefined} className={tabClass(tab === "dev")}>
+          개발자 통계
+        </Link>
       </nav>
-      {tab !== "admins" && (
+      {(tab === "ops" || tab === "users") && (
         <>
           <div className="flex flex-col gap-2">
             <StatsPeriodPicker
@@ -279,6 +288,24 @@ export default async function AdminStatsPage({
       <div className="flex flex-col gap-6">
         {header}
         <AdminActivityView report={activity} viewer={admin.id} all={all} options={options} />
+      </div>
+    );
+  }
+
+  if (tab === "dev") {
+    // GitHub commits (cached, server only); a failure only affects this tab
+    const options: DevOptions = {
+      period: isDevPeriod(params.dp) ? params.dp : "90",
+      unit: isDevUnit(params.du) ? params.du : null,
+      author: params.da && params.da.length <= 80 ? params.da : null,
+      limit: Math.min(2000, Math.max(TIMELINE_STEP, Math.floor(Number(params.dn) / TIMELINE_STEP) * TIMELINE_STEP || TIMELINE_STEP)),
+    };
+    const feed = await loadCommitFeed();
+    const report = feed.ok ? buildDevReport(feed.commits, { period: options.period, unit: options.unit, author: options.author, today }) : null;
+    return (
+      <div className="flex flex-col gap-6">
+        {header}
+        <DevStatsView feed={feed} report={report} options={options} />
       </div>
     );
   }
