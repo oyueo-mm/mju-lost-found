@@ -7,9 +7,10 @@
 //       vercel deploy; --alias also points mju-lost-found-preview.vercel.app at it
 //   node scripts/deployments/deploy.mjs production
 //       vercel deploy --prod
-//   recording: the Preview database by default; add
-//   --db production --confirm-production to record in the Production database
-//   (after its DeploymentRecord migration).
+//   recording: the Preview database by default; after the release (its
+//   DeploymentRecord migration on Production) add
+//   --db both --confirm-production so both environments' 개발자 통계 see
+//   every deployment.
 //
 // Deploy from a clean working tree: the CLI then sends the exact commit
 // (meta.githubCommitSha); uncommitted changes are flagged as gitDirty and
@@ -26,7 +27,7 @@ const run = (args, capture = false) =>
 
 const [target, ...rest] = process.argv.slice(2);
 if (target !== "preview" && target !== "production") {
-  console.error("usage: deploy.mjs preview [--alias] | production  [--db production --confirm-production]");
+  console.error("usage: deploy.mjs preview [--alias] | production  [--db both|production --confirm-production]");
   process.exit(2);
 }
 const alias = rest.includes("--alias");
@@ -37,7 +38,7 @@ if (status) console.warn("주의: 커밋하지 않은 변경이 있습니다. �
 
 const deploy = run(["vercel", "deploy", "--yes", ...(target === "production" ? ["--prod"] : [])], true);
 process.stdout.write(deploy.stdout ?? "");
-const url = /https:\/\/[a-z0-9-]+\.vercel\.app/.exec(deploy.stdout ?? "")?.[0];
+const url = /https:\/\/[a-z0-9-]+-[a-z0-9]{9}-oyueo\.vercel\.app/.exec(deploy.stdout ?? "")?.[0];
 if (!url) {
   console.error("배포 URL을 찾지 못했습니다. `vercel ls`로 생성 여부를 확인한 뒤 record.mjs로 기록하세요.");
   process.exit(1);

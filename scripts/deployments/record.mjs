@@ -8,13 +8,17 @@
 //
 //   node scripts/deployments/record.mjs <deployment url or id> [...]
 //   node scripts/deployments/record.mjs --all      every deployment Vercel still lists
-//   options: --db preview (default) | --db production --confirm-production
+//   options: --db preview (default) | production | both, the last two with
+//            --confirm-production
 //            --dry-run (print what would be written, write nothing)
 //
 // The Preview database is the default. The Production database is only
-// written with both production flags, and only once its migration
-// (20261107000000_deployment_record) has been applied there. Deployments
-// Vercel has already deleted are not recreated.
+// written with --confirm-production, and only once its migration
+// (20261107000000_deployment_record) has been applied there. Each
+// environment's deployments record themselves only in their own database,
+// so after the release use --db both: then Production's 개발자 통계 also
+// sees the Preview deployments. Deployments Vercel has already deleted are
+// not recreated.
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -43,8 +47,9 @@ export function parseArgs(argv) {
     else if (a.startsWith("--")) throw new Error(`unknown option ${a}`);
     else opts.targets.push(a.replace(/^https?:\/\//, "").replace(/\/.*$/, ""));
   }
-  if (!(opts.db in DBS)) throw new Error("--db must be preview or production");
-  if (opts.db === "production" && !opts.confirmProduction) throw new Error("writing the Production database needs --confirm-production as well");
+  if (!(opts.db in DBS) && opts.db !== "both") throw new Error("--db must be preview, production or both");
+  if (opts.db !== "preview" && !opts.confirmProduction) throw new Error("writing the Production database needs --confirm-production as well");
+  opts.dbs = opts.db === "both" ? ["preview", "production"] : [opts.db];
   if (!opts.all && opts.targets.length === 0) throw new Error("give deployment urls / ids, or --all");
   return opts;
 }
@@ -135,24 +140,30 @@ async function main() {
   }
   if (opts.dryRun) return console.log(`dry run: ${rows.length} deployments, nothing written`);
 
-  const db = DBS[opts.db];
-  const url = envValue(db.file, "DIRECT_URL");
-  if (!url) throw new Error(`DIRECT_URL missing in ${db.file}`);
-  if (!new URL(url).username.includes(db.project)) throw new Error(`${db.file} does not point at the ${opts.db} database`);
+  // every database is checked before any is written
+  const targets = opts.dbs.map((name) => {
+    const db = DBS[name];
+    const url = envValue(db.file, "DIRECT_URL");
+    if (!url) throw new Error(`DIRECT_URL missing in ${db.file}`);
+    if (!new URL(url).username.includes(db.project)) throw new Error(`${db.file} does not point at the ${name} database`);
+    return { name, url };
+  });
   const { Client } = require("pg");
-  const client = new Client({ connectionString: url });
-  await client.connect();
-  try {
-    await client.query("BEGIN");
-    for (const r of rows) await client.query(UPSERT_SQL, paramsOf(r, current(r.id)));
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw error;
-  } finally {
-    await client.end();
+  for (const { name, url } of targets) {
+    const client = new Client({ connectionString: url });
+    await client.connect();
+    try {
+      await client.query("BEGIN");
+      for (const r of rows) await client.query(UPSERT_SQL, paramsOf(r, current(r.id)));
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw new Error(`${name} database: ${error.message}`);
+    } finally {
+      await client.end();
+    }
+    console.log(`recorded ${rows.length} deployments in the ${name} database`);
   }
-  console.log(`recorded ${rows.length} deployments in the ${opts.db} database`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
