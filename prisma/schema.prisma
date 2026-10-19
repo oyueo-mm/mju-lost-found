@@ -1984,3 +1984,32 @@ model ApiMetricHourly {
   @@map("ApiMetricHourly")
 }
 
+
+// ---------- DeploymentRecord ----------
+
+// 개발자 통계 > 배포 이력: one row per Vercel deployment, kept after Vercel
+// deletes the deployment (retention). Written by the deployment itself on
+// its first start (src/instrumentation.ts: id, environment, Git commit),
+// by the deploy recorder run next to the CLI (scripts/deployments: Vercel's
+// own created / ready times and state, read with the CLI's login), and by
+// the dashboard when a Vercel API token is configured. Upserted by id, so a
+// deployment is never recorded twice; a later source only fills what is
+// known. Nothing is guessed: unknown values stay null. All times UTC.
+model DeploymentRecord {
+  id          String    @id // Vercel deployment id (dpl_...)
+  target      String // production | preview
+  url         String? // the deployment's own hostname
+  gitSha      String?   @map("git_sha")
+  gitMessage  String?   @map("git_message") // first line of the commit message, shortened
+  gitDirty    Boolean?  @map("git_dirty") // deployed with uncommitted changes (CLI)
+  state       String? // READY | ERROR | CANCELED | BUILDING | QUEUED | INITIALIZING
+  createdAt   DateTime? @map("created_at") // Vercel: deployment created
+  readyAt     DateTime? @map("ready_at") // Vercel: build finished (ready, failed or canceled)
+  firstSeenAt DateTime? @map("first_seen_at") // the app first started on it
+  currentAt   DateTime? @map("current_at") // last time seen as the live Production / the Preview alias
+  sources     String[]  @default([]) // runtime | cli | api
+  updatedAt   DateTime  @default(now()) @map("updated_at")
+
+  @@index([createdAt], map: "idx_deploymentrecord_created")
+  @@map("DeploymentRecord")
+}

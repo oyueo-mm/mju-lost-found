@@ -49,6 +49,7 @@ export type DevCommit = {
   author: CommitAuthor;
   coAuthors: string[]; // names from Co-Authored-By trailers
   merge: boolean; // more than one parent
+  parents: string[]; // parent SHAs: which commits a deployed commit contains
 };
 
 export type CommitFeed =
@@ -60,7 +61,7 @@ type RawCommit = {
   html_url: string;
   commit: { message: string; author: { name?: string; email?: string; date?: string } | null; committer: { date?: string } | null };
   author: { login?: string; html_url?: string; type?: string } | null;
-  parents: unknown[];
+  parents: { sha?: string }[];
 };
 
 const CO_AUTHOR = /^co-authored-by:\s*(.+?)\s*(?:<[^>]*>)?\s*$/i;
@@ -95,6 +96,7 @@ export function normalizeCommit(raw: RawCommit): DevCommit {
     author: { key, login, name, profileUrl: login ? (raw.author?.html_url ?? `https://github.com/${login}`) : null },
     coAuthors: [...new Set(coAuthors)],
     merge: Array.isArray(raw.parents) && raw.parents.length > 1,
+    parents: Array.isArray(raw.parents) ? raw.parents.map((p) => p?.sha).filter((x): x is string => typeof x === "string") : [],
   };
 }
 
@@ -115,13 +117,18 @@ function failureOf(response: Response): Extract<CommitFeed, { ok: false }> {
 }
 
 // Every commit of the branch, newest first (at most MAX_COMMITS).
-export async function fetchCommitFeed(fetcher: typeof fetch = fetch, token = process.env.GITHUB_TOKEN): Promise<CommitFeed> {
+const headersOf = (token: string | undefined) => {
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
     "User-Agent": "mju-find-admin-stats",
   };
   if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+};
+
+export async function fetchCommitFeed(fetcher: typeof fetch = fetch, token = process.env.GITHUB_TOKEN): Promise<CommitFeed> {
+  const headers = headersOf(token);
   const commits: DevCommit[] = [];
   let truncated = false;
   for (let page = 1; ; page++) {
@@ -152,7 +159,7 @@ const cachedFeed = unstable_cache(
     if (!feed.ok) throw new FeedFailure(feed);
     return feed;
   },
-  ["github-commit-feed-v1", GITHUB_REPO.owner, GITHUB_REPO.repo, GITHUB_REPO.branch],
+  ["github-commit-feed-v2", GITHUB_REPO.owner, GITHUB_REPO.repo, GITHUB_REPO.branch],
   { revalidate: REVALIDATE_SECONDS, tags: ["github-commit-feed"] },
 );
 
@@ -169,6 +176,70 @@ export async function loadCommitFeed(): Promise<CommitFeed> {
     // status only: never the request, its headers or the token
     console.error("GitHub commit feed unavailable:", result.reason);
     lastFailure = { until: Date.now() + FAILURE_BACKOFF_MS, result };
+    return result;
+  }
+}
+
+// ---------- Compare (GET /repos/{owner}/{repo}/compare/{base}...{head}) ----------
+// For deployed commits that are not on the branch list (another branch):
+// the commits head has and base does not. A commit GitHub does not know
+// (not pushed yet) is "not_found" -- shown as 확인 불가, never guessed.
+// A found comparison never changes, so it is cached for good; a miss is
+// remembered here for a while so it is not asked again on every view.
+
+export type CompareResult =
+  | { ok: true; status: "ahead" | "behind" | "identical" | "diverged"; aheadBy: number; behindBy: number; commits: DevCommit[]; truncated: boolean }
+  | { ok: false; reason: "not_found" | "rate_limited" | "unavailable" };
+
+const SHA = /^[0-9a-f]{40}$/;
+
+export async function fetchCompare(base: string, head: string, fetcher: typeof fetch = fetch, token = process.env.GITHUB_TOKEN): Promise<CompareResult> {
+  if (!SHA.test(base) || !SHA.test(head)) return { ok: false, reason: "not_found" };
+  try {
+    const res = await fetcher(`https://api.github.com/repos/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/compare/${base}...${head}?per_page=250`, {
+      headers: headersOf(token),
+      cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      const f = failureOf(res);
+      return { ok: false, reason: res.status === 422 ? "not_found" : f.reason };
+    }
+    const body = (await res.json()) as { status?: string; ahead_by?: number; behind_by?: number; total_commits?: number; commits?: RawCommit[] };
+    const status = body.status === "ahead" || body.status === "behind" || body.status === "identical" || body.status === "diverged" ? body.status : null;
+    if (!status) return { ok: false, reason: "unavailable" };
+    const commits = (body.commits ?? []).map(normalizeCommit);
+    return { ok: true, status, aheadBy: body.ahead_by ?? 0, behindBy: body.behind_by ?? 0, commits, truncated: (body.total_commits ?? commits.length) > commits.length };
+  } catch {
+    return { ok: false, reason: "unavailable" };
+  }
+}
+
+class CompareMiss extends Error {
+  constructor(readonly result: Extract<CompareResult, { ok: false }>) {
+    super(result.reason);
+  }
+}
+const misses = new Map<string, { until: number; result: Extract<CompareResult, { ok: false }> }>();
+
+export async function loadCompare(base: string, head: string): Promise<CompareResult> {
+  const key = `${base}...${head}`;
+  const miss = misses.get(key);
+  if (miss && Date.now() < miss.until) return miss.result;
+  try {
+    return await unstable_cache(
+      async () => {
+        const r = await fetchCompare(base, head);
+        if (!r.ok) throw new CompareMiss(r);
+        return r;
+      },
+      ["github-compare-v1", base, head],
+      { revalidate: false },
+    )();
+  } catch (error) {
+    const result: Extract<CompareResult, { ok: false }> = error instanceof CompareMiss ? error.result : { ok: false, reason: "unavailable" };
+    misses.set(key, { until: Date.now() + FAILURE_BACKOFF_MS * 3, result });
+    if (misses.size > 200) misses.delete(misses.keys().next().value as string);
     return result;
   }
 }

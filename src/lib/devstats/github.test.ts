@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // unstable_cache needs the Next server; here it simply calls through.
 vi.mock("next/cache", () => ({ unstable_cache: (fn: () => unknown) => fn }));
 
-const { fetchCommitFeed, normalizeCommit, loadCommitFeed } = await import("./github");
+const { fetchCommitFeed, fetchCompare, normalizeCommit, loadCommitFeed } = await import("./github");
 
 const raw = (over: Record<string, unknown> = {}) => ({
   sha: "a".repeat(40),
@@ -75,5 +75,20 @@ describe("GitHub commit feed", () => {
     expect(error).toHaveBeenCalledWith("GitHub commit feed unavailable:", "unavailable");
     await loadCommitFeed();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps parent SHAs, and compares two commits through GitHub Compare", async () => {
+    expect(normalizeCommit(raw({ parents: [{ sha: "b".repeat(40) }] }) as never).parents).toEqual(["b".repeat(40)]);
+    const base = "1".repeat(40);
+    const head = "2".repeat(40);
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({ status: "ahead", ahead_by: 1, behind_by: 0, total_commits: 1, commits: [raw({ sha: head })] }),
+    );
+    const r = await fetchCompare(base, head, fetcher, undefined);
+    expect(String(fetcher.mock.calls[0][0])).toBe(`https://api.github.com/repos/oyueo-mm/mju-lost-found/compare/${base}...${head}?per_page=250`);
+    expect(r).toMatchObject({ ok: true, status: "ahead", aheadBy: 1, truncated: false });
+    // a commit GitHub does not know (not pushed): not found, never guessed
+    expect(await fetchCompare(base, head, vi.fn<typeof fetch>(async () => new Response("", { status: 404 })), undefined)).toEqual({ ok: false, reason: "not_found" });
+    expect(await fetchCompare("nope", head, vi.fn(), undefined)).toEqual({ ok: false, reason: "not_found" });
   });
 });

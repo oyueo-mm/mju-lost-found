@@ -6,6 +6,7 @@ import { setGoogleTestMode } from "@/lib/settings/service";
 import { runRetention } from "@/lib/retention/service";
 import { recordCapacity } from "@/lib/metrics/record";
 import { recordAdminActivity } from "@/lib/admin/activityLog";
+import { fetchVercelFeed, hasVercelToken, storeVercelFeed } from "@/lib/devstats/vercel";
 
 const patchSettingsSchema = z.object({
   googleTestModeEnabled: z.boolean(),
@@ -55,6 +56,17 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const result = await runRetention();
   // 운영 통계: the daily DB/Storage size snapshot rides on this same cron.
   const capacity = await recordCapacity();
-  console.log("retention run", JSON.stringify({ ...result, capacity }));
+  // 배포 이력: with a Vercel API token, the day's deployments are kept
+  // before Vercel's retention removes them (one list request a day, on this
+  // same cron -- no polling). Never fails the clean-up.
+  let deployments: number | null = null;
+  if (hasVercelToken()) {
+    const feed = await fetchVercelFeed().catch(() => null);
+    if (feed?.ok) {
+      await storeVercelFeed(feed).catch(() => {});
+      deployments = feed.deployments.length;
+    }
+  }
+  console.log("retention run", JSON.stringify({ ...result, capacity, deployments }));
   return jsonOk(result);
 });

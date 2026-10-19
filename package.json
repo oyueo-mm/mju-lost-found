@@ -10,7 +10,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "download-model": "node scripts/downloadModel.mjs"
+    "download-model": "node scripts/downloadModel.mjs",
+    "deploy:preview": "node scripts/deployments/deploy.mjs preview --alias",
+    "deployments:record": "node scripts/deployments/record.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

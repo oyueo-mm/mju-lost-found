@@ -18,6 +18,7 @@ const commit = (sha: string, authoredAt: string, author: "a" | "b" | "c", over: 
         : { key: "mail:0123456789ab", login: null, name: "Someone", profileUrl: null },
   coAuthors: [],
   merge: false,
+  parents: [],
   ...over,
 });
 

@@ -39,8 +39,10 @@ import { loadDayVisits, loadMultiDayVisits, resolveVisitDays } from "@/lib/metri
 import { DayVisitsSection, DayVisitsView, MultiDayVisitsView } from "@/components/admin/DayVisitsView";
 import { HourlyDayPopover } from "@/components/admin/HourlyDayPopover";
 import { DevStatsView, TIMELINE_STEP, type DevOptions } from "@/components/admin/DevStatsView";
-import { loadCommitFeed } from "@/lib/devstats/github";
-import { buildDevReport, isDevPeriod, isDevUnit } from "@/lib/devstats/stats";
+import { headers } from "next/headers";
+import { isDeployEnv, loadDevDashboard } from "@/lib/devstats/dashboard";
+import { isDevPeriod, isDevUnit } from "@/lib/devstats/stats";
+import { PREVIEW_ALIAS } from "@/lib/devstats/vercelDeployment.mjs";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
 import { AdminActivityView, type DashboardOptions } from "@/components/admin/AdminActivityView";
 import { CategoryStats } from "@/components/admin/CategoryStats";
@@ -157,7 +159,7 @@ function SeriesTable({ report, columns }: { report: Report; columns: { label: st
 export default async function AdminStatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[]; a?: string; day?: string; k?: string; p?: string; hm?: string; dm?: string; vd?: string; dp?: string; du?: string; da?: string; dn?: string }>;
+  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[]; a?: string; day?: string; k?: string; p?: string; hm?: string; dm?: string; vd?: string; dp?: string; du?: string; da?: string; dn?: string; de?: string }>;
 }) {
   const admin = await requireAdmin();
   const params = await searchParams;
@@ -303,14 +305,19 @@ export default async function AdminStatsPage({
       period: isDevPeriod(params.dp) ? params.dp : "90",
       unit: isDevUnit(params.du) ? params.du : null,
       author: params.da && params.da.length <= 80 ? params.da : null,
+      env: isDeployEnv(params.de) ? params.de : "all",
       limit: Math.min(2000, Math.max(TIMELINE_STEP, Math.floor(Number(params.dn) / TIMELINE_STEP) * TIMELINE_STEP || TIMELINE_STEP)),
     };
-    const feed = await loadCommitFeed();
-    const report = feed.ok ? buildDevReport(feed.commits, { period: options.period, unit: options.unit, author: options.author, today }) : null;
+    // on a Preview deployment opened through the fixed Preview URL, that
+    // URL's deployment is the one rendering this page
+    const host = (await headers()).get("host");
+    const deploymentId = process.env.VERCEL_DEPLOYMENT_ID;
+    const self = process.env.VERCEL_ENV === "preview" && deploymentId ? { id: deploymentId, viaAlias: host === PREVIEW_ALIAS } : null;
+    const dash = await loadDevDashboard({ period: options.period, unit: options.unit, author: options.author, today }, self);
     return (
       <div className="flex flex-col gap-6">
         {header}
-        <DevStatsView feed={feed} report={report} options={options} />
+        <DevStatsView dash={dash} options={options} />
       </div>
     );
   }
