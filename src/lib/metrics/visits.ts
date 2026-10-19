@@ -134,11 +134,67 @@ export function refSourceOf(referrer: string, ownHost: string): RefSource {
 }
 
 // UTM values are visitor-controlled: lower-case letters, digits, "-" and
-// "_" only, at most 32 characters; anything else -> null (not counted).
+// "_" only, at most 32 characters; anything else -> null (not counted). So
+// no URL, e-mail or free text can be stored, and 7+ digits in a row once "-"/"_" are taken out (a
+// phone, student or full-date number pasted into a link) is refused too.
 export function sanitizeUtm(value: string | null | undefined): string | null {
   if (!value) return null;
   const v = value.trim().toLowerCase();
-  return /^[a-z0-9_-]{1,32}$/.test(v) ? v : null;
+  return /^[a-z0-9_-]{1,32}$/.test(v) && !/\d{7,}/.test(v.replace(/[-_]/g, "")) ? v : null;
+}
+
+// ---------- 유입 경로 (inflow) ----------
+// A visit session's source, decided once at its first view: a valid
+// utm_source wins over the referrer (a campaign link says where it was
+// posted), and the two stay apart in the counter name so either can be
+// read on its own: "utm.<value>" or "ref.<category>".
+export type ChannelKey = `utm.${string}` | `ref.${RefSource}`;
+export function channelOf(ref: RefSource, utmSource: string | null): ChannelKey {
+  return utmSource ? `utm.${utmSource}` : `ref.${ref}`;
+}
+
+// Where a channel points to, for grouping: a known site (UTM spellings
+// people actually use are folded in), offline QR / posters, a UTM value of
+// its own, or "unknown" -- no referrer is not proof of a direct visit
+// (typed address, bookmark, but also in-app browsers and privacy settings
+// that drop the referrer).
+const UTM_SITES: Record<string, RefSource | "qr"> = {
+  everytime: "everytime",
+  et: "everytime",
+  instagram: "instagram",
+  insta: "instagram",
+  ig: "instagram",
+  kakao: "kakao",
+  kakaotalk: "kakao",
+  google: "google",
+  naver: "naver",
+  daum: "daum",
+  facebook: "facebook",
+  fb: "facebook",
+  youtube: "youtube",
+  x: "x",
+  twitter: "x",
+  mju: "mju",
+  qr: "qr",
+  poster: "qr",
+  poster_qr: "qr",
+  "poster-qr": "qr",
+};
+export type SiteKey = RefSource | "qr" | "unknown" | `utm:${string}`;
+export function siteOf(channel: string): SiteKey {
+  if (channel.startsWith("utm.")) {
+    const v = channel.slice(4);
+    return UTM_SITES[v] ?? `utm:${v}`;
+  }
+  const ref = channel.slice(4);
+  if (ref === "direct") return "unknown";
+  return isRefSource(ref) ? ref : "other";
+}
+export function siteLabel(site: SiteKey): string {
+  if (site === "unknown") return "출처 확인 불가 (리퍼러 없음)";
+  if (site === "qr") return "포스터·QR (UTM)";
+  if (site.startsWith("utm:")) return `기타 UTM: ${site.slice(4)}`;
+  return REF_SOURCE_LABELS[site as RefSource] ?? site;
 }
 
 // Crawlers and headless tools (a second line after the browser's own
@@ -155,6 +211,7 @@ export type VisitEvent = {
   sessionStart: boolean;
   ref?: RefSource;
   utmSource?: string | null;
+  utmMedium?: string | null;
   utmCampaign?: string | null;
 };
 

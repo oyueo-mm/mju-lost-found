@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 
 import { addDailyCount, currentAudience } from "@/lib/metrics/record";
 import { flowCounterChanges, parseFlowUpdate } from "@/lib/metrics/flow";
-import { deviceOf, isBotUserAgent, isPageKind, isRefSource, MAX_EVENTS_PER_CALL, sanitizeUtm } from "@/lib/metrics/visits";
+import { channelOf, deviceOf, isBotUserAgent, isPageKind, isRefSource, MAX_EVENTS_PER_CALL, sanitizeUtm } from "@/lib/metrics/visits";
 
 // 방문 통계: page views from components/layout/VisitBeacon (real browser
 // renders only -- a prefetch never runs it). A server action, not a new API
@@ -20,7 +20,12 @@ import { deviceOf, isBotUserAgent, isPageKind, isRefSource, MAX_EVENTS_PER_CALL,
 //   page.<kind>.<aud>           page views by page kind
 //   session.<aud>               visit sessions started
 //   ref.<source>                sessions by referrer category
-//   utm_source.<v>, utm_campaign.<v>   sessions with UTM tags
+//   utm_source.<v>, utm_medium.<v>, utm_campaign.<v>   sessions with UTM tags
+//   src.<channel>.<aud>          sessions by source (utm.<v> if a valid
+//                               utm_source, else ref.<category>) and login
+//                               state at the first view -- one per session,
+//                               so they add up to session.<aud>
+//   entry.<channel>.<kind>       the same sessions by source and first screen
 //   internal.pv                 admins' page views (kept out of the above)
 //   device.<kind>.pv, device.<kind>.session   the same page views / sessions
 //                               by device class (lib/metrics/visits.ts
@@ -70,7 +75,7 @@ function admit(client: string, wanted: number, now = Date.now()): number {
   return allowed;
 }
 
-function cappedUtm(kind: "source" | "campaign", value: string, day: string): string {
+function cappedUtm(kind: "source" | "medium" | "campaign", value: string, day: string): string {
   const key = `${day}|${kind}`;
   let seen = utmSeen.get(key);
   if (!seen) {
@@ -125,11 +130,20 @@ export async function recordVisitsAction(
       addDailyCount(`visit.device.${device}.session`);
       addDailyCount(`visit.start.hour.${String(kstNow.getUTCHours()).padStart(2, "0")}`);
       addDailyCount(`visit.start.page.${event.kind}`);
-      addDailyCount(`visit.ref.${isRefSource(event.ref) ? event.ref : "other"}`);
+      const ref = isRefSource(event.ref) ? event.ref : "other";
+      addDailyCount(`visit.ref.${ref}`);
       const utmSource = sanitizeUtm(typeof event.utmSource === "string" ? event.utmSource : null);
+      const utmMedium = sanitizeUtm(typeof event.utmMedium === "string" ? event.utmMedium : null);
       const utmCampaign = sanitizeUtm(typeof event.utmCampaign === "string" ? event.utmCampaign : null);
-      if (utmSource) addDailyCount(`visit.utm_source.${cappedUtm("source", utmSource, day)}`);
+      const source = utmSource ? cappedUtm("source", utmSource, day) : null;
+      if (source) addDailyCount(`visit.utm_source.${source}`);
+      if (utmMedium) addDailyCount(`visit.utm_medium.${cappedUtm("medium", utmMedium, day)}`);
       if (utmCampaign) addDailyCount(`visit.utm_campaign.${cappedUtm("campaign", utmCampaign, day)}`);
+      // 유입 경로: the same session once, by source and login state, and by
+      // source and first screen (the capped UTM value keeps the names bounded)
+      const channel = channelOf(ref, source);
+      addDailyCount(`visit.src.${channel}.${audience}`);
+      addDailyCount(`visit.entry.${channel}.${event.kind}`);
     }
     // 방문 시간·이탈: admins' sessions stay out, like their page views.
     if (audience !== "internal") {

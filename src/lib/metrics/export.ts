@@ -19,6 +19,7 @@ import { NEW_MEMBER_DAYS, RETURN_WINDOW_DAYS, windowNote, type UserReport } from
 import { byHour, HOURLY_METRICS, type CellStatus, type HourlyCells } from "./hourly";
 import { describeDays } from "./daySelection";
 import { changeOf, type DayVisitReport, type MultiDayReport } from "./dayVisits";
+import type { InflowReport } from "./inflow";
 import { DURATION_BUCKETS, DURATION_LABELS, PAGES_BUCKETS, PAGES_LABELS } from "./flow";
 import { DEVICE_KINDS, DEVICE_LABELS, PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "./visits";
 import { buildCsv, buildXlsx, columnName, type Cell, type Sheet } from "./xlsx";
@@ -65,13 +66,90 @@ function coverageNote(coverage: Coverage, key: MetricKey | VisitSeriesKey): stri
   return coverage === "none" ? `미측정(${sinceLabel(source)}부터 집계)` : `${sinceLabel(source)} 이후만 집계(이전은 미측정)`;
 }
 
-export function datasetsOf(report: Report, users?: UserReport, hourly?: HourlyCells, dayVisits?: DayVisitReport | MultiDayReport): Dataset[] {
+export function datasetsOf(report: Report, users?: UserReport, hourly?: HourlyCells, dayVisits?: DayVisitReport | MultiDayReport, inflow?: InflowReport): Dataset[] {
   return [
     ...opsDatasets(report),
     ...(users ? [userDataset(users)] : []),
     ...(hourly ? [hourlyDataset(hourly)] : []),
     ...(dayVisits ? ["figures" in dayVisits ? multiDayVisitsDataset(dayVisits) : dayVisitsDataset(dayVisits)] : []),
+    ...(inflow ? [inflowDataset(inflow)] : []),
   ];
+}
+
+// 유입 경로: the chosen days' sessions by source (UTM first, else the
+// referrer category), login state and first screen. null = 미측정.
+export function inflowDataset(r: InflowReport): Dataset {
+  const share = (n: number) => (r.total.all ? n / r.total.all : null);
+  const statusOf = (c: string) => (c === "none" ? "미측정" : c === "partial" ? "부분 측정(수집 시작일)" : "");
+  return {
+    key: "inflow",
+    name: "유입 경로",
+    period: `날짜별 방문 분석에서 고른 날짜 ${r.days.length}일 (${describeDays(r.days)}) · 유입 경로 수집 시작 ${r.since ?? "전"}`,
+    widths: [30, 12, 10, 12, 12, 12, 12],
+    tables: [
+      {
+        title: "유입 출처별 방문 세션",
+        columns: [
+          { label: "출처", kind: "text" },
+          { label: "방문 세션", kind: "int" },
+          { label: "비율", kind: "pct" },
+          { label: "로그인", kind: "int" },
+          { label: "비로그인", kind: "int" },
+          { label: "UTM", kind: "int" },
+          { label: "리퍼러", kind: "int" },
+        ],
+        rows: r.sites.map((x) => [x.label, x.total, share(x.total), x.member, x.anon, x.viaUtm, x.viaRef]),
+        total: r.measuredDays ? ["합계", r.total.all, r.total.all ? 1 : null, r.total.member, r.total.anon, r.sites.reduce((a, x) => a + x.viaUtm, 0), r.sites.reduce((a, x) => a + x.viaRef, 0)] : undefined,
+      },
+      {
+        title: "날짜별 검증 (유입 세션 합 = 방문 세션)",
+        columns: [
+          { label: "날짜", kind: "text" },
+          { label: "방문 세션", kind: "int" },
+          { label: "유입 집계 세션", kind: "int" },
+          { label: "측정 상태", kind: "text" },
+        ],
+        rows: r.perDay.map((d) => [
+          d.day,
+          d.sessions ? d.sessions.anon + d.sessions.member : null,
+          d.coverage === "none" ? null : (d.bySource?.anon ?? 0) + (d.bySource?.member ?? 0),
+          d.mismatch ? "불일치" : statusOf(d.coverage),
+        ]),
+      },
+      {
+        title: "최초 진입 화면",
+        columns: [
+          { label: "첫 화면", kind: "text" },
+          { label: "방문 세션", kind: "int" },
+        ],
+        rows: r.entries.map((e) => [PAGE_KIND_LABELS[e.kind], e.total]),
+      },
+      {
+        title: "출처 세부(UTM 값·리퍼러 분류)",
+        columns: [
+          { label: "출처 세부", kind: "text" },
+          { label: "방문 세션", kind: "int" },
+          { label: "로그인", kind: "int" },
+          { label: "비로그인", kind: "int" },
+        ],
+        rows: r.channels.map((c) => [c.label, c.total, c.member, c.anon]),
+      },
+      ...(["source", "medium", "campaign"] as const).map((k) => ({
+        title: `utm_${k}`,
+        columns: [
+          { label: `utm_${k}`, kind: "text" as const },
+          { label: "방문 세션", kind: "int" as const },
+        ],
+        rows: r.utm[k].map((t) => [t.value, t.sessions]),
+      })),
+    ],
+    notes: [
+      "방문 세션마다 첫 화면에서 한 번만 셉니다(화면 이동·새로고침은 다시 세지 않음). 유효한 utm_source가 있으면 그 출처를, 없으면 리퍼러 도메인 분류를 씁니다.",
+      "리퍼러가 없는 방문은 직접 방문으로 단정하지 않고 '출처 확인 불가'로 둡니다(직접 입력·북마크·앱 안 브라우저 등).",
+      "유입 경로 수집을 시작하기 전 날짜는 미측정(0이 아님)이며, 수집 시작일은 부분 측정입니다. 완전히 측정된 날은 유입 세션 합이 방문 세션 수와 같아야 합니다.",
+      "전체 리퍼러 주소·검색어·IP는 저장하지 않고, 도메인 분류와 허용된 UTM 값(영문 소문자·숫자·-·_ 32자 이내)만 날짜별 합계로 저장합니다. 관리자·자동화 브라우저의 방문은 제외합니다. 한국 시간(KST) 기준.",
+    ],
+  };
 }
 
 // 날짜별 방문 분석, several days: one row per chosen day, then the sums
@@ -862,14 +940,14 @@ export function toSheets(report: Report, label?: string, datasets = datasetsOf(r
   });
 }
 
-export function toXlsx(report: Report, label?: string, users?: UserReport, notice?: string | null, hourly?: HourlyCells, dayVisits?: DayVisitReport | MultiDayReport): Buffer {
-  return buildXlsx(toSheets(report, label, datasetsOf(report, users, hourly, dayVisits), notice), { title: "MJU Find 운영 통계", createdAt: new Date() });
+export function toXlsx(report: Report, label?: string, users?: UserReport, notice?: string | null, hourly?: HourlyCells, dayVisits?: DayVisitReport | MultiDayReport, inflow?: InflowReport): Buffer {
+  return buildXlsx(toSheets(report, label, datasetsOf(report, users, hourly, dayVisits, inflow), notice), { title: "MJU Find 운영 통계", createdAt: new Date() });
 }
 
 // One CSV per data kind: "#" lines (service, period, time, caveats) on top
 // -- skipped by most tools with a comment option -- then plain tables.
-export function toCsv(report: Report, key: DatasetKey, label?: string, users?: UserReport, notice?: string | null, hourly?: HourlyCells, dayVisits?: DayVisitReport | MultiDayReport): string {
-  const ds = datasetsOf(report, users, hourly, dayVisits).find((d) => d.key === key);
+export function toCsv(report: Report, key: DatasetKey, label?: string, users?: UserReport, notice?: string | null, hourly?: HourlyCells, dayVisits?: DayVisitReport | MultiDayReport, inflow?: InflowReport): string {
+  const ds = datasetsOf(report, users, hourly, dayVisits, inflow).find((d) => d.key === key);
   if (!ds) throw new Error(`no data for ${key}`);
   // "#" lines are written as they are (never quoted), so a reader's comment
   // option skips each one whole even when it holds a comma.
@@ -894,6 +972,10 @@ export function toCsv(report: Report, key: DatasetKey, label?: string, users?: U
 }
 
 export const exportFileName = (report: Report, ext: "xlsx" | "csv", key?: DatasetKey, days?: string[], visitDays?: string[]) => {
+  if (key === "inflow" && visitDays?.length) {
+    const [a, b] = [visitDays[0].replaceAll("-", ""), visitDays[visitDays.length - 1].replaceAll("-", "")];
+    return `mju-find-stats-inflow_${a === b ? a : `${a}-${b}_${visitDays.length}d`}.${ext}`;
+  }
   if (key === "dayVisits" && visitDays?.length) {
     const [a, b] = [visitDays[0].replaceAll("-", ""), visitDays[visitDays.length - 1].replaceAll("-", "")];
     return visitDays.length === 1 ? `mju-find-stats-day-visits_${a}.${ext}` : `mju-find-stats-day-visits_${a}-${b}_${visitDays.length}d.${ext}`;

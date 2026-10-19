@@ -44,6 +44,9 @@ describe("방문 통계 server action", () => {
       "visit.ref.everytime": 1,
       "visit.utm_source.everytime": 1,
       "visit.utm_campaign.launch": 1,
+      // 유입 경로: the session once, by source (UTM first) and login state / first screen
+      "visit.src.utm.everytime.anon": 1,
+      "visit.entry.utm.everytime.home": 1,
       "visit.device.mobile.pv": 3,
       "visit.device.mobile.session": 1,
     });
@@ -79,6 +82,8 @@ describe("방문 통계 server action", () => {
       "visit.page.home.anon": 1,
       "visit.session.anon": 1,
       "visit.ref.other": 1,
+      "visit.src.ref.other.anon": 1,
+      "visit.entry.ref.other.home": 1,
       "visit.device.other.pv": 1,
       "visit.device.other.session": 1,
     });
@@ -201,5 +206,27 @@ describe("방문 통계 server action", () => {
     await recordVisitsAction([], { flow: [{ day: today, init: true, to: s1 }] });
     expect(counts.size).toBe(0);
   });
-});
 
+  it("유입 경로: one count per session start, UTM before the referrer, sources adding up to sessions", async () => {
+    await recordVisitsAction([
+      { kind: "post", sessionStart: true, ref: "instagram", utmSource: "poster_qr", utmMedium: "offline" },
+      { kind: "home", sessionStart: false, ref: "google" }, // same session: not a new inflow
+      { kind: "found", sessionStart: true, ref: "direct" },
+      { kind: "lost", sessionStart: true, ref: "naver", utmSource: "010-1234-5678", utmMedium: "https://x.y" }, // invalid tags dropped
+    ]);
+    const src = [...counts].filter(([k]) => k.startsWith("visit.src."));
+    expect(Object.fromEntries(src)).toEqual({ "visit.src.utm.poster_qr.anon": 1, "visit.src.ref.direct.anon": 1, "visit.src.ref.naver.anon": 1 });
+    expect(src.reduce((a, [, n]) => a + n, 0)).toBe(counts.get("visit.session.anon"));
+    expect(counts.get("visit.entry.utm.poster_qr.post")).toBe(1);
+    expect(counts.get("visit.entry.ref.direct.found")).toBe(1);
+    expect(counts.get("visit.utm_medium.offline")).toBe(1);
+    expect([...counts.keys()].some((k) => k.includes("1234") || k.includes("https"))).toBe(false);
+    // the referrer counter itself is unchanged by UTM
+    expect(counts.get("visit.ref.instagram")).toBe(1);
+
+    counts.clear();
+    audience = "internal";
+    await recordVisitsAction([{ kind: "home", sessionStart: true, ref: "everytime", utmSource: "everytime" }]);
+    expect([...counts.keys()].filter((k) => k.startsWith("visit.src.") || k.startsWith("visit.entry."))).toEqual([]);
+  });
+});

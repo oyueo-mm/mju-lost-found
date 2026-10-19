@@ -38,6 +38,8 @@ import { addDays, describeDays, encodeDays, resolveSelection } from "@/lib/metri
 import { loadDayVisits, loadMultiDayVisits, resolveVisitDays } from "@/lib/metrics/dayVisits";
 import { DayVisitsSection, DayVisitsView, MultiDayVisitsView } from "@/components/admin/DayVisitsView";
 import { HourlyDayPopover } from "@/components/admin/HourlyDayPopover";
+import { InflowView } from "@/components/admin/InflowView";
+import { loadInflow } from "@/lib/metrics/inflow";
 import { DevStatsView, TIMELINE_STEP, type DevOptions } from "@/components/admin/DevStatsView";
 import { headers } from "next/headers";
 import { isDeployEnv, loadDevDashboard } from "@/lib/devstats/dashboard";
@@ -332,11 +334,12 @@ export default async function AdminStatsPage({
     );
   }
 
-  const [report, hourlyCells, dayVisits, multiDayVisits] = await Promise.all([
+  const [report, hourlyCells, dayVisits, multiDayVisits, inflow] = await Promise.all([
     loadReport(period.range),
     loadHourlyCells(selection.days),
     visitDays.length === 1 ? loadDayVisits(visitDays[0]) : null,
     visitDays.length > 1 ? loadMultiDayVisits(visitDays) : null,
+    visitDays.length ? loadInflow(visitDays) : null,
   ]);
   const { core, visit, totals, totalCoverage: cov } = report;
   const labels = report.buckets.map((b) => bucketLabel(bucketSpan(report.range, b).from, unit));
@@ -618,6 +621,7 @@ export default async function AdminStatsPage({
         >
           {dayVisits && <DayVisitsView report={dayVisits} />}
           {multiDayVisits && <MultiDayVisitsView report={multiDayVisits} />}
+          {inflow && <InflowView report={inflow} />}
           {visitDays.length === 0 && <p className="text-xs text-muted-foreground">날짜 선택에서 날짜를 골라 주세요.</p>}
         </DayVisitsSection>
       </div>

@@ -13,6 +13,8 @@ vi.mock("@/lib/metrics/hourly", async (importOriginal) => ({ ...(await importOri
 const loadDayVisits = vi.fn(async (day: string) => ({ dayVisits: true, day }));
 const loadMultiDayVisits = vi.fn(async (days: string[]) => ({ dayVisits: true, figures: [], days }));
 vi.mock("@/lib/metrics/dayVisits", async (importOriginal) => ({ ...(await importOriginal<object>()), loadDayVisits, loadMultiDayVisits }));
+const loadInflow = vi.fn(async (days: string[]) => ({ inflow: true, days }));
+vi.mock("@/lib/metrics/inflow", async (importOriginal) => ({ ...(await importOriginal<object>()), loadInflow }));
 const toXlsx = vi.fn(() => Buffer.from("xlsx"));
 const toCsv = vi.fn(() => "csv");
 vi.mock("@/lib/metrics/export", async (importOriginal) => ({ ...(await importOriginal<object>()), toXlsx, toCsv }));
@@ -42,6 +44,7 @@ describe("운영 통계 내보내기 action", () => {
       expect.stringContaining("실제 이용자 통계가 아닙니다"),
       expect.objectContaining({ hourly: true }),
       expect.objectContaining({ dayVisits: true }),
+      expect.objectContaining({ inflow: true }),
     );
     expect(loadUserReport).toHaveBeenLastCalledWith({ from: "2026-10-12", until: "2026-10-17", unit: "day" });
     // 날짜·시간대별 without chosen days: the page's default, the last 7 days
@@ -57,6 +60,7 @@ describe("운영 통계 내보내기 action", () => {
       expect.stringContaining("실제 이용자 통계가 아닙니다"),
       expect.objectContaining({ hourly: true }),
       expect.objectContaining({ dayVisits: true }),
+      expect.objectContaining({ inflow: true }),
     );
 
     const custom = await exportStatsAction({ format: "csv", preset: "custom", from: "2026-10-01", to: "2026-10-15", dataset: "server" });
@@ -85,6 +89,10 @@ describe("운영 통계 내보내기 action", () => {
     const many = await exportStatsAction({ format: "csv", preset: "month", dataset: "dayVisits", visitDays: "2026-10-01~2026-10-03,2026-10-05" });
     expect(loadMultiDayVisits).toHaveBeenLastCalledWith(["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-05"]);
     expect(many).toMatchObject({ ok: true, filename: "mju-find-stats-day-visits_20261001-20261005_4d.csv" });
+    // 유입 경로 follows the same days
+    expect(loadInflow).toHaveBeenLastCalledWith(["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-05"]);
+    const inflowCsv = await exportStatsAction({ format: "csv", preset: "month", dataset: "inflow", visitDays: "2026-10-09" });
+    expect(inflowCsv).toMatchObject({ ok: true, filename: "mju-find-stats-inflow_20261009.csv" });
     // only days that cannot be chosen: nothing to export for this sheet
     loadDayVisits.mockClear();
     loadMultiDayVisits.mockClear();

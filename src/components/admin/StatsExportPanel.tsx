@@ -52,7 +52,7 @@ export function StatsExportPanel({
       <p>
         기간: <b className="font-semibold text-foreground">{periodLabel}</b> — 위에서 고른 조회 기간과 같습니다. 날짜·시간대별은 시간대 분석 달력에서 고른
         날짜(<b className="font-semibold text-foreground">{daysLabel}</b>), 날짜별 방문 상세는 날짜별 방문 분석에서 고른 날짜(
-        <b className="font-semibold text-foreground">{visitDaysLabel}</b>, 하루면 그 전날과 비교)입니다.
+        <b className="font-semibold text-foreground">{visitDaysLabel}</b>, 하루면 그 전날과 비교)이며 유입 경로도 같은 날짜입니다.
       </p>
       <fieldset className="flex flex-col gap-1.5">
         <legend className="mb-1.5 font-medium text-foreground">형식</legend>
@@ -89,7 +89,7 @@ export function StatsExportPanel({
       )}
       <p className="leading-relaxed">
         {format === "xlsx"
-          ? "운영 요약·방문 통계·유입 분석·서비스 이용·카테고리별 현황·완료 처리·서버 운영·방문 시간·이탈·사용자 통계·날짜·시간대별·날짜별 방문 상세 11개 시트로 저장됩니다."
+          ? "운영 요약·방문 통계·유입 분석·서비스 이용·카테고리별 현황·완료 처리·서버 운영·방문 시간·이탈·사용자 통계·날짜·시간대별·날짜별 방문 상세·유입 경로 12개 시트로 저장됩니다."
           : "CSV는 시트가 없어 고른 데이터 1종류만 저장됩니다. 맨 위 # 줄은 기간·주의사항입니다."}{" "}
         개인정보(실명·이메일·회원 식별자·IP·검색어)는 포함되지 않습니다.
       </p>

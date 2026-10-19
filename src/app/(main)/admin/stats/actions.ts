@@ -11,6 +11,7 @@ import { loadUserReport } from "@/lib/metrics/userReport";
 import { loadHourlyCells } from "@/lib/metrics/hourly";
 import { addDays, resolveSelection } from "@/lib/metrics/daySelection";
 import { loadDayVisits, loadMultiDayVisits, resolveVisitDays } from "@/lib/metrics/dayVisits";
+import { loadInflow } from "@/lib/metrics/inflow";
 
 // 운영 통계 내보내기 (Excel / CSV). A Server Action rather than a download
 // route: the Hobby plan's function cap is used up (see next.config.ts), and
@@ -51,18 +52,19 @@ export async function exportStatsAction(input: StatsExportInput): Promise<StatsE
   const visit = resolveVisitDays(visitDays, addDays(period.range.until, -1), today).days;
 
   try {
-    const [report, users, hourly, dayVisits] = await Promise.all([
+    const [report, users, hourly, dayVisits, inflow] = await Promise.all([
       loadReport(period.range),
       loadUserReport(period.range),
       loadHourlyCells(selection.days),
       visit.length === 1 ? loadDayVisits(visit[0]) : visit.length > 1 ? loadMultiDayVisits(visit) : undefined,
+      visit.length ? loadInflow(visit) : undefined,
     ]);
     if (format === "xlsx") {
       return {
         ok: true,
         filename: exportFileName(report, "xlsx"),
         mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        base64: toXlsx(report, period.label, users, testDataNotice(), hourly, dayVisits).toString("base64"),
+        base64: toXlsx(report, period.label, users, testDataNotice(), hourly, dayVisits, inflow).toString("base64"),
       };
     }
     const key = dataset as (typeof DATASETS)[number]["key"];
@@ -70,7 +72,7 @@ export async function exportStatsAction(input: StatsExportInput): Promise<StatsE
       ok: true,
       filename: exportFileName(report, "csv", key, selection.days, visit),
       mime: "text/csv;charset=utf-8",
-      base64: Buffer.from(toCsv(report, key, period.label, users, testDataNotice(), hourly, dayVisits), "utf8").toString("base64"),
+      base64: Buffer.from(toCsv(report, key, period.label, users, testDataNotice(), hourly, dayVisits, inflow), "utf8").toString("base64"),
     };
   } catch {
     return { ok: false, error: "파일을 만들지 못했습니다. 잠시 후 다시 시도해 주세요." };

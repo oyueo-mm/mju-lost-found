@@ -22,7 +22,7 @@ import { pageKindOf, refSourceOf, sanitizeUtm, SESSION_IDLE_MS, MAX_EVENTS_PER_C
 // Visit session: kept only in this browser (localStorage: the last view's
 // time and KST day). Nothing identifying is sent -- just whether this view
 // starts a session, and for that first view the referrer category and the
-// UTM tags.
+// UTM tags (source, medium, campaign; validated values only).
 //
 // 방문 시간·이탈 (lib/metrics/flow.ts): this browser also keeps its current
 // session's own summary in localStorage -- start time, first and last
@@ -271,6 +271,7 @@ export function VisitBeacon() {
       const params = new URLSearchParams(window.location.search);
       event.ref = refSourceOf(document.referrer, window.location.host);
       event.utmSource = sanitizeUtm(params.get("utm_source"));
+      event.utmMedium = sanitizeUtm(params.get("utm_medium"));
       event.utmCampaign = sanitizeUtm(params.get("utm_campaign"));
     }
     writeQueue([...readQueue(), event]);
