@@ -123,15 +123,29 @@ describe("Vercel 배포", () => {
         d("preview", "BUILDING", "2026-10-18T15:40:00Z"),
         d("production", "READY", "2026-10-01T00:00:00Z"), // before the period
       ],
-      "2026-10-18",
-      "2026-10-19",
+      { from: "2026-10-18", to: "2026-10-19", days: null },
       "day",
       ["2026-10-18", "2026-10-19"],
+      "2026-10-17",
     );
     expect(s.production).toEqual([0, 1]);
     expect(s.preview).toEqual([1, 0]);
     expect(s.failed).toEqual([0, 1]);
     expect(s.totals).toEqual({ production: 1, preview: 1, failed: 1, finished: 3, unknownState: 1 });
     expect(s.successRate).toBeCloseTo(2 / 3);
+    expect(s.coverage).toEqual(["full", "full"]);
+    expect(s.beforeRecords).toBe(false);
+  });
+
+  it("before the first recorded deployment nothing is known: 미측정, not 0", () => {
+    const s = deployStats([], { from: "2026-10-01", to: "2026-10-31", days: null }, "week", ["2026-09-28", "2026-10-05", "2026-10-12", "2026-10-19", "2026-10-26"], "2026-10-17");
+    expect(s.coverage).toEqual(["none", "none", "partial", "full", "full"]);
+    expect(s.beforeRecords).toBe(true);
+    expect(deployStats([], { from: "2026-10-01", to: "2026-10-02", days: null }, "day", ["2026-10-01", "2026-10-02"], null).coverage).toEqual(["none", "none"]);
+    // chosen days only
+    const d = (createdAt: string) => ({ id: createdAt, target: "preview", state: "READY", createdAt, firstSeenAt: null }) as never;
+    const only = deployStats([d("2026-10-18T01:00:00Z"), d("2026-10-19T01:00:00Z")], { from: "2026-10-18", to: "2026-10-20", days: ["2026-10-18", "2026-10-20"] }, "day", ["2026-10-18", "2026-10-20"], "2026-10-17");
+    expect(only.preview).toEqual([1, 0]);
+    expect(only.totals.preview).toBe(1);
   });
 });

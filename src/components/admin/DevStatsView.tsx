@@ -5,7 +5,9 @@ import { More, Section, StatTile, SubHeading } from "@/components/admin/StatsBlo
 import { AlertIcon, InfoIcon } from "@/components/icons";
 import { addDays } from "@/lib/metrics/daySelection";
 import { GITHUB_REPO, MAX_COMMITS, REPO_URL, REVALIDATE_SECONDS, type CommitFeed, type DevCommit } from "@/lib/devstats/github";
-import { DEV_PERIODS, kstDayOf, kstTimeOf, type DevReport, type DevUnit } from "@/lib/devstats/stats";
+import { DEV_PERIODS, inSelection, kstDayOf, kstTimeOf, type DevReport, type DevSelection, type DevUnit } from "@/lib/devstats/stats";
+import { EARLIEST_SELECTABLE_DAY, encodeDays } from "@/lib/metrics/daySelection";
+import { HourlyDayPopover } from "@/components/admin/HourlyDayPopover";
 import type { DeployEnv, DevDashboard } from "@/lib/devstats/dashboard";
 import { graphOf, timeOf, traceCommit, type Change, type CurrentVersion, type Deployment, type Release } from "@/lib/devstats/releases";
 import { inspectorUrl } from "@/lib/devstats/vercelDeployment.mjs";
@@ -13,7 +15,8 @@ import { inspectorUrl } from "@/lib/devstats/vercelDeployment.mjs";
 // 개발 통계 (/admin/stats?tab=dev): the repository's commits from GitHub
 // and the Vercel deployments that carried them (lib/devstats). Read-only;
 // links go to GitHub and the Vercel dashboard. Filters live in the URL: dp
-// (period), da (developer), de (deployment environment), du (unit), dn
+// (preset) / df..dt (any range) / dd (chosen days), da (developer), de
+// (deployment environment), du (unit), dn
 // (timeline length). Commit time (authored), deployment creation and build
 // finish are always labelled apart; a Preview deployment is never a release.
 
@@ -27,11 +30,17 @@ const UNIT_TEXT: Record<DevUnit, string> = { day: "일별", week: "주별", mont
 export const TIMELINE_STEP = 40;
 const external = { target: "_blank", rel: "noopener noreferrer" } as const;
 
-export type DevOptions = { period: DevReport["period"]; unit: DevUnit | null; author: string | null; env: DeployEnv; limit: number };
+export type DevOptions = { selection: DevSelection; unit: DevUnit | null; author: string | null; env: DeployEnv; limit: number };
 
 function hrefOf(o: DevOptions, patch: Partial<DevOptions>, hash = "") {
   const s = { ...o, ...patch };
-  const q = new URLSearchParams({ tab: "dev", dp: s.period });
+  const q = new URLSearchParams({ tab: "dev" });
+  const sel = s.selection;
+  if (sel.kind === "preset") q.set("dp", sel.period);
+  else if (sel.kind === "range") {
+    q.set("df", sel.from);
+    q.set("dt", sel.to);
+  } else q.set("dd", encodeDays(sel.days));
   if (s.unit) q.set("du", s.unit);
   if (s.author) q.set("da", s.author);
   if (s.env !== "all") q.set("de", s.env);
@@ -58,7 +67,7 @@ function Segmented({ items, label }: { items: { href: string; text: string; acti
 }
 
 // A developer's colour follows the all-time order, so it never changes
-// with the filter or the period.
+// with the filter or the dates.
 function toneMap(report: DevReport): Map<string, ChartTone> {
   const byFirst = [...report.authors].sort((a, b) => b.allTime - a.allTime || a.key.localeCompare(b.key));
   return new Map(byFirst.map((a, i) => [a.key, DAY_TONES[i % DAY_TONES.length]]));
@@ -105,6 +114,8 @@ function CommitHeatmap({ report }: { report: DevReport }) {
               <div key={w[0]} className="flex shrink-0 flex-col gap-[3px]">
                 {w.map((d) => {
                   if (d > to) return <span key={d} className="size-3" />;
+                  if (report.heat.only && !report.heat.only.includes(d))
+                    return <span key={d} title={`${d}: 고르지 않은 날`} className="size-3 rounded-[3px] border border-dashed border-border" />;
                   const n = counts[d] ?? 0;
                   return (
                     <span
@@ -132,6 +143,11 @@ function CommitHeatmap({ report }: { report: DevReport }) {
           많음
         </span>
         <span>테두리 = 오늘</span>
+        {report.heat.only && (
+          <span className="flex items-center gap-1">
+            <span className="inline-block size-2.5 rounded-[3px] border border-dashed border-border" /> 고르지 않은 날
+          </span>
+        )}
       </div>
     </div>
   );
@@ -426,7 +442,7 @@ const VERCEL_REASON: Record<string, string> = {
 
 type Item = { kind: "commit"; at: string; commit: DevCommit } | { kind: "deploy"; at: string; d: Deployment };
 
-export function DevStatsView({ dash, options }: { dash: DevDashboard; options: DevOptions }) {
+export function DevStatsView({ dash, options, today, selectionNotice }: { dash: DevDashboard; options: DevOptions; today: string; selectionNotice?: string | null }) {
   const { feed, report } = dash;
   const source = (
     <div className="flex flex-col gap-1 text-[11px] leading-relaxed text-muted-foreground">
@@ -471,13 +487,13 @@ export function DevStatsView({ dash, options }: { dash: DevDashboard; options: D
     );
 
   const tones = toneMap(report);
-  const period = DEV_PERIODS.find((p) => p.key === report.period)!;
-  const periodText = `${report.from} ~ ${report.to}`;
+  const periodText = report.label;
   const filtered = report.author ? report.authors.find((a) => a.key === report.author) : null;
-  const inPeriod = (iso: string) => {
-    const day = kstDayOf(iso);
-    return day >= report.from && day <= report.to;
-  };
+  const inPeriod = (iso: string) => inSelection(report, kstDayOf(iso));
+  // the dates reach before the first recorded deployment: counts cover less
+  const recordNote = dash.firstRecord ? `${kstDayOf(dash.firstRecord)} 기록 시작 이전은 확인 불가` : "배포 기록 없음";
+  const sel = report.selection;
+  const field = "h-8 rounded-lg border border-border bg-background px-2 text-xs text-foreground";
   const env = options.env;
   const deploysShown = dash.deployments.filter((d) => {
     const t = timeOf(d);
@@ -509,7 +525,14 @@ export function DevStatsView({ dash, options }: { dash: DevDashboard; options: D
         {source}
         {notices}
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-          <Segmented label="기간" items={DEV_PERIODS.map((p) => ({ href: hrefOf(options, { period: p.key, unit: null, limit: TIMELINE_STEP }), text: p.label, active: p.key === report.period }))} />
+          <Segmented
+            label="기간"
+            items={DEV_PERIODS.map((p) => ({
+              href: hrefOf(options, { selection: { kind: "preset", period: p.key }, unit: null, limit: TIMELINE_STEP }),
+              text: p.days === null ? p.label : `최근 ${p.label}`,
+              active: sel.kind === "preset" && sel.period === p.key,
+            }))}
+          />
           <Segmented
             label="개발자"
             items={[
@@ -530,14 +553,40 @@ export function DevStatsView({ dash, options }: { dash: DevDashboard; options: D
             ).map(([k, text]) => ({ href: hrefOf(options, { env: k, limit: TIMELINE_STEP }), text, active: env === k }))}
           />
         </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+          {/* any range (no length limit; the same day twice = one day) */}
+          <form action="/admin/stats" className="flex flex-wrap items-end gap-2 text-[11px] text-muted-foreground">
+            <input type="hidden" name="tab" value="dev" />
+            {options.author && <input type="hidden" name="da" value={options.author} />}
+            {options.env !== "all" && <input type="hidden" name="de" value={options.env} />}
+            <label className="flex flex-col gap-0.5">
+              시작일
+              <input type="date" name="df" required min={EARLIEST_SELECTABLE_DAY} max={today} defaultValue={sel.kind === "range" ? sel.from : report.from} className={field} />
+            </label>
+            <label className="flex flex-col gap-0.5">
+              종료일
+              <input type="date" name="dt" required min={EARLIEST_SELECTABLE_DAY} max={today} defaultValue={sel.kind === "range" ? sel.to : report.to} className={field} />
+            </label>
+            <button type="submit" className={`h-8 rounded-lg px-3 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${sel.kind === "range" ? "bg-primary text-primary-foreground" : "border border-border text-foreground hover:bg-muted"}`}>
+              기간 조회
+            </button>
+          </form>
+          {/* single days, gaps allowed (the calendar of 시간대 분석) */}
+          <HourlyDayPopover selected={sel.kind === "days" ? sel.days : []} today={today} param="dd" />
+        </div>
+        {selectionNotice && (
+          <p role="alert" className="text-xs text-destructive">
+            {selectionNotice}
+          </p>
+        )}
         <p className="text-[11px] text-muted-foreground">
-          {period.label} ({periodText}){filtered ? ` · ${filtered.login ?? filtered.name}` : ""} · 한국 시간 기준 · 커밋은 작성 시각, 배포는 Vercel 생성 시각
+          {periodText}{filtered ? ` · ${filtered.login ?? filtered.name}` : ""} · 한국 시간 기준 · 커밋은 작성 시각, 배포는 Vercel 생성 시각
           {feed.ok && feed.truncated ? ` · 최근 커밋 ${fmt(MAX_COMMITS)}개까지만 반영` : ""}
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        <StatTile primary label="커밋" value={`${fmt(report.totals.commits)}건`} sub={report.totals.merges ? `병합 ${fmt(report.totals.merges)}건 포함` : `${period.label}`} />
+        <StatTile primary label="커밋" value={`${fmt(report.totals.commits)}건`} sub={report.totals.merges ? `병합 ${fmt(report.totals.merges)}건 포함` : "고른 기간"} />
         <StatTile primary label="커밋한 날" value={`${fmt(report.totals.activeDays)}일`} sub={`참여 개발자 ${fmt(report.totals.authors)}명`} />
         <StatTile
           primary
@@ -545,8 +594,8 @@ export function DevStatsView({ dash, options }: { dash: DevDashboard; options: D
           value={last ? kstDayOf(last.authoredAt).slice(5).replace("-", "/") : "-"}
           sub={last ? `${kstTimeOf(last.authoredAt)} · ${last.author.login ?? last.author.name}` : "이 기간에 커밋 없음"}
         />
-        <StatTile primary label="Production 배포" value={s ? `${fmt(s.totals.production)}회` : "-"} sub="빌드가 끝난 출시 · 기록 기준" />
-        <StatTile primary label="Preview 배포" value={s ? `${fmt(s.totals.preview)}회` : "-"} sub="출시 아님 · 기록 기준" />
+        <StatTile primary label="Production 배포" value={s ? `${fmt(s.totals.production)}회` : "-"} sub={s?.beforeRecords ? recordNote : "빌드가 끝난 출시 · 기록 기준"} />
+        <StatTile primary label="Preview 배포" value={s ? `${fmt(s.totals.preview)}회` : "-"} sub={s?.beforeRecords ? recordNote : "출시 아님 · 기록 기준"} />
         <StatTile
           primary
           label="배포 성공률"
@@ -626,6 +675,7 @@ export function DevStatsView({ dash, options }: { dash: DevDashboard; options: D
           {s && (
             <GroupedBarChart
               title={`${UNIT_TEXT[report.unit]} 배포 횟수`}
+              coverage={s.coverage}
               unit="회"
               labels={s.buckets.map((b) => bucketLabel(b, report.unit))}
               series={[
@@ -689,7 +739,9 @@ export function DevStatsView({ dash, options }: { dash: DevDashboard; options: D
         description="기간 안의 Production 출시(빌드가 끝난 Production 배포)마다, 기록된 직전 출시와 비교한 커밋입니다. 포함 여부는 Git 커밋 관계로만 판단하며, 기록 전 출시와 GitHub에 없는 커밋은 확인 불가로 둡니다."
       >
         {releasesInPeriod.length === 0 ? (
-          <p className="text-xs text-muted-foreground">{dash.records === "failed" ? "배포 기록을 읽지 못했습니다." : "이 기간에 기록된 Production 출시가 없습니다."}</p>
+          <p className="text-xs text-muted-foreground">{dash.records === "failed" ? "배포 기록을 읽지 못했습니다." : !dash.firstRecord || report.to < kstDayOf(dash.firstRecord)
+                ? "고른 기간은 배포 기록을 시작하기 전이라 확인할 수 없습니다(0건이 아님)."
+                : "이 기간에 기록된 Production 출시가 없습니다(0건)."}</p>
         ) : (
           <ol className="flex flex-col gap-2">
             {releasesInPeriod.map((r) => (

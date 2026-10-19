@@ -17,7 +17,8 @@ import {
   type Deployment,
   type Release,
 } from "./releases";
-import { bucketOf, buildDevReport, kstDayOf, type DevPeriod, type DevReport, type DevUnit } from "./stats";
+import { bucketOf, buildDevReport, inSelection, kstDayOf, nextBucket, type DevReport, type DevSelection, type DevUnit, type ResolvedSelection } from "./stats";
+import type { Coverage } from "@/lib/metrics/report";
 import { loadVercelFeed, type VercelFeed } from "./vercel";
 
 // 개발 통계: everything the tab shows, each source on its own -- a failed
@@ -28,6 +29,11 @@ export const isDeployEnv = (v: unknown): v is DeployEnv => v === "all" || v === 
 
 export type DeployStats = {
   buckets: string[];
+  // per bucket: before the first recorded deployment nothing is known
+  // ("none", never 0), the bucket holding it is "partial"
+  coverage: Coverage[];
+  // the selection starts before the first record: its totals cover less
+  beforeRecords: boolean;
   production: number[]; // finished Production builds (releases) per bucket
   preview: number[]; // finished Preview builds per bucket
   failed: number[]; // failed or canceled builds, either environment
@@ -35,7 +41,13 @@ export type DeployStats = {
   successRate: number | null; // ready / (ready + failed + canceled), over the period
 };
 
-export function deployStats(list: Deployment[], from: string, to: string, unit: DevUnit, buckets: string[]): DeployStats {
+export function deployStats(
+  list: Deployment[],
+  sel: Pick<ResolvedSelection, "from" | "to" | "days">,
+  unit: DevUnit,
+  buckets: string[],
+  firstRecordDay: string | null,
+): DeployStats {
   const index = new Map(buckets.map((b, i) => [b, i]));
   const zeros = () => buckets.map(() => 0);
   const out = { production: zeros(), preview: zeros(), failed: zeros() };
@@ -44,7 +56,7 @@ export function deployStats(list: Deployment[], from: string, to: string, unit: 
     const t = timeOf(d);
     if (!t) continue;
     const day = kstDayOf(t);
-    if (day < from || day > to) continue;
+    if (!inSelection(sel, day)) continue;
     const i = index.get(bucketOf(day, unit));
     if (d.state === "READY") {
       totals[d.target]++;
@@ -56,7 +68,21 @@ export function deployStats(list: Deployment[], from: string, to: string, unit: 
       if (i !== undefined) out.failed[i]++;
     } else totals.unknownState++;
   }
-  return { buckets, ...out, totals, successRate: totals.finished ? (totals.production + totals.preview) / totals.finished : null };
+  // a bucket [b, its end) wholly before the first record is unknown, one
+  // holding it is partly known
+  const coverage = buckets.map((b): Coverage => {
+    if (!firstRecordDay) return "none";
+    if (nextBucket(b, unit) <= firstRecordDay) return "none";
+    return b < firstRecordDay ? "partial" : "full";
+  });
+  return {
+    buckets,
+    coverage,
+    beforeRecords: !firstRecordDay || sel.from < firstRecordDay,
+    ...out,
+    totals,
+    successRate: totals.finished ? (totals.production + totals.preview) / totals.finished : null,
+  };
 }
 
 export type DevDashboard = {
@@ -76,11 +102,11 @@ export type DevDashboard = {
 };
 
 export async function loadDevDashboard(
-  { period, unit, author, today }: { period: DevPeriod; unit: DevUnit | null; author: string | null; today: string },
+  { selection, unit, author, today }: { selection: DevSelection; unit: DevUnit | null; author: string | null; today: string },
   self: { id: string; viaAlias: boolean } | null,
 ): Promise<DevDashboard> {
   const [feed, records, vercel, live] = await Promise.all([loadCommitFeed(), loadDeploymentRecords(), loadVercelFeed(), loadLiveVersion()]);
-  const report = feed.ok ? buildDevReport(feed.commits, { period, unit, author, today }) : null;
+  const report = feed.ok ? buildDevReport(feed.commits, { selection, unit, author, today }) : null;
   const deployments = mergeDeployments(records, vercel.ok ? vercel.deployments : null);
   const graph = graphOf(feed.ok ? feed.commits : []);
   const production = currentProduction(deployments, live, vercel.ok ? vercel.productionId : null);
@@ -112,6 +138,6 @@ export async function loadDevDashboard(
     pending,
     releases: releasesOf(deployments, graph, compares),
     commits,
-    stats: report ? deployStats(deployments, report.from, report.to, report.unit, report.buckets) : null,
+    stats: report ? deployStats(deployments, report, report.unit, report.buckets, times[0] ? kstDayOf(times[0]) : null) : null,
   };
 }

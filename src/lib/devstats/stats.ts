@@ -1,4 +1,4 @@
-import { addDays } from "@/lib/metrics/daySelection";
+import { addDays, decodeDays, EARLIEST_SELECTABLE_DAY, isRealDay, MAX_SELECTED_DAYS, selectableDay } from "@/lib/metrics/daySelection";
 import type { CommitAuthor, DevCommit } from "./github";
 
 // 개발 통계, computed from the cached commit list (pure): what the tab
@@ -23,7 +23,7 @@ export const kstDayOf = (iso: string) => new Date(Date.parse(iso) + KST).toISOSt
 export const kstTimeOf = (iso: string) => new Date(Date.parse(iso) + KST).toISOString().slice(11, 16);
 const mondayOf = (day: string) => addDays(day, -((new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7));
 export const bucketOf = (day: string, unit: DevUnit) => (unit === "day" ? day : unit === "week" ? mondayOf(day) : `${day.slice(0, 7)}-01`);
-const nextBucket = (b: string, unit: DevUnit) => {
+export const nextBucket = (b: string, unit: DevUnit) => {
   if (unit === "day") return addDays(b, 1);
   if (unit === "week") return addDays(b, 7);
   const [y, m] = b.split("-").map(Number);
@@ -46,36 +46,81 @@ export type DevAuthor = CommitAuthor & {
   series: number[]; // per bucket of the period
 };
 
-export type DevReport = {
-  period: DevPeriod;
+// What the tab covers: a quick preset (최근 30일 ... 전체), any range
+// (시작일~종료일, no length limit, one day when both ends are the same), or
+// a set of single days from the calendar (at most 31, gaps allowed). KST
+// days, never after today.
+export type DevSelection = { kind: "preset"; period: DevPeriod } | { kind: "range"; from: string; to: string } | { kind: "days"; days: string[] };
+
+export type ResolvedSelection = {
+  selection: DevSelection;
+  from: string;
+  to: string;
+  days: string[] | null; // the chosen days (kind "days"), else every day from..to
+  label: string;
+};
+
+const md = (day: string) => `${Number(day.slice(5, 7))}/${Number(day.slice(8, 10))}`;
+
+export function resolveDevSelection(sel: DevSelection, today: string, firstDay: string): ResolvedSelection {
+  if (sel.kind === "days") {
+    const days = [...new Set(sel.days)].sort();
+    const runs: string[] = [];
+    for (let i = 0; i < days.length; i++) {
+      let j = i;
+      while (j + 1 < days.length && addDays(days[j], 1) === days[j + 1]) j++;
+      runs.push(i === j ? md(days[i]) : `${md(days[i])}~${md(days[j])}`);
+      i = j;
+    }
+    return { selection: sel, from: days[0], to: days[days.length - 1], days, label: `고른 날짜 ${days.length}일 (${runs.join(", ")})` };
+  }
+  if (sel.kind === "range") {
+    const n = daysBetween(sel.from, sel.to) + 1;
+    return { selection: sel, from: sel.from, to: sel.to, days: null, label: sel.from === sel.to ? `${sel.from} 하루` : `${sel.from} ~ ${sel.to} (${n}일)` };
+  }
+  const p = DEV_PERIODS.find((x) => x.key === sel.period)!;
+  const from = p.days === null ? firstDay : addDays(today, 1 - p.days);
+  return { selection: sel, from, to: today, days: null, label: `${p.days === null ? "전체" : `최근 ${p.label}`} (${from} ~ ${today})` };
+}
+
+// Is a KST day inside the selection?
+export const inSelection = (r: Pick<ResolvedSelection, "from" | "to" | "days">, day: string) => (r.days ? r.days.includes(day) : day >= r.from && day <= r.to);
+
+const MAX_BUCKETS = 400;
+function bucketsFor(r: ResolvedSelection, unit: DevUnit): string[] {
+  // a day-by-day view of chosen days shows those days only
+  if (r.days && unit === "day") return r.days;
+  const out: string[] = [];
+  for (let b = bucketOf(r.from, unit); b <= r.to && out.length <= MAX_BUCKETS; b = nextBucket(b, unit)) out.push(b);
+  return out;
+}
+
+export type DevReport = ResolvedSelection & {
   unit: DevUnit;
-  from: string; // KST day, inclusive
-  to: string; // today
   author: string | null; // the filter (author key)
   authors: DevAuthor[]; // everyone with a commit (all time), newest activity first
   buckets: string[];
   // commits per bucket for each shown author (all, or the filtered one)
   series: { key: string; label: string; values: number[] }[];
   totals: { commits: number; activeDays: number; authors: number; merges: number; lastCommit: DevCommit | null };
-  heat: { from: string; to: string; counts: Record<string, number>; max: number };
-  commits: DevCommit[]; // the period's (filtered) commits, newest first
+  // only: the chosen days (others are drawn as not chosen)
+  heat: { from: string; to: string; counts: Record<string, number>; max: number; only: string[] | null };
+  commits: DevCommit[]; // the selection's (filtered) commits, newest first
 };
 
 export function buildDevReport(
   all: DevCommit[],
-  { period, unit: askedUnit, author, today }: { period: DevPeriod; unit?: DevUnit | null; author?: string | null; today: string },
+  { selection, unit: askedUnit, author, today }: { selection: DevSelection; unit?: DevUnit | null; author?: string | null; today: string },
 ): DevReport {
   const sorted = [...all].sort((a, b) => b.authoredAt.localeCompare(a.authoredAt));
   const firstDay = sorted.length ? kstDayOf(sorted[sorted.length - 1].authoredAt) : today;
-  const days = DEV_PERIODS.find((p) => p.key === period)!.days;
-  const from = days === null ? firstDay : addDays(today, 1 - days);
-  const unit = askedUnit ?? autoUnit(from, today);
-  const inPeriod = sorted.filter((c) => {
-    const d = kstDayOf(c.authoredAt);
-    return d >= from && d <= today;
-  });
+  const resolved = resolveDevSelection(selection, today, firstDay);
+  // a unit too fine for the span gives way to a coarser one
+  let unit = askedUnit ?? autoUnit(resolved.from, resolved.to);
+  while (unit !== "month" && bucketsFor(resolved, unit).length > MAX_BUCKETS) unit = unit === "day" ? "week" : "month";
+  const inPeriod = sorted.filter((c) => inSelection(resolved, kstDayOf(c.authoredAt)));
 
-  // authors, all time (so the filter lists everyone), stats in the period
+  // authors, all time (so the filter lists everyone), stats in the selection
   const byKey = new Map<string, DevAuthor>();
   for (const c of sorted) {
     let a = byKey.get(c.author.key);
@@ -86,8 +131,7 @@ export function buildDevReport(
     a.allTime++;
     if (!a.names.includes(c.author.name)) a.names.push(c.author.name);
   }
-  const buckets: string[] = [];
-  for (let b = bucketOf(from, unit); b <= today && buckets.length < 400; b = nextBucket(b, unit)) buckets.push(b);
+  const buckets = bucketsFor(resolved, unit);
   const index = new Map(buckets.map((b, i) => [b, i]));
   const authorDays = new Map<string, Set<string>>();
   for (const c of inPeriod) {
@@ -110,21 +154,20 @@ export function buildDevReport(
   const shownAuthors = authors.filter((a) => (filter ? a.key === filter : a.commits > 0));
   const label = (a: DevAuthor) => a.login ?? a.name;
 
-  // heatmap: the period, but at least the last 12 weeks and at most a year
-  const atLeast = addDays(today, -83);
-  const atMost = addDays(today, -364);
-  const heatFrom = mondayOf(from < atMost ? atMost : from < atLeast ? from : atLeast);
+  // heatmap: the selection, but at least 12 weeks and at most a year,
+  // ending with its last day
+  const atLeast = addDays(resolved.to, -83);
+  const atMost = addDays(resolved.to, -364);
+  const heatFrom = mondayOf(resolved.from < atMost ? atMost : resolved.from < atLeast ? resolved.from : atLeast);
   const counts: Record<string, number> = {};
   for (const c of filter ? sorted.filter((x) => x.author.key === filter) : sorted) {
     const d = kstDayOf(c.authoredAt);
-    if (d >= heatFrom && d <= today) counts[d] = (counts[d] ?? 0) + 1;
+    if (d >= heatFrom && d <= resolved.to && inSelection(resolved, d)) counts[d] = (counts[d] ?? 0) + 1;
   }
 
   return {
-    period,
+    ...resolved,
     unit,
-    from,
-    to: today,
     author: filter,
     authors,
     buckets,
@@ -136,7 +179,32 @@ export function buildDevReport(
       merges: shown.filter((c) => c.merge).length,
       lastCommit: shown[0] ?? null,
     },
-    heat: { from: heatFrom, to: today, counts, max: Math.max(0, ...Object.values(counts)) },
+    heat: { from: heatFrom, to: resolved.to, counts, max: Math.max(0, ...Object.values(counts)), only: resolved.days },
     commits: shown,
   };
+}
+
+// The URL's choice: dd (chosen days, encoded like the calendars' d / vd)
+// before df..dt (a range of any length; one day when equal) before dp (a
+// preset, default 90일). A bad value falls back with a notice; nothing
+// after today.
+export function parseDevSelection(p: { dp?: string; df?: string; dt?: string; dd?: string }, today: string): { selection: DevSelection; notice: string | null } {
+  if (p.dd) {
+    const days = decodeDays(p.dd).filter((d) => selectableDay(d, today));
+    if (days.length > MAX_SELECTED_DAYS)
+      return {
+        selection: { kind: "days", days: days.slice(-MAX_SELECTED_DAYS) },
+        notice: `날짜는 최대 ${MAX_SELECTED_DAYS}일까지 고를 수 있어 가장 최근 ${MAX_SELECTED_DAYS}일만 반영했습니다. 더 긴 기간은 시작일~종료일로 조회하세요.`,
+      };
+    if (days.length) return { selection: { kind: "days", days }, notice: null };
+  }
+  if (p.df || p.dt) {
+    if (!p.df || !p.dt || !isRealDay(p.df) || !isRealDay(p.dt)) return { selection: { kind: "preset", period: "90" }, notice: "시작일과 종료일을 모두 골라 주세요. 최근 90일로 보여 줍니다." };
+    if (p.df > p.dt) return { selection: { kind: "preset", period: "90" }, notice: "시작일이 종료일보다 늦습니다. 최근 90일로 보여 줍니다." };
+    const to = p.dt > today ? today : p.dt;
+    const from = p.df < EARLIEST_SELECTABLE_DAY ? EARLIEST_SELECTABLE_DAY : p.df;
+    if (from > to) return { selection: { kind: "preset", period: "90" }, notice: "오늘 이후는 고를 수 없습니다. 최근 90일로 보여 줍니다." };
+    return { selection: { kind: "range", from, to }, notice: to !== p.dt ? "종료일을 오늘로 맞췄습니다." : null };
+  }
+  return { selection: { kind: "preset", period: isDevPeriod(p.dp) ? p.dp : "90" }, notice: null };
 }
