@@ -1,6 +1,7 @@
 import { getSupabaseAdminClient as getAdminClient } from "@/lib/supabase/adminClient";
 
 import { POST_IMAGES_BUCKET } from "./config";
+import { purgeOptimizedImages } from "./imageCache";
 
 // Server-only -- see src/lib/supabase/adminClient.ts (where the service-
 // role client singleton itself now lives, shared with the new chat
@@ -66,6 +67,14 @@ export async function deletePostImagePaths(
   { attempts = DELETE_ATTEMPTS, baseDelayMs = DELETE_RETRY_BASE_MS }: { attempts?: number; baseDelayMs?: number } = {},
 ): Promise<boolean> {
   if (paths.length === 0) return true;
+  const removed = await removeWithRetry(paths, attempts, baseDelayMs);
+  // the photos are no longer used: their optimized copies go too (best
+  // effort, also when Storage could not remove the file yet)
+  await purgeOptimizedImages(paths.map(publicUrlFor));
+  return removed;
+}
+
+async function removeWithRetry(paths: string[], attempts: number, baseDelayMs: number): Promise<boolean> {
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const { error } = await getAdminClient().storage.from(POST_IMAGES_BUCKET).remove(paths);

@@ -100,6 +100,13 @@ const nextConfig: NextConfig = {
     // 768px, 64px thumbnails) at 1x-3x pixel density. Defaults were
     // [640, 750, 828, 1080, 1200, 1920, 2048, 3840] / [32 ... 384].
     deviceSizes: [640, 828, 1080, 1920],
+    // 운영 비용: post photos are never changed in place (a new photo gets a
+    // new UUID path) and Storage sends no max-age, so this TTL alone decides
+    // how often a cached transformation is revalidated -- and every
+    // revalidation is billed as a transformation. 24 hours instead of the
+    // default 4. A deleted photo's cached copies are purged at deletion
+    // (lib/images/imageCache.ts), so a longer TTL does not keep it online.
+    minimumCacheTTL: 86400,
     imageSizes: [64, 128, 256, 384],
     remotePatterns: [
       // Scoped to Vercel Blob's own domain suffix only -- not a blanket
