@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { FallbackImage } from "@/components/ui/FallbackImage";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -275,13 +275,18 @@ export default async function PostDetailPage({
         // `bg-muted` tone as PostCard's own no-image placeholder instead
         // of bare white/black.
         <div className="relative h-[45vh] w-full overflow-hidden rounded-card border border-border bg-muted md:h-[65vh]">
-          <Image
+          <FallbackImage
             src={post.imageUrl}
             alt={post.title}
             fill
             sizes="(min-width: 768px) 768px, 100vw"
             className="object-contain"
             priority
+            fallback={
+              <span role="img" aria-label={post.title} className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                <ImageOffIcon aria-hidden="true" className="size-7" />
+              </span>
+            }
           />
         </div>
       ) : (

@@ -1,7 +1,7 @@
 "use client";
 
 import { createElement, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import Image from "next/image";
+import { FallbackImage } from "@/components/ui/FallbackImage";
 import Link from "next/link";
 
 import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
@@ -46,6 +46,16 @@ function isResolved(post: SlidePost): boolean {
   return post.status !== (post.type === "lost" ? LOST_STATUSES[0] : FOUND_STATUSES[0]);
 }
 
+function CategoryTile({ post }: { post: SlidePost }) {
+  return (
+    <div className="flex size-full items-center justify-center bg-primary-muted/70">
+      <span className="flex size-11 items-center justify-center rounded-full bg-card text-primary shadow-sm">
+        {createElement(categoryIconFor(post), { "aria-hidden": true, className: "size-5" })}
+      </span>
+    </div>
+  );
+}
+
 function SlideCard({ post }: { post: SlidePost }) {
   const { locale } = useI18n();
   return (
@@ -57,7 +67,8 @@ function SlideCard({ post }: { post: SlidePost }) {
     >
       <div className="relative aspect-4/3 w-full shrink-0 overflow-hidden bg-muted">
         {post.imageUrl ? (
-          <Image
+          // the original photo if optimization fails, then the category tile
+          <FallbackImage
             src={post.imageUrl}
             alt=""
             fill
@@ -65,13 +76,10 @@ function SlideCard({ post }: { post: SlidePost }) {
             loading="lazy"
             draggable={false}
             className="object-cover transition-transform duration-300 motion-safe:group-hover:scale-[1.03]"
+            fallback={<CategoryTile post={post} />}
           />
         ) : (
-          <div className="flex size-full items-center justify-center bg-primary-muted/70">
-            <span className="flex size-11 items-center justify-center rounded-full bg-card text-primary shadow-sm">
-              {createElement(categoryIconFor(post), { "aria-hidden": true, className: "size-5" })}
-            </span>
-          </div>
+          <CategoryTile post={post} />
         )}
         {isResolved(post) && (
           <span className="absolute top-2 left-2 inline-flex rounded-full bg-card shadow-sm">

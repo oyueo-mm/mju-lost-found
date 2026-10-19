@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { FallbackImage } from "@/components/ui/FallbackImage";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -140,7 +140,14 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
           >
             <span className="relative size-6 shrink-0 overflow-hidden rounded-full bg-muted">
               {ref.imageUrl ? (
-                <Image src={ref.imageUrl} alt={ref.title} fill sizes="24px" className="object-cover" />
+                <FallbackImage
+                  src={ref.imageUrl}
+                  alt={ref.title}
+                  fill
+                  sizes="24px"
+                  className="object-cover"
+                  fallback={<ImageOffIcon className="absolute inset-0 m-auto size-3.5 text-muted-foreground" />}
+                />
               ) : (
                 <ImageOffIcon className="m-auto size-3.5 text-muted-foreground" />
               )}

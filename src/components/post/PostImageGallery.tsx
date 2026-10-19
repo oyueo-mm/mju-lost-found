@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
+import { FallbackImage } from "@/components/ui/FallbackImage";
 
-import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
+import { ChevronLeftIcon, ChevronRightIcon, ImageOffIcon } from "@/components/icons";
 
 type GalleryImage = { id: number; imageUrl: string; isPrimary: boolean };
 
@@ -106,7 +106,7 @@ export function PostImageGallery({ images, title }: PostImageGalleryProps) {
           if (step !== 0) go(step);
         }}
       >
-        <Image
+        <FallbackImage
           key={selected.id}
           src={selected.imageUrl}
           alt={multiple ? `${title} (${selectedIndex + 1}/${count})` : title}
@@ -114,6 +114,11 @@ export function PostImageGallery({ images, title }: PostImageGalleryProps) {
           sizes="(min-width: 768px) 768px, 100vw"
           className="object-contain"
           priority
+          fallback={
+            <span role="img" aria-label={multiple ? `${title} (${selectedIndex + 1}/${count})` : title} className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+              <ImageOffIcon aria-hidden="true" className="size-7" />
+            </span>
+          }
         />
 
         {multiple && (
@@ -155,7 +160,14 @@ export function PostImageGallery({ images, title }: PostImageGalleryProps) {
                 index === selectedIndex ? "border-primary" : "border-border hover:border-foreground/30"
               }`}
             >
-              <Image src={image.imageUrl} alt="" fill sizes="64px" className="object-cover" />
+              <FallbackImage
+                src={image.imageUrl}
+                alt=""
+                fill
+                sizes="64px"
+                className="object-cover"
+                fallback={<ImageOffIcon aria-hidden="true" className="absolute inset-0 m-auto size-4 text-muted-foreground" />}
+              />
               {image.isPrimary && (
                 <span className="absolute right-0.5 bottom-0.5 rounded-full bg-card/90 px-1 text-[9px] font-medium text-foreground shadow-sm">
                   대표

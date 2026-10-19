@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { FallbackImage } from "@/components/ui/FallbackImage";
 
 import { MAX_IMAGES_PER_POST } from "@/lib/images/config";
 import type { GalleryItem } from "@/lib/images/galleryState";
@@ -76,7 +76,14 @@ export function PostImageManager({
                     // eslint-disable-next-line @next/next/no-img-element -- local blob: object URL preview.
                     <img src={url} alt={t("imageManager.selectedPreview")} className="h-full w-full object-cover" />
                   ) : (
-                    <Image src={url} alt={t("imageManager.postImage")} fill sizes="200px" className="object-cover" />
+                    <FallbackImage
+                      src={url}
+                      alt={t("imageManager.postImage")}
+                      fill
+                      sizes="200px"
+                      className="object-cover"
+                      fallback={<ImageOffIcon aria-hidden="true" className="absolute inset-0 m-auto size-6 text-muted-foreground" />}
+                    />
                   )}
                   {isPrimary && (
                     <span className="absolute top-1.5 left-1.5 rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-medium text-foreground shadow-sm backdrop-blur-sm">

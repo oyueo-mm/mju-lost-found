@@ -1,14 +1,14 @@
 "use client";
 
 import { createElement, useState } from "react";
-import Image from "next/image";
+import { FallbackImage } from "@/components/ui/FallbackImage";
 import Link from "next/link";
 
 import type { PostDTO } from "@/lib/posts/service";
 import { FOUND_STATUSES, LOST_STATUSES } from "@/lib/posts/schema";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { AttributionLink } from "@/components/user/AttributionLink";
-import { PinIcon } from "@/components/icons";
+import { ImageOffIcon, PinIcon } from "@/components/icons";
 import { useI18n } from "@/lib/i18n/client";
 import { postCategoryLabel, postTypeLabelKey } from "@/lib/i18n/labels";
 import type { Locale } from "@/lib/i18n/config";
@@ -157,7 +157,9 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
     >
       {post.imageUrl ? (
         <div className={`relative overflow-hidden bg-muted ${c.media}`}>
-          <Image
+          {/* FallbackImage: the original photo if optimization fails, then
+              the photo-off icon (the backdrop simply disappears) */}
+          <FallbackImage
             src={post.imageUrl}
             alt=""
             aria-hidden="true"
@@ -166,12 +168,17 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
             loading="lazy"
             className={`scale-110 object-cover opacity-50 blur-xl ${c.backdrop}`}
           />
-          <Image
+          <FallbackImage
             src={post.imageUrl}
             alt={post.title}
             fill
             sizes={sizes}
             loading="lazy"
+            fallback={
+              <span role="img" aria-label={post.title} className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                <ImageOffIcon aria-hidden="true" className="size-6" />
+              </span>
+            }
             onLoad={(event) => {
               const { naturalWidth: w, naturalHeight: h } = event.currentTarget;
               if (w && h) setPhotoRatio(w / h);
