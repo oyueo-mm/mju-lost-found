@@ -37,7 +37,7 @@ const DBS = {
 };
 
 export function parseArgs(argv) {
-  const opts = { db: "preview", all: false, dryRun: false, confirmProduction: false, targets: [] };
+  const opts = { db: "preview", dbs: /** @type {string[]} */ ([]), all: false, dryRun: false, confirmProduction: false, targets: /** @type {string[]} */ ([]) };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--all") opts.all = true;
