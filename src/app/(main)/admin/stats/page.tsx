@@ -496,18 +496,22 @@ export default async function AdminStatsPage({
         )}
         <div className="grid gap-5 md:grid-cols-3">
           <div className="flex flex-col gap-1 rounded-card border border-primary/30 bg-primary-muted/40 p-3">
-            <span className="text-xs text-muted-foreground">에브리타임 유입 (방문 세션)</span>
+            <span className="text-xs text-muted-foreground">에브리타임 리퍼러 (방문 세션)</span>
             {everytime === null ? (
               <span className="text-lg font-bold text-muted-foreground">미측정</span>
             ) : (
               <span className="text-xl font-bold tabular-nums text-foreground">{fmt(everytime)}</span>
             )}
             <span className="text-[11px] text-muted-foreground">
-              {everytime !== null && sessionsTotal ? `전체 방문 세션의 ${Math.round((everytime / sessionsTotal) * 100)}%` : "에브리타임 게시글 링크로 시작한 방문"}
+              {everytime !== null && sessionsTotal ? `전체 방문 세션의 ${Math.round((everytime / sessionsTotal) * 100)}%` : "리퍼러가 에브리타임인 방문(UTM 링크·앱 안 브라우저는 날짜별 방문 분석의 유입 경로 참고)"}
             </span>
           </div>
           <div className="flex flex-col gap-2">
-            <h3 className="text-xs font-semibold text-foreground">유입 경로 (방문 세션, 비율은 전체 방문 세션 대비)</h3>
+            <h3 className="text-xs font-semibold text-foreground">리퍼러 분류 (방문 세션, 비율은 전체 방문 세션 대비)</h3>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              {sinceLabel("visit")}부터 집계한 리퍼러 도메인 분류입니다(로그인 구분·UTM 우선 없음). UTM을 우선한 유입 출처와 로그인 비교는 아래 날짜별 방문
+              분석의 유입 경로에 있으며, 수집 시작일이 달라 두 값을 더하거나 섞지 않습니다.
+            </p>
             <BarList
               rows={report.breakdown.refs.map((r) => ({ label: REF_SOURCE_LABELS[r.source as RefSource] ?? r.source, value: r.sessions }))}
               empty={cov.sessionAnon === "none" ? "미측정 기간입니다." : "아직 기록이 없습니다."}

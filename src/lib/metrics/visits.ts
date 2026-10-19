@@ -87,7 +87,8 @@ export const REF_SOURCES = [
 export type RefSource = (typeof REF_SOURCES)[number];
 
 export const REF_SOURCE_LABELS: Record<RefSource, string> = {
-  direct: "직접 방문(리퍼러 없음)",
+  // no referrer is not proof of a direct visit (in-app browsers, privacy settings)
+  direct: "리퍼러 없음(직접 방문·앱 안 브라우저 등)",
   internal: "사이트 내부(재방문)",
   everytime: "에브리타임",
   mju: "명지대 사이트",

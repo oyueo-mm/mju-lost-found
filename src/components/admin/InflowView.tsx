@@ -3,6 +3,7 @@ import { More, SubHeading } from "@/components/admin/StatsBlocks";
 import { UtmLinkBuilder } from "@/components/admin/UtmLinkBuilder";
 import { AlertIcon } from "@/components/icons";
 import type { InflowReport } from "@/lib/metrics/inflow";
+import { sinceLabel } from "@/lib/metrics/report";
 import { PAGE_KIND_LABELS, type SiteKey } from "@/lib/metrics/visits";
 
 // 유입 경로 (날짜별 방문 분석, the same chosen days): visit sessions by
@@ -196,7 +197,7 @@ export function InflowView({ report }: { report: InflowReport }) {
         </>
       )}
 
-      <More label={`기존 리퍼러 분류 보기 (로그인 구분·UTM 우선 없음, ${report.legacyDays}일)`}>
+      <More label={`기존 리퍼러 분류 보기 (${sinceLabel("visit")}부터 · 로그인 구분·UTM 우선 없음, ${report.legacyDays}일)`}>
         <BarList
           rows={report.legacyRefs.map((r) => ({ label: r.label, value: r.sessions }))}
           unit="회"
