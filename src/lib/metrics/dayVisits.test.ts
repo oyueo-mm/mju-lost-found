@@ -133,9 +133,9 @@ describe("날짜별 방문 분석", () => {
     const ds = dayVisitsDataset(r);
     expect(ds.key).toBe("dayVisits");
     expect(ds.period).toContain("2026-10-18");
-    expect(ds.tables[0].rows[0]).toEqual(["방문자(서로 다른 회원, 명)", r.current.members, "수집하지 않음", "-"]);
+    expect(ds.tables[0].rows[0]).toEqual(["방문자(서로 다른 회원, 명)", r.current.members, "수집하지 않음", "—"]);
     const members = ds.tables[1].rows.find((row) => String(row[0]).startsWith("방문한 로그인 회원"))!;
-    expect(members.slice(1, 5)).toEqual(["-", "-", "-", "-"]);
+    expect(members.slice(1, 5)).toEqual(["—", "—", "—", "—"]);
     // today: hours up to the current one
     expect(ds.tables[2].rows).toHaveLength(15);
   });

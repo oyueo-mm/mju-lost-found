@@ -147,7 +147,7 @@ export function DayVisitsView({ report }: { report: DayVisitReport }) {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile report={report} keyName="members" label="방문자 (로그인 회원)" sub="비로그인 방문자 수는 수집하지 않음" />
         <Tile report={report} keyName="session" label="방문 세션" sub="방문 횟수, 사람 수 아님" />
         <Tile report={report} keyName="pv" label="페이지뷰" />

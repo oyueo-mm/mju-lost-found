@@ -97,7 +97,7 @@ export function dayVisitsDataset(r: DayVisitReport): Dataset {
         ],
         rows: [
           // 비로그인 방문자 수는 수집하지 않음 (미측정과 다름)
-          ["방문자(서로 다른 회원, 명)", r.current.members, "수집하지 않음", "-"],
+          ["방문자(서로 다른 회원, 명)", r.current.members, "수집하지 않음", "—"],
           ["방문 세션(회)", r.current.sessionMember, r.current.sessionAnon, sumOf2(r.current.sessionMember, r.current.sessionAnon)],
           ["페이지뷰(회)", r.current.pvMember, r.current.pvAnon, sumOf2(r.current.pvMember, r.current.pvAnon)],
         ],
@@ -114,9 +114,9 @@ export function dayVisitsDataset(r: DayVisitReport): Dataset {
         ],
         rows: r.rows.map((row) => {
           const c = changeOf(row.current, row.previous);
-          // not compared (a note says why): "-", never 미측정
-          if (row.note) return [`${row.label}(${row.unit})`, "-", "-", "-", "-", row.note];
-          return [`${row.label}(${row.unit})`, row.current, row.previous, c.diff, c.rate ?? (c.diff === null ? null : "-"), row.partial ? "부분 측정 포함" : ""];
+          // not compared (a note says why): "—" (a plain "-" would be escaped as a formula), never 미측정
+          if (row.note) return [`${row.label}(${row.unit})`, "—", "—", "—", "—", row.note];
+          return [`${row.label}(${row.unit})`, row.current, row.previous, c.diff, c.rate ?? (c.diff === null ? null : "—"), row.partial ? "부분 측정 포함" : ""];
         }),
       },
       {
