@@ -8,6 +8,7 @@ import { RegisterShowcase } from "./landing/RegisterShowcase";
 import { AfterPostingShowcase } from "./landing/AfterPostingShowcase";
 import { FinalCta } from "./landing/FinalCta";
 import { LandingStickyCta } from "./landing/LandingStickyCta";
+import { RecentPostsSections } from "./RecentPostsSections";
 
 // Phase 29 introduced this as the logged-out visitor's very first screen
 // (replacing the full dashboard Home() normally shows -- see page.tsx's
@@ -31,6 +32,11 @@ export function LandingHero() {
           물건도 있지 않을까" hook this phase asks for, so they should be
           there instantly rather than arrive on scroll. */}
       <LandingStats />
+
+      {/* the real newest posts, the same rows a signed-in member sees */}
+      <div className="flex flex-col gap-10 pt-6 pb-4 md:pt-8">
+        <RecentPostsSections />
+      </div>
 
       <ScrollReveal replay>
         <FeatureGrid />

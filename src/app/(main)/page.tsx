@@ -1,17 +1,11 @@
 import { getCurrentUser } from "@/lib/auth/session";
-import { listLostPosts, listFoundPosts } from "@/lib/posts/service";
 import { ScrollReveal } from "@/components/ui/ScrollReveal";
 import { CategoryShortcuts } from "@/components/home/CategoryShortcuts";
 import { LandingHero } from "@/components/home/LandingHero";
 import { Hero } from "@/components/home/landing/Hero";
 import { LandingStats } from "@/components/home/landing/LandingStats";
-import { SectionHeader } from "@/components/ui/SectionHeader";
-import { PostRail } from "@/components/post/PostRail";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { LinkButton } from "@/components/ui/Button";
+import { RecentPostsSections } from "@/components/home/RecentPostsSections";
 import { getTranslator } from "@/lib/i18n/server";
-
-const RECENT_LIMIT = 6;
 
 // Home. Public, no auth gate: the session only decides what follows the
 // first screen.
@@ -23,11 +17,10 @@ const RECENT_LIMIT = 6;
 // the form; signed in, straight to the form), then LandingStats (the real
 // registration counts and the links into the two boards).
 //
-// - Signed out: the landing story continues (LandingHero: features and the
-//   demos of posting, AI search, matching).
-// - Signed in: what a member comes back for -- category shortcuts and the
-//   newest lost / found posts (the same listLostPosts()/listFoundPosts()
-//   every board uses, page 1, newest first).
+// Both then show the newest lost / found posts as two slowly drifting card
+// rows (RecentPostsSections) -- signed in after the category shortcuts,
+// signed out before the landing story (LandingHero: features and the demos
+// of posting, AI search, matching).
 //
 // The search itself is unchanged: AI search over found posts
 // (HomeSearchBar); the mode toggle and board choice stay on /search,
@@ -36,17 +29,6 @@ export default async function Home() {
   const [user, t] = await Promise.all([getCurrentUser(), getTranslator()]);
   if (!user) {
     return <LandingHero />;
-  }
-
-  let recentLost: Awaited<ReturnType<typeof listLostPosts>> | null = null;
-  let recentFound: Awaited<ReturnType<typeof listFoundPosts>> | null = null;
-  try {
-    [recentLost, recentFound] = await Promise.all([
-      listLostPosts({ page: 1, limit: RECENT_LIMIT }),
-      listFoundPosts({ page: 1, limit: RECENT_LIMIT }),
-    ]);
-  } catch (error) {
-    console.error("Failed to load recent posts for Home", error);
   }
 
   return (
@@ -63,35 +45,7 @@ export default async function Home() {
           <CategoryShortcuts />
         </ScrollReveal>
 
-        <ScrollReveal className="flex flex-col gap-4">
-          <SectionHeader title={t("home.recentLost")} href="/lost" centered titleClassName="text-xl md:text-2xl" />
-          {recentLost === null ? (
-            <p className="text-sm text-muted-foreground">{t("home.recentLost.error")}</p>
-          ) : recentLost.items.length === 0 ? (
-            <EmptyState
-              title={t("board.lost.empty.title")}
-              description={t("board.lost.empty.description")}
-              action={<LinkButton href="/lost/new">{t("board.lost.newCta")}</LinkButton>}
-            />
-          ) : (
-            <PostRail posts={recentLost.items} />
-          )}
-        </ScrollReveal>
-
-        <ScrollReveal className="flex flex-col gap-4">
-          <SectionHeader title={t("home.recentFound")} href="/found" centered titleClassName="text-xl md:text-2xl" />
-          {recentFound === null ? (
-            <p className="text-sm text-muted-foreground">{t("home.recentFound.error")}</p>
-          ) : recentFound.items.length === 0 ? (
-            <EmptyState
-              title={t("board.found.empty.title")}
-              description={t("board.found.empty.description")}
-              action={<LinkButton href="/found/new">{t("board.found.newCta")}</LinkButton>}
-            />
-          ) : (
-            <PostRail posts={recentFound.items} />
-          )}
-        </ScrollReveal>
+        <RecentPostsSections />
       </div>
     </div>
   );
