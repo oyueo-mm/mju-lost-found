@@ -26,7 +26,6 @@ const commit = (ch: string, parents: string[]): DevCommit => ({
   committedAt: "2026-10-10T00:00:00Z",
   url: "",
   author: { key: "gh:a", login: "a", name: "a", profileUrl: null },
-  coAuthors: [],
   merge: parents.length > 1,
   parents: parents.map(sha),
 });

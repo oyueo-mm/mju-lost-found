@@ -16,7 +16,6 @@ const commit = (sha: string, authoredAt: string, author: "a" | "b" | "c", over: 
       : author === "b"
         ? { key: "gh:jihwan26", login: "jihwan26", name: "박지환", profileUrl: "https://github.com/jihwan26" }
         : { key: "mail:0123456789ab", login: null, name: "Someone", profileUrl: null },
-  coAuthors: [],
   merge: false,
   parents: [],
   ...over,
@@ -27,7 +26,7 @@ const commits = [
   commit("c1", "2026-10-18T15:30:00Z", "a"), // 10-19 00:30 KST
   commit("c2", "2026-10-18T14:59:00Z", "a"), // 10-18 23:59 KST
   commit("c3", "2026-10-10T01:00:00Z", "b", { merge: true }),
-  commit("c4", "2026-09-12T08:53:00Z", "b", { coAuthors: ["Claude"] }),
+  commit("c4", "2026-09-12T08:53:00Z", "b"),
   commit("c5", "2026-06-01T00:00:00Z", "c"),
 ];
 
@@ -57,7 +56,7 @@ describe("개발자 통계", () => {
     const r = buildDevReport(commits, { period: "all", today: TODAY, author: "gh:jihwan26" });
     expect(r.from).toBe("2026-06-01");
     expect(r.commits.map((c) => c.sha)).toEqual(["c3", "c4"]);
-    expect(r.totals).toMatchObject({ commits: 2, authors: 1, coAuthored: 1 });
+    expect(r.totals).toMatchObject({ commits: 2, authors: 1 });
     expect(r.authors).toHaveLength(3);
     expect(r.series).toHaveLength(1);
     expect(Object.values(r.heat.counts).reduce((a, n) => a + n, 0)).toBe(2);

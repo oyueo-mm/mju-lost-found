@@ -26,11 +26,13 @@ beforeEach(() => {
 });
 
 describe("GitHub commit feed", () => {
-  it("keeps the title, the body without trailers, co-authors and the GitHub account -- never the e-mail", () => {
+  it("keeps the title, the body without trailers and the GitHub account -- never the e-mail", () => {
     const c = normalizeCommit(raw() as never);
     expect(c.title).toBe("feat: a thing");
     expect(c.body).toBe("Why it changed.");
-    expect(c.coAuthors).toEqual(["Claude Opus 5.5"]);
+    // co-author trailers (any tool) are neither kept nor shown
+    expect(JSON.stringify(c)).not.toMatch(/co-authored|claude/i);
+    expect(normalizeCommit(raw({ commit: { ...raw().commit, message: "x\n\nCo-authored-by: Codex <codex@example.com>" } }) as never).body).toBe("");
     expect(c.author).toEqual({ key: "gh:oyueo-mm", login: "oyueo-mm", name: "oyueo-mm", profileUrl: "https://github.com/oyueo-mm" });
     expect(JSON.stringify(c)).not.toMatch(/example\.com/i);
     expect(c.merge).toBe(false);

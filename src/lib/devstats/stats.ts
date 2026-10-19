@@ -56,7 +56,7 @@ export type DevReport = {
   buckets: string[];
   // commits per bucket for each shown author (all, or the filtered one)
   series: { key: string; label: string; values: number[] }[];
-  totals: { commits: number; activeDays: number; authors: number; merges: number; coAuthored: number; lastCommit: DevCommit | null };
+  totals: { commits: number; activeDays: number; authors: number; merges: number; lastCommit: DevCommit | null };
   heat: { from: string; to: string; counts: Record<string, number>; max: number };
   commits: DevCommit[]; // the period's (filtered) commits, newest first
 };
@@ -134,7 +134,6 @@ export function buildDevReport(
       activeDays: new Set(shown.map((c) => kstDayOf(c.authoredAt))).size,
       authors: new Set(shown.map((c) => c.author.key)).size,
       merges: shown.filter((c) => c.merge).length,
-      coAuthored: shown.filter((c) => c.coAuthors.length > 0).length,
       lastCommit: shown[0] ?? null,
     },
     heat: { from: heatFrom, to: today, counts, max: Math.max(0, ...Object.values(counts)) },

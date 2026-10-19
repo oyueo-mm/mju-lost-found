@@ -163,11 +163,6 @@ function CommitItem({ c, tone, trace }: { c: DevCommit; tone: ChartTone | undefi
             {c.sha.slice(0, 7)}
           </a>
           {c.merge && <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium">병합</span>}
-          {c.coAuthors.length > 0 && (
-            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px]" title="커밋 메시지의 Co-Authored-By 표시">
-              공동 작성: {c.coAuthors.join(", ")}
-            </span>
-          )}
         </p>
         {trace && (
           <p className="flex flex-wrap gap-1.5 text-[10px]">
@@ -593,8 +588,7 @@ export function DevStatsView({ dash, options }: { dash: DevDashboard; options: D
                   따로 표시합니다(이메일은 화면에 보이지 않음).
                 </li>
                 <li>
-                  커밋 수는 작업을 나누어 기록하는 방식에 따라 크게 달라지므로 작업량이나 기여도를 비교하는 지표로 쓰지 마세요. 공동 작성 표시(Co-Authored-By)는
-                  커밋 작성자 수에 넣지 않습니다.
+                  커밋 수는 작업을 나누어 기록하는 방식에 따라 크게 달라지므로 작업량이나 기여도를 비교하는 지표로 쓰지 마세요.
                 </li>
                 <li>
                   배포는 배포 기록(가장 오래된 기록 {dash.firstRecord ? kstStamp(dash.firstRecord) : "없음"}) 기준이며, 그 이전에 Vercel에서 삭제된 배포는 확인할 수

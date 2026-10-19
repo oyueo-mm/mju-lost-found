@@ -42,12 +42,11 @@ export type CommitAuthor = {
 export type DevCommit = {
   sha: string;
   title: string; // first line of the message
-  body: string; // the rest, without Co-Authored-By lines, shortened
+  body: string; // the rest, without Co-Authored-By trailers (not shown), shortened
   authoredAt: string; // ISO (UTC)
   committedAt: string;
   url: string; // the commit's page on GitHub
   author: CommitAuthor;
-  coAuthors: string[]; // names from Co-Authored-By trailers
   merge: boolean; // more than one parent
   parents: string[]; // parent SHAs: which commits a deployed commit contains
 };
@@ -64,17 +63,14 @@ type RawCommit = {
   parents: { sha?: string }[];
 };
 
-const CO_AUTHOR = /^co-authored-by:\s*(.+?)\s*(?:<[^>]*>)?\s*$/i;
+// Co-Authored-By trailers (e.g. AI tools) are left out of the body and
+// not shown anywhere; the commit's author is who it is credited to.
+const CO_AUTHOR = /^co-authored-by:/i;
 
 export function normalizeCommit(raw: RawCommit): DevCommit {
   const message = (raw.commit.message ?? "").replace(/\r\n/g, "\n");
   const [first = "", ...rest] = message.split("\n");
-  const coAuthors: string[] = [];
-  const bodyLines = rest.filter((line) => {
-    const m = CO_AUTHOR.exec(line.trim());
-    if (m) coAuthors.push(m[1]);
-    return !m;
-  });
+  const bodyLines = rest.filter((line) => !CO_AUTHOR.test(line.trim()));
   let body = bodyLines.join("\n").trim();
   if (body.length > MAX_BODY) body = `${body.slice(0, MAX_BODY).trimEnd()}…`;
   const name = raw.commit.author?.name?.trim() || "이름 없음";
@@ -94,7 +90,6 @@ export function normalizeCommit(raw: RawCommit): DevCommit {
     committedAt: raw.commit.committer?.date ?? authoredAt,
     url: raw.html_url,
     author: { key, login, name, profileUrl: login ? (raw.author?.html_url ?? `https://github.com/${login}`) : null },
-    coAuthors: [...new Set(coAuthors)],
     merge: Array.isArray(raw.parents) && raw.parents.length > 1,
     parents: Array.isArray(raw.parents) ? raw.parents.map((p) => p?.sha).filter((x): x is string => typeof x === "string") : [],
   };
@@ -159,7 +154,7 @@ const cachedFeed = unstable_cache(
     if (!feed.ok) throw new FeedFailure(feed);
     return feed;
   },
-  ["github-commit-feed-v2", GITHUB_REPO.owner, GITHUB_REPO.repo, GITHUB_REPO.branch],
+  ["github-commit-feed-v3", GITHUB_REPO.owner, GITHUB_REPO.repo, GITHUB_REPO.branch],
   { revalidate: REVALIDATE_SECONDS, tags: ["github-commit-feed"] },
 );
 
