@@ -40,8 +40,8 @@ vi.mock("./hourly", async (importOriginal) => {
   };
 });
 
-const { changeOf, loadDayVisits, resolveVisitDay } = await import("./dayVisits");
-const { dayVisitsDataset } = await import("./export");
+const { changeOf, loadDayVisits, loadMultiDayVisits, resolveVisitDays } = await import("./dayVisits");
+const { dayVisitsDataset, multiDayVisitsDataset } = await import("./export");
 const { activityActor } = await import("./record");
 
 const mark = (id: number, day: string) => ({ day, actor: activityActor(id) });
@@ -56,12 +56,16 @@ beforeEach(() => {
 });
 
 describe("날짜별 방문 분석", () => {
-  it("picks `vd` when it is a real day up to today, else the period's last day", () => {
-    expect(resolveVisitDay("2026-10-10", "2026-10-18", "2026-10-18")).toBe("2026-10-10");
-    expect(resolveVisitDay(undefined, "2026-10-12", "2026-10-18")).toBe("2026-10-12");
-    expect(resolveVisitDay("2026-10-19", "2026-10-18", "2026-10-18")).toBe("2026-10-18");
-    expect(resolveVisitDay("2026-02-30", "2026-10-18", "2026-10-18")).toBe("2026-10-18");
-    expect(resolveVisitDay("1999-01-01", "2026-10-18", "2026-10-18")).toBe("2026-10-18");
+  it("reads `vd` as days (single, runs, gaps), defaulting to the period's last day", () => {
+    expect(resolveVisitDays(undefined, "2026-10-12", "2026-10-18")).toEqual({ days: ["2026-10-12"], notice: null });
+    expect(resolveVisitDays(undefined, "2026-10-31", "2026-10-18").days).toEqual(["2026-10-18"]);
+    expect(resolveVisitDays("2026-10-10", "2026-10-18", "2026-10-18").days).toEqual(["2026-10-10"]);
+    expect(resolveVisitDays("2026-10-01~2026-10-02,2026-10-05,2026-10-19", "2026-10-18", "2026-10-18").days).toEqual(["2026-10-01", "2026-10-02", "2026-10-05"]);
+    expect(resolveVisitDays("", "2026-10-18", "2026-10-18").days).toEqual([]);
+    const many = resolveVisitDays("2026-08-01~2026-10-18", "2026-10-18", "2026-10-18");
+    expect(many.days).toHaveLength(31);
+    expect(many.days[0]).toBe("2026-09-18");
+    expect(many.notice).toContain("31일");
   });
 
   it("gives a rate only from a previous value above 0", () => {
@@ -138,5 +142,36 @@ describe("날짜별 방문 분석", () => {
     expect(members.slice(1, 5)).toEqual(["—", "—", "—", "—"]);
     // today: hours up to the current one
     expect(ds.tables[2].rows).toHaveLength(15);
+  });
+
+  it("compares several days: sums of what can be added, members never added up, 미측정 days left out", async () => {
+    admins = [9];
+    // 10-14: before the visit counters (미측정); 10-16, 10-17 measured
+    counters = [
+      c("2026-10-16", "visit.pv.anon", 10),
+      c("2026-10-16", "visit.session.anon", 3),
+      c("2026-10-17", "visit.pv.member", 4),
+      c("2026-10-17", "visit.session.member", 1),
+      c("2026-10-14", "visit.pv.anon", 99), // stray count before collection: not shown
+    ];
+    marks = [mark(1, "2026-10-16"), mark(2, "2026-10-16"), mark(1, "2026-10-17"), mark(9, "2026-10-17")];
+    const r = await loadMultiDayVisits(["2026-10-17", "2026-10-14", "2026-10-16"], { now: new Date("2026-10-19T03:00:00Z") });
+    expect(r.days).toEqual(["2026-10-14", "2026-10-16", "2026-10-17"]);
+    expect(r.figures[0]).toMatchObject({ visitCoverage: "none", pvAnon: null, members: null });
+    expect(r.measuredDays).toBe(2);
+    expect(r.totals).toEqual({ pvMember: 4, pvAnon: 10, sessionMember: 1, sessionAnon: 3 });
+    expect(r.figures.map((f) => f.members)).toEqual([null, 2, 1]);
+    expect(r.members.average).toBe(1.5);
+    expect(r.members.peak).toEqual({ day: "2026-10-16", n: 2 });
+    // 10-14 has no member marks yet (before 03:35 that day was partial; 10-14 none): no distinct total
+    expect(r.members.distinct).toBeNull();
+
+    const measuredOnly = await loadMultiDayVisits(["2026-10-16", "2026-10-17"], { now: new Date("2026-10-19T03:00:00Z") });
+    // members 1 and 2, each counted once -- not 2 + 1
+    expect(measuredOnly.members.distinct).toBe(2);
+    const ds = multiDayVisitsDataset(measuredOnly);
+    expect(ds.tables[0].rows).toHaveLength(2);
+    expect(ds.tables[0].total?.[1]).toBe("더하지 않음");
+    expect(ds.tables[1].rows.find((row) => String(row[0]).startsWith("선택 기간"))?.[1]).toBe(2);
   });
 });

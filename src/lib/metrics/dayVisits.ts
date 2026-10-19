@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { addDays, isRealDay, selectableDay } from "./daySelection";
+import { addDays, decodeDays, MAX_SELECTED_DAYS, selectableDay } from "./daySelection";
 import { loadHourlyCells, type CellStatus, type HourlyCells } from "./hourly";
 import { activityActor, kstDay } from "./record";
 import { activityCoverageOf, coverageOf, kstNow, type Coverage } from "./report";
@@ -62,11 +62,18 @@ export type DayVisitReport = {
 const asDay = (d: Date | string) => (typeof d === "string" ? d.slice(0, 10) : d.toISOString().slice(0, 10));
 const sum = (...v: (number | null)[]) => (v.every((x) => x === null) ? null : v.reduce<number>((a, x) => a + (x ?? 0), 0));
 
-// The day the page asks for: `vd` when it is a real, selectable day, else
-// the last day of the chosen period (never after today).
-export function resolveVisitDay(param: string | null | undefined, fallback: string, today: string): string {
-  if (param && isRealDay(param) && selectableDay(param, today)) return param;
-  return fallback > today ? today : fallback;
+// The days the page asks for (`vd`, encoded like 시간대 분석's `d` --
+// independent of it): absent means the last day of the chosen period, an
+// empty value means none. Days after today are left out; past the limit
+// the latest ones are kept and the page says so.
+export function resolveVisitDays(param: string | null | undefined, fallback: string, today: string): { days: string[]; notice: string | null } {
+  if (param === null || param === undefined) return { days: [fallback > today ? today : fallback], notice: null };
+  const days = decodeDays(param).filter((d) => selectableDay(d, today));
+  if (days.length <= MAX_SELECTED_DAYS) return { days, notice: null };
+  return {
+    days: days.slice(-MAX_SELECTED_DAYS),
+    notice: `날짜는 최대 ${MAX_SELECTED_DAYS}일까지 고를 수 있어 가장 최근 ${MAX_SELECTED_DAYS}일만 반영했습니다(요청 ${days.length}일).`,
+  };
 }
 
 // Change from `previous` to `current`: the difference, and the rate when
@@ -134,31 +141,37 @@ export function compareRows(current: DayFigures, before: DayFigures, hourly: Hou
 // Distinct members active on each day, admin accounts out: their marks are
 // found by recomputing the HMAC of each admin id (marks are never linked to
 // anyone else here).
-async function activeMembersByDay(days: string[]): Promise<Map<string, number>> {
+// With `distinct`, also the members active on any of the days, counted
+// once -- never the sum of the daily counts.
+async function activeMembers(days: string[], distinct: boolean): Promise<{ byDay: Map<string, number>; distinct: number | null }> {
   const admins = await prisma.user.findMany({ where: { isAdmin: true }, select: { id: true } });
   const adminActors = admins.map((a) => activityActor(a.id));
-  const counted = await prisma.$queryRaw<{ day: Date | string; n: bigint | number }[]>`
-    SELECT "day", count(DISTINCT "actor") AS n FROM "ActivityDay"
-    WHERE "day" = ANY(${days}::date[]) AND NOT ("actor" = ANY(${adminActors}::text[]))
-    GROUP BY 1`.catch(() => [] as { day: Date | string; n: bigint | number }[]);
-  return new Map(counted.map((r) => [asDay(r.day), Number(r.n)]));
+  const [counted, all] = await Promise.all([
+    prisma.$queryRaw<{ day: Date | string; n: bigint | number }[]>`
+      SELECT "day", count(DISTINCT "actor") AS n FROM "ActivityDay"
+      WHERE "day" = ANY(${days}::date[]) AND NOT ("actor" = ANY(${adminActors}::text[]))
+      GROUP BY 1`.catch(() => [] as { day: Date | string; n: bigint | number }[]),
+    distinct
+      ? prisma.$queryRaw<{ n: bigint | number }[]>`
+          SELECT count(DISTINCT "actor") AS n FROM "ActivityDay"
+          WHERE "day" = ANY(${days}::date[]) AND NOT ("actor" = ANY(${adminActors}::text[]))`.catch(() => null)
+      : Promise.resolve(null),
+  ]);
+  return { byDay: new Map(counted.map((r) => [asDay(r.day), Number(r.n)])), distinct: all ? Number(all[0]?.n ?? 0) : null };
 }
 
-export async function loadDayVisits(day: string, { now = new Date() } = {}): Promise<DayVisitReport> {
-  const today = kstDay(now);
-  const previous = addDays(day, -1);
-  const days = [previous, day];
-  const [counters, members, hourly] = await Promise.all([
+// Each day's figures; null (미측정) where a counter had not begun.
+async function loadDayFigures(days: string[], today: string, distinct = false): Promise<{ figures: DayFigures[]; distinctMembers: number | null }> {
+  const [counters, members] = await Promise.all([
     prisma.$queryRaw<{ day: Date | string; metric: string; n: bigint | number }[]>`
       SELECT "day", "metric", sum("value") AS n FROM "MetricDaily"
       WHERE "day" = ANY(${days}::date[])
         AND "metric" IN ('visit.pv.anon', 'visit.pv.member', 'visit.session.anon', 'visit.session.member')
       GROUP BY 1, 2`.catch(() => [] as { day: Date | string; metric: string; n: bigint | number }[]),
-    activeMembersByDay(days),
-    loadHourlyCells(days, { now }),
+    activeMembers(days, distinct),
   ]);
   const value = (d: string, metric: string) => counters.filter((r) => asDay(r.day) === d && r.metric === metric).reduce((a, r) => a + Number(r.n), 0);
-  const figures = (d: string): DayFigures => {
+  const figures = days.map((d): DayFigures => {
     const visitCoverage = coverageOf("visit", d, addDays(d, 1));
     const membersCoverage = activityCoverageOf(d, addDays(d, 1), today);
     const v = (metric: string) => (visitCoverage === "none" ? null : value(d, metric));
@@ -170,11 +183,18 @@ export async function loadDayVisits(day: string, { now = new Date() } = {}): Pro
       sessionAnon: v("visit.session.anon"),
       sessionMember: v("visit.session.member"),
       membersCoverage,
-      members: membersCoverage === "none" ? null : (members.get(d) ?? 0),
+      members: membersCoverage === "none" ? null : (members.byDay.get(d) ?? 0),
     };
-  };
-  const current = figures(day);
-  const before = figures(previous);
+  });
+  return { figures, distinctMembers: members.distinct };
+}
+
+export async function loadDayVisits(day: string, { now = new Date() } = {}): Promise<DayVisitReport> {
+  const today = kstDay(now);
+  const previous = addDays(day, -1);
+  const days = [previous, day];
+  const [{ figures }, hourly] = await Promise.all([loadDayFigures(days, today), loadHourlyCells(days, { now })]);
+  const [before, current] = figures;
   const isToday = day === today;
   const nowHour = hourly.nowHour;
   const basis: DayVisitReport["basis"] = !isToday ? "day" : nowHour > 0 ? "hours" : "none";
@@ -192,4 +212,57 @@ export async function loadDayVisits(day: string, { now = new Date() } = {}): Pro
     hours: basis === "hours" ? nowHour : 24,
     rows: compareRows(current, before, hourly, basis, nowHour),
   };
+}
+
+// ---------- several days ----------
+
+export type MultiDayReport = {
+  days: string[]; // as chosen, in order
+  today: string;
+  generatedAt: string;
+  figures: DayFigures[];
+  measuredDays: number; // days with page views / sessions measured (at least in part)
+  memberDays: number; // days with members measured
+  totals: { pvMember: number | null; pvAnon: number | null; sessionMember: number | null; sessionAnon: number | null };
+  // members are people per day: never added up across days
+  members: {
+    average: number | null; // mean of the measured days' counts
+    peak: { day: string; n: number } | null;
+    distinct: number | null; // active on any chosen day, counted once (null: some day unmeasured)
+    distinctPartial: boolean; // a chosen day is only partly measured
+  };
+  includesToday: boolean;
+};
+
+const measured = (c: Coverage) => c !== "none";
+
+export function summarizeDays(figures: DayFigures[], today: string, distinct: number | null): Omit<MultiDayReport, "generatedAt"> {
+  const visitDays = figures.filter((f) => measured(f.visitCoverage));
+  const memberFigures = figures.filter((f) => measured(f.membersCoverage));
+  const total = (key: "pvMember" | "pvAnon" | "sessionMember" | "sessionAnon") => (visitDays.length ? visitDays.reduce((a, f) => a + (f[key] ?? 0), 0) : null);
+  const peak = memberFigures.reduce<{ day: string; n: number } | null>((best, f) => (f.members !== null && (!best || f.members > best.n) ? { day: f.day, n: f.members } : best), null);
+  const allMembersMeasured = memberFigures.length === figures.length;
+  return {
+    days: figures.map((f) => f.day),
+    today,
+    figures,
+    measuredDays: visitDays.length,
+    memberDays: memberFigures.length,
+    totals: { pvMember: total("pvMember"), pvAnon: total("pvAnon"), sessionMember: total("sessionMember"), sessionAnon: total("sessionAnon") },
+    members: {
+      average: memberFigures.length ? memberFigures.reduce((a, f) => a + (f.members ?? 0), 0) / memberFigures.length : null,
+      peak: peak && peak.n > 0 ? peak : null,
+      // over days that are not all measured, a "distinct" count would read as complete: left out
+      distinct: allMembersMeasured && figures.length ? distinct : null,
+      distinctPartial: figures.some((f) => f.membersCoverage === "partial"),
+    },
+    includesToday: figures.some((f) => f.day === today),
+  };
+}
+
+export async function loadMultiDayVisits(days: string[], { now = new Date() } = {}): Promise<MultiDayReport> {
+  const today = kstDay(now);
+  const sorted = [...new Set(days)].sort();
+  const { figures, distinctMembers } = await loadDayFigures(sorted, today, true);
+  return { ...summarizeDays(figures, today, distinctMembers), generatedAt: kstNow(now) };
 }

@@ -18,7 +18,8 @@ export function StatsExportPanel({
   periodLabel,
   days,
   daysLabel,
-  visitDay,
+  visitDays,
+  visitDaysLabel,
 }: {
   preset: PeriodPreset;
   from?: string;
@@ -26,7 +27,8 @@ export function StatsExportPanel({
   periodLabel: string;
   days: string;
   daysLabel: string;
-  visitDay: string;
+  visitDays: string;
+  visitDaysLabel: string;
 }) {
   const [format, setFormat] = useState<"xlsx" | "csv">("xlsx");
   const [dataset, setDataset] = useState<string>("summary");
@@ -37,7 +39,7 @@ export function StatsExportPanel({
     setMessage(null);
     startTransition(async () => {
       try {
-        setMessage(saveExport(await exportStatsAction({ format, preset, from, to, dataset, days, visitDay })));
+        setMessage(saveExport(await exportStatsAction({ format, preset, from, to, dataset, days, visitDays })));
       } catch {
         setMessage({ kind: "error", text: "파일을 만들지 못했습니다. 잠시 후 다시 시도해 주세요." });
       }
@@ -50,7 +52,7 @@ export function StatsExportPanel({
       <p>
         기간: <b className="font-semibold text-foreground">{periodLabel}</b> — 위에서 고른 조회 기간과 같습니다. 날짜·시간대별은 시간대 분석 달력에서 고른
         날짜(<b className="font-semibold text-foreground">{daysLabel}</b>), 날짜별 방문 상세는 날짜별 방문 분석에서 고른 날짜(
-        <b className="font-semibold text-foreground">{visitDay}</b>)와 그 전날입니다.
+        <b className="font-semibold text-foreground">{visitDaysLabel}</b>, 하루면 그 전날과 비교)입니다.
       </p>
       <fieldset className="flex flex-col gap-1.5">
         <legend className="mb-1.5 font-medium text-foreground">형식</legend>

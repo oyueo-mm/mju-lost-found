@@ -18,7 +18,7 @@ import { describeRoute } from "./apiRoutes";
 import { NEW_MEMBER_DAYS, RETURN_WINDOW_DAYS, windowNote, type UserReport } from "./userReport";
 import { byHour, HOURLY_METRICS, type CellStatus, type HourlyCells } from "./hourly";
 import { describeDays } from "./daySelection";
-import { changeOf, type DayVisitReport } from "./dayVisits";
+import { changeOf, type DayVisitReport, type MultiDayReport } from "./dayVisits";
 import { DURATION_BUCKETS, DURATION_LABELS, PAGES_BUCKETS, PAGES_LABELS } from "./flow";
 import { DEVICE_KINDS, DEVICE_LABELS, PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "./visits";
 import { buildCsv, buildXlsx, columnName, type Cell, type Sheet } from "./xlsx";
@@ -65,13 +65,78 @@ function coverageNote(coverage: Coverage, key: MetricKey | VisitSeriesKey): stri
   return coverage === "none" ? `미측정(${sinceLabel(source)}부터 집계)` : `${sinceLabel(source)} 이후만 집계(이전은 미측정)`;
 }
 
-export function datasetsOf(report: Report, users?: UserReport, hourly?: HourlyCells, dayVisits?: DayVisitReport): Dataset[] {
+export function datasetsOf(report: Report, users?: UserReport, hourly?: HourlyCells, dayVisits?: DayVisitReport | MultiDayReport): Dataset[] {
   return [
     ...opsDatasets(report),
     ...(users ? [userDataset(users)] : []),
     ...(hourly ? [hourlyDataset(hourly)] : []),
-    ...(dayVisits ? [dayVisitsDataset(dayVisits)] : []),
+    ...(dayVisits ? ["figures" in dayVisits ? multiDayVisitsDataset(dayVisits) : dayVisitsDataset(dayVisits)] : []),
   ];
+}
+
+// 날짜별 방문 분석, several days: one row per chosen day, then the sums
+// over the measured days. Members are people per day and are never added
+// up; the selection's distinct members are their own figure.
+export function multiDayVisitsDataset(r: MultiDayReport): Dataset {
+  const sum2 = (a: number | null, b: number | null) => (a === null && b === null ? null : (a ?? 0) + (b ?? 0));
+  const status = (c: string) => (c === "none" ? "미측정" : c === "partial" ? "부분 측정" : "");
+  const sessions = sum2(r.totals.sessionMember, r.totals.sessionAnon);
+  const pv = sum2(r.totals.pvMember, r.totals.pvAnon);
+  const per = (v: number | null) => (v === null || !r.measuredDays ? null : Math.round((v / r.measuredDays) * 10) / 10);
+  return {
+    key: "dayVisits",
+    name: "날짜별 방문 상세",
+    period: `날짜별 방문 분석에서 고른 날짜 ${r.days.length}일 (${describeDays(r.days)})${r.includesToday ? " · 오늘은 생성 시각까지" : ""}`,
+    widths: [16, 14, 14, 14, 12, 14, 14, 12, 12],
+    tables: [
+      {
+        title: "날짜별 방문",
+        columns: [
+          { label: "날짜", kind: "text" },
+          { label: "회원 방문자(명)", kind: "int" },
+          { label: "세션 로그인", kind: "int" },
+          { label: "세션 비로그인", kind: "int" },
+          { label: "세션 합계", kind: "int" },
+          { label: "페이지뷰 로그인", kind: "int" },
+          { label: "페이지뷰 비로그인", kind: "int" },
+          { label: "페이지뷰 합계", kind: "int" },
+          { label: "측정 상태", kind: "text" },
+        ],
+        rows: r.figures.map((f) => [
+          f.day,
+          f.members,
+          f.sessionMember,
+          f.sessionAnon,
+          sum2(f.sessionMember, f.sessionAnon),
+          f.pvMember,
+          f.pvAnon,
+          sum2(f.pvMember, f.pvAnon),
+          status(f.visitCoverage),
+        ]),
+        total: [`합계(측정된 ${r.measuredDays}일)`, "더하지 않음", r.totals.sessionMember, r.totals.sessionAnon, sessions, r.totals.pvMember, r.totals.pvAnon, pv, ""],
+      },
+      {
+        title: "요약",
+        columns: [
+          { label: "지표", kind: "text" },
+          { label: "값", kind: "int" },
+          { label: "비고", kind: "text" },
+        ],
+        rows: [
+          ["방문 세션 하루 평균(회)", per(sessions), "측정된 날만으로 나눔"],
+          ["페이지뷰 하루 평균(회)", per(pv), "측정된 날만으로 나눔"],
+          ["회원 방문자 하루 평균(명)", r.members.average === null ? null : Math.round(r.members.average * 10) / 10, "날짜별 서로 다른 회원 수의 평균"],
+          ["선택 기간 서로 다른 회원(명)", r.members.distinct ?? (r.memberDays ? "일부 미측정" : null), "한 번이라도 이용한 회원을 한 번씩만 셈(날짜별 수의 합이 아님)"],
+          ["비로그인 방문자", "수집하지 않음", "비로그인 이용자는 식별하지 않아 방문자 수가 없음"],
+        ],
+      },
+    ],
+    notes: [
+      "회원 방문자는 그날 로그인 상태로 이용한 서로 다른 회원 수입니다(관리자 제외). 날짜마다 따로 센 사람 수라 여러 날을 더하지 않으며, 선택 기간 전체의 수는 따로 셉니다.",
+      "방문 세션은 방문 횟수(사람 수 아님), 페이지뷰는 화면이 열린 횟수이며 날짜별로 더할 수 있습니다. 관리자의 이용은 포함하지 않습니다.",
+      "미측정(수집 시작 전) 날짜는 0이 아니며 합계·평균에서 뺍니다. 모든 날짜와 시각은 한국 시간(KST) 기준입니다.",
+    ],
+  };
 }
 
 // 날짜별 방문 분석: the chosen day next to the day before (today: the same
@@ -797,13 +862,13 @@ export function toSheets(report: Report, label?: string, datasets = datasetsOf(r
   });
 }
 
-export function toXlsx(report: Report, label?: string, users?: UserReport, notice?: string | null, hourly?: HourlyCells, dayVisits?: DayVisitReport): Buffer {
+export function toXlsx(report: Report, label?: string, users?: UserReport, notice?: string | null, hourly?: HourlyCells, dayVisits?: DayVisitReport | MultiDayReport): Buffer {
   return buildXlsx(toSheets(report, label, datasetsOf(report, users, hourly, dayVisits), notice), { title: "MJU Find 운영 통계", createdAt: new Date() });
 }
 
 // One CSV per data kind: "#" lines (service, period, time, caveats) on top
 // -- skipped by most tools with a comment option -- then plain tables.
-export function toCsv(report: Report, key: DatasetKey, label?: string, users?: UserReport, notice?: string | null, hourly?: HourlyCells, dayVisits?: DayVisitReport): string {
+export function toCsv(report: Report, key: DatasetKey, label?: string, users?: UserReport, notice?: string | null, hourly?: HourlyCells, dayVisits?: DayVisitReport | MultiDayReport): string {
   const ds = datasetsOf(report, users, hourly, dayVisits).find((d) => d.key === key);
   if (!ds) throw new Error(`no data for ${key}`);
   // "#" lines are written as they are (never quoted), so a reader's comment
@@ -828,8 +893,11 @@ export function toCsv(report: Report, key: DatasetKey, label?: string, users?: U
   return `\ufeff${meta.join("\r\n")}\r\n${buildCsv(rows).slice(1)}`;
 }
 
-export const exportFileName = (report: Report, ext: "xlsx" | "csv", key?: DatasetKey, days?: string[], visitDay?: string) => {
-  if (key === "dayVisits" && visitDay) return `mju-find-stats-day-visits_${visitDay.replaceAll("-", "")}.${ext}`;
+export const exportFileName = (report: Report, ext: "xlsx" | "csv", key?: DatasetKey, days?: string[], visitDays?: string[]) => {
+  if (key === "dayVisits" && visitDays?.length) {
+    const [a, b] = [visitDays[0].replaceAll("-", ""), visitDays[visitDays.length - 1].replaceAll("-", "")];
+    return visitDays.length === 1 ? `mju-find-stats-day-visits_${a}.${ext}` : `mju-find-stats-day-visits_${a}-${b}_${visitDays.length}d.${ext}`;
+  }
   // 날짜·시간대별 alone: named after its own days
   if (key === "hourly" && days?.length) return `mju-find-stats-hourly_${days[0].replaceAll("-", "")}-${days[days.length - 1].replaceAll("-", "")}_${days.length}d.${ext}`;
   const last = new Date(Date.parse(`${report.range.until}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);

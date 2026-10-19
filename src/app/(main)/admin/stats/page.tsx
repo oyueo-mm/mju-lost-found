@@ -35,8 +35,9 @@ import { HourlyStatsView, type HourlyView } from "@/components/admin/HourlyStats
 import { HourlyExportButtons } from "@/components/admin/HourlyExportButtons";
 import { isHourlyMetric, loadHourlyCells } from "@/lib/metrics/hourly";
 import { addDays, describeDays, encodeDays, resolveSelection } from "@/lib/metrics/daySelection";
-import { loadDayVisits, resolveVisitDay } from "@/lib/metrics/dayVisits";
-import { DayVisitsView } from "@/components/admin/DayVisitsView";
+import { loadDayVisits, loadMultiDayVisits, resolveVisitDays } from "@/lib/metrics/dayVisits";
+import { DayVisitsSection, DayVisitsView, MultiDayVisitsView } from "@/components/admin/DayVisitsView";
+import { HourlyDayPopover } from "@/components/admin/HourlyDayPopover";
 import { DevStatsView, TIMELINE_STEP, type DevOptions } from "@/components/admin/DevStatsView";
 import { loadCommitFeed } from "@/lib/devstats/github";
 import { buildDevReport, isDevPeriod, isDevUnit } from "@/lib/devstats/stats";
@@ -177,10 +178,13 @@ export default async function AdminStatsPage({
   const selectedParam = encodeDays(selection.days);
   const metric: HourlyView = params.m === "all" ? "all" : isHourlyMetric(params.m) ? params.m : "pv";
   const hourlyQuery = new URLSearchParams({ d: selectedParam, m: metric }).toString();
-  // 날짜별 방문 분석: the day in `vd`, else the last day of the period; a
-  // chosen day is kept when the period changes
-  const visitDay = resolveVisitDay(params.vd, addDays(period.range.until, -1), today);
-  const keepQuery = params.vd === visitDay ? `${hourlyQuery}&vd=${visitDay}` : hourlyQuery;
+  // 날짜별 방문 분석: its own days in `vd` (independent of 시간대 분석's
+  // `d`), else the last day of the period; chosen days are kept when the
+  // period changes
+  const visitSelection = resolveVisitDays(params.vd, addDays(period.range.until, -1), today);
+  const visitDays = visitSelection.days;
+  const visitDaysParam = encodeDays(visitDays);
+  const keepQuery = params.vd !== undefined ? `${hourlyQuery}&vd=${visitDaysParam}` : hourlyQuery;
   const periodQuery =
     period.selection.preset === "custom"
       ? `period=custom&from=${period.selection.from}&to=${period.selection.to}`
@@ -257,7 +261,8 @@ export default async function AdminStatsPage({
                 periodLabel={period.label}
                 days={selectedParam}
                 daysLabel={selection.days.length ? `${selection.days.length}일: ${describeDays(selection.days)}` : "고른 날짜 없음"}
-                visitDay={visitDay}
+                visitDays={visitDaysParam}
+                visitDaysLabel={visitDays.length ? `${visitDays.length}일: ${describeDays(visitDays)}` : "고른 날짜 없음"}
               />
             </div>
           </details>
@@ -320,7 +325,12 @@ export default async function AdminStatsPage({
     );
   }
 
-  const [report, hourlyCells, dayVisits] = await Promise.all([loadReport(period.range), loadHourlyCells(selection.days), loadDayVisits(visitDay)]);
+  const [report, hourlyCells, dayVisits, multiDayVisits] = await Promise.all([
+    loadReport(period.range),
+    loadHourlyCells(selection.days),
+    visitDays.length === 1 ? loadDayVisits(visitDays[0]) : null,
+    visitDays.length > 1 ? loadMultiDayVisits(visitDays) : null,
+  ]);
   const { core, visit, totals, totalCoverage: cov } = report;
   const labels = report.buckets.map((b) => bucketLabel(bucketSpan(report.range, b).from, unit));
   const last = report.buckets.length - 1;
@@ -587,7 +597,22 @@ export default async function AdminStatsPage({
       </Section>
 
       <div id="day-visits" className="scroll-mt-20">
-        <DayVisitsView report={dayVisits} />
+        <DayVisitsSection
+          controls={
+            <div className="flex flex-col gap-2">
+              <HourlyDayPopover selected={visitDays} today={today} param="vd" />
+              {visitSelection.notice && (
+                <p role="alert" className="text-xs text-destructive">
+                  {visitSelection.notice}
+                </p>
+              )}
+            </div>
+          }
+        >
+          {dayVisits && <DayVisitsView report={dayVisits} />}
+          {multiDayVisits && <MultiDayVisitsView report={multiDayVisits} />}
+          {visitDays.length === 0 && <p className="text-xs text-muted-foreground">날짜 선택에서 날짜를 골라 주세요.</p>}
+        </DayVisitsSection>
       </div>
 
       <div id="hourly" className="scroll-mt-20">

@@ -40,9 +40,12 @@ export function HourlyDayPicker({
   selected,
   today,
   onChosenChange,
+  param = "d",
 }: {
   selected: string[];
   today: string;
+  // the URL parameter the days live in (시간대 분석: d, 날짜별 방문 분석: vd)
+  param?: string;
   // told of every accepted change at once (the date button's label), before the page follows
   onChosenChange?: (days: string[]) => void;
 }) {
@@ -79,7 +82,7 @@ export function HourlyDayPicker({
     if (commitTimer.current) clearTimeout(commitTimer.current);
     commitTimer.current = setTimeout(() => {
       const params = new URLSearchParams(searchParams.toString());
-      params.set("d", encodeDays([...days]));
+      params.set(param, encodeDays([...days]));
       startTransition(() => router.replace(`${pathname}?${params.toString()}`, { scroll: false }));
     }, delay);
   };

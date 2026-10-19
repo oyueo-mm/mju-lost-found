@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { LineChart, StackedBarChart, type ChartSeries } from "@/components/admin/StatsCharts";
 import { More, Section, StatTile, SubHeading, Unmeasured } from "@/components/admin/StatsBlocks";
 import { VisitDayPicker } from "@/components/admin/VisitDayPicker";
-import { changeOf, type CompareRow, type DayVisitReport } from "@/lib/metrics/dayVisits";
+import { changeOf, type CompareRow, type DayVisitReport, type MultiDayReport } from "@/lib/metrics/dayVisits";
 import { peakHour, type CellStatus } from "@/lib/metrics/hourly";
 import type { Coverage } from "@/lib/metrics/report";
 
@@ -108,37 +108,7 @@ export function DayVisitsView({ report }: { report: DayVisitReport }) {
   ];
 
   return (
-    <Section
-      title="날짜별 방문 분석"
-      description={
-        <>
-          <p>
-            고른 하루의 일반 이용자 방문을 로그인 여부·시간대별로 보고, 이전 날짜와 비교합니다(한국 시간 기준, 관리자 이용 제외). 관리자 활동 탭의 날짜별
-            방문 기록(관리자 본인의 접속)과는 다른 데이터입니다.
-          </p>
-          <More label="지표 정의와 한계">
-            <ul className="flex list-disc flex-col gap-1 pl-4">
-              <li>
-                <b className="font-semibold">방문자</b>: 그날 로그인 상태로 이용한 서로 다른 회원 수(관리자 계정 제외, 탈퇴한 회원의 기록은 삭제되어 빠짐).
-                비로그인 이용자는 개인을 식별하지 않으므로 <b className="font-semibold">방문자 수를 수집하지 않습니다</b>(방문 세션으로 추정하지 않음).
-              </li>
-              <li>
-                <b className="font-semibold">방문 세션</b>: 방문 횟수(사람 수 아님). 첫 화면을 볼 때의 로그인 여부로 나누며, 30분 넘게 조회가 없거나 날짜가 바뀌면 새
-                방문입니다. <b className="font-semibold">페이지뷰</b>: 화면이 열린 횟수(볼 때의 로그인 여부로 구분).
-              </li>
-              <li>
-                시간대 그래프는 시간대 분석과 같은 시간별 기록입니다. 방문 세션은 시작한 시간으로 세며 시간별로는 로그인 구분이 없습니다. 지표마다 수집 시작
-                시점이 달라 그 전은 미측정(0이 아님), 시작한 시간은 부분 측정입니다.
-              </li>
-              <li>
-                오늘을 고르면 어제의 같은 시간(0시부터 지금 시각 직전의 정시까지)과 비교합니다. 시간별로 저장하지 않는 값(로그인 구분 방문 세션, 방문자)은 진행 중인
-                날에는 비교하지 않습니다. 증감률은 이전 값이 0이면 계산하지 않습니다.
-              </li>
-            </ul>
-          </More>
-        </>
-      }
-    >
+    <>
       <div className="flex flex-col gap-1.5">
         <VisitDayPicker day={report.day} today={report.today} />
         <p className="text-[11px] text-muted-foreground">
@@ -315,6 +285,183 @@ export function DayVisitsView({ report }: { report: DayVisitReport }) {
       {before.visitCoverage === "none" && current.visitCoverage !== "none" && (
         <p className="text-[11px] text-muted-foreground">{dayLabel(report.previous)}은 방문 통계 수집 전이라 비교하지 않습니다(미측정).</p>
       )}
+    </>
+  );
+}
+
+// ---------- the section around both views ----------
+
+export function DayVisitsSection({ controls, children }: { controls: ReactNode; children: ReactNode }) {
+  return (
+    <Section
+      title="날짜별 방문 분석"
+      description={
+        <>
+          <p>
+            고른 날짜의 일반 이용자 방문을 로그인 여부별로 봅니다(한국 시간 기준, 관리자 이용 제외). 하루를 고르면 0~23시와 전날 비교를, 여러 날을 고르면
+            날짜별 비교·합계·평균을 보여 줍니다. 시간대 분석의 날짜 선택과는 따로 움직이며, 관리자 활동 탭의 날짜별 방문 기록(관리자 본인의 접속)과는 다른
+            데이터입니다.
+          </p>
+          <More label="지표 정의와 한계">
+            <ul className="flex list-disc flex-col gap-1 pl-4">
+              <li>
+                <b className="font-semibold">회원 방문자</b>: 그날 로그인 상태로 이용한 서로 다른 회원 수(관리자 계정 제외, 탈퇴한 회원의 기록은 삭제되어 빠짐).
+                날짜마다 따로 센 사람 수라 여러 날을 더하지 않습니다. 여러 날 전체의 수는 그 기간에 한 번이라도 이용한 회원을 한 번씩만 따로 셉니다. 비로그인
+                이용자는 개인을 식별하지 않으므로 <b className="font-semibold">방문자 수를 수집하지 않습니다</b>(방문 세션으로 추정하지 않음).
+              </li>
+              <li>
+                <b className="font-semibold">방문 세션</b>: 방문 횟수(사람 수 아님). 첫 화면을 볼 때의 로그인 여부로 나누며, 30분 넘게 조회가 없거나 날짜가 바뀌면 새
+                방문입니다. <b className="font-semibold">페이지뷰</b>: 화면이 열린 횟수(볼 때의 로그인 여부로 구분). 이 둘은 날짜별로 더할 수 있습니다.
+              </li>
+              <li>
+                수집을 시작하기 전 날짜는 <b className="font-semibold">미측정</b>(0이 아님)이며 합계·평균에서 빼고, 수집을 시작한 날은 부분 측정입니다. 평균은
+                측정된 날만으로 나눕니다.
+              </li>
+              <li>
+                하루를 골랐을 때 시간대 그래프는 시간대 분석과 같은 시간별 기록입니다. 오늘을 고르면 어제의 같은 시간(0시부터 지금 시각 직전의 정시까지)과
+                비교하며, 시간별로 저장하지 않는 값(로그인 구분 방문 세션, 회원 방문자)은 진행 중인 날에는 비교하지 않습니다.
+              </li>
+            </ul>
+          </More>
+        </>
+      }
+    >
+      {controls}
+      {children}
     </Section>
+  );
+}
+
+// ---------- several days ----------
+
+const statusText = (c: Coverage) => (c === "none" ? "미측정" : c === "partial" ? "부분 측정" : "측정");
+
+export function MultiDayVisitsView({ report }: { report: MultiDayReport }) {
+  const { figures, totals, members } = report;
+  const n = figures.length;
+  const labels = figures.map((f) => dayLabel(f.day));
+  const visitCoverage = figures.map((f) => f.visitCoverage);
+  const sessionTotal = sum(totals.sessionMember, totals.sessionAnon);
+  const pvTotal = sum(totals.pvMember, totals.pvAnon);
+  const avg = (v: number | null) => (v === null || report.measuredDays === 0 ? null : v / report.measuredDays);
+  const one = (v: number | null, unit: string) => (v === null ? <Unmeasured /> : `${(Math.round(v * 10) / 10).toLocaleString("ko-KR")}${unit}`);
+  const unmeasuredDays = n - report.measuredDays;
+  return (
+    <>
+      <p className="text-[11px] text-muted-foreground">
+        {n}일 선택 · 방문 통계 측정 {report.measuredDays}일{unmeasuredDays ? ` · 미측정 ${unmeasuredDays}일(합계·평균에서 제외)` : ""}
+        {report.includesToday ? " · 오늘은 지금까지의 값" : ""}
+      </p>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile
+          primary
+          label="방문 세션 합계"
+          value={sessionTotal === null ? <Unmeasured /> : <Value v={sessionTotal} unit="회" />}
+          sub={<>하루 평균 {one(avg(sessionTotal), "회")} · 사람 수 아님</>}
+        />
+        <StatTile primary label="페이지뷰 합계" value={pvTotal === null ? <Unmeasured /> : <Value v={pvTotal} unit="회" />} sub={<>하루 평균 {one(avg(pvTotal), "회")}</>} />
+        <StatTile
+          primary
+          label="회원 방문자 (하루 평균)"
+          value={one(members.average, "명")}
+          sub={members.peak ? `가장 많은 날 ${dayLabel(members.peak.day)} ${fmt(members.peak.n)}명 · 날짜별 수는 더하지 않음` : "날짜별 수는 더하지 않음"}
+        />
+        <StatTile
+          primary
+          label="선택 기간 서로 다른 회원"
+          value={members.distinct === null ? <Unmeasured text={report.memberDays === 0 ? "미측정" : "일부 미측정"} /> : <Value v={members.distinct} unit="명" partial={members.distinctPartial} />}
+          sub="한 번이라도 이용한 회원을 한 번씩만 셈 · 비로그인은 수집하지 않음"
+        />
+      </div>
+
+      <div className="grid gap-5 md:grid-cols-2">
+        <StackedBarChart
+          title="날짜별 방문 세션"
+          unit="회"
+          labels={labels}
+          coverage={visitCoverage}
+          inProgress={report.includesToday && figures.at(-1)?.day === report.today}
+          series={[
+            { label: "로그인 상태로 시작", values: figures.map((f) => f.sessionMember), tone: 1 },
+            { label: "비로그인으로 시작", values: figures.map((f) => f.sessionAnon), tone: 2 },
+          ]}
+        />
+        <StackedBarChart
+          title="날짜별 페이지뷰"
+          unit="회"
+          labels={labels}
+          coverage={visitCoverage}
+          inProgress={report.includesToday && figures.at(-1)?.day === report.today}
+          series={[
+            { label: "로그인", values: figures.map((f) => f.pvMember), tone: 1 },
+            { label: "비로그인", values: figures.map((f) => f.pvAnon), tone: 2 },
+          ]}
+        />
+        <LineChart
+          title="날짜별 회원 방문자 (그날의 서로 다른 회원)"
+          unit="명"
+          labels={labels}
+          coverage={figures.map((f) => f.membersCoverage)}
+          series={[{ label: "회원 방문자", values: figures.map((f) => f.members), tone: 3, status: figures.map((f) => f.membersCoverage) }]}
+          note="날짜가 띄엄띄엄 선택돼도 고른 날짜만 순서대로 잇습니다."
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <SubHeading basis={`${n}일`}>날짜별 상세</SubHeading>
+        <div className="relative overflow-x-auto">
+          <table className="w-full min-w-[44rem] text-right text-xs tabular-nums">
+            <caption className="sr-only">고른 날짜별 방문 상세</caption>
+            <thead className="text-muted-foreground">
+              <tr>
+                <th scope="col" className="py-1.5 pr-2 text-left font-medium">날짜</th>
+                <th scope="col" className="py-1.5 pr-2 font-medium">회원 방문자</th>
+                <th scope="col" className="py-1.5 pr-2 font-medium">세션 로그인</th>
+                <th scope="col" className="py-1.5 pr-2 font-medium">세션 비로그인</th>
+                <th scope="col" className="py-1.5 pr-2 font-medium">세션 합계</th>
+                <th scope="col" className="py-1.5 pr-2 font-medium">페이지뷰 로그인</th>
+                <th scope="col" className="py-1.5 pr-2 font-medium">페이지뷰 비로그인</th>
+                <th scope="col" className="py-1.5 pr-2 font-medium">페이지뷰 합계</th>
+                <th scope="col" className="py-1.5 pr-2 font-medium">측정</th>
+              </tr>
+            </thead>
+            <tbody>
+              {figures.map((f) => {
+                const partial = f.visitCoverage === "partial";
+                return (
+                  <tr key={f.day} className="border-t border-border text-foreground">
+                    <th scope="row" className="py-1.5 pr-2 text-left font-medium">
+                      {f.day} ({DOW[new Date(`${f.day}T00:00:00Z`).getUTCDay()]})
+                    </th>
+                    <td className="py-1.5 pr-2"><Value v={f.members} unit="" partial={f.membersCoverage === "partial"} /></td>
+                    <td className="py-1.5 pr-2"><Value v={f.sessionMember} unit="" partial={partial} /></td>
+                    <td className="py-1.5 pr-2"><Value v={f.sessionAnon} unit="" partial={partial} /></td>
+                    <td className="py-1.5 pr-2 font-semibold"><Value v={sum(f.sessionMember, f.sessionAnon)} unit="" /></td>
+                    <td className="py-1.5 pr-2"><Value v={f.pvMember} unit="" partial={partial} /></td>
+                    <td className="py-1.5 pr-2"><Value v={f.pvAnon} unit="" partial={partial} /></td>
+                    <td className="py-1.5 pr-2 font-semibold"><Value v={sum(f.pvMember, f.pvAnon)} unit="" /></td>
+                    <td className="py-1.5 pr-2 text-muted-foreground">{statusText(f.visitCoverage)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-border font-semibold text-foreground">
+                <th scope="row" className="py-1.5 pr-2 text-left">합계 (측정된 {report.measuredDays}일)</th>
+                <td className="py-1.5 pr-2 font-normal text-muted-foreground">더하지 않음</td>
+                <td className="py-1.5 pr-2"><Value v={totals.sessionMember} unit="" /></td>
+                <td className="py-1.5 pr-2"><Value v={totals.sessionAnon} unit="" /></td>
+                <td className="py-1.5 pr-2"><Value v={sessionTotal} unit="" /></td>
+                <td className="py-1.5 pr-2"><Value v={totals.pvMember} unit="" /></td>
+                <td className="py-1.5 pr-2"><Value v={totals.pvAnon} unit="" /></td>
+                <td className="py-1.5 pr-2"><Value v={pvTotal} unit="" /></td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </>
   );
 }

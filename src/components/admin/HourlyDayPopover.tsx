@@ -13,7 +13,7 @@ import { describeDays } from "@/lib/metrics/daySelection";
 // behind it) and closes with the close / 완료 button, Escape, or a press
 // outside it. The calendar stays mounted while closed, so a pick made just
 // before closing is still sent.
-export function HourlyDayPopover({ selected, today }: { selected: string[]; today: string }) {
+export function HourlyDayPopover({ selected, today, param }: { selected: string[]; today: string; param?: string }) {
   const [open, setOpen] = useState(false);
   const [days, setDays] = useState(selected);
   const selectedKey = selected.join(",");
@@ -93,7 +93,7 @@ export function HourlyDayPopover({ selected, today }: { selected: string[]; toda
             <XIcon className="size-4" />
           </button>
         </div>
-        <HourlyDayPicker selected={selected} today={today} onChosenChange={setDays} />
+        <HourlyDayPicker selected={selected} today={today} onChosenChange={setDays} param={param} />
         <div className="mt-3 flex justify-end">
           <button
             type="button"

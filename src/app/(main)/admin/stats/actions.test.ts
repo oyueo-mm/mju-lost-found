@@ -11,7 +11,8 @@ vi.mock("@/lib/metrics/userReport", async (importOriginal) => ({ ...(await impor
 const loadHourlyCells = vi.fn(async (days: string[]) => ({ hourly: true, days }));
 vi.mock("@/lib/metrics/hourly", async (importOriginal) => ({ ...(await importOriginal<object>()), loadHourlyCells }));
 const loadDayVisits = vi.fn(async (day: string) => ({ dayVisits: true, day }));
-vi.mock("@/lib/metrics/dayVisits", async (importOriginal) => ({ ...(await importOriginal<object>()), loadDayVisits }));
+const loadMultiDayVisits = vi.fn(async (days: string[]) => ({ dayVisits: true, figures: [], days }));
+vi.mock("@/lib/metrics/dayVisits", async (importOriginal) => ({ ...(await importOriginal<object>()), loadDayVisits, loadMultiDayVisits }));
 const toXlsx = vi.fn(() => Buffer.from("xlsx"));
 const toCsv = vi.fn(() => "csv");
 vi.mock("@/lib/metrics/export", async (importOriginal) => ({ ...(await importOriginal<object>()), toXlsx, toCsv }));
@@ -77,14 +78,19 @@ describe("운영 통계 내보내기 action", () => {
     expect(loadDayVisits).toHaveBeenLastCalledWith("2026-10-16");
     await exportStatsAction({ format: "xlsx", preset: "custom", from: "2026-10-01", to: "2026-10-05" });
     expect(loadDayVisits).toHaveBeenLastCalledWith("2026-10-05");
-    const csv = await exportStatsAction({ format: "csv", preset: "month", dataset: "dayVisits", visitDay: "2026-10-09" });
+    const csv = await exportStatsAction({ format: "csv", preset: "month", dataset: "dayVisits", visitDays: "2026-10-09" });
     expect(loadDayVisits).toHaveBeenLastCalledWith("2026-10-09");
     expect(csv).toMatchObject({ ok: true, filename: "mju-find-stats-day-visits_20261009.csv" });
-    // a day after today, or not a day at all: the default
-    for (const visitDay of ["2026-10-17", "2026-02-30", "x"]) {
-      await exportStatsAction({ format: "xlsx", preset: "month", visitDay });
-      expect(loadDayVisits).toHaveBeenLastCalledWith("2026-10-16");
-    }
+    // several days, as encoded in the URL
+    const many = await exportStatsAction({ format: "csv", preset: "month", dataset: "dayVisits", visitDays: "2026-10-01~2026-10-03,2026-10-05" });
+    expect(loadMultiDayVisits).toHaveBeenLastCalledWith(["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-05"]);
+    expect(many).toMatchObject({ ok: true, filename: "mju-find-stats-day-visits_20261001-20261005_4d.csv" });
+    // only days that cannot be chosen: nothing to export for this sheet
+    loadDayVisits.mockClear();
+    loadMultiDayVisits.mockClear();
+    await exportStatsAction({ format: "xlsx", preset: "month", visitDays: "2026-10-17,x" });
+    expect(loadDayVisits).not.toHaveBeenCalled();
+    expect(loadMultiDayVisits).not.toHaveBeenCalled();
   });
 
   it("rejects bad or oversized ranges without querying", async () => {
