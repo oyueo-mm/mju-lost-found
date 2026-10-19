@@ -1987,7 +1987,7 @@ model ApiMetricHourly {
 
 // ---------- DeploymentRecord ----------
 
-// 개발자 통계 > 배포 이력: one row per Vercel deployment, kept after Vercel
+// 개발 통계 > 배포 이력: one row per Vercel deployment, kept after Vercel
 // deletes the deployment (retention). Written by the deployment itself on
 // its first start (src/instrumentation.ts: id, environment, Git commit),
 // by the deploy recorder run next to the CLI (scripts/deployments: Vercel's

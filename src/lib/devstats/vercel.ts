@@ -3,7 +3,7 @@ import { unstable_cache } from "next/cache";
 import { upsertDeployment } from "./deployments";
 import { fromVercel, PREVIEW_ALIAS, PROJECT_ID, type VercelDeploymentRow } from "./vercelDeployment.mjs";
 
-// 개발자 통계 > Vercel API (optional). Only when VERCEL_API_TOKEN is set (a
+// 개발 통계 > Vercel API (optional). Only when VERCEL_API_TOKEN is set (a
 // server environment variable; Vercel has no read-only token -- see the
 // tab's notes): the project's deployments, which one serves Production, and
 // which one the fixed Preview URL points to. Three GET requests, cached 5

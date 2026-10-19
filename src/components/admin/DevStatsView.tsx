@@ -10,7 +10,7 @@ import type { DeployEnv, DevDashboard } from "@/lib/devstats/dashboard";
 import { graphOf, timeOf, traceCommit, type Change, type CurrentVersion, type Deployment, type Release } from "@/lib/devstats/releases";
 import { inspectorUrl } from "@/lib/devstats/vercelDeployment.mjs";
 
-// 개발자 통계 (/admin/stats?tab=dev): the repository's commits from GitHub
+// 개발 통계 (/admin/stats?tab=dev): the repository's commits from GitHub
 // and the Vercel deployments that carried them (lib/devstats). Read-only;
 // links go to GitHub and the Vercel dashboard. Filters live in the URL: dp
 // (period), da (developer), de (deployment environment), du (unit), dn
@@ -202,7 +202,7 @@ function FeedError({ feed }: { feed: Extract<CommitFeed, { ok: false }> }) {
     <div role="alert" className="flex gap-2 rounded-card border border-warning/50 bg-warning-muted px-3 py-2 text-xs leading-relaxed text-foreground">
       <AlertIcon className="mt-0.5 size-4 shrink-0 text-warning" />
       <div>
-        <p className="font-semibold">개발자 통계를 불러오지 못했습니다.</p>
+        <p className="font-semibold">GitHub 커밋 기록을 불러오지 못했습니다.</p>
         <p>{text} 다른 운영 통계와 서비스 기능에는 영향이 없습니다.</p>
       </div>
     </div>

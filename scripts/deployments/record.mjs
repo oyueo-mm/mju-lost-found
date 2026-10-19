@@ -16,7 +16,7 @@
 // written with --confirm-production, and only once its migration
 // (20261107000000_deployment_record) has been applied there. Each
 // environment's deployments record themselves only in their own database,
-// so after the release use --db both: then Production's 개발자 통계 also
+// so after the release use --db both: then Production's 개발 통계 also
 // sees the Preview deployments. Deployments Vercel has already deleted are
 // not recreated.
 import { spawnSync } from "node:child_process";

@@ -1,7 +1,7 @@
 // GET /api/version -- which deployment answers on this host: its Vercel
 // deployment id, environment and Git commit (Vercel's system environment
 // variables). Public on purpose and nothing else: the repository is
-// public, and 개발자 통계 reads Production's answer to show the version that
+// public, and 개발 통계 reads Production's answer to show the version that
 // is actually live without a Vercel token. No database, no secrets.
 // Cached at the edge for a minute.
 export const dynamic = "force-dynamic";

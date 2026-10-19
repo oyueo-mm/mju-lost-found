@@ -1,7 +1,7 @@
 import { addDays } from "@/lib/metrics/daySelection";
 import type { CommitAuthor, DevCommit } from "./github";
 
-// 개발자 통계, computed from the cached commit list (pure): what the tab
+// 개발 통계, computed from the cached commit list (pure): what the tab
 // shows for a period and, optionally, one developer. Days are KST calendar
 // days of the authored time (what GitHub's own activity graph uses).
 // Commit counts describe how work was recorded, not how much was done or

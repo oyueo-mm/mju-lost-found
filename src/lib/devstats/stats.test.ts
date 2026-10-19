@@ -30,7 +30,7 @@ const commits = [
   commit("c5", "2026-06-01T00:00:00Z", "c"),
 ];
 
-describe("개발자 통계", () => {
+describe("개발 통계", () => {
   it("counts KST days of the authored time", () => {
     expect(kstDayOf("2026-10-18T15:30:00Z")).toBe("2026-10-19");
     expect(kstDayOf("2026-10-18T14:59:00Z")).toBe("2026-10-18");

@@ -56,7 +56,7 @@ export const API_ROUTE_NOTES: Record<string, string> = {
   "PATCH /api/admin/users/[id]": "관리자: 회원 권한 변경·이용 정지·해제",
   "PATCH /api/admin/settings": "관리자: 서비스 설정 변경 (Google 테스트 모드)",
   "GET /api/admin/settings": "매일 새벽 자동 정리 작업 (Vercel Cron, 보관 기간 지난 기록 삭제, 토큰이 있으면 배포 이력 동기화)",
-  "GET /api/version": "지금 응답한 배포의 ID·환경·커밋 (개발자 통계의 Production 버전 확인용, 공개)",
+  "GET /api/version": "지금 응답한 배포의 ID·환경·커밋 (개발 통계의 Production 버전 확인용, 공개)",
   // 내부 측정 (API 요청이 아님)
   "ai:text-load": "AI 문장 모델 로딩 (서버 인스턴스당 한 번, 콜드 스타트)",
   "ai:text-embed": "AI 문장 임베딩 1건 계산 (검색어·게시글)",

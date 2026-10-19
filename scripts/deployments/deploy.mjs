@@ -9,7 +9,7 @@
 //       vercel deploy --prod
 //   recording: the Preview database by default; after the release (its
 //   DeploymentRecord migration on Production) add
-//   --db both --confirm-production so both environments' 개발자 통계 see
+//   --db both --confirm-production so both environments' 개발 통계 see
 //   every deployment.
 //
 // Deploy from a clean working tree: the CLI then sends the exact commit

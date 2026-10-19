@@ -20,7 +20,7 @@ import {
 import { bucketOf, buildDevReport, kstDayOf, type DevPeriod, type DevReport, type DevUnit } from "./stats";
 import { loadVercelFeed, type VercelFeed } from "./vercel";
 
-// 개발자 통계: everything the tab shows, each source on its own -- a failed
+// 개발 통계: everything the tab shows, each source on its own -- a failed
 // GitHub, Vercel or database read only empties its own part.
 
 export type DeployEnv = "all" | "production" | "preview" | "commits" | "deploys";

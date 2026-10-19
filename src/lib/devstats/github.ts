@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { unstable_cache } from "next/cache";
 
-// 개발자 통계 (/admin/stats?tab=dev): the commits of the service's GitHub
+// 개발 통계 (/admin/stats?tab=dev): the commits of the service's GitHub
 // repository, read from the official REST API (GET /repos/{owner}/{repo}/
 // commits on the deployed branch) on the server only.
 //

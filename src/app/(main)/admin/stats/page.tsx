@@ -210,7 +210,7 @@ export default async function AdminStatsPage({
           {tab === "admins"
             ? `최근 ${STRIP_DAYS}일 · 한국 시간 기준 · 관리자 본인의 운영 기록만 다룹니다.`
             : tab === "dev"
-              ? "서비스 GitHub 저장소의 커밋 기록 · 한국 시간 기준 · 이용자 통계와는 별개입니다."
+              ? "서비스 개발·배포 이력: GitHub 커밋과 Vercel 배포(Production·Preview) · 한국 시간 기준 · 이용자 통계와는 별개입니다."
               : `${period.label} · ${UNIT_TEXT[unit]} 집계 · 한국 시간 기준(진행 중인 기간은 오늘 현재까지) · 개인정보와 검색어 원문은 수집하지 않습니다.`}
         </p>
       </div>
@@ -231,7 +231,7 @@ export default async function AdminStatsPage({
           관리자 활동
         </Link>
         <Link href="/admin/stats?tab=dev" aria-current={tab === "dev" ? "page" : undefined} className={tabClass(tab === "dev")}>
-          개발자 통계
+          개발 통계
         </Link>
       </nav>
       {(tab === "ops" || tab === "users") && (
