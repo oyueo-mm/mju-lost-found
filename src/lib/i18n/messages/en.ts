@@ -490,7 +490,7 @@ export const en: Dictionary = {
   "auth.login.google": "Sign in with Google",
   "auth.login.domainNotice": "Only Myongji University accounts (@mju.ac.kr) or external accounts approved by an administrator can sign in.",
   "auth.login.noAccount": "Don't have an MJU account?",
-  "auth.login.accountGuide": "Myongji University account guide",
+  "auth.login.accountGuide": "How to create one",
   "auth.login.troublePrompt": "Having trouble signing in?",
   "auth.login.contactSupport": "Contact the team",
   "auth.login.error.accessDenied": "Only Myongji University accounts (@mju.ac.kr) or external accounts approved by an administrator can use this service.",

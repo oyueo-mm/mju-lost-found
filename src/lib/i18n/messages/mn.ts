@@ -490,7 +490,7 @@ export const mn: Dictionary = {
   "auth.login.google": "Google-ээр нэвтрэх",
   "auth.login.domainNotice": "Зөвхөн сургуулийн бүртгэл (@mju.ac.kr) эсвэл админы баталсан гадны бүртгэлээр нэвтрэх боломжтой.",
   "auth.login.noAccount": "Мёнжийн бүртгэл байхгүй юу?",
-  "auth.login.accountGuide": "Сургуулийн бүртгэл үүсгэх заавар",
+  "auth.login.accountGuide": "Үүсгэх заавар",
   "auth.login.troublePrompt": "Нэвтрэхэд асуудал гарсан уу?",
   "auth.login.contactSupport": "Ажиллуулах багт хандах",
   "auth.login.error.accessDenied": "Зөвхөн Мёнжи их сургуулийн бүртгэл (@mju.ac.kr) эсвэл админы баталсан гадны бүртгэл ашиглах боломжтой.",

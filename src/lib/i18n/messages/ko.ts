@@ -515,7 +515,7 @@ export const ko = {
   "auth.login.google": "Google 계정으로 로그인",
   "auth.login.domainNotice": "명지대학교 Google 계정(@mju.ac.kr)으로 로그인해 주세요. 관리자 승인을 받은 외부 관계자는 승인된 Google 계정으로 로그인할 수 있어요.",
   "auth.login.noAccount": "명지대 계정이 없으신가요?",
-  "auth.login.accountGuide": "명지대학교 학교 계정 생성 가이드",
+  "auth.login.accountGuide": "계정 생성 방법 보기",
   "auth.login.troublePrompt": "로그인에 문제가 있으신가요?",
   "auth.login.contactSupport": "운영팀에 문의하기",
   "auth.login.error.accessDenied": "명지대학교 계정(@mju.ac.kr) 또는 관리자가 승인한 외부 관계자 계정만 이용할 수 있습니다.",

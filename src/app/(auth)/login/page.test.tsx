@@ -42,7 +42,7 @@ describe("login page", () => {
     // the account help: a title and one guide button to /account-guide, no extra explanation
     expect(html).toContain(ko["auth.login.noAccount"]);
     expect(html).toContain(ko["auth.login.accountGuide"]);
-    expect(ko["auth.login.accountGuide"]).toBe("명지대학교 학교 계정 생성 가이드");
+    expect(ko["auth.login.accountGuide"]).toBe("계정 생성 방법 보기");
     expect(html).toContain("href=\"/account-guide\"");
     expect(html).not.toContain("학생정보시스템에서 직접");
   });
