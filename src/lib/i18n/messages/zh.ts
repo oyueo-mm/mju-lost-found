@@ -481,11 +481,11 @@ export const zh: Dictionary = {
   "report.submitting": "提交中…",
 
   "auth.login.title": "MJU Find",
-  "auth.login.subtitle": "登录后即可发布失物和招领信息，并使用聊天和通知功能。\n搜索和浏览无需登录也可以使用。",
+  "auth.login.subtitle": "登录后即可发布失物和招领信息，并使用聊天和通知功能。",
   "auth.login.google": "使用 Google 登录",
   "auth.login.domainNotice": "仅学校账号（@mju.ac.kr）或经管理员批准的外部账号可以登录。",
   "auth.login.noAccount": "还没有明知大学账号？",
-  "auth.login.accountGuide": "查看账号创建方法", "auth.login.accountGuideNote": "账号需在明知大学学生信息系统中自行创建，MJU Find 仅提供创建方法说明。",
+  "auth.login.accountGuide": "明知大学校园账号创建指南",
   "auth.login.troublePrompt": "登录遇到问题？",
   "auth.login.contactSupport": "联系运营团队",
   "auth.login.error.accessDenied": "仅明知大学账号（@mju.ac.kr）或经管理员批准的外部账号可以使用。",

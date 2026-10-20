@@ -95,7 +95,7 @@ export default async function LoginPage({
           <LogoMark size={56} />
           <div className="flex flex-col items-center gap-1.5">
             <h1 className="text-xl font-semibold tracking-tight text-foreground">{t("auth.login.title")}</h1>
-            <p className="text-sm whitespace-pre-line [&:lang(ko)]:break-keep text-muted-foreground">{t("auth.login.subtitle")}</p>
+            <p className="text-sm [&:lang(ko)]:break-keep text-muted-foreground">{t("auth.login.subtitle")}</p>
           </div>
         </div>
 
@@ -163,20 +163,17 @@ export default async function LoginPage({
 
         {/* No MJU account yet: its own box right under the Google button
             (it used to be one small line further down), the guide as a
-            full-width, 44px-tall link. The note says the account is made in
-            the university's own system -- MJU Find only explains how. */}
+            full-width, 44px-tall link to the guide (the account itself is made
+            in the university's own system). */}
         <section aria-labelledby="login-no-account" className="-mt-3 flex w-full flex-col gap-3 rounded-card border border-primary/25 bg-primary-muted/50 p-4 text-left">
-          <div className="flex flex-col gap-1">
-            <h2 id="login-no-account" className="text-sm font-semibold text-foreground">
-              {t("auth.login.noAccount")}
-            </h2>
-            <p className="text-xs leading-relaxed [&:lang(ko)]:break-keep text-muted-foreground">{t("auth.login.accountGuideNote")}</p>
-          </div>
+          <h2 id="login-no-account" className="text-sm font-semibold text-foreground">
+            {t("auth.login.noAccount")}
+          </h2>
           <Link
             href="/account-guide"
             className="flex min-h-11 w-full items-center justify-between gap-2 rounded-lg border border-primary/30 bg-card px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
-            <span>{t("auth.login.accountGuide")}</span>
+            <span className="text-balance [&:lang(ko)]:break-keep">{t("auth.login.accountGuide")}</span>
             <ChevronRightIcon aria-hidden className="size-4 shrink-0" />
           </Link>
         </section>

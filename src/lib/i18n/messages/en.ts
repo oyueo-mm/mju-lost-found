@@ -486,11 +486,11 @@ export const en: Dictionary = {
   "report.submitting": "Submitting...",
 
   "auth.login.title": "MJU Find",
-  "auth.login.subtitle": "Sign in to post lost and found items, and to use chat and notifications.\nSearching and browsing work without signing in.",
+  "auth.login.subtitle": "Sign in to post lost and found items, and to use chat and notifications.",
   "auth.login.google": "Sign in with Google",
   "auth.login.domainNotice": "Only Myongji University accounts (@mju.ac.kr) or external accounts approved by an administrator can sign in.",
   "auth.login.noAccount": "Don't have an MJU account?",
-  "auth.login.accountGuide": "See how to create one", "auth.login.accountGuideNote": "Accounts are created in Myongji University's own student system. MJU Find only shows you how.",
+  "auth.login.accountGuide": "Myongji University account guide",
   "auth.login.troublePrompt": "Having trouble signing in?",
   "auth.login.contactSupport": "Contact the team",
   "auth.login.error.accessDenied": "Only Myongji University accounts (@mju.ac.kr) or external accounts approved by an administrator can use this service.",

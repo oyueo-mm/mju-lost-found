@@ -484,11 +484,11 @@ export const vi: Dictionary = {
   "report.submitting": "Đang gửi...",
 
   "auth.login.title": "MJU Find",
-  "auth.login.subtitle": "Đăng nhập để đăng tin đồ thất lạc, đồ nhặt được, đồng thời dùng trò chuyện và nhận thông báo.\nTìm kiếm và xem không cần đăng nhập.",
+  "auth.login.subtitle": "Đăng nhập để đăng tin đồ thất lạc, đồ nhặt được, đồng thời dùng trò chuyện và nhận thông báo.",
   "auth.login.google": "Đăng nhập bằng Google",
   "auth.login.domainNotice": "Chỉ tài khoản của trường (@mju.ac.kr) hoặc tài khoản bên ngoài được quản trị viên phê duyệt mới có thể đăng nhập.",
   "auth.login.noAccount": "Bạn chưa có tài khoản Myongji?",
-  "auth.login.accountGuide": "Xem cách tạo tài khoản", "auth.login.accountGuideNote": "Tài khoản được tạo trên hệ thống sinh viên của Đại học Myongji. MJU Find chỉ hướng dẫn cách tạo.",
+  "auth.login.accountGuide": "Hướng dẫn tạo tài khoản Đại học Myongji",
   "auth.login.troublePrompt": "Bạn gặp vấn đề khi đăng nhập?",
   "auth.login.contactSupport": "Liên hệ đội ngũ vận hành",
   "auth.login.error.accessDenied": "Chỉ tài khoản Đại học Myongji (@mju.ac.kr) hoặc tài khoản bên ngoài được quản trị viên phê duyệt mới sử dụng được.",

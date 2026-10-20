@@ -36,13 +36,15 @@ describe("login page", () => {
     expect(html.indexOf(ko["auth.login.domainNotice"])).toBeLessThan(html.indexOf(ko["auth.login.google"]));
     expect(ko["auth.login.domainNotice"]).toContain("@mju.ac.kr");
     expect(ko["auth.login.domainNotice"]).toMatch(/관리자 승인을 받은 외부 관계자/);
-    // signing in is not needed to search
+    // the top line says only what signing in gives
     expect(html).toContain(ko["auth.login.subtitle"]);
-    expect(ko["auth.login.subtitle"]).toContain("로그인 없이");
-    // the benefit of signing in comes first, searching without it second
-    const [first, second] = ko["auth.login.subtitle"].split("\n");
-    expect(first).toBe("로그인하면 분실물·습득물을 등록하고, 채팅과 알림을 이용할 수 있어요.");
-    expect(second).toBe("검색과 열람은 로그인 없이도 가능해요.");
+    expect(ko["auth.login.subtitle"]).toBe("로그인하면 분실물·습득물을 등록하고, 채팅과 알림을 이용할 수 있어요.");
+    // the account help: a title and one guide button to /account-guide, no extra explanation
+    expect(html).toContain(ko["auth.login.noAccount"]);
+    expect(html).toContain(ko["auth.login.accountGuide"]);
+    expect(ko["auth.login.accountGuide"]).toBe("명지대학교 학교 계정 생성 가이드");
+    expect(html).toContain("href=\"/account-guide\"");
+    expect(html).not.toContain("학생정보시스템에서 직접");
   });
 
   it("shows the account restriction once after an AccessDenied rejection", async () => {

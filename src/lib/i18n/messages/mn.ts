@@ -486,11 +486,11 @@ export const mn: Dictionary = {
   "report.submitting": "Илгээж байна...",
 
   "auth.login.title": "MJU Find",
-  "auth.login.subtitle": "Нэвтэрвэл гээгдсэн, олдсон эд зүйлээ бүртгэж, чат болон мэдэгдлийг ашиглах боломжтой.\nХайх, үзэхэд нэвтрэх шаардлагагүй.",
+  "auth.login.subtitle": "Нэвтэрвэл гээгдсэн, олдсон эд зүйлээ бүртгэж, чат болон мэдэгдлийг ашиглах боломжтой.",
   "auth.login.google": "Google-ээр нэвтрэх",
   "auth.login.domainNotice": "Зөвхөн сургуулийн бүртгэл (@mju.ac.kr) эсвэл админы баталсан гадны бүртгэлээр нэвтрэх боломжтой.",
   "auth.login.noAccount": "Мёнжийн бүртгэл байхгүй юу?",
-  "auth.login.accountGuide": "Бүртгэл үүсгэх аргыг харах", "auth.login.accountGuideNote": "Бүртгэлийг Мёнжи их сургуулийн оюутны системд өөрөө үүсгэнэ. MJU Find зөвхөн арга замыг зааж өгнө.",
+  "auth.login.accountGuide": "Сургуулийн бүртгэл үүсгэх заавар",
   "auth.login.troublePrompt": "Нэвтрэхэд асуудал гарсан уу?",
   "auth.login.contactSupport": "Ажиллуулах багт хандах",
   "auth.login.error.accessDenied": "Зөвхөн Мёнжи их сургуулийн бүртгэл (@mju.ac.kr) эсвэл админы баталсан гадны бүртгэл ашиглах боломжтой.",
