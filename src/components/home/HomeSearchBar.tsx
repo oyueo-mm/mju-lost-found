@@ -3,14 +3,17 @@
 import { useMemo } from "react";
 
 import { AISearchPanel } from "@/components/search/AISearchPanel";
+import { keywordSearchHref } from "@/components/search/searchModeParams";
 import { useI18n } from "@/lib/i18n/client";
 
-export const HOME_POPULAR_SEARCHES = ["카드", "지갑", "무선 이어폰", "휴대폰"] as const;
+// A fixed list (not counted from real searches). A tap opens 키워드 검색
+// for that word with its results (keywordSearchHref) -- not an AI search.
+export const HOME_POPULAR_SEARCHES = ["카드", "지갑", "버즈", "에어팟", "휴대폰"] as const;
 
 // landing hero: the bar a little taller and lifted (the page's main action),
 // the popular searches small and quiet underneath
 const LANDING_CONTROLS =
-  "!gap-2.5 [&>form]:border-primary/25 [&>form]:py-2 [&>form]:shadow-md [&>form]:shadow-primary/5 [&>div]:gap-1.5 [&>div>span]:font-normal [&>div>button]:border-transparent [&>div>button]:bg-muted/70 [&>div>button]:px-2.5 [&>div>button]:py-0.5";
+  "!gap-2.5 [&>form]:border-primary/25 [&>form]:py-2 [&>form]:shadow-md [&>form]:shadow-primary/5 [&>div]:gap-1.5 [&>div>span]:font-normal [&>div>a]:border-transparent [&>div>a]:bg-muted/70 [&>div>a]:px-2.5 [&>div>a]:py-0.5";
 
 // Home UX 단순화 Phase: 홈의 검색은 이제 고를 것이 없다 -- AI 검색으로,
 // 습득물 게시판을 대상으로 고정된다. 사용자는 검색창에 찾는 물건을
@@ -50,8 +53,9 @@ export function HomeSearchBar({ variant = "home" }: { variant?: "home" | "landin
   const quickSearchItems = [
     { query: HOME_POPULAR_SEARCHES[0], label: t("home.popular.card") },
     { query: HOME_POPULAR_SEARCHES[1], label: t("home.popular.wallet") },
-    { query: HOME_POPULAR_SEARCHES[2], label: t("home.popular.wirelessEarbuds") },
-    { query: HOME_POPULAR_SEARCHES[3], label: t("home.popular.phone") },
+    { query: HOME_POPULAR_SEARCHES[2], label: t("home.popular.buds") },
+    { query: HOME_POPULAR_SEARCHES[3], label: t("home.popular.airpods") },
+    { query: HOME_POPULAR_SEARCHES[4], label: t("home.popular.phone") },
   ];
   const animatedPlaceholders = useMemo(
     () => [
@@ -85,6 +89,7 @@ export function HomeSearchBar({ variant = "home" }: { variant?: "home" | "landin
       placeholder={animatedPlaceholders[0] ?? t("home.aiPlaceholder")}
       quickSearchLabel={t("home.popularSearches")}
       quickSearchItems={quickSearchItems}
+      quickSearchHref={keywordSearchHref}
       controlsClassName={`mx-auto w-full max-w-xl text-center [&>div]:justify-center [&>p]:text-center ${
         locale === "fr" ? "!gap-2 sm:!gap-3 [&>div]:gap-1.5 sm:[&>div]:gap-2" : ""
       } ${landing ? LANDING_CONTROLS : ""}`}

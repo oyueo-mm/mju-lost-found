@@ -1,4 +1,5 @@
-import { LinkButton } from "@/components/ui/Button";
+import { buttonClassName, LinkButton } from "@/components/ui/Button";
+import { KeywordSearchLink } from "./KeywordSearchLink";
 import { getTranslator } from "@/lib/i18n/server";
 
 // Phase K: the id lets LandingStickyCta hide its floating button while
@@ -18,9 +19,10 @@ export async function FinalCta() {
       <p className="max-w-sm text-sm text-muted-foreground md:text-base">
         {t("landing.finalCta.description")}
       </p>
-      <LinkButton href="/search" size="md" className="px-8 hover:shadow-md motion-safe:hover:-translate-y-0.5">
+      {/* 키워드 검색 (KeywordSearchLink) */}
+      <KeywordSearchLink className={buttonClassName("primary", "md", "px-8 hover:shadow-md motion-safe:hover:-translate-y-0.5")}>
         {t("landing.searchCta")}
-      </LinkButton>
+      </KeywordSearchLink>
       {/* posting stays second, as in the hero */}
       <div className="grid w-full max-w-xs grid-cols-2 gap-2 sm:max-w-sm">
         <LinkButton href="/lost/new" variant="secondary" size="sm" className="h-auto min-h-9 px-3 py-1.5 text-[0.8125rem] leading-tight whitespace-normal">

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveSearchUiMode, withSearchMode } from "./searchModeParams";
+import { keywordSearchHref, resolveSearchUiMode, withSearchMode } from "./searchModeParams";
 
 const p = (query: string) => new URLSearchParams(query);
 const asObject = (query: string) => Object.fromEntries(new URLSearchParams(query));
@@ -64,5 +64,18 @@ describe("withSearchMode", () => {
         expect(resolveSearchUiMode(p(withSearchMode("period=1w", mode, defaultMode)), defaultMode)).toBe(mode);
       }
     }
+  });
+});
+
+describe("keywordSearchHref", () => {
+  it("opens /search in 키워드 검색, with the words when there are any", () => {
+    expect(keywordSearchHref()).toBe("/search?searchMode=keyword");
+    expect(keywordSearchHref("   ")).toBe("/search?searchMode=keyword");
+    const url = new URL(keywordSearchHref(" 에어팟 "), "https://x");
+    expect(url.pathname).toBe("/search");
+    expect(resolveSearchUiMode(url.searchParams, "ai")).toBe("keyword");
+    expect(url.searchParams.get("q")).toBe("에어팟");
+    // no API `mode`: the page validates that one and would drop the filters
+    expect(url.searchParams.has("mode")).toBe(false);
   });
 });

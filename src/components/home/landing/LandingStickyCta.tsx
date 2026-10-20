@@ -1,11 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useI18n } from "@/lib/i18n/client";
+import { HERO_SEARCH_ID, KeywordSearchLink } from "./KeywordSearchLink";
 
-// Phase K: the landing page's floating "잃어버린 물건 찾기" (to /search; was
+// Phase K: the landing page's floating "잃어버린 물건 찾기" (to 키워드 검색 on
+// /search, with what the hero search box holds -- KeywordSearchLink; was
 // "로그인하고 시작하기" -- searching needs no account, so it is the action).
 //
 // The landing page is long (hero -> features -> two showcases -> how it
@@ -19,7 +20,7 @@ import { useI18n } from "@/lib/i18n/client";
 //
 // It watches the two existing CTAs by id rather than taking refs, so Hero
 // and FinalCta stay Server Components (they only gained an id attribute).
-const HERO_CTA_ID = "landing-hero-cta";
+const HERO_CTA_ID = HERO_SEARCH_ID;
 const FINAL_CTA_ID = "landing-final-cta";
 
 export function LandingStickyCta() {
@@ -65,15 +66,14 @@ export function LandingStickyCta() {
         visible ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
       }`}
     >
-      <Link
-        href="/search"
+      <KeywordSearchLink
         tabIndex={visible ? undefined : -1}
         className={`inline-flex h-11 w-full max-w-sm items-center justify-center rounded-full bg-primary px-6 text-sm font-medium text-primary-foreground shadow-lg transition-opacity hover:opacity-90 md:w-auto ${
           visible ? "pointer-events-auto" : ""
         }`}
       >
         {t("landing.searchCta")}
-      </Link>
+      </KeywordSearchLink>
     </div>
   );
 }

@@ -33,7 +33,7 @@ export type ButtonSize = keyof typeof SIZES;
 // not smaller" rule globals.css's own [data-reveal]/[data-fade-in] blocks
 // already follow. Kept subtle (2% scale, default duration) so it reads as
 // "this responded to your tap", not a bounce.
-function buttonClassName(variant: ButtonVariant, size: ButtonSize, className: string) {
+export function buttonClassName(variant: ButtonVariant, size: ButtonSize, className: string) {
   return `inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full font-medium transition motion-safe:active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 ${VARIANTS[variant]} ${SIZES[size]} ${className}`;
 }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { validateImageFile } from "@/lib/images/client";
@@ -36,6 +37,9 @@ type AISearchPanelProps = {
   placeholder?: string;
   quickSearchLabel?: string;
   quickSearchItems?: readonly { label: string; query: string }[];
+  // Given: each quick search is a link there (the home's popular searches
+  // open 키워드 검색) instead of running this AI search.
+  quickSearchHref?: (query: string) => string;
   controlsClassName?: string;
   // 게시판 리디자인 Phase: rendered right under the search input (the
   // boards' category/period filters), and the card layout for results --
@@ -55,6 +59,9 @@ type AISearchPanelProps = {
   hideHint?: boolean;
 };
 
+const QUICK_SEARCH_CLASS =
+  "rounded-full border border-border bg-background/70 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50";
+
 export function resolveAiSearchQuery(currentQuery: string, quickSearchQuery?: string): string {
   return (quickSearchQuery ?? currentQuery).trim();
 }
@@ -73,6 +80,7 @@ export function AISearchPanel({
   placeholder,
   quickSearchLabel,
   quickSearchItems,
+  quickSearchHref,
   controlsClassName,
   belowInput,
   cardVariant = "default",
@@ -337,18 +345,24 @@ export function AISearchPanel({
         {quickSearchLabel && quickSearchItems && quickSearchItems.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 px-1">
             <span className="text-xs font-medium text-muted-foreground">{quickSearchLabel}</span>
-            {quickSearchItems.map((item) => (
+            {quickSearchItems.map((item) =>
+              quickSearchHref ? (
+                <Link key={item.query} href={quickSearchHref(item.query)} className={QUICK_SEARCH_CLASS}>
+                  {item.label}
+                </Link>
+              ) : (
               <button
                 key={item.query}
                 type="button"
                 value={item.query}
                 onClick={() => void runSearch(resolveAiSearchQuery(query, item.query))}
                 disabled={pending}
-                className="rounded-full border border-border bg-background/70 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary-muted hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50"
+                className={QUICK_SEARCH_CLASS}
               >
                 {item.label}
               </button>
-            ))}
+              ),
+            )}
           </div>
         )}
         {hasImageTypeConflict && (

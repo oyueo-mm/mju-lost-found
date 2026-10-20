@@ -13,7 +13,7 @@ import { zh } from "./zh";
 describe("locale dictionary parity", () => {
   it("exposes every Korean dictionary key in all supported locales", () => {
     const keySet = Object.keys(ko).sort();
-    expect(keySet).toHaveLength(762);
+    expect(keySet).toHaveLength(764);
 
     for (const dictionary of [en, zh, vi, mn, ja, fr]) {
       expect(Object.keys(dictionary).sort()).toEqual(keySet);
@@ -42,6 +42,8 @@ describe("locale dictionary parity", () => {
       "auth.login.title",
       "brand.name",
       "brand.shortName",
+      "home.popular.airpods",
+      "home.popular.buds",
       "taxonomy.subcategory.earphones.airpods",
       "taxonomy.subcategory.earphones.buds",
       "taxonomy.subcategory.phone.lg",
@@ -56,6 +58,9 @@ describe("locale dictionary parity", () => {
       "form.campus",
       "form.description",
       "form.photos",
+      "home.popular.airpods",
+      "home.popular.buds",
+      "landing.feature.recommend.title",
       "me.notifications",
       "nav.mobile.admin",
       "nav.mobile.chat",
@@ -63,6 +68,7 @@ describe("locale dictionary parity", () => {
       "notification.title",
       "organization.description",
       "organization.inactive",
+      "recommend.title",
       "report.reason.spam",
       "search.filter.campus",
       "taxonomy.subcategory.earphones.airpods",

@@ -37,3 +37,14 @@ export function withSearchMode(search: string, mode: SearchUiMode, defaultMode: 
   else params.set(SEARCH_MODE_PARAM, mode);
   return params.toString();
 }
+
+// /search opened in 키워드 검색 (its default is AI), optionally with search
+// words: the server renders their keyword results right away -- the same
+// URL the page's own keyword form produces. Used by the home's "잃어버린
+// 물건 찾기" buttons and popular searches.
+export function keywordSearchHref(q?: string): string {
+  const params = new URLSearchParams({ [SEARCH_MODE_PARAM]: "keyword" });
+  const words = q?.trim();
+  if (words) params.set("q", words);
+  return `/search?${params.toString()}`;
+}

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { signIn } from "@/lib/auth/auth";
 import { getCurrentUser, getRejoinIdentityId, hasRequiredConsents, sanitizeCallbackUrl, type LoginReason } from "@/lib/auth/session";
 import { isGoogleTestModeEnabled } from "@/lib/settings/service";
+import { ChevronRightIcon } from "@/components/icons";
 import { LogoMark } from "@/components/layout/Logo";
 import { Button } from "@/components/ui/Button";
 import { getTranslator } from "@/lib/i18n/server";
@@ -160,20 +161,34 @@ export default async function LoginPage({
           </Button>
         </form>
 
-        <div className="flex w-full flex-col items-center gap-1.5 border-t border-border/60 pt-6">
-          <p className="text-sm text-muted-foreground">{t("auth.login.noAccount")}</p>
-          <Link href="/account-guide" className="text-sm font-medium text-primary hover:opacity-80">
-            {t("auth.login.accountGuide")}
+        {/* No MJU account yet: its own box right under the Google button
+            (it used to be one small line further down), the guide as a
+            full-width, 44px-tall link. The note says the account is made in
+            the university's own system -- MJU Find only explains how. */}
+        <section aria-labelledby="login-no-account" className="-mt-3 flex w-full flex-col gap-3 rounded-card border border-primary/25 bg-primary-muted/50 p-4 text-left">
+          <div className="flex flex-col gap-1">
+            <h2 id="login-no-account" className="text-sm font-semibold text-foreground">
+              {t("auth.login.noAccount")}
+            </h2>
+            <p className="text-xs leading-relaxed [&:lang(ko)]:break-keep text-muted-foreground">{t("auth.login.accountGuideNote")}</p>
+          </div>
+          <Link
+            href="/account-guide"
+            className="flex min-h-11 w-full items-center justify-between gap-2 rounded-lg border border-primary/30 bg-card px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            <span>{t("auth.login.accountGuide")}</span>
+            <ChevronRightIcon aria-hidden className="size-4 shrink-0" />
           </Link>
-          {/* Reachable without signing in -- the one place a user who can't
-              log in can still ask for help. */}
-          <p className="mt-2 text-xs text-muted-foreground">
-            {t("auth.login.troublePrompt")}{" "}
-            <a href={SUPPORT_MAILTO} className="font-medium text-primary hover:opacity-80">
-              {t("auth.login.contactSupport")}
-            </a>
-          </p>
-        </div>
+        </section>
+
+        {/* Reachable without signing in -- the one place a user who can't
+            log in can still ask for help. */}
+        <p className="-mt-3 text-xs text-muted-foreground">
+          {t("auth.login.troublePrompt")}{" "}
+          <a href={SUPPORT_MAILTO} className="font-medium text-primary hover:opacity-80">
+            {t("auth.login.contactSupport")}
+          </a>
+        </p>
       </div>
     </div>
   );
