@@ -484,7 +484,7 @@ export const vi: Dictionary = {
   "report.submitting": "Đang gửi...",
 
   "auth.login.title": "MJU Find",
-  "auth.login.subtitle": "Bạn có thể tìm kiếm và xem mà không cần đăng nhập. Hãy đăng nhập để đăng tin, trò chuyện và nhận thông báo.",
+  "auth.login.subtitle": "Đăng nhập để đăng tin đồ thất lạc, đồ nhặt được, đồng thời dùng trò chuyện và nhận thông báo.\nTìm kiếm và xem không cần đăng nhập.",
   "auth.login.google": "Đăng nhập bằng Google",
   "auth.login.domainNotice": "Chỉ tài khoản của trường (@mju.ac.kr) hoặc tài khoản bên ngoài được quản trị viên phê duyệt mới có thể đăng nhập.",
   "auth.login.noAccount": "Bạn chưa có tài khoản Myongji?",

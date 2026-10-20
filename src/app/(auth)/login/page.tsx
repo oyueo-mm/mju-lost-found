@@ -95,7 +95,7 @@ export default async function LoginPage({
           <LogoMark size={56} />
           <div className="flex flex-col items-center gap-1.5">
             <h1 className="text-xl font-semibold tracking-tight text-foreground">{t("auth.login.title")}</h1>
-            <p className="text-sm text-muted-foreground">{t("auth.login.subtitle")}</p>
+            <p className="text-sm whitespace-pre-line [&:lang(ko)]:break-keep text-muted-foreground">{t("auth.login.subtitle")}</p>
           </div>
         </div>
 

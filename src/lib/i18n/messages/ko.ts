@@ -511,7 +511,7 @@ export const ko = {
 
   // ---------- 로그인 / 온보딩 ----------
   "auth.login.title": "MJU Find",
-  "auth.login.subtitle": "검색·열람은 로그인 없이 할 수 있어요. 글 등록·채팅·알림에 로그인이 필요해요.",
+  "auth.login.subtitle": "로그인하면 분실물·습득물을 등록하고, 채팅과 알림을 이용할 수 있어요.\n검색과 열람은 로그인 없이도 가능해요.",
   "auth.login.google": "Google 계정으로 로그인",
   "auth.login.domainNotice": "명지대학교 Google 계정(@mju.ac.kr)으로 로그인해 주세요. 관리자 승인을 받은 외부 관계자는 승인된 Google 계정으로 로그인할 수 있어요.",
   "auth.login.noAccount": "명지대 계정이 없으신가요?",

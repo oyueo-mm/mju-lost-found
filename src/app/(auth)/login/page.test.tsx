@@ -39,6 +39,10 @@ describe("login page", () => {
     // signing in is not needed to search
     expect(html).toContain(ko["auth.login.subtitle"]);
     expect(ko["auth.login.subtitle"]).toContain("로그인 없이");
+    // the benefit of signing in comes first, searching without it second
+    const [first, second] = ko["auth.login.subtitle"].split("\n");
+    expect(first).toBe("로그인하면 분실물·습득물을 등록하고, 채팅과 알림을 이용할 수 있어요.");
+    expect(second).toBe("검색과 열람은 로그인 없이도 가능해요.");
   });
 
   it("shows the account restriction once after an AccessDenied rejection", async () => {

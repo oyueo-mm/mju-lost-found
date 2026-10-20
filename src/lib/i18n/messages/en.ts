@@ -486,7 +486,7 @@ export const en: Dictionary = {
   "report.submitting": "Submitting...",
 
   "auth.login.title": "MJU Find",
-  "auth.login.subtitle": "Search and browse without signing in. Sign in to post, chat and get notifications.",
+  "auth.login.subtitle": "Sign in to post lost and found items, and to use chat and notifications.\nSearching and browsing work without signing in.",
   "auth.login.google": "Sign in with Google",
   "auth.login.domainNotice": "Only Myongji University accounts (@mju.ac.kr) or external accounts approved by an administrator can sign in.",
   "auth.login.noAccount": "Don't have an MJU account?",
