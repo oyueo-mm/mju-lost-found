@@ -16,6 +16,12 @@ const $queryRaw = vi.fn(async (strings: TemplateStringsArray, ...values: unknown
   const q = Prisma.sql(strings, ...values);
   raws.push({ sql: q.sql, values: q.values });
   if (q.sql.includes("LEAST(")) return [{ ...earliest, roles_since: roleSince }];
+  // ActivityDay marks (legacyAudience.ts): stored rows carry their event-time role
+  if (q.sql.includes('FROM "ActivityDay"')) {
+    const rows = ((await activityDay.findMany()) ?? []) as { actor: string; day: Date; audience?: string | null }[];
+    return rows.map((m) => ({ day: m.day, actor: m.actor, audience: m.audience === undefined ? "internal" : m.audience, role: m.audience === undefined ? "service" : null, org: null }));
+  }
+  if (q.sql.includes("mju_legacy_day_audience")) return legacyDay(values);
   if (q.sql.includes("GROUP BY 1, 2, 3")) return daily;
   if (q.sql.includes("max(e.at)")) return totals;
   if (q.sql.includes('"AdminVisit"')) return visits;
@@ -23,6 +29,9 @@ const $queryRaw = vi.fn(async (strings: TemplateStringsArray, ...values: unknown
   return recent;
 });
 const user = { findMany: vi.fn(), aggregate: vi.fn() };
+// what the DB resolves an unstamped (pre-snapshot) mark to, by account id
+let legacyById: Record<number, string> = {};
+const legacyDay = (values: unknown[]) => (values[0] as number[]).map((id, i) => ({ i: i + 1, a: legacyById[id] ?? "unclassified" }));
 const metricDaily = { findFirst: vi.fn(), createMany: vi.fn(), findMany: vi.fn() };
 const activityDay = { findMany: vi.fn() };
 vi.mock("@/lib/db/prisma", () => ({ prisma: { $queryRaw, user, metricDaily, activityDay } }));
@@ -36,7 +45,7 @@ const { activityActor } = await import("./record");
 const NOW = new Date("2026-10-17T12:00:00Z");
 const admin = (id: number, extra: object = {}) => ({ id, nickname: `관리자${id}`, isAdmin: true, lastLoginAt: null, lastActiveAt: null, withdrawnAt: null, adminPermissions: [], ...extra });
 // the per-admin queries (all but the record-start lookup)
-const scoped = () => raws.filter((r) => !r.sql.includes("LEAST("));
+const scoped = () => raws.filter((r) => !r.sql.includes("LEAST(") && !r.sql.includes('FROM "ActivityDay"') && !r.sql.includes("mju_legacy_day_audience"));
 const timelineQuery = () => raws.find((r) => r.sql.includes("ORDER BY e.at DESC"));
 
 beforeEach(() => {
@@ -49,6 +58,7 @@ beforeEach(() => {
   signIns = [];
   earliest = { log: null, presence: null };
   roleSince = "2026-10-15";
+  legacyById = {};
   user.findMany.mockResolvedValue([admin(13), admin(20)]);
   user.aggregate.mockResolvedValue({ _min: { lastActiveAt: null } });
   metricDaily.findFirst.mockResolvedValue(null);
@@ -88,12 +98,21 @@ describe("관리자 활동: who is shown", () => {
 });
 
 describe("관리자 활동: 활동일", () => {
-  it("marks dates before role snapshots as unmeasured, even when older activity exists", async () => {
+  it("does not hide days before the role snapshot: they are measured from their own collection start", async () => {
     roleSince = "2026-10-17";
     earliest = { log: null, presence: "2026-10-10T00:00:00.000Z" };
     const r = await loadAdminActivity({ viewer: 13, all: true, now: NOW });
-    expect(r.dayStatus.slice(-3)).toEqual(["none", "none", "partial"]);
-    expect(r.presenceStatus.slice(-3)).toEqual(["none", "none", "partial"]);
+    expect(r.dayStatus.slice(-3)).toEqual(["partial", "full", "full"]);
+    expect(r.presenceStatus.slice(-3)).not.toContain("none");
+  });
+  it("counts an unstamped (pre-snapshot) mark only when the admin history shows the account was an admin that day", async () => {
+    const mark = (id: number, day: string) => ({ actor: activityActor(id), day: new Date(`${day}T00:00:00Z`), audience: null });
+    activityDay.findMany.mockResolvedValue([mark(13, "2026-10-16"), mark(20, "2026-10-16")]);
+    user.findMany.mockResolvedValue([admin(13), admin(20)]);
+    legacyById = { 13: "internal", 20: "member" }; // 20 was still a member that day
+    const r = await loadAdminActivity({ viewer: 13, all: true, now: NOW });
+    expect(r.admins.find((a) => a.id === 13)!.activeDays7).toBe(1);
+    expect(r.admins.find((a) => a.id === 20)!.activeDays7).toBe(0);
   });
   it("counts only measured days; before collection is 미측정, never 0", async () => {
     const mark = (id: number, day: string) => ({ actor: activityActor(id), day: new Date(`${day}T00:00:00Z`) });
@@ -111,8 +130,9 @@ describe("관리자 활동: 활동일", () => {
 
   it("never reads or shows a withdrawn account's marks", async () => {
     user.findMany.mockResolvedValue([admin(13), admin(20, { isAdmin: false, withdrawnAt: new Date(), lastActiveAt: new Date() })]);
-    await loadAdminActivity({ viewer: 13, all: true, now: NOW });
-    expect(activityDay.findMany.mock.calls[0][0].where.actor.in).toEqual([activityActor(13)]);
+    activityDay.findMany.mockResolvedValue([{ actor: activityActor(20), day: new Date("2026-10-16T00:00:00Z") }]);
+    const r = await loadAdminActivity({ viewer: 13, all: true, now: NOW });
+    expect(r.admins.find((a) => a.id === 20)?.strip ?? []).not.toContain("active");
   });
 });
 

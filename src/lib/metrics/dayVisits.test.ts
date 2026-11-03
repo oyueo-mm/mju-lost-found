@@ -15,13 +15,9 @@ vi.mock("@/lib/db/prisma", () => ({
       const sql = strings.join("?");
       if (sql.includes("meta.since.audience_snapshot")) return [{ day: "2026-10-15" }];
       if (sql.includes('FROM "ActivityDay"')) {
-        const [days] = values as [string[]];
-        const byDay = new Map<string, Set<string>>();
-        for (const m of marks) {
-          if (!days.includes(m.day) || m.audience === "internal") continue;
-          byDay.set(m.day, (byDay.get(m.day) ?? new Set()).add(m.actor));
-        }
-        return [...byDay].map(([day, set]) => ({ day, n: set.size }));
+        // the day filter arrives as a nested Prisma.sql fragment
+        const days = (values[0] as { values: unknown[] }).values[0] as string[];
+        return marks.filter((m) => days.includes(m.day)).map((m) => ({ day: m.day, actor: m.actor, audience: m.audience ?? "member", role: null, org: null }));
       }
       if (sql.includes("'visit.pv.anon'")) {
         const [days] = values as [string[]];

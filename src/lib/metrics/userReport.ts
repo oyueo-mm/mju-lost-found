@@ -3,17 +3,17 @@ import { prisma } from "@/lib/db/prisma";
 import { CURRENT_TERMS_VERSION, isAcceptedPrivacyVersion } from "@/lib/auth/terms";
 import { addPeriods, periodStart } from "./dashboard";
 import { activityActor, kstDay, USER_HOURLY_SINCE_METRIC } from "./record";
-import { audienceCollectionDay } from "./collection";
+import { loadClassifiedMarks, signupAudienceSql, tableAudienceSql } from "./legacyAudience";
 import {
   ACTIVITY_FIRST_FULL_DAY,
   activityCoverageOf,
-  coverageSinceDay,
   activityRetainedFrom,
   bucketSpan,
   bucketsOf,
   kstNow,
   type Coverage,
   type ReportRange,
+  COLLECTION_SINCE,
 } from "./report";
 
 // 사용자 통계 (/admin/stats?tab=users): sign-ups and signed-in members'
@@ -77,7 +77,8 @@ export type UserReport = {
     withdrawn: number;
     onboarded: number; // of available
     notOnboarded: number; // of available
-    admins: number; // of available
+    admins: number; // of available: holds a management permission now (full administrator or per-permission)
+    general: number; // of available: 일반 사용자 now (no management permission, not a test-mode account)
     suspended: number; // of available
     external: number; // of available
   };
@@ -104,6 +105,10 @@ export type UserReport = {
     wau: number | null;
     mau: number | null;
     unique: number | null; // distinct members active in the range
+    // activity days in the range whose event-time role cannot be shown (a mark
+    // written before roles were stored, of an account promoted or demoted that
+    // day or no longer linkable): left out of every member count, shown apart
+    unclassified: number;
     perBucket: (number | null)[]; // distinct per period
     newPerBucket: (number | null)[]; // of those: new on any of their active days in the period
     existingPerBucket: (number | null)[]; // the rest (new + existing = perBucket)
@@ -216,14 +221,10 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
   const buckets = bucketsOf(range);
   const indexOf = (day: string) => buckets.indexOf(periodStart(day, range.unit));
   const inRange = (day: string) => day >= range.from && day < range.until;
-  const collectionDay = await audienceCollectionDay();
-  const activitySince = collectionDay ?? today;
+  const activitySince = COLLECTION_SINCE.ops.slice(0, 10); // ActivityDay began with the 운영 지표 release
   const retainedFrom = activityRetainedFrom(today);
   const measuredFrom = activitySince > retainedFrom ? activitySince : retainedFrom; // first day that can hold marks
-  const covered = (from: string, until: string): Coverage => {
-    const base = activityCoverageOf(from, until, today), classified = coverageSinceDay(collectionDay, from, until);
-    return base === "none" || classified === "none" ? "none" : base === "partial" || classified === "partial" ? "partial" : "full";
-  };
+  const covered = (from: string, until: string): Coverage => activityCoverageOf(from, until, today);
   const refDay = (() => {
     const last = addPeriods(range.until, "day", -1);
     const d = last < today ? last : today;
@@ -231,13 +232,12 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
   })();
   const activityFrom = [range.from, refDay ? addPeriods(refDay, "day", -29) : range.from].sort()[0];
 
-  const [members, activityRows, hourRows, firstDays, sinceRows, posters, chatters, newPosters, newChatters, inventory] = await Promise.all([
-    prisma.user.findMany({
-      where: { activityAudience: "member" },
-      select: { id: true, createdAt: true, withdrawnAt: true, deletedAt: true, isAdmin: true, isSuspended: true, nickname: true, privacyConsentVersion: true, termsVersion: true, userType: true },
-    }) as Promise<MemberRow[]>,
-    prisma.$queryRaw<{ day: Date | string; actor: string }[]>`
-      SELECT "day", "actor" FROM "ActivityDay" WHERE "activity_audience" = 'member' AND "day" >= ${activityFrom}::date AND "day" <= ${today}::date`.catch(() => []),
+  // Sign-ups and activity follow the event-time audience; rows written before it
+  // was stored are classified from the admin history (legacyAudience.ts), so no
+  // member is dropped for lacking a stored mark.
+  const [memberIds, activityRows, hourRows, firstDays, sinceRows, posters, chatters, newPosters, newChatters, inventory] = await Promise.all([
+    prisma.$queryRaw<{ id: number }[]>`SELECT "id" FROM "User" WHERE ${signupAudienceSql()} = 'member'`,
+    loadClassifiedMarks({ from: activityFrom, until: addPeriods(today, "day", 1) }).catch(() => [] as Awaited<ReturnType<typeof loadClassifiedMarks>>),
     prisma.$queryRaw<{ metric: string; n: bigint | number }[]>`
       SELECT "metric", sum("value") AS n FROM "OperationalMetricDaily"
       WHERE ("metric" LIKE 'visit.member.hour.%' OR "metric" LIKE 'auth.login.hour.%') AND "day" >= ${range.from}::date AND "day" < ${range.until}::date
@@ -249,24 +249,28 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
       SELECT "day", "value" FROM "OperationalMetricDaily" WHERE "metric" = ${USER_HOURLY_SINCE_METRIC} ORDER BY "day" LIMIT 1`.catch(() => []),
     prisma.$queryRaw<{ id: number }[]>`
       SELECT DISTINCT "user_id" AS id FROM (
-        SELECT "user_id", "created_at" FROM "LostPost" WHERE "activity_audience" = 'member' UNION ALL SELECT "user_id", "created_at" FROM "FoundPost" WHERE "activity_audience" = 'member'
+        SELECT "user_id", "created_at" FROM "LostPost" WHERE ${tableAudienceSql("LostPost")} = 'member' UNION ALL SELECT "user_id", "created_at" FROM "FoundPost" WHERE ${tableAudienceSql("FoundPost")} = 'member'
       ) p WHERE ${kst("created_at")} >= ${range.from}::date AND ${kst("created_at")} < ${range.until}::date`,
     prisma.$queryRaw<{ id: number }[]>`
       SELECT DISTINCT "sender_user_id" AS id FROM "Message"
-      WHERE "activity_audience" = 'member' AND ${kst("created_at")} >= ${range.from}::date AND ${kst("created_at")} < ${range.until}::date`,
+      WHERE ${tableAudienceSql("Message")} = 'member' AND ${kst("created_at")} >= ${range.from}::date AND ${kst("created_at")} < ${range.until}::date`,
     // members who signed up in the range and posted / chatted after signing up (until now)
     prisma.$queryRaw<{ id: number }[]>`
       SELECT DISTINCT p."user_id" AS id FROM (
-        SELECT "user_id", "created_at" FROM "LostPost" WHERE "activity_audience" = 'member' UNION ALL SELECT "user_id", "created_at" FROM "FoundPost" WHERE "activity_audience" = 'member'
+        SELECT "user_id", "created_at" FROM "LostPost" WHERE ${tableAudienceSql("LostPost")} = 'member' UNION ALL SELECT "user_id", "created_at" FROM "FoundPost" WHERE ${tableAudienceSql("FoundPost")} = 'member'
       ) p JOIN "User" u ON u."id" = p."user_id"
-      WHERE u."activity_audience" = 'member' AND ((u."created_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul') >= ${range.from}::date
+      WHERE ${signupAudienceSql("u")} = 'member' AND ((u."created_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul') >= ${range.from}::date
         AND ((u."created_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul') < ${range.until}::date AND p."created_at" >= u."created_at"`,
     prisma.$queryRaw<{ id: number }[]>`
-      SELECT DISTINCT m."sender_user_id" AS id FROM "Message" m JOIN "User" u ON u."id" = m."sender_user_id" AND m."activity_audience" = 'member'
-      WHERE u."activity_audience" = 'member' AND ((u."created_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul') >= ${range.from}::date
+      SELECT DISTINCT m."sender_user_id" AS id FROM "Message" m JOIN "User" u ON u."id" = m."sender_user_id" AND ${tableAudienceSql("Message", "m")} = 'member'
+      WHERE ${signupAudienceSql("u")} = 'member' AND ((u."created_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul') >= ${range.from}::date
         AND ((u."created_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul') < ${range.until}::date AND m."created_at" >= u."created_at"`,
-    prisma.user.findMany({ where: { isAdmin: false, userType: { not: "EXTERNAL_TEST" }, adminPermissions: { none: {} } }, select: { id: true, createdAt: true, withdrawnAt: true, deletedAt: true, isAdmin: true, isSuspended: true, nickname: true, privacyConsentVersion: true, termsVersion: true, userType: true } }),
+    // every account (전체 회원), with whether it holds a management permission now
+    prisma.user.findMany({ select: { id: true, createdAt: true, withdrawnAt: true, deletedAt: true, isAdmin: true, isSuspended: true, nickname: true, privacyConsentVersion: true, termsVersion: true, userType: true, adminPermissions: { select: { permission: true }, take: 1 } } }),
   ]);
+  const memberSet = new Set(memberIds.map((r) => Number(r.id)));
+  const members: MemberRow[] = inventory.filter((m) => memberSet.has(m.id));
+  const manages = (m: (typeof inventory)[number]) => m.isAdmin || m.adminPermissions.length > 0;
 
   // ---- accounts and sign-ups
   const onboarded = (m: MemberRow) => !!m.nickname && isAcceptedPrivacyVersion(m.privacyConsentVersion) && m.termsVersion === CURRENT_TERMS_VERSION;
@@ -280,7 +284,9 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
     withdrawn: inventory.length - current.length,
     onboarded: available.filter(onboarded).length,
     notOnboarded: available.filter((m) => !onboarded(m)).length,
-    admins: available.filter((m) => m.isAdmin).length,
+    // 관리 권한 보유 (full administrators and per-permission holders) and 일반 사용자, now
+    admins: available.filter(manages).length,
+    general: available.filter((m) => !manages(m) && m.userType !== "EXTERNAL_TEST").length,
     suspended: available.filter((m) => m.isSuspended).length,
     external: available.filter((m) => m.userType !== "STUDENT").length,
   };
@@ -318,7 +324,9 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
   // ---- activity (ActivityDay), admins out, actors linked back in memory
   const actorToMember = new Map<string, number>();
   for (const m of members) actorToMember.set(activityActor(m.id), m.id);
+  const unclassifiedMarks = activityRows.filter((r) => r.audience === "unclassified" && inRange(r.day)).length;
   const marks = activityRows
+    .filter((r) => r.audience === "member")
     .map((r) => ({ day: asDay(r.day), member: actorToMember.get(r.actor) ?? null, actor: r.actor }))
     ;
   const activityCoverage = covered(range.from, range.until);
@@ -444,6 +452,7 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
       dau: windowValue(windows.dau, 1),
       wau: windowValue(windows.wau, 7),
       mau: windowValue(windows.mau, 30),
+      unclassified: unclassifiedMarks,
       unique: activityCoverage === "none" ? null : distinct(inRangeMarks),
       perBucket: activityPerBucket.map((b) => b.all),
       newPerBucket: activityPerBucket.map((b) => b.fresh),

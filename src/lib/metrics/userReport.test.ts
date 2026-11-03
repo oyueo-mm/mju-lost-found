@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // In-memory stand-ins for the tables the loader reads. $queryRaw is told
 // apart by its SQL text.
-type Member = { activityAudience: "member" | "internal"; id: number; createdAt: Date; withdrawnAt: Date | null; deletedAt: Date | null; isAdmin: boolean; isSuspended: boolean; nickname: string | null; privacyConsentVersion: string | null; termsVersion: string | null; userType: string };
+// activityAudience null = written before roles were stored; `legacy` is what
+// the DB functions resolve it to (mju_legacy_signup_audience / _day_audience).
+type Member = { activityAudience: "member" | "internal" | null; legacy?: "member" | "internal" | "unclassified"; manages?: boolean; id: number; createdAt: Date; withdrawnAt: Date | null; deletedAt: Date | null; isAdmin: boolean; isSuspended: boolean; nickname: string | null; privacyConsentVersion: string | null; termsVersion: string | null; userType: string };
 let members: Member[] = [];
-let activity: { day: string; actor: string; activityAudience?: string }[] = [];
+let activity: { day: string; actor: string; activityAudience?: string | null }[] = [];
 let metrics: { metric: string; n: number }[] = [];
 let firstDays: { pv: string | null; login: string | null } = { pv: null, login: null };
 let sinceRows: { day: string; value: number }[] = [];
@@ -15,11 +17,17 @@ let newChatters: number[] = [];
 
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
-    user: { findMany: async () => members.filter((m) => m.activityAudience === "member") },
-    $queryRaw: async (strings: TemplateStringsArray) => {
+    user: { findMany: async () => members.map((m) => ({ ...m, adminPermissions: m.manages ? [{ permission: "reports.view" }] : [] })) },
+    $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
       const sql = strings.join("?");
+      const effective = (m: Member | undefined) => m?.activityAudience ?? m?.legacy ?? "member";
+      if (sql.includes('SELECT "id" FROM "User" WHERE')) return members.filter((m) => (m.activityAudience ?? "member") === "member").map((m) => ({ id: m.id }));
+      if (sql.includes("mju_legacy_day_audience")) {
+        const [ids] = values as [number[], string[]];
+        return ids.map((id, i) => ({ i: i + 1, a: effective(members.find((m) => m.id === id)) }));
+      }
       if (sql.includes("meta.since.audience_snapshot")) return [{ day: "2026-10-15" }];
-      if (sql.includes('FROM "ActivityDay"')) return activity.filter((m) => m.activityAudience !== "internal");
+      if (sql.includes('FROM "ActivityDay"')) return activity.map((m) => ({ day: m.day, actor: m.actor, audience: m.activityAudience === undefined ? "member" : m.activityAudience, role: null, org: null }));
       if (sql.includes("min(\"day\") FILTER")) return [firstDays];
       if (sql.includes("LIMIT 1")) return sinceRows;
       if (sql.includes('FROM "OperationalMetricDaily"')) return metrics;
@@ -320,5 +328,31 @@ describe("사용자 통계: 시간대별 수집 시작 (B3)", () => {
     firstDays = { pv: null, login: null };
     const none = await loadUserReport({ from: "2026-10-01", until: "2026-11-01", unit: "day" }, { now: NOW });
     expect(none.hourly).toMatchObject({ memberPvSince: null, loginSince: null, memberPv: null, logins: null });
+  });
+});
+
+describe("역할 기록 도입 전 회원 (활동 표식 없음)", () => {
+  it("counts their sign-ups and activity like any member, and a later promotion keeps the earlier member activity", async () => {
+    members = [member(1, "2026-10-16T01:00:00Z", { activityAudience: null }), member(2, "2026-10-16T02:00:00Z", { activityAudience: null, isAdmin: true, manages: true, legacy: "internal" })];
+    activity = [
+      ...active(1, "2026-10-17", "2026-10-18").map((m) => ({ ...m, activityAudience: null })),
+      { day: "2026-10-17", actor: activityActor(2), activityAudience: null },
+    ];
+    const r = await loadUserReport({ from: "2026-10-16", until: "2026-10-31", unit: "day" }, { now: NOW });
+    expect(r.signups.inRange).toBe(2); // both signed up as members (accounts are created as members)
+    expect(r.activity.unique).toBe(1); // 2 was an admin on its active day: management activity, not member activity
+    expect(r.accounts).toMatchObject({ total: 2, admins: 1, general: 1 });
+  });
+  it("shows marks whose role cannot be shown as 분류 불명 instead of counting or hiding them", async () => {
+    members = [member(1, "2026-10-16T01:00:00Z", { activityAudience: null, legacy: "unclassified" })];
+    activity = [{ day: "2026-10-17", actor: activityActor(1), activityAudience: null }];
+    const r = await loadUserReport({ from: "2026-10-16", until: "2026-10-31", unit: "day" }, { now: NOW });
+    expect(r.activity.unique).toBe(0);
+    expect(r.activity.unclassified).toBe(1);
+  });
+  it("does not mark the days before the role snapshot as 미측정", async () => {
+    const r = await loadUserReport({ from: "2026-10-16", until: "2026-10-31", unit: "day" }, { now: NOW });
+    expect(r.activity.since).toBe("2026-10-15");
+    expect(r.activity.coverage).not.toBe("none");
   });
 });

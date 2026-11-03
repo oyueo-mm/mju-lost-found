@@ -14,6 +14,7 @@ import { activityActor, kstDay, TRAFFIC_HOURLY_SINCE_METRIC } from "./record";
 import { activityRetainedFrom, COLLECTION_SINCE, type Coverage } from "./report";
 import type { ReportRange } from "./report";
 import { daysBetween } from "./daySelection";
+import { loadClassifiedMarks, roleSql } from "./legacyAudience";
 
 // 관리자 활동 tab of /admin/stats. Read-only, except the one marker row
 // below. Everything comes from records the app already keeps:
@@ -41,8 +42,8 @@ const TIMELINE_TASK_CAP = 2000;
 // One row per completed task: admin, UTC wall time, kind, target. `kind`
 // is mapped to a category and label by describeKind() below.
 const EVENTS = Prisma.sql`
-  SELECT "changed_by_user_id" AS admin_id, "created_at" AS at, 'item.' || COALESCE("action", 'status') AS kind, "post_type" || '_post' AS target_type, "post_id" AS target_id, "activity_role" AS actor_role, "activity_organization_id" AS actor_org
-    FROM "PostStatusChange" WHERE "activity_audience" = 'internal' AND "activity_role" IN ('service','officer')
+  SELECT "changed_by_user_id" AS admin_id, "created_at" AS at, 'item.' || COALESCE("action", 'status') AS kind, "post_type" || '_post' AS target_type, "post_id" AS target_id, ${roleSql("changed_by_user_id")} AS actor_role, "activity_organization_id" AS actor_org
+    FROM "PostStatusChange" WHERE ${roleSql("changed_by_user_id")} IN ('service','officer')
   UNION ALL
   SELECT actor_user_id, created_at, 'officer.' || action, 'user', target_user_id, 'service'::text,
     COALESCE((after->>'organizationId')::int, (before->>'organizationId')::int)
@@ -77,7 +78,7 @@ const EVENTS = Prisma.sql`
   UNION ALL
   SELECT "admin_user_id", "accessed_at", 'access.identity', 'report', "report_id", 'service'::text AS actor_role, NULL::int AS actor_org FROM "IdentityAccessLog"
   UNION ALL
-  SELECT "admin_user_id", "created_at", 'log.' || "action", "target_type", "target_id", "activity_role" AS actor_role, "activity_organization_id" AS actor_org FROM "AdminActivityLog" WHERE "action" <> ${ADMIN_SIGN_IN_ACTION}`;
+  SELECT "admin_user_id", "created_at", 'log.' || "action", "target_type", "target_id", ${roleSql("admin_user_id")} AS actor_role, "activity_organization_id" AS actor_org FROM "AdminActivityLog" WHERE "action" <> ${ADMIN_SIGN_IN_ACTION}`;
 
 const MODERATION_LABELS: Record<string, string> = {
   delete_post: "게시글 삭제",
@@ -315,8 +316,9 @@ async function startMarker(metric: string, now: Date): Promise<{ day: Date; valu
 const perDay = (days: string[], rows: { day: Date; value: number }[]) =>
   days.map((d) => rows.filter((f) => f.day.toISOString().slice(0, 10) === d).reduce((a, f) => a + f.value, 0));
 
-const VISITS = Prisma.sql`SELECT "admin_user_id" AS admin_id, "started_at" AS at, "last_active_at" AS last, "activity_role" AS actor_role, "activity_organization_id" AS actor_org FROM "AdminVisit" WHERE activity_role IN ('service','officer')`;
-const SIGN_INS = Prisma.sql`SELECT "admin_user_id" AS admin_id, "created_at" AS at, "activity_role" AS actor_role, "activity_organization_id" AS actor_org FROM "AdminActivityLog" WHERE "action" = ${ADMIN_SIGN_IN_ACTION} AND activity_role IN ('service','officer')`;
+// Rows from before the role snapshot take the role shown by the admin history (legacyAudience.ts).
+const VISITS = Prisma.sql`SELECT "admin_user_id" AS admin_id, "started_at" AS at, "last_active_at" AS last, ${roleSql("admin_user_id", undefined, "started_at")} AS actor_role, "activity_organization_id" AS actor_org FROM "AdminVisit" WHERE ${roleSql("admin_user_id", undefined, "started_at")} IN ('service','officer')`;
+const SIGN_INS = Prisma.sql`SELECT "admin_user_id" AS admin_id, "created_at" AS at, ${roleSql("admin_user_id")} AS actor_role, "activity_organization_id" AS actor_org FROM "AdminActivityLog" WHERE "action" = ${ADMIN_SIGN_IN_ACTION} AND ${roleSql("admin_user_id")} IN ('service','officer')`;
 
 // `all`: every admin's records (the viewer may see them); otherwise only
 // the viewer's own. `filter` narrows the timeline (its admin only when `all`).
@@ -404,30 +406,32 @@ export async function loadAdminActivity({
 
   // 활동일: which days were recorded at all (the first day only from the
   // minute collection began)
-  const roleDay = earliest[0]?.roles_since ?? null;
-  const collectionDay = roleDay && roleDay > COLLECTION_SINCE.ops.slice(0, 10) ? roleDay : COLLECTION_SINCE.ops.slice(0, 10);
+  // Activity days from their own collection start: marks from before the role
+  // snapshot are classified from the admin history (legacyAudience.ts).
+  const collectionDay = COLLECTION_SINCE.ops.slice(0, 10);
   const firstMeasured = [activityRetainedFrom(today), collectionDay].sort().at(-1)!;
   const dayStatus: Coverage[] = days.map((d) =>
-    !roleDay || d < firstMeasured ? "none" : d === collectionDay ? "partial" : "full",
+    d < firstMeasured ? "none" : d === collectionDay && !COLLECTION_SINCE.ops.endsWith("T00:00") ? "partial" : "full",
   );
   // a withdrawn account's marks are never read
   const actors = new Map(users.filter((u) => !u.withdrawnAt).map((u) => [activityActor(u.id), u.id]));
   const activityOrgIds = actorFilter.campus ? await prisma.organization.findMany({ where: { managementCampus: actorFilter.campus }, select: { id: true } }) : null;
-  const marks = await prisma.activityDay.findMany({
-    where: { activityAudience: "internal", activityRole: actorFilter.role ? actorFilter.role : { in: ["service", "officer"] }, ...(actorFilter.organizationId && { activityOrganizationId: actorFilter.organizationId }), ...(activityOrgIds && { AND: [{ activityOrganizationId: { in: activityOrgIds.map((o) => o.id) } }] }), actor: { in: [...actors.keys()] }, day: { gte: dayDate(days[0]), lte: dayDate(today) } },
-    select: { day: true, actor: true },
-  });
+  const orgIds = activityOrgIds?.map((o) => o.id);
+  const marks = (await loadClassifiedMarks({ from: days[0], until: addPeriods(today, "day", 1) })).filter((m) =>
+    m.audience === "internal" && actors.has(m.actor)
+    && (actorFilter.role ? m.role === actorFilter.role : m.role === "service" || m.role === "officer")
+    && (!actorFilter.organizationId || m.organizationId === actorFilter.organizationId)
+    && (!orgIds || (m.organizationId !== null && orgIds.includes(m.organizationId))));
   const activeOn = new Map<number, Set<string>>();
   for (const m of marks) {
     const id = actors.get(m.actor)!;
-    activeOn.set(id, (activeOn.get(id) ?? new Set<string>()).add(m.day.toISOString().slice(0, 10)));
+    activeOn.set(id, (activeOn.get(id) ?? new Set<string>()).add(m.day));
   }
 
   const first = earliest[0];
   const logSince = recordingSince(marker, first?.log ? new Date(first.log) : null);
   const recordedPresenceSince = recordingSince(presenceMarker, first?.presence ? new Date(first.presence) : null);
-  const roleBoundary = roleDay ? `${roleDay} 00:00` : null;
-  const presenceSince = roleBoundary && recordedPresenceSince ? [roleBoundary, recordedPresenceSince].sort().at(-1)! : null;
+  const presenceSince = recordedPresenceSince;
   const recordFailures = perDay(days, failures.filter((x) => x.metric === ADMIN_ACTIVITY_FAILED_METRIC));
   const visitFailures = perDay(days, failures.filter((x) => x.metric === ADMIN_VISIT_FAILED_METRIC));
   // a day is fully covered only once the log had begun before it, and had

@@ -21,6 +21,7 @@ import { EARLIEST_SELECTABLE_DAY } from "./daySelection";
 import { DURATION_BUCKETS, PAGES_BUCKETS, type DurationBucket, type PagesBucket } from "./flow";
 import { DEVICE_KINDS, PAGE_KINDS, type DeviceKind, type PageKind } from "./visits";
 import { loadCategoryCounts, type CategoryRow } from "./categories";
+import { loadClassifiedMarks, tableAudienceSql } from "./legacyAudience";
 
 // 운영 통계 for any KST date range -- the one loader behind both the
 // /admin/stats dashboard and its Excel/CSV export, so the two always show
@@ -306,8 +307,6 @@ export function kstNow(at = new Date()): string {
 }
 
 export async function loadReport(range: ReportRange, { now = new Date() } = {}): Promise<Report> {
-  const snapshotRows = await prisma.$queryRaw<{ day: Date | string | null }[]>`SELECT min(day) AS day FROM "OperationalMetricDaily" WHERE metric = 'meta.since.audience_snapshot'`;
-  const snapshotSince = snapshotRows[0]?.day ? asDay(snapshotRows[0].day) : null;
   const buckets = bucketsOf(range);
   const { from, until } = range;
   const trunc = Prisma.raw(`'${range.unit}'`);
@@ -332,7 +331,7 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
       const rows = await prisma.$queryRaw<Row[]>`
         SELECT date_trunc(${trunc}, ${kst("created_at")})::date AS bucket, count(*) AS n
         FROM ${Prisma.raw(`"${table}"`)}
-        WHERE "activity_audience" = 'member' AND ${kst("created_at")} >= ${from}::date AND ${kst("created_at")} < ${until}::date
+        WHERE ${tableAudienceSql(table)} = 'member' AND ${kst("created_at")} >= ${from}::date AND ${kst("created_at")} < ${until}::date
         GROUP BY 1`;
       put(core[key], rows);
     }),
@@ -340,7 +339,7 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
       const rows = await prisma.$queryRaw<(Row & { post_type: string })[]>`
         SELECT date_trunc(${trunc}, ${kst("created_at")})::date AS bucket, "post_type", count(*) AS n
         FROM "PostStatusChange"
-        WHERE "activity_audience" = 'member' AND ${kst("created_at")} >= ${from}::date AND ${kst("created_at")} < ${until}::date AND ${COMPLETED_WHERE}
+        WHERE ${tableAudienceSql("PostStatusChange")} = 'member' AND ${kst("created_at")} >= ${from}::date AND ${kst("created_at")} < ${until}::date AND ${COMPLETED_WHERE}
         GROUP BY 1, 2`;
       put(core.completed, rows);
       put(completedByType.lost, rows.filter((r) => r.post_type === "lost"));
@@ -356,16 +355,14 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
     (async () => {
       // Distinct members per period, and over the whole range (a member
       // active on 5 days of a week is one weekly active member).
-      const [rows, total] = await Promise.all([
-        prisma.$queryRaw<Row[]>`
-          SELECT date_trunc(${trunc}, "day")::date AS bucket, count(DISTINCT "actor") AS n
-          FROM "ActivityDay" WHERE "activity_audience" = 'member' AND "day" >= ${from}::date AND "day" < ${until}::date
-          GROUP BY 1`.catch(() => [] as Row[]),
-        prisma.$queryRaw<{ n: bigint }[]>`
-          SELECT count(DISTINCT "actor") AS n FROM "ActivityDay" WHERE "activity_audience" = 'member' AND "day" >= ${from}::date AND "day" < ${until}::date`.catch(() => []),
-      ]);
-      put(core.active, rows);
-      activeTotal = Number(total[0]?.n ?? 0);
+      const marks = (await loadClassifiedMarks({ from, until }).catch(() => [])).filter((m) => m.audience === "member");
+      const perBucket = new Map<string, Set<string>>();
+      for (const m of marks) {
+        const b = periodStart(m.day, range.unit);
+        perBucket.set(b, (perBucket.get(b) ?? new Set()).add(m.actor));
+      }
+      put(core.active, [...perBucket].map(([bucket, actors]) => ({ bucket, n: actors.size })));
+      activeTotal = new Set(marks.map((m) => m.actor)).size;
     })(),
     (async () => {
       const rows = await prisma.$queryRaw<(Row & { metric: string })[]>`
@@ -423,10 +420,9 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
   for (const [key, values] of all) {
     const source = SOURCE_OF[key];
     // 활성 회원 also stops being measured once its marks are past retention.
-    const coverOf = (f: string, u: string) => {
-      const base = key === "active" ? activityCoverageOf(f, u, kstDay(now)) : coverageOf(source, f, u);
-      return worstOf(base, coverageSinceDay(snapshotSince, f, u));
-    };
+    // Each count from its own collection start: rows written before the
+    // event-time snapshot are classified from the admin history (legacyAudience.ts).
+    const coverOf = (f: string, u: string) => (key === "active" ? activityCoverageOf(f, u, kstDay(now)) : coverageOf(source, f, u));
     coverage[key] = buckets.map((b) => {
       const span = bucketSpan(range, b);
       return coverOf(span.from, span.until);
