@@ -278,6 +278,8 @@ export async function withdrawUser(userId: number): Promise<WithdrawUserResult> 
       // deliberately leaves in place (posts/comments/chat/nickname
       // untouched).
       await tx.notification.deleteMany({ where: { userId } });
+      // devices that were set up for chat push stop receiving it
+      await tx.pushSubscription.deleteMany({ where: { userId } });
     }
     const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
     return { kind: "ok", data: user };

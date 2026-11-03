@@ -49,6 +49,21 @@ export function chatPushPayload(chatRoomId: number) {
 // ---------- subscriptions ----------
 
 export type SubscriptionInput = { endpoint: string; keys: { p256dh: string; auth: string } };
+
+// The server POSTs to whatever endpoint a subscription names, so only the
+// browsers' own push services are accepted (an arbitrary https address would
+// turn this into a request relay): Chrome / Android (FCM), Firefox, Safari /
+// iOS, Edge (Windows). The list can grow when a browser adds a service.
+export const PUSH_SERVICE_HOSTS: RegExp[] = [
+  /^fcm\.googleapis\.com$/,
+  /^android\.googleapis\.com$/,
+  /^updates\.push\.services\.mozilla\.com$/,
+  /^[a-z0-9-]+\.push\.services\.mozilla\.com$/,
+  /^web\.push\.apple\.com$/,
+  /^[a-z0-9-]+\.push\.apple\.com$/,
+  /^[a-z0-9-]+\.notify\.windows\.com$/,
+];
+export const MAX_DEVICES_PER_USER = 10;
 export function validSubscription(raw: unknown): SubscriptionInput | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } };
@@ -59,7 +74,8 @@ export function validSubscription(raw: unknown): SubscriptionInput | null {
   } catch {
     return null;
   }
-  if (url.protocol !== "https:") return null;
+  if (url.protocol !== "https:" || url.port !== "" || url.username || url.password) return null;
+  if (!PUSH_SERVICE_HOSTS.some((re) => re.test(url.hostname))) return null;
   const b64 = /^[A-Za-z0-9_-]+={0,2}$/;
   const p256dh = r.keys?.p256dh, auth = r.keys?.auth;
   if (typeof p256dh !== "string" || typeof auth !== "string" || !b64.test(p256dh) || !b64.test(auth) || p256dh.length > 200 || auth.length > 100) return null;
@@ -69,6 +85,9 @@ export function validSubscription(raw: unknown): SubscriptionInput | null {
 // A device's subscription belongs to whoever is signed in on it now: an
 // endpoint saved by another account moves to this one.
 export async function saveSubscription(userId: number, sub: SubscriptionInput, deviceLabel: string | null): Promise<number> {
+  // a user keeps at most MAX_DEVICES_PER_USER devices: the oldest go first
+  const mine = await prisma.pushSubscription.findMany({ where: { userId, NOT: { endpoint: sub.endpoint } }, orderBy: { createdAt: "desc" }, select: { id: true }, skip: MAX_DEVICES_PER_USER - 1 });
+  if (mine.length) await prisma.pushSubscription.deleteMany({ where: { id: { in: mine.map((m) => m.id) } } });
   const row = await prisma.pushSubscription.upsert({
     where: { endpoint: sub.endpoint },
     create: { userId, endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth, deviceLabel },
@@ -133,8 +152,8 @@ export async function deliverPush(outboxId: number, { send, now = new Date() }: 
   const room = await prisma.chatRoom.findUnique({ where: { id: m.chatRoomId }, select: { organizationId: true, initiatorUserId: true, counterpartUserId: true } });
   // direct rooms only, and the receiver must still be its other person
   if (!room || room.organizationId !== null || ![room.initiatorUserId, room.counterpartUserId].includes(row.userId) || row.userId === m.senderUserId) return skip("not_participant");
-  const receiver = await prisma.user.findUnique({ where: { id: row.userId }, select: { withdrawnAt: true } });
-  if (!receiver || receiver.withdrawnAt) return skip("receiver_gone");
+  const receiver = await prisma.user.findUnique({ where: { id: row.userId }, select: { withdrawnAt: true, deletedAt: true } });
+  if (!receiver || receiver.withdrawnAt || receiver.deletedAt) return skip("receiver_gone");
   const presence = await prisma.chatPresence.findUnique({ where: { userId_chatRoomId: { userId: row.userId, chatRoomId: m.chatRoomId } }, select: { seenAt: true } });
   if (presence && now.getTime() - presence.seenAt.getTime() < PRESENCE_FRESH_MS) return skip("viewing");
   const subs = await prisma.pushSubscription.findMany({ where: { userId: row.userId }, select: { id: true, endpoint: true, p256dh: true, auth: true } });

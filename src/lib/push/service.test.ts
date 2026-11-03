@@ -132,11 +132,21 @@ describe("deliverPush", () => {
 
 describe("validSubscription", () => {
   it("accepts an https endpoint with base64url keys; rejects anything else", () => {
-    expect(validSubscription({ endpoint: "https://fcm.googleapis.com/x", keys: { p256dh: "BAbc_-", auth: "xyz" } })).toBeTruthy();
-    expect(validSubscription({ endpoint: "http://x", keys: { p256dh: "a", auth: "b" } })).toBeNull();
-    expect(validSubscription({ endpoint: "https://x", keys: { p256dh: "a b", auth: "b" } })).toBeNull();
-    expect(validSubscription({ endpoint: "https://x" })).toBeNull();
+    const keys = { p256dh: "BAbc_-", auth: "xyz" };
+    for (const host of ["fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com", "wns2-pn1p.notify.windows.com", "jp.notify.windows.com"]) expect(validSubscription({ endpoint: `https://${host}/x/y`, keys }), host).toBeTruthy();
+    expect(validSubscription({ endpoint: "http://fcm.googleapis.com/x", keys })).toBeNull();
+    expect(validSubscription({ endpoint: "https://fcm.googleapis.com/x", keys: { p256dh: "a b", auth: "b" } })).toBeNull();
+    expect(validSubscription({ endpoint: "https://fcm.googleapis.com/x" })).toBeNull();
     expect(validSubscription("x")).toBeNull();
+  });
+
+  it("refuses any address that is not a browser push service (no request relay / SSRF)", () => {
+    const keys = { p256dh: "BAbc_-", auth: "xyz" };
+    for (const endpoint of [
+      "https://attacker.example/push", "https://127.0.0.1/x", "https://localhost/x", "https://169.254.169.254/latest/meta-data",
+      "https://10.0.0.5/x", "https://[::1]/x", "https://fcm.googleapis.com.attacker.example/x", "https://attacker.example/fcm.googleapis.com",
+      "https://evilnotify.windows.com.example/x", "https://fcm.googleapis.com:8443/x", "https://user:pw@fcm.googleapis.com/x", "https://notify.windows.com.evil.io/x",
+    ]) expect(validSubscription({ endpoint, keys }), endpoint).toBeNull();
   });
 });
 

@@ -6,6 +6,7 @@ const create = vi.fn();
 const updateMany = vi.fn();
 const findUniqueOrThrow = vi.fn();
 const notificationDeleteMany = vi.fn();
+const pushSubscriptionDeleteMany = vi.fn();
 // Phase 12-2: withdrawUser() now also locks/reads this user's own
 // OrganizationMember(role=LEADER) rows before doing anything else -- see
 // that function's own comment. $queryRaw defaults to "no leader
@@ -23,6 +24,7 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
   fn({
     user: { updateMany, findUniqueOrThrow },
     notification: { deleteMany: notificationDeleteMany },
+    pushSubscription: { deleteMany: pushSubscriptionDeleteMany },
     organization: { findUnique: organizationFindUnique },
     organizationMember: { count: organizationMemberCount },
     $queryRaw: queryRaw,
@@ -334,6 +336,8 @@ describe("withdrawUser", () => {
     await withdrawUser(5);
 
     expect(notificationDeleteMany).toHaveBeenCalledWith({ where: { userId: 5 } });
+    // chat-push devices of the account stop receiving too
+    expect(pushSubscriptionDeleteMany).toHaveBeenCalledWith({ where: { userId: 5 } });
   });
 
   it("returns the fresh (deactivated) user row wrapped in an ok result, nickname intact", async () => {
@@ -359,6 +363,7 @@ describe("withdrawUser", () => {
     const result = await withdrawUser(5);
 
     expect(notificationDeleteMany).not.toHaveBeenCalled();
+    expect(pushSubscriptionDeleteMany).not.toHaveBeenCalled();
     expect(result).toEqual({ kind: "ok", data: alreadyDeactivated });
   });
 
@@ -376,6 +381,7 @@ describe("withdrawUser", () => {
       expect(result).toEqual({ kind: "sole_leader_block", organizationNames: ["명지대학교 총학생회"] });
       expect(updateMany).not.toHaveBeenCalled();
       expect(notificationDeleteMany).not.toHaveBeenCalled();
+    expect(pushSubscriptionDeleteMany).not.toHaveBeenCalled();
     });
 
     it("lists every organization this user is the sole LEADER of, not just the first", async () => {

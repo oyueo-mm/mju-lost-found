@@ -159,6 +159,7 @@ export async function withdrawAccount(userId: number): Promise<WithdrawAccountRe
 
       // ---- notifications
       await tx.notification.deleteMany({ where: { userId } });
+      await tx.pushSubscription.deleteMany({ where: { userId } });
       const rewrite = async (type: NotificationType, relatedType: string, ids: number[], content: string) => {
         if (ids.length > 0) await tx.notification.updateMany({ where: { type, relatedType, relatedId: { in: ids } }, data: { content } });
       };
