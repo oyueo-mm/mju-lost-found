@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore, useTransition } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 
 import { sendThankNoteAction } from "@/app/(main)/me/thanks/actions";
 import { Button } from "@/components/ui/Button";
@@ -45,6 +45,12 @@ export function ThankNoteComposer({
   const laterStored = useSyncExternalStore(subscribeStorage, () => window.localStorage.getItem(laterKey) === "1", () => false);
   const later = laterNow || (variant === "prompt" && laterStored);
   const [pending, startTransition] = useTransition();
+  // opening the form brings it to the middle of the screen (on a phone the
+  // card can start below the fold, behind the bottom navigation)
+  const cardRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (open) cardRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [open]);
   const name = receiverName ?? t("thanks.unknownName");
 
   if (sent) {
@@ -120,7 +126,7 @@ export function ThankNoteComposer({
       );
     }
     return (
-      <section aria-labelledby={`thank-prompt-${postId}`} className="flex flex-col gap-3 rounded-card border border-primary/30 bg-primary-muted/60 px-4 py-3 text-sm">
+      <section ref={cardRef} aria-labelledby={`thank-prompt-${postId}`} className="flex flex-col gap-3 rounded-card border border-primary/30 bg-primary-muted/60 px-4 py-3 text-sm">
         <div className="flex flex-col gap-0.5">
           <h2 id={`thank-prompt-${postId}`} className="font-semibold text-foreground">
             {t("thanks.prompt.title")}

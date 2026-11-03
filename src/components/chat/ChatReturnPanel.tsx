@@ -34,6 +34,14 @@ export function ChatReturnPanel({
 
   if (!canComplete && !thank && !completed) return null;
 
+  // <dialog> needs iOS Safari 15.4+; older browsers get the native confirm box
+  const ask = () => {
+    const d = dialogRef.current;
+    if (d && typeof d.showModal === "function") d.showModal();
+    else if (window.confirm(`${t("chat.complete.title")}
+${t("chat.complete.body")}`)) confirm();
+  };
+
   const confirm = () =>
     startTransition(async () => {
       setError(null);
@@ -54,13 +62,20 @@ export function ChatReturnPanel({
       {canComplete && (
         <>
           <div className="flex justify-end">
-            <Button type="button" size="sm" onClick={() => dialogRef.current?.showModal()} disabled={pending}>
+            <Button type="button" size="sm" onClick={ask} disabled={pending}>
               {t("chat.complete.button")}
             </Button>
           </div>
           <dialog
             ref={dialogRef}
             aria-labelledby={`complete-title-${chatRoomId}`}
+            onKeyDown={(e) => {
+              // Esc closes it in every browser (some builds skip the native cancel)
+              if (e.key === "Escape") {
+                e.preventDefault();
+                dialogRef.current?.close();
+              }
+            }}
             className="m-auto w-[min(22rem,calc(100vw-2rem))] rounded-card border border-border bg-card p-5 text-foreground shadow-lg backdrop:bg-black/40"
           >
             <h2 id={`complete-title-${chatRoomId}`} className="text-base font-semibold">
