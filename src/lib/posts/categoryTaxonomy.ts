@@ -26,19 +26,29 @@
 // catch-all category for anything hard to classify.
 // 등록 UX 개선: 화장품 (cosmetics) and 유선 이어폰 (earphones.wired) added --
 // codes only, so no data migration (the DB never pins the code list).
+// 표시 순서 (고정, 2026-11-03): this key order is the order of every
+// category list -- post form, search filter, home shortcuts. It was chosen
+// once from Production's registered posts (all 78, 2026-10-13..11-03:
+// 카드 17, 생활용품 12, 전자기기 11, 지갑 9, 시계 5, 이어폰·의류·문구 4,
+// 가방 3, 휴대폰·액세서리·도서·화장품 2, 기타 1) and is NOT recomputed from
+// live statistics. Exceptions to plain frequency: 지갑 sits right after 카드
+// (card wallets / card cases are easy to confuse with cards), the device
+// categories stay together (전자기기 > 시계 > 이어폰 > 휴대폰), ties go to the
+// one members registered more, and 기타 is always last. The statistics
+// tables rank by count on their own (lib/metrics/categories.ts).
 export const TAXONOMY = {
-  electronics: ["headphones", "laptop", "tablet", "charger", "cable", "power_bank", "peripheral", "storage", "other"],
-  phone: ["samsung", "apple", "lg", "xiaomi", "other"],
-  earphones: ["airpods", "buds", "wired", "other"],
-  watch: ["analog", "smartwatch", "other"],
-  wallet: ["card_wallet", "card_case", "bifold", "long_wallet", "other"],
   card_id: ["student_id", "id_card", "credit_card", "debit_card", "transit_card", "other"],
-  bag: ["backpack", "tote", "eco_bag", "pouch", "shopping_bag", "other"],
+  wallet: ["card_wallet", "card_case", "bifold", "long_wallet", "other"],
+  living: ["key", "car_key", "umbrella", "parasol", "tumbler", "water_bottle", "hobby", "sports", "other"],
+  electronics: ["headphones", "laptop", "tablet", "charger", "cable", "power_bank", "peripheral", "storage", "other"],
+  watch: ["analog", "smartwatch", "other"],
+  earphones: ["airpods", "buds", "wired", "other"],
+  phone: ["samsung", "apple", "lg", "xiaomi", "other"],
+  stationery: ["pencil_case", "pen", "mechanical_pencil", "calculator", "other"],
   clothing: ["top", "outer", "dept_jacket", "school_jacket", "bottom", "hat", "scarf", "gloves", "shoes", "other"],
+  bag: ["backpack", "tote", "eco_bag", "pouch", "shopping_bag", "other"],
   accessory: ["glasses", "sunglasses", "jewelry", "hair", "keyring", "charm", "other"],
   book_document: ["major_book", "textbook", "general_book", "notebook", "planner", "document", "file", "other"],
-  stationery: ["pencil_case", "pen", "mechanical_pencil", "calculator", "other"],
-  living: ["key", "car_key", "umbrella", "parasol", "tumbler", "water_bottle", "hobby", "sports", "other"],
   cosmetics: ["lip", "base", "perfume", "skincare", "other"],
   etc: ["other"],
 } as const;

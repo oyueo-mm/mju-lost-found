@@ -40,8 +40,8 @@ describe("카테고리별 현황: categoryRows", () => {
   it("orders by total, ties in taxonomy order; shares and ranks per type (ties share a rank)", () => {
     expect(sample.slice(0, 4).map((r) => [r.label, r.total])).toEqual([
       ["지갑", 4],
+      ["카드", 3],
       ["휴대폰", 3],
-      ["카드·신분증", 3],
       ["미분류", 2],
     ]);
     const wallet = sample[0];

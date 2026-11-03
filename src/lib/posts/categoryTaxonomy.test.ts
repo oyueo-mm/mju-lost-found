@@ -17,20 +17,22 @@ import {
 } from "./categoryTaxonomy";
 
 describe("category taxonomy", () => {
-  it("has the 14 confirmed main categories in display order", () => {
+  // 표시 순서 is fixed (chosen once from Production's posts, 2026-11-03): it
+  // never follows live statistics, and 기타 stays last.
+  it("has the 14 confirmed main categories in the fixed display order", () => {
     expect(CATEGORY_CODES).toEqual([
-      "electronics",
-      "phone",
-      "earphones",
-      "watch",
-      "wallet",
       "card_id",
-      "bag",
+      "wallet",
+      "living",
+      "electronics",
+      "watch",
+      "earphones",
+      "phone",
+      "stationery",
       "clothing",
+      "bag",
       "accessory",
       "book_document",
-      "stationery",
-      "living",
       "cosmetics",
       "etc",
     ]);
@@ -132,20 +134,29 @@ describe("taxonomy labels", () => {
   it("uses the confirmed Korean labels", () => {
     const { ko } = DICTIONARIES;
     expect(CATEGORY_CODES.map((code) => ko[taxonomyCategoryLabelKey(code)])).toEqual([
-      "전자기기",
-      "휴대폰",
-      "이어폰",
-      "시계",
+      "카드",
       "지갑",
-      "카드·신분증",
-      "가방·파우치",
+      "생활용품",
+      "전자기기",
+      "시계",
+      "이어폰",
+      "휴대폰",
+      "문구·학용품",
       "의류",
+      "가방·파우치",
       "액세서리",
       "도서·문서",
-      "문구·학용품",
-      "생활용품",
       "화장품",
       "기타",
+    ]);
+    // 카드 keeps its ID cards as subcategories (code card_id unchanged)
+    expect(subcategoriesOf("card_id").map((code) => ko[taxonomySubcategoryLabelKey(code)])).toEqual([
+      "학생증",
+      "신분증(주민등록증, 운전면허증 등)",
+      "신용카드",
+      "체크카드",
+      "교통카드",
+      "기타 카드",
     ]);
     expect(subcategoriesOf("clothing").map((code) => ko[taxonomySubcategoryLabelKey(code)])).toEqual([
       "상의",

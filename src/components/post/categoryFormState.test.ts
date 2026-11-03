@@ -124,7 +124,7 @@ describe("postCategoryLabelKeys (read compatibility)", () => {
     expect(postCategoryLabel({ category: "기타", categoryCode: "living", subcategory: "living.other" }, t)).toBe(
       "생활용품 · 기타 생활용품",
     );
-    expect(postCategoryLabel({ category: "카드", categoryCode: "card_id", subcategory: null }, t)).toBe("카드·신분증");
+    expect(postCategoryLabel({ category: "카드", categoryCode: "card_id", subcategory: null }, t)).toBe("카드");
     expect(postCategoryLabel({ category: "카드", categoryCode: null, subcategory: null }, t)).toBe("카드");
     expect(postCategoryLabel({ category: "우산" }, t)).toBe("우산");
   });
