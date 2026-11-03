@@ -178,6 +178,7 @@ enum NotificationType {
   // their post/comment on a rights-infringement report, and when that is
   // lifted. relatedType "report", relatedId Report.id.
   CONTENT_TEMP_HIDDEN            @map("content_temp_hidden")
+  POST_MANAGED @map("post_managed")
   CONTENT_RESTORED               @map("content_restored")
 }
 
@@ -286,6 +287,12 @@ enum OrganizationRequestStatus {
 // ---------- User ----------
 
 model User {
+  institutionOfficer InstitutionOfficer?
+  adminPermissions AdminPermissionGrant[]
+
+  activityRole String? @map("activity_role")
+  activityOrganizationId Int? @map("activity_organization_id")
+  activityAudience String? @map("activity_audience") // immutable event-time member/internal; legacy null = unknown
   id                        Int       @id @default(autoincrement())
   // Phase H-7: opaque, unguessable identifier for public profile URLs
   // (/profile/[publicId]) -- kept entirely separate from `id` above,
@@ -530,6 +537,9 @@ model User {
 // ---------- LostPost ----------
 
 model LostPost {
+  activityRole String? @map("activity_role")
+  activityOrganizationId Int? @map("activity_organization_id")
+  activityAudience String? @map("activity_audience") // immutable event-time member/internal; legacy null = unknown
   id             Int                         @id @default(autoincrement())
   userId         Int                         @map("user_id")
   user           User                        @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -656,6 +666,16 @@ model LostPost {
 // ---------- FoundPost ----------
 
 model FoundPost {
+  custodyOrganizationId Int? @map("custody_organization_id")
+  custodyOrganization Organization? @relation("CustodyOrganization", fields: [custodyOrganizationId], references: [id], onDelete: Restrict)
+  pendingTransferOrganizationId Int? @map("pending_transfer_organization_id")
+  pendingTransferOrganization Organization? @relation("TransferOrganization", fields: [pendingTransferOrganizationId], references: [id], onDelete: Restrict)
+
+  activityRole String? @map("activity_role")
+  activityOrganizationId Int? @map("activity_organization_id")
+  custody Json?
+
+  activityAudience String? @map("activity_audience") // immutable event-time member/internal; legacy null = unknown
   id             Int                         @id @default(autoincrement())
   userId         Int                         @map("user_id")
   user           User                        @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -706,6 +726,8 @@ model FoundPost {
   categoryReview  PostCategoryReview?
 
   @@index([userId], map: "idx_foundpost_user_id")
+  @@index([custodyOrganizationId, status], map: "idx_foundpost_custody_org")
+  @@index([pendingTransferOrganizationId], map: "idx_foundpost_pending_transfer")
   @@index([organizationId], map: "idx_foundpost_organization_id")
   @@index([categoryCode, subcategory], map: "idx_foundpost_category_code")
   @@map("FoundPost")
@@ -814,6 +836,9 @@ model MatchCandidateCache {
 // both are NULL (ON DELETE SET NULL) and the room falls back to its
 // postType/postTitle snapshot -- the chat itself is kept.
 model ChatRoom {
+  activityRole String? @map("activity_role")
+  activityOrganizationId Int? @map("activity_organization_id")
+  activityAudience String? @map("activity_audience") // immutable event-time member/internal; legacy null = unknown
   id                Int        @id @default(autoincrement())
   directLostPostId  Int?       @map("direct_lost_post_id")
   directLostPost    LostPost?  @relation("ChatRoomDirectLostPost", fields: [directLostPostId], references: [id], onDelete: SetNull)
@@ -924,6 +949,9 @@ model ChatRoom {
 // ---------- Message ----------
 
 model Message {
+  activityRole String? @map("activity_role")
+  activityOrganizationId Int? @map("activity_organization_id")
+  activityAudience String? @map("activity_audience") // immutable event-time member/internal; legacy null = unknown
   id               Int               @id @default(autoincrement())
   chatRoomId       Int               @map("chat_room_id")
   chatRoom         ChatRoom          @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
@@ -1421,6 +1449,17 @@ model Comment {
 // (lost and found live in two tables); deletePostDerivedDataInTx removes a
 // deleted post's rows. changedBy is nulled if that account row ever goes.
 model PostStatusChange {
+  reason String?
+  organizationId Int? @map("organization_id")
+  targetOrganizationId Int? @map("target_organization_id")
+
+  activityRole String? @map("activity_role")
+  activityOrganizationId Int? @map("activity_organization_id")
+  action String?
+  institution String?
+  beforeCustody Json? @map("before_custody")
+  afterCustody Json? @map("after_custody")
+  activityAudience String? @map("activity_audience") // immutable event-time member/internal; legacy null = unknown
   id              Int      @id @default(autoincrement())
   postType        String   @map("post_type")
   postId          Int      @map("post_id")
@@ -1561,6 +1600,11 @@ model Feedback {
 // this is a deliberate, reasoned deviation from the User.publicId
 // pattern, not an oversight.
 model Organization {
+  managementCampus String? @map("management_campus")
+  officers InstitutionOfficer[]
+  custodyPosts FoundPost[] @relation("CustodyOrganization")
+  transferPosts FoundPost[] @relation("TransferOrganization")
+
   id               Int                @id @default(autoincrement())
   name             String             @db.Text
   description      String?            @db.Text
@@ -1743,6 +1787,9 @@ model PostCategoryReview {
 // content: the action key and the target's id only. Deleted after
 // RECORD_RETENTION_DAYS by the daily retention run.
 model AdminActivityLog {
+  activityAudience String? @map("activity_audience")
+  activityRole String? @map("activity_role")
+  activityOrganizationId Int? @map("activity_organization_id")
   id          Int      @id @default(autoincrement())
   adminUserId Int      @map("admin_user_id")
   admin       User     @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
@@ -1765,6 +1812,9 @@ model AdminActivityLog {
 // so auto-refresh does not add visits. Start and last activity times only.
 // Deleted after RECORD_RETENTION_DAYS by the daily retention run.
 model AdminVisit {
+  activityAudience String? @map("activity_audience")
+  activityRole String? @map("activity_role")
+  activityOrganizationId Int? @map("activity_organization_id")
   id           Int      @id @default(autoincrement())
   adminUserId  Int      @map("admin_user_id")
   admin        User     @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
@@ -1829,6 +1879,7 @@ model RateLimitCounter {
 // any existing session on its next request (auth/session.ts). Never
 // grants admin rights. Managed at /admin/external-access.
 model ExternalAccessGrant {
+  canManageItems Boolean @default(false) @map("can_manage_items")
   id              Int                  @id @default(autoincrement())
   email           String               @unique @db.Text
   name            String               @db.Text
@@ -1965,6 +2016,9 @@ model MetricDaily {
 }
 
 model ActivityDay {
+  activityRole String? @map("activity_role")
+  activityOrganizationId Int? @map("activity_organization_id")
+  activityAudience String? @map("activity_audience") // immutable event-time member/internal; legacy null = unknown
   day   DateTime @db.Date
   actor String
 
@@ -2012,4 +2066,42 @@ model DeploymentRecord {
 
   @@index([createdAt], map: "idx_deploymentrecord_created")
   @@map("DeploymentRecord")
+}
+
+// Explicit item-management grant, separate from external login and org membership.
+model InstitutionOfficer {
+  userId Int @id @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  organizationId Int @map("organization_id")
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  facility String @default("")
+  active Boolean @default(true)
+  memo String? @db.Text
+  grantedByUserId Int @map("granted_by_user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([organizationId, active])
+}
+model InstitutionOfficerAudit {
+  id Int @id @default(autoincrement())
+  targetUserId Int? @map("target_user_id")
+  actorUserId Int @map("actor_user_id")
+  action String
+  before Json?
+  after Json?
+  reason String?
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([targetUserId, createdAt])
+}
+
+// Per-user admin permissions (see src/lib/permissions). A full administrator is
+// still User.isAdmin; "permissions.manage" is never stored here.
+model AdminPermissionGrant {
+  userId Int @map("user_id")
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  permission String
+  grantedByUserId Int @map("granted_by_user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@id([userId, permission])
+  @@index([permission])
 }

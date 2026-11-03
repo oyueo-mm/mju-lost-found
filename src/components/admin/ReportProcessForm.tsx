@@ -25,6 +25,9 @@ type ReportProcessFormProps = {
   // Legal pre-beta Phase: a post/comment report with a rights-infringement
   // reason may be handled with a temporary hide instead of deletion.
   allowTempHide?: boolean;
+  // Deleting content / suspending a user need their own permissions beyond 신고 처리 (the server checks again).
+  canDelete?: boolean;
+  canSuspend?: boolean;
 };
 
 // Phase F-2: same duration shape as UserActionButtons' own picker (see that
@@ -40,11 +43,12 @@ const MAX_CUSTOM_DAYS = 365;
 // validation (pending only, one ModerationAction per report, action_type
 // vs target_type match) happens server-side in dismissReport()/
 // applyReportAction() -- this is presentation only.
-export function ReportProcessForm({ reportId, targetType, targetDeleted, allowTempHide = false }: ReportProcessFormProps) {
+export function ReportProcessForm({ reportId, targetType, targetDeleted, allowTempHide = false, canDelete = true, canSuspend = true }: ReportProcessFormProps) {
   const { t } = useI18n();
   const router = useRouter();
-  const actionChoices = allowTempHide ? ACTION_TYPES_FOR_TARGET[targetType] : [TARGET_TYPE_TO_ACTION_TYPE[targetType]];
-  const [actionType, setActionType] = useState<ModerationActionTypeValue>(actionChoices[0]);
+  const allChoices = allowTempHide ? ACTION_TYPES_FOR_TARGET[targetType] : [TARGET_TYPE_TO_ACTION_TYPE[targetType]];
+  const actionChoices = allChoices.filter((a) => !((a === "delete_post" || a === "delete_comment") && !canDelete) && !(a === "suspend_user" && !canSuspend));
+  const [actionType, setActionType] = useState<ModerationActionTypeValue>(actionChoices[0] ?? allChoices[0]);
 
   const [decision, setDecision] = useState<"dismiss" | "action">("dismiss");
   const [adminNote, setAdminNote] = useState("");
@@ -194,7 +198,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted, allowTe
           className={FIELD_CLASS}
         >
           <option value="dismiss">반려</option>
-          <option value="action" disabled={targetDeleted}>
+          <option value="action" disabled={targetDeleted || actionChoices.length === 0}>
             조치 완료
           </option>
         </select>

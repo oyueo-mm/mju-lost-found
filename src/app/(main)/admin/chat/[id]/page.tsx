@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { getChatRoomForAdmin } from "@/lib/chat/service";
 import { ChatIcon } from "@/components/icons";
 
@@ -29,7 +29,7 @@ export default async function AdminChatRoomPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ report?: string }>;
 }) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("reports.view");
 
   const { id: idParam } = await params;
   const id = Number(idParam);

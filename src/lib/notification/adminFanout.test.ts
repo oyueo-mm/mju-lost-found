@@ -23,7 +23,7 @@ describe("fanOutToAdmins (Phase 12-9 §2)", () => {
       relatedId: 77,
     });
 
-    expect(tx.user.findMany).toHaveBeenCalledWith({ where: { isAdmin: true, deletedAt: null }, select: { id: true } });
+    expect(tx.user.findMany).toHaveBeenCalledWith({ where: { deletedAt: null, OR: [{ isAdmin: true }] }, select: { id: true } });
     expect(tx.notification.createMany).toHaveBeenCalledWith({
       data: [
         { userId: 1, type: "REPORT_RECEIVED", title: "새 신고가 접수되었습니다", content: "게시글 신고: 기타", relatedType: "report", relatedId: 77 },
@@ -31,6 +31,13 @@ describe("fanOutToAdmins (Phase 12-9 §2)", () => {
       ],
       skipDuplicates: true,
     });
+  });
+
+  it("also reaches accounts holding the page's permission when one is given", async () => {
+    const tx = fakeTx();
+    tx.user.findMany.mockResolvedValueOnce([{ id: 9 }]);
+    await fanOutToAdmins(tx as never, { type: "REPORT_RECEIVED" as never, title: "t", content: "c", relatedType: "report", relatedId: 1 }, "reports.view");
+    expect(tx.user.findMany).toHaveBeenCalledWith({ where: { deletedAt: null, OR: [{ isAdmin: true }, { adminPermissions: { some: { permission: "reports.view" } } }] }, select: { id: true } });
   });
 
   it("does nothing (no query, no insert) when there are no admins", async () => {

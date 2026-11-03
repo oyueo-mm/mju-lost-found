@@ -21,6 +21,7 @@ export const PAGE_KINDS = [
   "login",
   "onboarding",
   "other",
+  "admin",
 ] as const;
 export type PageKind = (typeof PAGE_KINDS)[number];
 
@@ -40,6 +41,7 @@ export const PAGE_KIND_LABELS: Record<PageKind, string> = {
   login: "로그인",
   onboarding: "가입·동의",
   other: "기타",
+  admin: "관리자 화면",
 };
 
 export function isPageKind(value: unknown): value is PageKind {
@@ -50,7 +52,7 @@ export function isPageKind(value: unknown): value is PageKind {
 export function pageKindOf(pathname: string): PageKind | null {
   const p = pathname.replace(/\/+$/, "") || "/";
   if (p === "/") return "home";
-  if (p === "/admin" || p.startsWith("/admin/")) return null;
+  if (p === "/admin" || p.startsWith("/admin/")) return "admin";
   if (p === "/lost/new" || p === "/found/new" || /^\/post\/[^/]+\/edit$/.test(p)) return "write";
   if (p === "/lost") return "lost";
   if (p === "/found") return "found";

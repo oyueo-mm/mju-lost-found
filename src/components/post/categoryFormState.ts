@@ -30,7 +30,7 @@ export function initialCategoryState(post?: {
   categoryCode?: string | null;
   subcategory?: string | null;
 }): InitialCategoryState {
-  if (!post) return { categoryCode: null, subcategory: null, legacyUnmapped: null };
+  if (!post) return { categoryCode: "etc", subcategory: null, legacyUnmapped: null };
   if (isCategoryCode(post.categoryCode)) {
     const subcategory =
       isSubcategoryCode(post.subcategory) && parentCategoryOf(post.subcategory) === post.categoryCode ? post.subcategory : null;

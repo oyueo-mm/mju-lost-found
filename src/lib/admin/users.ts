@@ -6,7 +6,6 @@ import {
   ReportTargetType,
   type User,
 } from "@/generated/prisma/client";
-import { isAdmin } from "@/lib/moderation/service";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { UUID_PATTERN } from "@/lib/user/service";
 import { listCommentsByUser, type MyCommentDTO } from "@/lib/comment/service";
@@ -16,6 +15,7 @@ import { recordingSince } from "@/lib/metrics/activityTime";
 import { createAdminActionProposal, type AdminActionProposalDTO } from "./proposals";
 import { recordAdminActivity } from "./activityLog";
 import type { AdminUserAction, AdminActionProposalTypeValue } from "./schema";
+import { can } from "@/lib/permissions/check";
 
 // Phase 관리자 승인제: the one place an AdminUserAction (this ordinary
 // user-management screen's own verb set) maps onto an
@@ -141,7 +141,7 @@ export async function getUserDetailForAdmin(
   admin: User,
   targetUserId: number,
 ): Promise<AdminUserMutationResult<AdminUserDetailDTO>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "users.view")) return { kind: "forbidden" };
 
   const row = await prisma.user.findUnique({
     where: { id: targetUserId },
@@ -237,7 +237,7 @@ export async function listUsersForAdmin(
   admin: User,
   { q, page, limit }: { q?: string; page: number; limit: number },
 ): Promise<AdminUserMutationResult<PagedAdminUsers>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "users.view")) return { kind: "forbidden" };
 
   // Phase L: publicId search -- User.publicId is a native Postgres `uuid`
   // column (see schema.prisma), which has no LIKE/contains support the way
@@ -298,7 +298,12 @@ export async function updateUserByAdmin(
   reasonCategory?: string,
   reason?: string,
 ): Promise<AdminUserMutationResult<AdminUserDTO>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  // Suspending/unsuspending needs 사용자 제재. Granting or removing full-admin
+  // status is a 권한 관리 matter (full administrators only) and still goes
+  // through the two-admin proposal below.
+  if (!can(admin, action === "promote" || action === "demote" ? "permissions.manage" : "users.sanction")) {
+    return { kind: "forbidden" };
+  }
 
   if (targetUserId === admin.id && (action === "demote" || action === "suspend")) {
     return { kind: "self" };

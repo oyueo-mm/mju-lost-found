@@ -16,19 +16,36 @@ describe("운영 통계 조회 기간 (KST)", () => {
     expect(kstDay(new Date("2026-10-15T15:00:00Z"))).toBe("2026-10-16");
   });
 
-  it("runs 오늘 / 이번 주 (Mon) / 이번 달 / 올해 up to today", () => {
+  it("runs today / rolling 7 days / rolling 30 days / year up to today", () => {
     // 2026-10-16 is a Friday
     expect(ok(resolvePeriod({ preset: "today" }, "2026-10-16")).range).toEqual({ from: "2026-10-16", until: "2026-10-17", unit: "day" });
-    expect(ok(resolvePeriod({ preset: "week" }, "2026-10-16")).range).toEqual({ from: "2026-10-12", until: "2026-10-17", unit: "day" });
-    expect(ok(resolvePeriod({ preset: "month" }, "2026-10-16")).range).toEqual({ from: "2026-10-01", until: "2026-10-17", unit: "day" });
+    expect(ok(resolvePeriod({ preset: "week" }, "2026-10-16")).range).toEqual({ from: "2026-10-10", until: "2026-10-17", unit: "day" });
+    expect(ok(resolvePeriod({ preset: "month" }, "2026-10-16")).range).toEqual({ from: "2026-09-17", until: "2026-10-17", unit: "day" });
     expect(ok(resolvePeriod({ preset: "year" }, "2026-10-16")).range).toEqual({ from: "2026-01-01", until: "2026-10-17", unit: "month" });
     // week edges: Monday is its own start, Sunday belongs to the week before it
-    expect(ok(resolvePeriod({ preset: "week" }, "2026-10-12")).range.from).toBe("2026-10-12");
+    expect(ok(resolvePeriod({ preset: "week" }, "2026-10-12")).range.from).toBe("2026-10-06");
     expect(ok(resolvePeriod({ preset: "week" }, "2026-10-18")).range.from).toBe("2026-10-12");
     // first day of a month / year: just today
-    expect(ok(resolvePeriod({ preset: "month" }, "2026-11-01")).range).toEqual({ from: "2026-11-01", until: "2026-11-02", unit: "day" });
+    expect(ok(resolvePeriod({ preset: "month" }, "2026-11-01")).range).toEqual({ from: "2026-10-03", until: "2026-11-02", unit: "day" });
     expect(ok(resolvePeriod({ preset: "year" }, "2027-01-01")).range).toEqual({ from: "2027-01-01", until: "2027-01-02", unit: "day" });
-    expect(ok(resolvePeriod({ preset: "week" }, "2026-10-16")).label).toBe("이번 주 (2026-10-12 ~ 2026-10-16)");
+    expect(ok(resolvePeriod({ preset: "week" }, "2026-10-16")).label).toBe("최근 7일 (2026-10-10 ~ 2026-10-16)");
+  });
+
+  it("includes exactly 7/30 KST dates across month, year and leap boundaries, preserving old URL keys", () => {
+    const expected = [
+      ["2026-11-02", "2026-10-27", "2026-10-04"],
+      ["2027-01-01", "2026-12-26", "2026-12-03"],
+      ["2024-03-01", "2024-02-24", "2024-02-01"],
+    ];
+    for (const [today, seven, thirty] of expected) {
+      for (const [preset, start, n] of [["week", seven, 7], ["month", thirty, 30]] as const) {
+        const r = ok(resolvePeriod({ preset }, today));
+        expect(r.range.from).toBe(start);
+        expect(bucketsOf(r.range)).toHaveLength(n);
+        expect(bucketsOf(r.range).at(-1)).toBe(today);
+        expect(r.selection.preset).toBe(preset);
+      }
+    }
   });
 
   it("takes a custom range up to today, at most 366 days", () => {

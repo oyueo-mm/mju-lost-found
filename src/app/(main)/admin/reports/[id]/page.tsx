@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
+import { can } from "@/lib/permissions/check";
 import { getReportForAdmin } from "@/lib/moderation/service";
 import { MODERATION_ACTION_TYPE_LABELS } from "@/lib/moderation/schema";
 import {
@@ -38,7 +39,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default async function AdminReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("reports.view");
 
   const { id: idParam } = await params;
   const id = Number(idParam);
@@ -179,9 +180,15 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
       </Section>
 
       {/* 5. 관리자 처리 영역 / 6. 처리 결과·제재 정보 */}
-      {report.status === "pending" ? (
+      {report.status === "pending" && !can(admin, "reports.process") ? (
+        <Section title="관리자 처리">
+          <p className="text-sm text-muted-foreground">신고 처리 권한이 없어 내용만 볼 수 있습니다.</p>
+        </Section>
+      ) : report.status === "pending" ? (
         <Section title="관리자 처리">
           <ReportProcessForm
+            canDelete={can(admin, "posts.delete")}
+            canSuspend={can(admin, "users.sanction")}
             reportId={report.id}
             targetType={report.targetType}
             targetDeleted={report.targetDeleted}

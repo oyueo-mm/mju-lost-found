@@ -7,6 +7,13 @@ import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { CURRENT_TERMS_VERSION, isAcceptedIdentityConsentVersion, isAcceptedPrivacyVersion } from "@/lib/auth/terms";
 import { prisma } from "@/lib/db/prisma";
 import type { User } from "@/generated/prisma/client";
+import { can, hasAnyAdminPermission } from "@/lib/permissions/check";
+import type { PermissionKey } from "@/lib/permissions/definitions";
+
+// The User row plus the admin permissions granted to it, both read from the DB
+// on this request (never from the JWT), so a revoked permission is gone on the
+// very next request even with an old session cookie.
+export type CurrentUser = User & { adminPermissions: string[] };
 
 // Always re-reads the User row from the DB instead of trusting the JWT's
 // cached id/nickname for anything beyond routing -- same rule the legacy
@@ -36,7 +43,7 @@ import type { User } from "@/generated/prisma/client";
 // own unit tests, or any plain Node call) -- so no test needed to change,
 // and every call site's auth/permission behavior is byte-for-byte
 // unchanged, it just doesn't re-fetch the same row twice in one request.
-export const getCurrentUser = cache(async (): Promise<User | null> => {
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return null;
@@ -52,7 +59,9 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
   if (user && (user.userType === "EXTERNAL_VERIFIED" || user.userType === "EXTERNAL_TEST")) {
     if (!(await hasOngoingExternalAccess(user))) return null;
   }
-  return user;
+  if (!user) return null;
+  const grants = await prisma.adminPermissionGrant.findMany({ where: { userId: user.id }, select: { permission: true } });
+  return { ...user, adminPermissions: grants.map((g) => g.permission) };
 });
 
 // Phase 14: which one-line explanation /login shows above the Google
@@ -111,7 +120,7 @@ import { sanitizeCallbackUrl } from "./callbackUrl";
 // says and where it sends the user back to after signing in. Omitting
 // them still redirects to a plain /login exactly as before -- every
 // existing call site that doesn't pass them keeps working unchanged.
-export async function requireUser(reason?: LoginReason, callbackUrl?: string): Promise<User> {
+export async function requireUser(reason?: LoginReason, callbackUrl?: string): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) redirect(loginRedirectUrl(reason, callbackUrl));
   return user;
@@ -169,7 +178,7 @@ export function hasRequiredConsents(
   );
 }
 
-export async function requireReadyUser(reason?: LoginReason, callbackUrl?: string): Promise<User> {
+export async function requireReadyUser(reason?: LoginReason, callbackUrl?: string): Promise<CurrentUser> {
   const user = await requireUser(reason, callbackUrl);
   if (!hasRequiredConsents(user)) redirect(privacyConsentRedirectUrl(callbackUrl));
   if (user.nickname === null) redirect("/onboarding");
@@ -189,7 +198,7 @@ export async function requireReadyUser(reason?: LoginReason, callbackUrl?: strin
 // for a Server Component/Server Action that should never even render for a
 // suspended user; redirects to /suspended (which itself re-checks and
 // bounces home if the suspension has since expired).
-export async function requireActiveUser(): Promise<User> {
+export async function requireActiveUser(): Promise<CurrentUser> {
   const user = await requireReadyUser();
   if (isCurrentlySuspended(user)) redirect("/suspended");
   return user;
@@ -204,9 +213,31 @@ export async function requireActiveUser(): Promise<User> {
 // line of defense, never the only thing enforcing it. Redirects to /login
 // or /onboarding via requireReadyUser, or to / if logged in but not an
 // admin (there's no dedicated "access denied" page in this app).
-export async function requireAdmin(): Promise<User> {
+export async function requireAdmin(): Promise<CurrentUser> {
   const user = await requireReadyUser();
   if (!user.isAdmin) redirect("/");
+  return user;
+}
+
+// Page/Server Action gate for one admin permission (a full administrator holds
+// all of them). Same redirect behaviour as requireAdmin(); the service layer
+// re-checks the same permission itself.
+export async function requirePermission(permission: PermissionKey): Promise<CurrentUser> {
+  const user = await requireReadyUser();
+  if (!can(user, permission)) redirect("/");
+  return user;
+}
+
+// For pages several permissions open (the page then narrows what it shows).
+export async function requireAnyPermission(permissions: readonly PermissionKey[]): Promise<CurrentUser> {
+  const user = await requireReadyUser();
+  if (!permissions.some((p) => can(user, p))) redirect("/");
+  return user;
+}
+
+export async function requireAnyAdminPermission(): Promise<CurrentUser> {
+  const user = await requireReadyUser();
+  if (!hasAnyAdminPermission(user)) redirect("/");
   return user;
 }
 

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { getOrganizationForAdmin } from "@/lib/organization/service";
 import { listRecentPostsByOrganization } from "@/lib/posts/service";
 import { ORGANIZATION_STATUS_LABELS } from "@/lib/organization/schema";
@@ -30,7 +30,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 // organizationId는 URL 경로 파라미터에서 읽은 뒤 서버에서 다시 조회하며,
 // 클라이언트가 Organization 객체 전체를 보낼 방법은 어디에도 없다(§11).
 export default async function AdminOrganizationDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("institutions.manage");
 
   const { id: idParam } = await params;
   const id = Number(idParam);

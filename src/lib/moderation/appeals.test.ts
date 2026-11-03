@@ -91,6 +91,7 @@ describe("submitSuspensionAppeal", () => {
     expect(fanOutToAdmins).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ type: "SUSPENSION_APPEAL_RECEIVED", relatedType: "suspension_appeal", relatedId: 101 }),
+      "users.sanction",
     );
   });
 

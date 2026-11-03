@@ -588,7 +588,7 @@ export const zh: Dictionary = {
   "landing.registerLost": "登记失物",
   "landing.registerFound": "登记拾获物品",
   "landing.searchCta": "寻找丢失物品",
-  "landing.subtitle": "描述物品或上传照片，\nAI 会显示相似的拾获物品。",
+  "landing.subtitle": "描述物品或上传照片，\n即可查看相似的拾获物品。",
   "landing.features.title": "核心功能",
   "landing.features.subtitle": "从寻找失物到聊天联系，需要的功能一应俱全。",
   "landing.feature.register.title": "登记失物与招领",

@@ -593,7 +593,7 @@ export const en: Dictionary = {
   "landing.registerLost": "Post a lost item",
   "landing.registerFound": "Post a found item",
   "landing.searchCta": "Find a lost item",
-  "landing.subtitle": "Describe the item or add a photo,\nand AI shows similar found items.",
+  "landing.subtitle": "Describe the item or add a photo\nto see similar found items.",
   "landing.features.title": "Key features",
   "landing.features.subtitle": "From finding a lost item to chatting — everything you need is here.",
   "landing.feature.register.title": "Post lost and found items",

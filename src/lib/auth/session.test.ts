@@ -8,7 +8,7 @@ const redirect = vi.fn((url: string) => {
 });
 
 vi.mock("@/lib/auth/auth", () => ({ auth }));
-vi.mock("@/lib/db/prisma", () => ({ prisma: { user: { findUnique } } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { user: { findUnique }, adminPermissionGrant: { findMany: async () => [] } } }));
 vi.mock("next/navigation", () => ({ redirect }));
 // External access Phase: the per-request approval re-check (auth/access.ts,
 // tested on its own in access.test.ts).
@@ -82,7 +82,7 @@ describe("getCurrentUser", () => {
     const user = await getCurrentUser();
 
     expect(findUnique).toHaveBeenCalledWith({ where: { id: 42 } });
-    expect(user).toEqual({ id: 42, nickname: "실제닉네임", isAdmin: false });
+    expect(user).toEqual({ id: 42, nickname: "실제닉네임", isAdmin: false, adminPermissions: [] });
   });
 
   // Phase 10: a withdrawn account's row still exists (withdrawUser never
@@ -107,7 +107,7 @@ describe("requireUser", () => {
     auth.mockResolvedValueOnce({ user: { id: "1", nickname: null } });
     findUnique.mockResolvedValueOnce({ id: 1, nickname: null });
 
-    await expect(requireUser()).resolves.toEqual({ id: 1, nickname: null });
+    await expect(requireUser()).resolves.toEqual({ id: 1, nickname: null, adminPermissions: [] });
   });
 
   it("redirects to /login when not signed in, for a protected page like /onboarding", async () => {

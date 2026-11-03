@@ -15,9 +15,10 @@ export const createExternalAccessSchema = z.object({
     .trim()
     .toLowerCase()
     .email("올바른 이메일 주소를 입력해주세요.")
-    .max(254)
-    .refine((email) => !email.endsWith("@mju.ac.kr"), "명지대학교 계정(@mju.ac.kr)은 승인 없이 로그인할 수 있습니다."),
+    .max(254),
   ...detailsSchema,
+}).superRefine((input, ctx) => {
+  if (input.email.endsWith("@mju.ac.kr")) ctx.addIssue({ code: "custom", path: ["email"], message: "명지대학교 계정은 로그인 승인 없이 이용할 수 있습니다. 기관 담당자는 별도 관리 화면에서 지정해주세요." });
 });
 export type CreateExternalAccessInput = z.infer<typeof createExternalAccessSchema>;
 

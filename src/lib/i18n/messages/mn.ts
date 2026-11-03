@@ -593,7 +593,7 @@ export const mn: Dictionary = {
   "landing.registerLost": "Гээсэн эд зүйлээ бүртгэх",
   "landing.registerFound": "Олсон эд зүйлээ бүртгэх",
   "landing.searchCta": "Гээсэн зүйлээ хайх",
-  "landing.subtitle": "Эд зүйлээ тайлбарлах эсвэл зураг нэмбэл\nAI төстэй олдсон эд зүйлсийг харуулна.",
+  "landing.subtitle": "Эд зүйлээ тайлбарлах эсвэл зураг нэмбэл\nтөстэй олдсон эд зүйлсийг харуулна.",
   "landing.features.title": "Үндсэн боломжууд",
   "landing.features.subtitle": "Гээгдсэн эд хайхаас эхлээд чат хүртэл — хэрэгтэй бүх зүйл бий.",
   "landing.feature.register.title": "Гээгдсэн, олдсон эд бүртгэх",

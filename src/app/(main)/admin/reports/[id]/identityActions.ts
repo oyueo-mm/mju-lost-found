@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { viewIdentityForReport } from "@/lib/identity/service";
 
 export type IdentityViewState =
@@ -22,7 +22,7 @@ export type IdentityViewState =
 // viewIdentityForReport, which also limits the target to this report's
 // reporter or reported member, requires the reason, and logs the view.
 export async function viewReportPartyIdentityAction(_prev: IdentityViewState, formData: FormData): Promise<IdentityViewState> {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("reports.process");
   const reportId = Number(formData.get("reportId"));
   const targetUserId = Number(formData.get("targetUserId"));
   if (!Number.isInteger(reportId) || !Number.isInteger(targetUserId)) return { ok: false, error: "잘못된 요청입니다." };

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireActiveUser } from "@/lib/auth/session";
-import { isAdmin } from "@/lib/moderation/service";
+import { can } from "@/lib/permissions/check";
 import {
   appointAdmin,
   approveJoinRequest,
@@ -155,7 +155,7 @@ export type DeactivateOrganizationState = { error: string } | { ok: true };
 export async function deactivateOrganizationAction(organizationId: number): Promise<DeactivateOrganizationState> {
   const user = await requireActiveUser();
 
-  const result = await deactivateOrganization(user.id, organizationId, isAdmin(user));
+  const result = await deactivateOrganization(user.id, organizationId, can(user, "institutions.manage"));
   if (result.kind === "forbidden") return { error: "단체를 비활성화할 권한이 없습니다." };
   if (result.kind === "not_found") return { error: "단체를 찾을 수 없습니다." };
   if (result.kind === "invalid_state") return { error: "이미 비활성화된 단체입니다." };

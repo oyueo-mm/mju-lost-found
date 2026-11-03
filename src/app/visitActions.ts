@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { headers } from "next/headers";
 
-import { addDailyCount, currentAudience } from "@/lib/metrics/record";
+import { addDailyCount, currentAudience, recordRoleDimensions } from "@/lib/metrics/record";
 import { flowCounterChanges, parseFlowUpdate } from "@/lib/metrics/flow";
 import { channelOf, deviceOf, isBotUserAgent, isPageKind, isRefSource, MAX_EVENTS_PER_CALL, sanitizeUtm } from "@/lib/metrics/visits";
 
@@ -105,6 +105,8 @@ export async function recordVisitsAction(
     const admitted = admit(client, Math.max(1, Math.min(events.length, MAX_EVENTS_PER_CALL)));
     if (admitted === 0) return;
     const audience = await currentAudience();
+    if (audience === "unclassified") return { admin: false };
+    let internalPv = 0, internalSessions = 0;
     if (audience !== "internal" && options?.optedOut === true) return { admin: false };
     const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
     const day = kstNow.toISOString().slice(0, 10);
@@ -114,8 +116,11 @@ export async function recordVisitsAction(
       if (typeof raw !== "object" || raw === null) continue;
       const event = raw as Record<string, unknown>;
       if (!isPageKind(event.kind)) continue;
+      if (event.kind === "admin" && audience !== "internal") continue;
       if (audience === "internal") {
+        internalPv++; if (event.sessionStart === true) internalSessions++;
         addDailyCount("visit.internal.pv");
+        if (event.sessionStart === true) addDailyCount("visit.internal.session");
         continue;
       }
       addDailyCount(`visit.pv.${audience}`);
@@ -153,6 +158,7 @@ export async function recordVisitsAction(
         for (const [metric, n] of flowCounterChanges(update, device)) addDailyCount(metric, n, update.day);
       }
     }
+    if (audience === "internal") await recordRoleDimensions([{ metric: "visit.internal.pv", n: internalPv }, { metric: "visit.internal.session", n: internalSessions }]);
     return { admin: audience === "internal" };
   } catch {
     // Statistics never fail a visit.

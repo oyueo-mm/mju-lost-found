@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { listFeedbackForAdmin } from "@/lib/feedback/service";
 import {
   FEEDBACK_CATEGORY_LABELS,
@@ -26,7 +26,7 @@ export default async function AdminFeedbackPage({
 }: {
   searchParams: Promise<{ status?: string; page?: string }>;
 }) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("settings.manage");
 
   const { status: statusParam, page: pageParam } = await searchParams;
   const status = FEEDBACK_STATUSES.find((s) => s === statusParam);

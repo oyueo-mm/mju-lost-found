@@ -11,7 +11,7 @@ import { listPostsForAdmin } from "@/lib/admin/posts";
 // and listPostsForAdmin() re-checks isAdmin() itself regardless -- same
 // pattern api/admin/reports/route.ts and api/admin/users/route.ts already use.
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  const auth = await requireAdminForApi();
+  const auth = await requireAdminForApi(["posts.manage", "posts.delete"]);
   if ("response" in auth) return auth.response;
 
   const query = listPostsForAdminQuerySchema.parse(Object.fromEntries(request.nextUrl.searchParams));

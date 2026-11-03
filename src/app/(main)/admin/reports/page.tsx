@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { listReportsForAdmin } from "@/lib/moderation/service";
 import { REPORT_STATUSES_FOR_FILTER, REPORT_TARGET_TYPES_FOR_FILTER } from "@/lib/moderation/schema";
 import { REPORT_STATUS_LABELS, REPORT_TARGET_TYPE_LABELS, isUrgentReportReason } from "@/lib/report/schema";
@@ -17,7 +17,7 @@ export default async function AdminReportsPage({
 }: {
   searchParams: Promise<{ status?: string; targetType?: string; page?: string; urgent?: string }>;
 }) {
-  const admin = await requireAdmin(); // redirects unless logged in, ready, and DB-flagged admin
+  const admin = await requirePermission("reports.view"); // redirects unless logged in, ready, and DB-flagged admin
 
   const { status: statusParam, targetType: targetTypeParam, page: pageParam, urgent: urgentParam } = await searchParams;
   const urgentOnly = urgentParam === "1";

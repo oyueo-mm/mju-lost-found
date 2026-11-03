@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { activityStep } from "./activityTime";
 import { recordAdminVisit } from "@/lib/admin/activityLog";
+import { classifyActor, type ActorClassification } from "./audience";
 
 // 운영 통계 recording (admin dashboard, /admin/stats). Rules:
 // - Only what the existing tables can't answer is recorded here: search
@@ -95,15 +96,19 @@ function signatureOf(parts: unknown[]): string {
 // Counted in this instance's memory and written with the timings (at most
 // once a minute), so a busy page never costs a DB write per view.
 const pendingDaily = new Map<string, number>();
-export function recordDaily(metric: DailyMetric, dedupeParts?: unknown[]): boolean {
-  if (dedupeParts && !firstSeen(signatureOf([metric, ...dedupeParts]))) return false;
-  addDailyCount(metric);
-  // 방문 통계: a search is also counted by who made it -- "search.keyword"
-  // stays the total, "search.keyword.anon|member|internal" splits the same
-  // events (never added to the total). Resolved after this call, still
-  // before the deferred write.
-  if (metric.startsWith("search.")) void countByAudience(metric);
-  return true;
+const classifications = new Set<Promise<boolean>>();
+export function recordDaily(metric: DailyMetric, dedupeParts?: unknown[]): Promise<boolean> {
+  // Role-suffixed counters are the source of truth. Unclassified legacy
+  // totals are retained in the DB, never mixed into new member metrics.
+  // Member, internal and anonymous counters are independent. Dedupe is
+  // scoped to the event-time role and the signed-in actor, held only as
+  // an HMAC in memory; unrelated accounts cannot suppress each other.
+  const task = countByAudience(metric, kstDay(), dedupeParts);
+  classifications.add(task);
+  void task.finally(() => classifications.delete(task));
+  // Keep role resolution alive even when the caller does not await metrics.
+  later(() => task);
+  return task;
 }
 
 // Adds to a per-day counter in the same batched write (방문 통계 uses its
@@ -111,6 +116,7 @@ export function recordDaily(metric: DailyMetric, dedupeParts?: unknown[]): boole
 // `day` (KST "YYYY-MM-DD"): for a count that belongs to another day than
 // today -- 방문 시간·이탈 reports about a session that started earlier.
 export function addDailyCount(metric: string, n = 1, day: string = kstDay()): void {
+  if (/^(visit\.|search\.|recommend\.|active\.|auth\.login\.)/.test(metric)) metric = `audience_v3.${metric}`;
   const key = `${day}|${metric}`;
   pendingDaily.set(key, (pendingDaily.get(key) ?? 0) + n);
   noteObservation();
@@ -118,18 +124,38 @@ export function addDailyCount(metric: string, n = 1, day: string = kstDay()): vo
 
 // anon (signed out), member, or internal (an admin -- kept apart so staff
 // testing never reads as visitor traffic).
-export type Audience = "anon" | "member" | "internal";
+export type Audience = "anon" | "member" | "internal" | "unclassified";
+let sessionModule: Promise<typeof import("@/lib/auth/session")> | undefined;
 export async function currentAudience(): Promise<Audience> {
-  const { getCurrentUser } = await import("@/lib/auth/session");
-  const user = await getCurrentUser();
-  return !user ? "anon" : user.isAdmin ? "internal" : "member";
+  return (await audienceContext()).audience;
 }
 
-async function countByAudience(metric: string): Promise<void> {
+async function audienceContext(): Promise<{ audience: Audience; actor: string; classification: ActorClassification | null }> {
+  const { getCurrentUser } = await (sessionModule ??= import("@/lib/auth/session"));
+  const user = await getCurrentUser();
+  const classification = user ? await classifyActor(user) : null;
+  return { audience: classification?.audience ?? "anon", actor: user ? activityActor(user.id) : "anonymous", classification };
+}
+
+function addRoleCount(metric: string, classification: ActorClassification | null, n = 1, day = kstDay()) {
+  if (classification?.audience !== "internal") return;
+  addDailyCount(`audience_v3.role.${classification.role}.org.${classification.organizationId ?? 0}.${metric}`, n, day);
+}
+export async function recordRoleDimensions(metrics: { metric: string; n: number }[]) {
+  const { classification } = await audienceContext();
+  for (const m of metrics) addRoleCount(m.metric, classification, m.n);
+}
+
+async function countByAudience(metric: string, day: string, dedupeParts?: unknown[]): Promise<boolean> {
   try {
-    addDailyCount(`${metric}.${await currentAudience()}`);
+    const { audience, actor, classification } = await audienceContext();
+    if (dedupeParts && !firstSeen(signatureOf([metric, audience, actor, ...dedupeParts]))) return false;
+    addDailyCount(`${metric}.${audience}`, 1, day);
+    addRoleCount(`${metric}.${audience}`, classification, 1, day);
+    return true;
   } catch {
     // Outside a request (scripts, tests) there is no session to read.
+    return false;
   }
 }
 
@@ -157,6 +183,10 @@ export function kstMinuteOfDay(at: Date): number {
 export function recordSignIn(at: Date = new Date()): void {
   const hour = String(new Date(at.getTime() + KST_OFFSET_MS).getUTCHours()).padStart(2, "0");
   addDailyCount(`auth.login.hour.${hour}`, 1, kstDay(at));
+}
+export function recordClassifiedSignIn(classification: ActorClassification) {
+  if (classification.audience === "member") recordSignIn();
+  else if (classification.audience === "internal") { addDailyCount("auth.login.internal"); addRoleCount("auth.login.internal", classification); }
 }
 
 // Active member: one row per member per KST day, keyed by an HMAC of the id.
@@ -202,7 +232,7 @@ export function kstHour(at: Date): number {
   return new Date(at.getTime() + KST_OFFSET_MS).getUTCHours();
 }
 
-type ActiveMember = { id: number; isAdmin: boolean; lastActiveAt: Date | null };
+type ActiveMember = { id: number; isAdmin: boolean; lastActiveAt: Date | null; email?: string; userType?: string };
 
 // Returns whether this call wrote (false: within the interval, the account
 // is deactivated / withdrawn, or another request wrote first).
@@ -212,6 +242,8 @@ export async function recordMemberActivity(user: ActiveMember, now: Date = new D
   if (!step.write) return false;
   const day = kstDay(now);
   try {
+    const classification = await classifyActor(user);
+    const internal = classification.audience === "internal";
     // timestamp columns hold UTC wall time: convert explicitly, never
     // through the driver's local-time handling of a Date parameter
     const rows = await prisma.$queryRaw<{ n: number }[]>`
@@ -221,15 +253,15 @@ export async function recordMemberActivity(user: ActiveMember, now: Date = new D
           AND "last_active_at" IS NOT DISTINCT FROM (${last ? last.toISOString() : null}::timestamptz AT TIME ZONE 'UTC')
         RETURNING "id"
       ), d AS (
-        INSERT INTO "ActivityDay" ("day", "actor")
-        SELECT ${day}::date, ${activityActor(user.id)} FROM u WHERE ${step.newDay}::boolean
+        INSERT INTO "ActivityDay" ("day", "actor", "activity_audience", "activity_role", "activity_organization_id")
+        SELECT ${day}::date, ${activityActor(user.id)}, ${classification.audience}, ${classification.role}, ${classification.organizationId} FROM u WHERE ${step.newDay}::boolean
         ON CONFLICT DO NOTHING
       )
       SELECT count(*)::int AS n FROM u`;
     const wrote = Number(rows[0]?.n ?? 0) > 0;
     // 관리자 활동 > 방문: the same write extends or opens the admin's visit
-    if (wrote && user.isAdmin) await recordAdminVisit(user.id, now);
-    if (wrote && step.newHour && !user.isAdmin) {
+    if (wrote && internal) await recordAdminVisit(user.id, now);
+    if (wrote && step.newHour && classification.audience === "member") {
       addDailyCount(`${ACTIVE_MEMBER_HOUR_PREFIX}${String(kstHour(now)).padStart(2, "0")}`, 1, day);
     } else if (wrote && !hourlySinceMarked) {
       // nothing counted (an admin): still record this environment's
@@ -316,6 +348,7 @@ function noteObservation() {
 }
 
 export async function flushTimings(): Promise<void> {
+  await Promise.all([...classifications]);
   if (pending.size === 0 && pendingDaily.size === 0 && hourlySinceMarked) return;
   const rows = [...pending.values()];
   pending.clear();

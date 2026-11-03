@@ -5,7 +5,7 @@ const approveOrganizationCreationRequest = vi.fn();
 const rejectOrganizationCreationRequest = vi.fn();
 const revalidatePath = vi.fn();
 
-vi.mock("@/lib/auth/session", () => ({ requireAdmin }));
+vi.mock("@/lib/auth/session", () => ({ requireAdmin, requirePermission: requireAdmin, requireAnyPermission: requireAdmin }));
 vi.mock("@/lib/organization/service", () => ({ approveOrganizationCreationRequest, rejectOrganizationCreationRequest }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 

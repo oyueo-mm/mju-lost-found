@@ -3,7 +3,7 @@ import { releaseResolvedWithdrawnIdentitiesSafely } from "@/lib/auth/identityRel
 import { NotificationType as PrismaNotificationType, type User } from "@/generated/prisma/client";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { fanOutToAdmins } from "@/lib/notification/adminFanout";
-import { isAdmin } from "./service";
+import { can } from "@/lib/permissions/check";
 
 // Phase I section 4: deliberately minimal, per this phase's own spec
 // ("운영자가 승인/거절하는 복잡한 workflow가 현재 구조상 과도하다면... 최소한의
@@ -62,7 +62,7 @@ export async function submitSuspensionAppeal(user: User, content: string): Promi
       content: `${user.nickname ?? "사용자"}님이 정지에 대해 이의를 제기했습니다.`,
       relatedType: "suspension_appeal",
       relatedId: appeal.id,
-    });
+    }, "users.sanction");
     return appeal;
   });
   return { kind: "ok", data: toAppealDTO(created) };
@@ -99,7 +99,7 @@ export async function listSuspensionAppealsForAdmin(
   admin: User,
   { page, limit }: { page: number; limit: number },
 ): Promise<AppealMutationResult<PagedSuspensionAppeals>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "users.sanction")) return { kind: "forbidden" };
 
   const skip = (page - 1) * limit;
   const [pendingRows, reviewedRows, total] = await Promise.all([
@@ -131,7 +131,7 @@ export async function listSuspensionAppealsForAdmin(
 // unsuspend anyone; an admin who agrees still uses the existing "정지 해제"
 // action separately.
 export async function markSuspensionAppealReviewed(admin: User, appealId: number): Promise<AppealMutationResult<SuspensionAppealDTO>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "users.sanction")) return { kind: "forbidden" };
 
   const existing = await prisma.suspensionAppeal.findUnique({ where: { id: appealId } });
   if (!existing) return { kind: "not_found" };

@@ -2,10 +2,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { requireAdmin, getUserDetailForAdmin } = vi.hoisted(() => ({ requireAdmin: vi.fn(), getUserDetailForAdmin: vi.fn() }));
-vi.mock("@/lib/auth/session", () => ({ requireAdmin }));
+vi.mock("@/lib/auth/session", () => ({ requireAdmin, requirePermission: requireAdmin, requireAnyPermission: requireAdmin }));
 vi.mock("@/lib/admin/users", () => ({ getUserDetailForAdmin }));
 vi.mock("@/lib/metrics/report", () => ({ COLLECTION_SINCE: { ops: "2026-10-15T03:35" } }));
 vi.mock("@/components/admin/UserActionButtons", () => ({ UserActionButtons: () => null }));
+vi.mock("@/lib/permissions/service", () => ({ loadPermissionStates: async () => new Map(), listPermissionHistory: async () => [], listManagementInstitutions: async () => [] }));
+vi.mock("@/components/admin/AdminPermissionEditor", () => ({ AdminPermissionEditor: () => null }));
 vi.mock("@/components/user/AuthorLink", () => ({ AuthorLink: () => null }));
 vi.mock("@/components/comment/MyCommentList", () => ({ MyCommentList: () => null }));
 

@@ -132,7 +132,7 @@ export async function createReport(reporter: User, input: CreateReportInput): Pr
         content: `${REPORT_TARGET_TYPE_LABELS[input.targetType]} 신고: ${input.reason}`,
         relatedType: "report",
         relatedId: report.id,
-      });
+      }, "reports.view");
       return report;
     });
     return { kind: "ok", data: toReportDTO(created) };

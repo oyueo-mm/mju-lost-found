@@ -1,4 +1,6 @@
 "use client";
+import { CustodyFields } from "./CustodyFields";
+import { custodyInputSchema, type CustodyInput } from "@/lib/posts/custodySchema";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
@@ -47,6 +49,7 @@ function RequiredMark() {
 }
 
 type PostFormValues = {
+  custody?: (CustodyInput & { confirmedAt?: string | null }) | null;
   title: string;
   description: string;
   // Legacy category (always set) plus the taxonomy codes, null when the
@@ -179,6 +182,7 @@ function KnownToggle({
 }
 
 export function PostForm({ type, postId, initialValues, myOrganizations = [], defaults = null, draftOwnerId = null }: PostFormProps) {
+  const [custody, setCustody] = useState<CustodyInput>(initialValues?.custody ? { state: initialValues.custody.state, place: initialValues.custody.place } : { state: "UNKNOWN", place: "" });
   const router = useRouter();
   const { t } = useI18n();
   const [error, setError] = useState<string | null>(null);
@@ -349,6 +353,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
     dateUnknown,
     exactTime,
     organizationId,
+    ...(type === "found" && { custody }),
     photoCount: items.filter((item) => item.kind === "new").length,
   });
 
@@ -377,7 +382,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
     // currentDraft() reads exactly these values (plus the uncontrolled
     // inputs, which bump draftTick through the form's onInput).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftStorageKey, draftTick, titleText, descriptionText, categoryValue, campus, locationUnknown, dateUnknown, exactTime, organizationId, items]);
+  }, [draftStorageKey, draftTick, titleText, descriptionText, categoryValue, campus, locationUnknown, dateUnknown, exactTime, organizationId, items, custody]);
 
   function setFieldValue(name: string, value: string) {
     const input = formRef.current?.elements.namedItem(name) as HTMLInputElement | HTMLTextAreaElement | null;
@@ -387,6 +392,8 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
   function restoreDraft() {
     const d = pendingDraft;
     if (!d) return;
+    const storedCustody = custodyInputSchema.safeParse(d.custody);
+    if (storedCustody.success) setCustody(storedCustody.data);
     setFieldValue("title", d.title);
     setFieldValue("description", d.description);
     setFieldValue("location", d.location);
@@ -637,6 +644,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
 
     const body = {
       type,
+      ...(type === "found" && (!isEdit || JSON.stringify(custody) !== JSON.stringify(initialValues?.custody ? { state: initialValues.custody.state, place: initialValues.custody.place } : { state: "UNKNOWN", place: "" })) && { custody }),
       ...fieldIfChanged(isEdit, "title", title, initialValues?.title),
       ...fieldIfChanged(isEdit, "description", description, initialValues?.description),
       // 카테고리 대분류-소분류: categoryCode/subcategory only; the server
@@ -744,7 +752,8 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
     <form
       ref={formRef}
       onSubmit={handleSubmit}
-      // React's onChange, never the native onInput: a <select> fires `input`
+      // React's onChange, never the native onInput: a <select>
+      // fires `input`
       // before `change`, and re-rendering on `input` put a controlled select
       // (카테고리) back to its old value before its own onChange ran -- the
       // choice never stuck. onChange runs in the same update as the field's own.
@@ -1036,6 +1045,8 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
             )}
           </div>
         </div>
+
+        {type === "found" && <><CustodyFields value={custody} onChange={setCustody} disabled={fieldsLocked || Boolean(initialValues?.custody?.confirmedAt)} />{initialValues?.custody?.confirmedAt && <p className="text-xs text-muted-foreground">기관에서 접수한 물품의 보관 정보 변경은 담당 기관에 요청해주세요.</p>}</>}
 
         <div className="flex flex-col gap-2 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">

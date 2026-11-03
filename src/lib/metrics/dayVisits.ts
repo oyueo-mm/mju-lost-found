@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/db/prisma";
 import { addDays, decodeDays, MAX_SELECTED_DAYS, selectableDay } from "./daySelection";
 import { loadHourlyCells, type CellStatus, type HourlyCells } from "./hourly";
-import { activityActor, kstDay } from "./record";
-import { activityCoverageOf, coverageOf, kstNow, type Coverage } from "./report";
+import { kstDay } from "./record";
+import { activityCoverageOf, coverageOf, coverageSinceDay, kstNow, type Coverage } from "./report";
+import { audienceCollectionDay } from "./collection";
 
 // 날짜별 방문 분석 (운영 통계): one KST day's visits in detail, next to the
 // day before. Read-only and aggregate only, from counters already kept:
@@ -144,17 +145,15 @@ export function compareRows(current: DayFigures, before: DayFigures, hourly: Hou
 // With `distinct`, also the members active on any of the days, counted
 // once -- never the sum of the daily counts.
 async function activeMembers(days: string[], distinct: boolean): Promise<{ byDay: Map<string, number>; distinct: number | null }> {
-  const admins = await prisma.user.findMany({ where: { isAdmin: true }, select: { id: true } });
-  const adminActors = admins.map((a) => activityActor(a.id));
   const [counted, all] = await Promise.all([
     prisma.$queryRaw<{ day: Date | string; n: bigint | number }[]>`
       SELECT "day", count(DISTINCT "actor") AS n FROM "ActivityDay"
-      WHERE "day" = ANY(${days}::date[]) AND NOT ("actor" = ANY(${adminActors}::text[]))
+      WHERE "day" = ANY(${days}::date[]) AND "activity_audience" = 'member'
       GROUP BY 1`.catch(() => [] as { day: Date | string; n: bigint | number }[]),
     distinct
       ? prisma.$queryRaw<{ n: bigint | number }[]>`
           SELECT count(DISTINCT "actor") AS n FROM "ActivityDay"
-          WHERE "day" = ANY(${days}::date[]) AND NOT ("actor" = ANY(${adminActors}::text[]))`.catch(() => null)
+          WHERE "day" = ANY(${days}::date[]) AND "activity_audience" = 'member'`.catch(() => null)
       : Promise.resolve(null),
   ]);
   return { byDay: new Map(counted.map((r) => [asDay(r.day), Number(r.n)])), distinct: all ? Number(all[0]?.n ?? 0) : null };
@@ -162,9 +161,10 @@ async function activeMembers(days: string[], distinct: boolean): Promise<{ byDay
 
 // Each day's figures; null (미측정) where a counter had not begun.
 async function loadDayFigures(days: string[], today: string, distinct = false): Promise<{ figures: DayFigures[]; distinctMembers: number | null }> {
+  const since = await audienceCollectionDay();
   const [counters, members] = await Promise.all([
     prisma.$queryRaw<{ day: Date | string; metric: string; n: bigint | number }[]>`
-      SELECT "day", "metric", sum("value") AS n FROM "MetricDaily"
+      SELECT "day", "metric", sum("value") AS n FROM "OperationalMetricDaily"
       WHERE "day" = ANY(${days}::date[])
         AND "metric" IN ('visit.pv.anon', 'visit.pv.member', 'visit.session.anon', 'visit.session.member')
       GROUP BY 1, 2`.catch(() => [] as { day: Date | string; metric: string; n: bigint | number }[]),
@@ -172,8 +172,10 @@ async function loadDayFigures(days: string[], today: string, distinct = false): 
   ]);
   const value = (d: string, metric: string) => counters.filter((r) => asDay(r.day) === d && r.metric === metric).reduce((a, r) => a + Number(r.n), 0);
   const figures = days.map((d): DayFigures => {
-    const visitCoverage = coverageOf("visit", d, addDays(d, 1));
-    const membersCoverage = activityCoverageOf(d, addDays(d, 1), today);
+    const classified = coverageSinceDay(since, d, addDays(d, 1));
+    const combine = (base: Coverage): Coverage => base === "none" || classified === "none" ? "none" : base === "partial" || classified === "partial" ? "partial" : "full";
+    const visitCoverage = combine(coverageOf("visit", d, addDays(d, 1)));
+    const membersCoverage = combine(activityCoverageOf(d, addDays(d, 1), today));
     const v = (metric: string) => (visitCoverage === "none" ? null : value(d, metric));
     return {
       day: d,

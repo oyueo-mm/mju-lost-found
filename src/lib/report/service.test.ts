@@ -290,6 +290,7 @@ describe("createReport", () => {
     expect(fanOutToAdmins).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ type: "REPORT_RECEIVED", relatedType: "report", relatedId: 77 }),
+      "reports.view",
     );
   });
 
@@ -395,7 +396,7 @@ describe("report reasons (Legal pre-beta Phase)", () => {
 
     await createReport(reporter, { targetType: "post", targetId: 5, reason: "불법 성적 콘텐츠(불법촬영물·성착취물 등)" });
 
-    expect(fanOutToAdmins).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ title: "[긴급] 불법 성적 콘텐츠 신고가 접수되었습니다" }));
+    expect(fanOutToAdmins).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ title: "[긴급] 불법 성적 콘텐츠 신고가 접수되었습니다" }), "reports.view");
   });
 
   it("keeps the usual title for other reasons", async () => {
@@ -404,6 +405,6 @@ describe("report reasons (Legal pre-beta Phase)", () => {
 
     await createReport(reporter, { targetType: "post", targetId: 5, reason: "명예훼손" });
 
-    expect(fanOutToAdmins).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ title: "새 신고가 접수되었습니다" }));
+    expect(fanOutToAdmins).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ title: "새 신고가 접수되었습니다" }), "reports.view");
   });
 });

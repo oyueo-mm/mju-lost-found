@@ -3,15 +3,15 @@ import { prisma } from "@/lib/db/prisma";
 import { CURRENT_TERMS_VERSION, isAcceptedPrivacyVersion } from "@/lib/auth/terms";
 import { addPeriods, periodStart } from "./dashboard";
 import { activityActor, kstDay, USER_HOURLY_SINCE_METRIC } from "./record";
+import { audienceCollectionDay } from "./collection";
 import {
   ACTIVITY_FIRST_FULL_DAY,
   activityCoverageOf,
+  coverageSinceDay,
   activityRetainedFrom,
   bucketSpan,
   bucketsOf,
-  COLLECTION_SINCE,
   kstNow,
-  sinceLabel,
   type Coverage,
   type ReportRange,
 } from "./report";
@@ -216,10 +216,14 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
   const buckets = bucketsOf(range);
   const indexOf = (day: string) => buckets.indexOf(periodStart(day, range.unit));
   const inRange = (day: string) => day >= range.from && day < range.until;
-  const activitySince = COLLECTION_SINCE.ops.slice(0, 10); // ActivityDay began with the 운영 지표 release
+  const collectionDay = await audienceCollectionDay();
+  const activitySince = collectionDay ?? today;
   const retainedFrom = activityRetainedFrom(today);
   const measuredFrom = activitySince > retainedFrom ? activitySince : retainedFrom; // first day that can hold marks
-  const covered = (from: string, until: string) => activityCoverageOf(from, until, today);
+  const covered = (from: string, until: string): Coverage => {
+    const base = activityCoverageOf(from, until, today), classified = coverageSinceDay(collectionDay, from, until);
+    return base === "none" || classified === "none" ? "none" : base === "partial" || classified === "partial" ? "partial" : "full";
+  };
   const refDay = (() => {
     const last = addPeriods(range.until, "day", -1);
     const d = last < today ? last : today;
@@ -227,52 +231,53 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
   })();
   const activityFrom = [range.from, refDay ? addPeriods(refDay, "day", -29) : range.from].sort()[0];
 
-  const [members, activityRows, hourRows, firstDays, sinceRows, posters, chatters, newPosters, newChatters] = await Promise.all([
+  const [members, activityRows, hourRows, firstDays, sinceRows, posters, chatters, newPosters, newChatters, inventory] = await Promise.all([
     prisma.user.findMany({
+      where: { activityAudience: "member" },
       select: { id: true, createdAt: true, withdrawnAt: true, deletedAt: true, isAdmin: true, isSuspended: true, nickname: true, privacyConsentVersion: true, termsVersion: true, userType: true },
     }) as Promise<MemberRow[]>,
     prisma.$queryRaw<{ day: Date | string; actor: string }[]>`
-      SELECT "day", "actor" FROM "ActivityDay" WHERE "day" >= ${activityFrom}::date AND "day" <= ${today}::date`.catch(() => []),
+      SELECT "day", "actor" FROM "ActivityDay" WHERE "activity_audience" = 'member' AND "day" >= ${activityFrom}::date AND "day" <= ${today}::date`.catch(() => []),
     prisma.$queryRaw<{ metric: string; n: bigint | number }[]>`
-      SELECT "metric", sum("value") AS n FROM "MetricDaily"
+      SELECT "metric", sum("value") AS n FROM "OperationalMetricDaily"
       WHERE ("metric" LIKE 'visit.member.hour.%' OR "metric" LIKE 'auth.login.hour.%') AND "day" >= ${range.from}::date AND "day" < ${range.until}::date
       GROUP BY 1`.catch(() => []),
     prisma.$queryRaw<{ pv: Date | string | null; login: Date | string | null }[]>`
       SELECT min("day") FILTER (WHERE "metric" LIKE 'visit.member.hour.%') AS pv, min("day") FILTER (WHERE "metric" LIKE 'auth.login.hour.%') AS login
-      FROM "MetricDaily" WHERE "metric" LIKE 'visit.member.hour.%' OR "metric" LIKE 'auth.login.hour.%'`.catch(() => []),
+      FROM "OperationalMetricDaily" WHERE "metric" LIKE 'visit.member.hour.%' OR "metric" LIKE 'auth.login.hour.%'`.catch(() => []),
     prisma.$queryRaw<{ day: Date | string; value: number }[]>`
-      SELECT "day", "value" FROM "MetricDaily" WHERE "metric" = ${USER_HOURLY_SINCE_METRIC} ORDER BY "day" LIMIT 1`.catch(() => []),
+      SELECT "day", "value" FROM "OperationalMetricDaily" WHERE "metric" = ${USER_HOURLY_SINCE_METRIC} ORDER BY "day" LIMIT 1`.catch(() => []),
     prisma.$queryRaw<{ id: number }[]>`
       SELECT DISTINCT "user_id" AS id FROM (
-        SELECT "user_id", "created_at" FROM "LostPost" UNION ALL SELECT "user_id", "created_at" FROM "FoundPost"
+        SELECT "user_id", "created_at" FROM "LostPost" WHERE "activity_audience" = 'member' UNION ALL SELECT "user_id", "created_at" FROM "FoundPost" WHERE "activity_audience" = 'member'
       ) p WHERE ${kst("created_at")} >= ${range.from}::date AND ${kst("created_at")} < ${range.until}::date`,
     prisma.$queryRaw<{ id: number }[]>`
       SELECT DISTINCT "sender_user_id" AS id FROM "Message"
-      WHERE ${kst("created_at")} >= ${range.from}::date AND ${kst("created_at")} < ${range.until}::date`,
+      WHERE "activity_audience" = 'member' AND ${kst("created_at")} >= ${range.from}::date AND ${kst("created_at")} < ${range.until}::date`,
     // members who signed up in the range and posted / chatted after signing up (until now)
     prisma.$queryRaw<{ id: number }[]>`
       SELECT DISTINCT p."user_id" AS id FROM (
-        SELECT "user_id", "created_at" FROM "LostPost" UNION ALL SELECT "user_id", "created_at" FROM "FoundPost"
+        SELECT "user_id", "created_at" FROM "LostPost" WHERE "activity_audience" = 'member' UNION ALL SELECT "user_id", "created_at" FROM "FoundPost" WHERE "activity_audience" = 'member'
       ) p JOIN "User" u ON u."id" = p."user_id"
-      WHERE ((u."created_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul') >= ${range.from}::date
+      WHERE u."activity_audience" = 'member' AND ((u."created_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul') >= ${range.from}::date
         AND ((u."created_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul') < ${range.until}::date AND p."created_at" >= u."created_at"`,
     prisma.$queryRaw<{ id: number }[]>`
-      SELECT DISTINCT m."sender_user_id" AS id FROM "Message" m JOIN "User" u ON u."id" = m."sender_user_id"
-      WHERE ((u."created_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul') >= ${range.from}::date
+      SELECT DISTINCT m."sender_user_id" AS id FROM "Message" m JOIN "User" u ON u."id" = m."sender_user_id" AND m."activity_audience" = 'member'
+      WHERE u."activity_audience" = 'member' AND ((u."created_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul') >= ${range.from}::date
         AND ((u."created_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul') < ${range.until}::date AND m."created_at" >= u."created_at"`,
+    prisma.user.findMany({ where: { isAdmin: false, userType: { not: "EXTERNAL_TEST" }, adminPermissions: { none: {} } }, select: { id: true, createdAt: true, withdrawnAt: true, deletedAt: true, isAdmin: true, isSuspended: true, nickname: true, privacyConsentVersion: true, termsVersion: true, userType: true } }),
   ]);
 
   // ---- accounts and sign-ups
-  const admins = new Set(members.filter((m) => m.isAdmin).map((m) => m.id));
   const onboarded = (m: MemberRow) => !!m.nickname && isAcceptedPrivacyVersion(m.privacyConsentVersion) && m.termsVersion === CURRENT_TERMS_VERSION;
-  const current = members.filter((m) => !m.withdrawnAt);
+  const current = inventory.filter((m) => !m.withdrawnAt);
   const available = current.filter((m) => !m.deletedAt);
   const accounts = {
-    total: members.length,
+    total: inventory.length,
     current: current.length,
     available: available.length,
     deactivated: current.length - available.length,
-    withdrawn: members.length - current.length,
+    withdrawn: inventory.length - current.length,
     onboarded: available.filter(onboarded).length,
     notOnboarded: available.filter((m) => !onboarded(m)).length,
     admins: available.filter((m) => m.isAdmin).length,
@@ -315,7 +320,7 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
   for (const m of members) actorToMember.set(activityActor(m.id), m.id);
   const marks = activityRows
     .map((r) => ({ day: asDay(r.day), member: actorToMember.get(r.actor) ?? null, actor: r.actor }))
-    .filter((r) => r.member === null || !admins.has(r.member));
+    ;
   const activityCoverage = covered(range.from, range.until);
   const perBucketCoverage = buckets.map((b) => {
     const span = bucketSpan(range, b);
@@ -347,11 +352,11 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
   const windowCount = (from: string, to: string) => distinct(marks.filter((r) => r.day >= from && r.day <= to));
   const perActorDays = new Map<string, number>();
   for (const r of inRangeMarks) perActorDays.set(r.actor, (perActorDays.get(r.actor) ?? 0) + 1);
-  const cohort = members.filter((m) => !m.isAdmin && inRange(signupDay.get(m.id)!));
+  const cohort = members.filter((m) => inRange(signupDay.get(m.id)!));
   const windowStatus = (m: MemberRow) => {
     if (m.withdrawnAt) return "withdrawn" as const;
     const first = addPeriods(signupDay.get(m.id)!, "day", 1);
-    if (first < ACTIVITY_FIRST_FULL_DAY) return "beforeCollection" as const;
+    if (first < [ACTIVITY_FIRST_FULL_DAY, addPeriods(activitySince, "day", 1)].sort().at(-1)!) return "beforeCollection" as const;
     if (first < retainedFrom) return "expired" as const;
     if (addPeriods(first, "day", RETURN_WINDOW_DAYS - 1) >= today) return "pending" as const;
     return "eligible" as const;
@@ -400,7 +405,7 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
   const sum = (values: number[]) => values.reduce((a, v) => a + v, 0);
 
   // ---- participation
-  const noAdmin = (rows: { id: number }[]) => new Set(rows.map((r) => Number(r.id)).filter((id) => !admins.has(id)));
+  const noAdmin = (rows: { id: number }[]) => new Set(rows.map((r) => Number(r.id)));
   const posterSet = noAdmin(posters);
   const chatterSet = noAdmin(chatters);
   const activeMembers = new Set(inRangeMarks.map((r) => r.member).filter((m): m is number => m !== null));
@@ -429,7 +434,7 @@ export async function loadUserReport(range: ReportRange, { now = new Date() } = 
     },
     withdrawals: { inRange: withdrawalsInRange, perBucket: withdrawalsPerBucket },
     activity: {
-      since: sinceLabel("ops"),
+      since: activitySince,
       retainedFrom,
       expiredInRange: range.from < retainedFrom && retainedFrom > activitySince && range.until > activitySince,
       coverage: activityCoverage,

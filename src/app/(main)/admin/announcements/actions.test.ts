@@ -6,7 +6,7 @@ const updateAnnouncement = vi.fn();
 const deleteAnnouncement = vi.fn();
 const revalidatePath = vi.fn();
 
-vi.mock("@/lib/auth/session", () => ({ requireAdmin }));
+vi.mock("@/lib/auth/session", () => ({ requireAdmin, requirePermission: requireAdmin, requireAnyPermission: requireAdmin }));
 vi.mock("@/lib/announcement/service", () => ({ createAnnouncement, updateAnnouncement, deleteAnnouncement }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 

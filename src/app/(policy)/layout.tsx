@@ -3,7 +3,7 @@ import { Footer } from "@/components/layout/Footer";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { getCurrentUser } from "@/lib/auth/session";
 import { countUnreadMessagesForUser } from "@/lib/chat/service";
-import { isAdmin } from "@/lib/moderation/service";
+import { hasAnyAdminPermission } from "@/lib/permissions/check";
 
 // 필수 동의 게이트 우회 점검 Phase: /policy/terms, /policy/community,
 // /policy/privacy need to stay readable in *every* account state --
@@ -44,7 +44,7 @@ export default async function PolicyLayout({ children }: { children: React.React
         {children}
       </main>
       <Footer />
-      <BottomNav unreadChatCount={unreadChat} isAdmin={Boolean(user && isAdmin(user))} />
+      <BottomNav unreadChatCount={unreadChat} isAdmin={hasAnyAdminPermission(user)} />
     </div>
   );
 }

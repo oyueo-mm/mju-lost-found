@@ -591,7 +591,7 @@ export const vi: Dictionary = {
   "landing.registerLost": "Đăng đồ thất lạc",
   "landing.registerFound": "Đăng đồ nhặt được",
   "landing.searchCta": "Tìm đồ bị mất",
-  "landing.subtitle": "Mô tả món đồ hoặc thêm ảnh,\nAI sẽ hiển thị đồ nhặt được tương tự.",
+  "landing.subtitle": "Mô tả món đồ hoặc thêm ảnh,\nđể xem đồ nhặt được tương tự.",
   "landing.features.title": "Tính năng chính",
   "landing.features.subtitle": "Từ tìm đồ thất lạc đến trò chuyện — mọi thứ bạn cần đều có ở đây.",
   "landing.feature.register.title": "Đăng đồ thất lạc và đồ nhặt được",

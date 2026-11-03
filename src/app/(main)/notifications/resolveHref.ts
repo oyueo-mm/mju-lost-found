@@ -5,6 +5,7 @@ import { encodePostTargetId, resolveMessageTarget, resolvePostTarget } from "@/l
 import { getAnnouncement } from "@/lib/announcement/service";
 import { getOrganizationById } from "@/lib/organization/service";
 import { getKeywordAlertMatchForUser } from "@/lib/keywordAlert/service";
+import { prisma } from "@/lib/db/prisma";
 
 // Resolves a notification's relatedType/relatedId into a link to navigate
 // to, when there's something to link to. Kept out of
@@ -34,6 +35,17 @@ export async function resolveHref(
   relatedId: number | null,
 ): Promise<string | null> {
   if (relatedId === null) return null;
+  if (type === "post_managed" && relatedType === "post_status_change") {
+    const change = await prisma.postStatusChange.findUnique({ where: { id: relatedId }, select: { postType: true, postId: true } });
+    if (!change || (change.postType !== "found" && change.postType !== "lost")) return null;
+    const post = await resolvePostTarget(encodePostTargetId(change.postType, change.postId));
+    return post ? `/post/${change.postId}?type=${change.postType}` : null;
+  }
+  if (type === "post_managed" && (relatedType === "found_post" || relatedType === "lost_post")) {
+    const board = relatedType === "found_post" ? "found" : "lost";
+    const post = await resolvePostTarget(encodePostTargetId(board, relatedId));
+    return post ? `/post/${relatedId}?type=${board}` : null;
+  }
 
   // Phase J-2: relatedType "match" (NotificationType.MATCH) is no longer
   // produced -- the Match domain is gone. Historical rows can still exist,

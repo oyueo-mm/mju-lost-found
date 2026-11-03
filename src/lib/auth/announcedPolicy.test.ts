@@ -12,7 +12,7 @@ const findUnique = vi.fn();
 const update = vi.fn();
 const identityCount = vi.fn();
 vi.mock("@/lib/auth/auth", () => ({ auth }));
-vi.mock("@/lib/db/prisma", () => ({ prisma: { user: { findUnique, update }, userIdentityInfo: { count: identityCount } } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { user: { findUnique, update }, userIdentityInfo: { count: identityCount }, adminPermissionGrant: { findMany: async () => [] } } }));
 vi.mock("next/navigation", () => ({ redirect: (url: string) => { throw new Error(`REDIRECT:${url}`); } }));
 vi.mock("@/lib/auth/access", () => ({ hasOngoingExternalAccess: vi.fn() }));
 
@@ -51,7 +51,7 @@ describe("기존 회원: 추가 동의 없이 이용", () => {
       findUnique.mockResolvedValue(member);
       expect(hasRequiredConsents(member)).toBe(true); // (main) layout: browsing, search
       await expect(requireReadyUser()).resolves.toMatchObject({ id: 1 }); // write pages (post form, chat)
-      expect(await requireUserForApi()).toEqual({ user: member }); // POST posts / comments / chat messages
+      expect(await requireUserForApi()).toEqual({ user: { ...member, adminPermissions: [] } }); // POST posts / comments / chat messages
       identityCount.mockResolvedValueOnce(1);
       expect(await hasIdentityInfo(1)).toBe(true); // 이름·소속 on file -> posting / chatting allowed
       expect(identityCount.mock.calls[0][0].where.user.identityConsentVersion.in).toContain(member.identityConsentVersion);

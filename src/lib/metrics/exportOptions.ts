@@ -21,8 +21,8 @@ export type DatasetKey = (typeof DATASETS)[number]["key"];
 // export action; resolved by lib/metrics/report.ts resolvePeriod().
 export const PERIOD_PRESETS = [
   { key: "today", label: "오늘" },
-  { key: "week", label: "이번 주" },
-  { key: "month", label: "이번 달" },
+  { key: "week", label: "최근 7일" },
+  { key: "month", label: "최근 30일" },
   { key: "year", label: "올해" },
   { key: "custom", label: "사용자 지정" },
 ] as const;

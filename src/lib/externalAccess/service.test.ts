@@ -48,7 +48,7 @@ describe("createExternalAccessGrant", () => {
 
     expect(await createExternalAccessGrant(admin, input)).toEqual({ kind: "ok", data: { id: 9 } });
     expect(externalAccessGrant.create).toHaveBeenCalledWith({
-      data: { ...input, createdByUserId: 1 },
+      data: { ...input, createdByUserId: 1, canManageItems: false },
       select: { id: true },
     });
     expect(user.updateMany).toHaveBeenCalledWith({

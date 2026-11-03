@@ -14,7 +14,7 @@ import { postTypeSchema } from "@/lib/posts/schema";
 // delete; nothing about that is reimplemented here.
 export const DELETE = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const auth = await requireAdminForApi();
+    const auth = await requireAdminForApi("posts.delete");
     if ("response" in auth) return auth.response;
 
     const { id: idParam } = await params;

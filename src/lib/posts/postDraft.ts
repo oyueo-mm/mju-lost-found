@@ -9,12 +9,15 @@
 // so the form can say they need picking again. Every storage access is
 // wrapped: a private window or a full quota just means "no draft".
 
+import type { CustodyInput } from "./custodySchema";
+
 export const DRAFT_PREFIX = "mju-find:post-draft:v1:";
 export const DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 
 export type DraftBoard = "lost" | "found";
 
 export type PostDraft = {
+  custody?: CustodyInput;
   savedAt: number;
   title: string;
   description: string;

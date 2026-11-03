@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireReadyUser } from "@/lib/auth/session";
 import { signOut } from "@/lib/auth/auth";
 import { getUnreadNotificationCount } from "@/lib/notification/service";
-import { isAdmin } from "@/lib/moderation/service";
+import { hasAnyAdminPermission } from "@/lib/permissions/check";
 import { UserIcon, ChevronRightIcon, BellIcon, ShieldIcon, LogoutIcon, ChatBubbleIcon, SearchIcon } from "@/components/icons";
 import { ThemeSettings } from "@/components/settings/ThemeSettings";
 import { InstallAppPrompt } from "@/components/settings/InstallAppPrompt";
@@ -53,7 +53,7 @@ export default async function MePage() {
     console.error("Failed to load unread notification count", error);
   }
 
-  const admin = isAdmin(user);
+  const admin = hasAnyAdminPermission(user);
   // 실명·학과: the member's own, shown only here (and on its form).
   const identity = await getOwnIdentityInfo(user.id);
 

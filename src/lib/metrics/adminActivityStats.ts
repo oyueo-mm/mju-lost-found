@@ -56,6 +56,7 @@ const sumOrNull = (values: (number | null)[]) => (values.every((v) => v === null
 
 // One admin's figures for the period (null: 미측정 for the whole period)
 export type AdminPeriodFigures = {
+  currentRole?: "service" | "officer" | "member";
   id: number;
   nickname: string;
   isAdmin: boolean;
@@ -74,6 +75,7 @@ export function adminFigures(row: AdminActivityRow, view: PeriodView): AdminPeri
     id: row.id,
     nickname: row.nickname,
     isAdmin: row.isAdmin,
+    ...(row.currentRole && { currentRole: row.currentRole }),
     visits: sumOrNull(slice(row.visits)),
     signIns: sumOrNull(slice(row.signIns)),
     tasks: slice(row.tasksByDay).reduce((a, n) => a + n, 0),
@@ -98,7 +100,7 @@ export function totalsOf(figures: AdminPeriodFigures[], view: PeriodView): Total
     visits: sumOrNull(figures.map((f) => f.visits)),
     signIns: sumOrNull(figures.map((f) => f.signIns)),
     tasks: figures.reduce((a, f) => a + f.tasks, 0),
-    activeAdmins: view.activityDays === 0 ? null : figures.filter((f) => f.isAdmin && (f.activeDays ?? 0) > 0).length,
+    activeAdmins: view.activityDays === 0 ? null : figures.filter((f) => (f.activeDays ?? 0) > 0).length,
   };
 }
 

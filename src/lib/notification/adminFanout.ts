@@ -1,5 +1,6 @@
 import { OrganizationRole, type NotificationType, type Prisma } from "@/generated/prisma/client";
 import { ACTIVE_RECIPIENT_WHERE } from "./recipients";
+import type { PermissionKey } from "@/lib/permissions/definitions";
 
 // Phase 12-9 §2: the one shared helper report/service.ts, feedback/
 // service.ts, and moderation/appeals.ts each call, inside their own
@@ -21,8 +22,13 @@ import { ACTIVE_RECIPIENT_WHERE } from "./recipients";
 export async function fanOutToAdmins(
   tx: Prisma.TransactionClient,
   input: { type: NotificationType; title: string; content: string; relatedType: string; relatedId: number },
+  // Also notify accounts holding this permission (they can open the target page); full administrators always get it.
+  permission?: PermissionKey,
 ): Promise<void> {
-  const admins = await tx.user.findMany({ where: { isAdmin: true, ...ACTIVE_RECIPIENT_WHERE }, select: { id: true } });
+  const admins = await tx.user.findMany({
+    where: { ...ACTIVE_RECIPIENT_WHERE, OR: [{ isAdmin: true }, ...(permission ? [{ adminPermissions: { some: { permission } } }] : [])] },
+    select: { id: true },
+  });
   if (admins.length === 0) return;
 
   await tx.notification.createMany({

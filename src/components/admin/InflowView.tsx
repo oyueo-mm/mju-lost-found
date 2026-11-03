@@ -15,7 +15,7 @@ const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 1000) / 10}%`
 const md = (day: string) => `${Number(day.slice(5, 7))}/${Number(day.slice(8, 10))}`;
 const TONES: ChartTone[] = [1, 2, 3, 5, 6];
 
-export function InflowView({ report }: { report: InflowReport }) {
+export function InflowView({ report, canPromote = false }: { report: InflowReport; canPromote?: boolean }) {
   const n = report.days.length;
   const { total } = report;
   const unmeasured = n - report.measuredDays;
@@ -206,9 +206,11 @@ export function InflowView({ report }: { report: InflowReport }) {
         <p className="mt-1 text-[11px]">유입 경로 수집 전 날짜도 포함하는 이전 방식의 집계로, 위 유입 출처와 더하거나 섞지 마세요.</p>
       </More>
 
-      <More label="홍보 링크 만들기 (UTM)">
-        <UtmLinkBuilder />
-      </More>
+      {canPromote && (
+        <More label="홍보 링크 만들기 (UTM)">
+          <UtmLinkBuilder />
+        </More>
+      )}
     </div>
   );
 }

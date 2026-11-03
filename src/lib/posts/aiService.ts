@@ -1,3 +1,4 @@
+import { readCustody } from "./custodySchema";
 import { after } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
@@ -179,7 +180,7 @@ export async function updateLostPost(
           const updated = await update(tx);
           if (current && current.status !== updated.status) {
             await tx.postStatusChange.create({
-              data: { postType: "lost", postId: id, fromStatus: LOST_STATUS_FROM_DB[current.status], toStatus: status, changedByUserId: userId },
+              data: { postType: "lost", postId: id, fromStatus: LOST_STATUS_FROM_DB[current.status], toStatus: status, changedByUserId: userId, action: "owner_status" },
             });
           }
           return updated;
@@ -265,40 +266,51 @@ export async function updateFoundPost(
   }
 
   const { status, ...rest } = dropUnchangedLegacyCategory(input, existing.category);
+  let currentCustody = existing.custody;
   const update = (client: Pick<StatusTx, "foundPost">) =>
     client.foundPost.update({
       where: { id },
       data: {
         ...rest,
         ...(status !== undefined && { status: FOUND_STATUS_TO_DB[status] }),
+        ...((input.custody !== undefined || input.campus !== undefined) && {
+          custody: input.custody ?? (readCustody(currentCustody) ? { state: readCustody(currentCustody)!.state, place: readCustody(currentCustody)!.place } : undefined),
+        }),
       },
       include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },
     });
   // 게시판 상태 변경 이력 -- e.g. 완료 set by mistake and put back. See
   // updateLostPost's own comment.
   const row =
-    status === undefined
+    status === undefined && input.custody === undefined && input.campus === undefined
       ? await update(prisma)
       : await prisma.$transaction(async (tx: StatusTx) => {
           await tx.$queryRaw`SELECT id FROM "FoundPost" WHERE id = ${id} FOR UPDATE`;
-          const current = await tx.foundPost.findUnique({ where: { id }, select: { status: true } });
+          const current = await tx.foundPost.findUnique({ where: { id }, select: { status: true, custody: true, custodyOrganizationId: true } });
+          if (current?.custodyOrganizationId && (input.custody !== undefined || input.campus !== undefined)) return null;
+          currentCustody = current?.custody ?? null;
           const updated = await update(tx);
           if (current && current.status !== updated.status) {
             await tx.postStatusChange.create({
-              data: { postType: "found", postId: id, fromStatus: FOUND_STATUS_FROM_DB[current.status], toStatus: status, changedByUserId: userId },
+              data: { postType: "found", postId: id, fromStatus: FOUND_STATUS_FROM_DB[current.status], toStatus: FOUND_STATUS_FROM_DB[updated.status], changedByUserId: userId, action: "owner_status" },
             });
+          }
+          if (input.custody !== undefined || input.campus !== undefined) {
+            await tx.postStatusChange.create({ data: { postType: "found", postId: id, fromStatus: FOUND_STATUS_FROM_DB[current!.status], toStatus: FOUND_STATUS_FROM_DB[updated.status], changedByUserId: userId, action: "owner_custody", beforeCustody: current!.custody ?? undefined, afterCustody: updated.custody ?? undefined } });
           }
           return updated;
         });
   // Phase H-5-1: see updateLostPost's own comment -- embed + invalidate
   // moved together into after(), same relative order, same failure
   // handling.
+  if (!row) return { kind: "forbidden", reason: "custody_managed" };
   if (EMBEDDING_INPUT_FIELDS.some((field) => field in rest)) {
     after(async () => {
       await embedPostBestEffort("found", row.id, row);
       await invalidateRecommendationCache("found", row.id);
     });
   }
+  if (!row) return { kind: "forbidden", reason: "custody_managed" };
   return { kind: "ok", data: toFoundPostDTO(row) };
 }
 

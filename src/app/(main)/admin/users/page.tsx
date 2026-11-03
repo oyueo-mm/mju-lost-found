@@ -1,10 +1,14 @@
 import Link from "next/link";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { listUsersForAdmin } from "@/lib/admin/users";
 import { UserActionButtons } from "@/components/admin/UserActionButtons";
 import { AuthorLink } from "@/components/user/AuthorLink";
 import { ShieldIcon } from "@/components/icons";
+import { AdminPermissionEditor } from "@/components/admin/AdminPermissionEditor";
+import { can } from "@/lib/permissions/check";
+import { PERMISSION_INFO } from "@/lib/permissions/definitions";
+import { listManagementInstitutions, loadPermissionStates } from "@/lib/permissions/service";
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
@@ -29,7 +33,7 @@ export default async function AdminUsersPage({
 }: {
   searchParams: Promise<{ q?: string; page?: string }>;
 }) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("users.view");
 
   const { q, page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
@@ -37,6 +41,14 @@ export default async function AdminUsersPage({
   const result = await listUsersForAdmin(admin, { q, page, limit: PAGE_SIZE });
   const { items, total, totalPages } =
     result.kind === "ok" ? result.data : { items: [], total: 0, totalPages: 1 };
+  // 사용자 조회 shows who holds which permissions; changing them needs 권한 관리
+  // (full administrators), and suspending needs 사용자 제재.
+  const canManagePermissions = can(admin, "permissions.manage");
+  const canSanction = can(admin, "users.sanction");
+  const [states, institutions] = await Promise.all([
+    loadPermissionStates(items.map((u) => u.id)),
+    canManagePermissions ? listManagementInstitutions() : Promise.resolve([]),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -107,7 +119,18 @@ export default async function AdminUsersPage({
                       정지됨
                     </span>
                   )}
+                  {!u.isAdmin && (states.get(u.id)?.permissions.length ?? 0) > 0 && (
+                    <span className="rounded-full bg-primary-muted px-2 py-0.5 text-[11px] font-medium text-primary">
+                      관리 권한 {states.get(u.id)!.permissions.length}개
+                    </span>
+                  )}
                 </div>
+                {!u.isAdmin && (states.get(u.id)?.permissions.length ?? 0) > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {states.get(u.id)!.permissions.map((k) => PERMISSION_INFO[k].label).join(" · ")}
+                    {states.get(u.id)!.changedAt && ` · 권한 변경: ${formatDate(states.get(u.id)!.changedAt!)}`}
+                  </span>
+                )}
                 <span className="text-xs text-muted-foreground">
                   {u.email} · public ID: {u.publicId} · 가입일: {formatDate(u.createdAt)}
                   {u.currentlySuspended &&
@@ -123,7 +146,21 @@ export default async function AdminUsersPage({
                 </span>
               </div>
 
-              <UserActionButtons user={u} isSelf={u.id === admin.id} />
+              <div className="flex shrink-0 flex-col items-end gap-2 sm:max-w-md">
+                <UserActionButtons user={u} isSelf={u.id === admin.id} canSanction={canSanction} canManageAdmin={canManagePermissions} />
+                {canManagePermissions && (
+                  <AdminPermissionEditor
+                    userId={u.id}
+                    label={u.nickname ?? u.email}
+                    current={states.get(u.id)?.permissions ?? []}
+                    organizationId={states.get(u.id)?.organizationId ?? null}
+                    facility={states.get(u.id)?.facility ?? ""}
+                    institutions={institutions}
+                    targetIsAdmin={u.isAdmin}
+                    isSelf={u.id === admin.id}
+                  />
+                )}
+              </div>
             </div>
           ))}
         </div>

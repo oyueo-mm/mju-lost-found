@@ -1,4 +1,5 @@
 import { FREE_LIMITS_MB, type MetricKey, type VisitSeriesKey } from "./dashboard";
+import { AUDIENCE_NOTICE } from "./operations";
 import {
   apiCoverage,
   formatSeconds,
@@ -51,10 +52,11 @@ export const CAVEATS = [
   "방문 세션은 고유 방문자 수가 아닙니다. 같은 브라우저에서 30분 넘게 조회가 없거나 날짜가 바뀌면 새 방문으로 세며, 한 사람이 기기 두 대로 들어오면 두 번 셉니다.",
   "방문 세션은 첫 화면을 볼 때의 로그인 여부로 나눕니다. 방문 도중 로그인하면 '비로그인으로 시작'한 방문으로 세고, 로그인한 뒤 본 화면은 '로그인' 페이지뷰로 셉니다.",
   "완료 처리는 작성자가 게시글을 '찾음/완료'로 바꾸고 되돌리지 않은 건수(작성자 표시)이며, 실제 물품 반환을 확인한 수치가 아닙니다.",
-  `통계 수집 시작 이전 기간은 미측정입니다(0건이 아님). 검색·AI 추천·활성 회원·서버 응답 시간: ${sinceLabel("ops")}부터, 방문 통계와 검색의 로그인·비로그인 구분: ${sinceLabel("visit")}부터, 완료 처리: ${sinceLabel("completed")}부터. 가입·게시글·채팅은 서비스 시작부터 집계됩니다.`,
+  "활동 주체 분류를 수집하기 시작한 날부터 집계합니다. 그 이전의 가입·게시글·채팅·방문·검색·완료 기록은 역할을 확정할 수 없어 미측정으로 구분하고 일반 통계에서 제외합니다. 이전 원본은 보존합니다. 서버 응답 시간은 기존 수집 기준을 유지합니다.",
   `키워드 검색 집계 기준이 ${KEYWORD_BASIS_CHANGED_AT.replace("T", " ")}에 바뀌었습니다(이전: API 검색만, 이후: 게시판·검색 화면의 검색 포함). 이 시점 전후의 수치를 직접 비교하지 마세요.`,
   "관리자 계정의 방문과 검색은 일반 통계에서 제외해 따로 셉니다. 검색어 원문, 실명, 이메일, 회원 식별자, IP 주소는 수집하거나 내보내지 않습니다.",
   "모든 날짜와 시각은 한국 시간(KST) 기준입니다.",
+  AUDIENCE_NOTICE,
 ];
 
 const sumOf = (...values: (number | null)[]): number | null => (values.every((v) => v === null) ? null : values.reduce<number>((a, v) => a + (v ?? 0), 0));

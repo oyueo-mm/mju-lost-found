@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { createAnnouncement, deleteAnnouncement, updateAnnouncement } from "@/lib/announcement/service";
 import { createAnnouncementSchema, updateAnnouncementSchema } from "@/lib/announcement/schema";
 import { recordAdminActivity } from "@/lib/admin/activityLog";
@@ -20,7 +20,7 @@ export async function createAnnouncementAction(input: {
   title: string;
   content: string;
 }): Promise<AnnouncementActionState> {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("settings.manage");
 
   const parsed = createAnnouncementSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
@@ -36,7 +36,7 @@ export async function updateAnnouncementAction(
   id: number,
   input: { title: string; content: string },
 ): Promise<AnnouncementActionState> {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("settings.manage");
 
   const parsed = updateAnnouncementSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
@@ -55,7 +55,7 @@ export async function updateAnnouncementAction(
 }
 
 export async function deleteAnnouncementAction(id: number): Promise<AnnouncementActionState> {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("settings.manage");
 
   const result = await deleteAnnouncement(admin, id);
   if (result.kind === "not_found") return { error: "공지사항을 찾을 수 없습니다." };

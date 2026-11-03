@@ -68,6 +68,8 @@ export function postMutationResultToResponse<T>(
           return jsonError(404, "단체를 찾을 수 없습니다.");
         case "organization_inactive":
           return jsonError(403, "비활성화된 단체 명의로는 게시할 수 없습니다.");
+        case "custody_managed":
+          return jsonError(403, "기관에서 접수한 물품의 보관 정보·캠퍼스는 담당 기관에 변경을 요청해주세요.");
         case "organization_not_member":
           return jsonError(403, "해당 단체의 구성원만 단체 명의로 게시할 수 있습니다.");
         default:

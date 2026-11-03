@@ -104,6 +104,7 @@ describe("createFeedback", () => {
     expect(fanOutToAdmins).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ type: "FEEDBACK_RECEIVED", relatedType: "feedback", relatedId: 88 }),
+      "settings.manage",
     );
   });
 });

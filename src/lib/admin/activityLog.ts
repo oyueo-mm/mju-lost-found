@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { Prisma } from "@/generated/prisma/client";
+import { can } from "@/lib/permissions/check";
 
 // 관리자 활동 (운영 통계 > 관리자 활동). The tab reads the records the app
 // already keeps with an admin and a time (reports processed, sanctions,
@@ -115,10 +116,7 @@ export async function recordAdminVisit(adminUserId: number, now: Date = new Date
 // user ids in ADMIN_ACTIVITY_VIEWER_IDS (comma-separated), who must also
 // be admins. Any other admin sees only their own row and history. Unset:
 // nobody sees the others.
-export function canViewAllAdminActivity(user: { id: number; isAdmin: boolean }, env = process.env.ADMIN_ACTIVITY_VIEWER_IDS): boolean {
-  if (!user.isAdmin || !env) return false;
-  return env
-    .split(",")
-    .map((v) => v.trim())
-    .some((v) => /^\d+$/.test(v) && Number(v) === user.id);
+export function canViewAllAdminActivity(user: { id: number; isAdmin: boolean; adminPermissions?: readonly string[] }, _env = process.env.ADMIN_ACTIVITY_VIEWER_IDS): boolean {
+  void _env;
+  return can(user, "stats.admins");
 }

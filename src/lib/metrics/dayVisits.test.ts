@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // admin actors the query is given), the daily visit counters, and the
 // hourly counters handed to the real buildCells().
 let admins: number[] = [];
-let marks: { day: string; actor: string }[] = [];
+let marks: { day: string; actor: string; audience?: string }[] = [];
 let counters: { day: string; metric: string; n: number }[] = [];
 let hourRows: { day: string; metric: string; n: number }[] = [];
 
@@ -13,11 +13,12 @@ vi.mock("@/lib/db/prisma", () => ({
     user: { findMany: async () => admins.map((id) => ({ id })) },
     $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
       const sql = strings.join("?");
+      if (sql.includes("meta.since.audience_snapshot")) return [{ day: "2026-10-15" }];
       if (sql.includes('FROM "ActivityDay"')) {
-        const [days, adminActors] = values as [string[], string[]];
+        const [days] = values as [string[]];
         const byDay = new Map<string, Set<string>>();
         for (const m of marks) {
-          if (!days.includes(m.day) || adminActors.includes(m.actor)) continue;
+          if (!days.includes(m.day) || m.audience === "internal") continue;
           byDay.set(m.day, (byDay.get(m.day) ?? new Set()).add(m.actor));
         }
         return [...byDay].map(([day, set]) => ({ day, n: set.size }));
@@ -44,7 +45,7 @@ const { changeOf, loadDayVisits, loadMultiDayVisits, resolveVisitDays } = await 
 const { dayVisitsDataset, multiDayVisitsDataset } = await import("./export");
 const { activityActor } = await import("./record");
 
-const mark = (id: number, day: string) => ({ day, actor: activityActor(id) });
+const mark = (id: number, day: string) => ({ day, actor: activityActor(id), audience: admins.includes(id) ? "internal" : "member" });
 const c = (day: string, metric: string, n: number) => ({ day, metric, n });
 const h = (day: string, kind: "member" | "anon" | "start", hour: number, n: number) => c(day, `visit.${kind}.hour.${String(hour).padStart(2, "0")}`, n);
 

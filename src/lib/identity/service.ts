@@ -5,6 +5,7 @@ import type { User } from "@/generated/prisma/client";
 import type { IdentityHints, IdentityValueSource } from "./googleHints";
 import type { IdentityInput } from "./validation";
 import { normalizeViewReason } from "./validation";
+import { can } from "@/lib/permissions/check";
 
 // 실명·학과 (UserIdentityInfo). Every read of these values goes through
 // this file: the member's own (내 정보, the form) and an admin's, for a
@@ -165,7 +166,7 @@ export async function viewIdentityForReport(
   admin: Pick<User, "id" | "isAdmin">,
   { reportId, targetUserId, reason }: { reportId: number; targetUserId: number; reason: unknown },
 ): Promise<AdminIdentityViewResult> {
-  if (!admin.isAdmin) return { kind: "forbidden" };
+  if (!can(admin, "reports.process")) return { kind: "forbidden" };
   const normalizedReason = normalizeViewReason(reason);
   if (!normalizedReason) return { kind: "invalid_reason" };
 

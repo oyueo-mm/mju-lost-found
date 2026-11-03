@@ -1,10 +1,11 @@
+import { classifyActor } from "@/lib/metrics/audience";
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 
 import { decideSignIn } from "@/lib/auth/access";
 import { isAcceptedIdentityConsentVersion } from "@/lib/auth/terms";
 import { resolveSignIn } from "@/lib/auth/user";
-import { recordSignIn } from "@/lib/metrics/record";
+import { recordClassifiedSignIn } from "@/lib/metrics/record";
 import {
   describeSignInIdentity,
   fetchDepartmentHint,
@@ -120,8 +121,13 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           token.nickname = resolved.user.nickname;
           // 사용자 통계: one anonymous count per completed sign-in, by hour;
           // an admin's sign-in goes to 관리자 활동 instead (who and when).
-          if (!resolved.user.isAdmin) recordSignIn();
-          else await recordAdminActivity(resolved.user.id, ADMIN_SIGN_IN_ACTION);
+          try {
+            const classification = await classifyActor(resolved.user);
+            recordClassifiedSignIn(classification);
+            if (classification.audience === "internal") await recordAdminActivity(resolved.user.id, ADMIN_SIGN_IN_ACTION);
+          } catch {
+            console.error("Sign-in statistics skipped: role classification unavailable");
+          }
         }
         if (resolved.kind === "held") {
           delete token.identityHints;

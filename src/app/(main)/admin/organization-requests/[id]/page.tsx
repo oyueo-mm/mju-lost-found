@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { getOrganizationById, getOrganizationCreationRequestForAdmin } from "@/lib/organization/service";
 import { ORGANIZATION_REQUEST_STATUS_LABELS } from "@/lib/organization/schema";
 import { OrganizationRequestReviewForm } from "@/components/admin/OrganizationRequestReviewForm";
@@ -25,7 +25,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 // isAdmin()을 자체 재검증하므로 이 페이지의 requireAdmin() 게이트는 첫
 // 방어선일 뿐이다.
 export default async function AdminOrganizationRequestDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("institutions.manage");
 
   const { id: idParam } = await params;
   const id = Number(idParam);

@@ -31,7 +31,7 @@ export function StatsPeriodPicker({
   today: string;
   openByDefault: boolean;
   // keeps the 운영 / 사용자 통계 tab when the period changes
-  tab?: "ops" | "users";
+  tab?: "ops" | "users" | "admins";
   // other params to keep (시간대 분석's days and metric), as a query string
   keep?: string;
 }) {

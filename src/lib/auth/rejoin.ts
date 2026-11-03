@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { isAdmin } from "@/lib/moderation/service";
 import { RejoinRequestStatus, WithdrawnIdentityStatus, type User } from "@/generated/prisma/client";
+import { can } from "@/lib/permissions/check";
 
 // 회원탈퇴: rejoin requests from a held withdrawn identity (see
 // auth/withdrawnIdentity.ts). The requester has no account -- they are
@@ -136,7 +137,7 @@ export async function reviewRejoinRequest(
   decision: "approve" | "reject",
   note: string,
 ): Promise<ReviewRejoinResult> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "users.sanction")) return { kind: "forbidden" };
   const exists = await prisma.rejoinRequest.findUnique({ where: { id: requestId }, select: { id: true } });
   if (!exists) return { kind: "not_found" };
   const { count } = await prisma.rejoinRequest.updateMany({

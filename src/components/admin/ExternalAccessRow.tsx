@@ -18,6 +18,7 @@ export type ExternalAccessRowData = {
   name: string;
   affiliation: string;
   campus: string;
+  canManageItems?: boolean;
   status: "ACTIVE" | "REVOKED";
   createdAtLabel: string;
   createdByNickname: string | null;

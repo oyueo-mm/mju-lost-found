@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { notifyUser } from "@/lib/notification/recipients";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
-import { isAdmin } from "@/lib/moderation/service";
+import { can } from "@/lib/permissions/check";
 import { validateOrganizationPosting } from "@/lib/organization/service";
 import type { PostType } from "@/lib/posts/schema";
 import { NotificationType, type User } from "@/generated/prisma/client";
@@ -323,7 +323,7 @@ export async function deleteComment(
   if (!existing || existing.deletedAt) return { kind: "not_found" };
 
   const isOwner = existing.authorUserId === requester.id;
-  if (!isOwner && !isAdmin(requester)) {
+  if (!isOwner && !can(requester, "posts.delete")) {
     return { kind: "forbidden", reason: "not_owner" };
   }
 

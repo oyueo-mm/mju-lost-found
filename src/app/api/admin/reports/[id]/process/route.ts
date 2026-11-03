@@ -22,7 +22,7 @@ import { applyReportAction, dismissReport, getReportTargetType } from "@/lib/mod
 // suspend_user against a post report.
 export const POST = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const auth = await requireAdminForApi();
+    const auth = await requireAdminForApi("reports.process");
     if ("response" in auth) return auth.response;
 
     const { id: idParam } = await params;

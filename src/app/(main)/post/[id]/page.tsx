@@ -1,3 +1,7 @@
+import { prisma } from "@/lib/db/prisma";
+import { managementScope, inManagementScope, managementHistory } from "@/lib/posts/management";
+import { PostManagement } from "@/components/post/PostManagement";
+import { CUSTODY_STATES, MANAGEMENT_ACTION_LABELS } from "@/lib/posts/custodySchema";
 import { FallbackImage } from "@/components/ui/FallbackImage";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -6,7 +10,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getFoundPost, getLatestStatusChange, getLostPost, type PostDTO } from "@/lib/posts/service";
 import { dateOnlyToDb, postEventDateTime } from "@/lib/posts/eventDate";
 import { FOUND_STATUSES, LOST_STATUSES, postTypeSchema } from "@/lib/posts/schema";
-import { isAdmin } from "@/lib/moderation/service";
+import { can, canAny } from "@/lib/permissions/check";
 import { listCommentsForPost } from "@/lib/comment/service";
 import { getMyOrganizationMemberships, getOrganizationById, getOrganizationRole } from "@/lib/organization/service";
 import { PostManageMenu } from "@/components/post/PostManageMenu";
@@ -97,7 +101,9 @@ export default async function PostDetailPage({
   if (!post) notFound();
 
   const isOwner = currentUser?.id === post.author.id;
-  const viewerIsAdmin = currentUser ? isAdmin(currentUser) : false;
+  // Hidden/removed posts are visible to those who moderate content; only 게시글 삭제 may delete others' comments.
+  const viewerIsAdmin = canAny(currentUser, ["posts.manage", "posts.delete", "reports.view"]);
+  const viewerCanDelete = can(currentUser, "posts.delete");
   // 게시판 상태 변경 이력: shown to the author and admins only.
   const lastStatusChange = isOwner || viewerIsAdmin ? await getLatestStatusChange(type, post.id) : null;
   const statusText = (status: string) => {
@@ -127,6 +133,11 @@ export default async function PostDetailPage({
       />
     );
   }
+  const scope = currentUser ? await managementScope(currentUser.id) : null;
+  const custody = post.type === "found" ? post.custody ?? null : null;
+  const canManage = scope && (post.type === "found" || scope.platform) && inManagementScope(scope, post.campus, custody, post.type === "found" ? post.custodyOrganizationId : null, post.type === "found" ? post.pendingTransferOrganizationId : null);
+  const institutions = canManage ? await prisma.organization.findMany({ where: { managementCampus: { not: null }, status: "ACTIVE" }, select: { id: true, name: true } }) : [];
+  const history = canManage && currentUser ? await managementHistory(currentUser.id, type, post.id) : [];
   const dateLabel = post.type === "lost" ? t("post.lostAt") : t("post.foundAt");
   const dateText = formatEventDateTime(post);
 
@@ -408,6 +419,14 @@ export default async function PostDetailPage({
         )}
       </div>
 
+      {post.type === "found" && <div className="rounded-card border border-border bg-card p-4 text-sm space-y-1">
+        <p>보관 장소: {custody?.place || (custody?.state === "SELF" ? "본인 보관 (개인 위치 비공개)" : "미등록")}</p>
+        <p>보관 상태: {post.status === "완료" ? "반환 완료 표시" : custody?.confirmedAt ? "기관 보관 중" : CUSTODY_STATES[custody?.state ?? "UNKNOWN"]}</p>
+        <p className="text-muted-foreground">{custody?.confirmedAt ? `기관 접수 확인 완료 (${custody.institution})` : custody ? "작성자 신고 · 관리자 미확인" : "보관 정보 미등록"}</p>
+      </div>}
+      {canManage && <PostManagement key={post.updatedAt.toISOString()} id={post.id} type={type} updatedAt={post.updatedAt.toISOString()} completed={post.status === "완료" || post.status === "찾음"} confirmedCustody={Boolean(custody?.confirmedAt)} platform={scope!.platform} scopeOrganizationId={scope!.organizationId} permissions={scope!.permissions} organizationId={post.type === "found" ? post.custodyOrganizationId : null} pendingOrganizationId={post.type === "found" ? post.pendingTransferOrganizationId : null} institutions={institutions} />}
+      {canManage && history.length > 0 && <details className="rounded-card border border-border p-4 text-sm"><summary>물품 처리 이력</summary><ul className="mt-3 space-y-2">{history.map((h) => <li key={h.id}>{formatDate(h.createdAt, locale)} · {h.changedBy?.nickname ?? "담당자"} · {h.institution ?? "작성자"} · {MANAGEMENT_ACTION_LABELS[h.action ?? ""] ?? "상태 변경"} · {h.fromStatus} → {h.toStatus}{h.reason && <p className="text-muted-foreground">사유: {h.reason}</p>}</li>)}</ul></details>}
+
       {post.type === "lost" && (
         <p className="rounded-lg bg-primary-muted px-3.5 py-3 text-xs leading-relaxed text-primary">
           {t("post.lostPropertyNotice")}
@@ -488,7 +507,7 @@ export default async function PostDetailPage({
         postId={post.id}
         initialComments={comments}
         currentUser={currentUser ? { id: currentUser.id } : null}
-        isAdmin={viewerIsAdmin}
+        isAdmin={viewerCanDelete}
         myOrganizations={myOrganizations}
       />
     </div>

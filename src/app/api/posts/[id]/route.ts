@@ -1,3 +1,4 @@
+import { managePost } from "@/lib/posts/management";
 import { NextRequest } from "next/server";
 
 import {
@@ -13,6 +14,7 @@ import { updateFoundPost, updateLostPost } from "@/lib/posts/aiService";
 import { embedPostImageBestEffort } from "@/lib/ai/postEmbedding";
 import { findPostRecommendations, invalidateRecommendationCache } from "@/lib/recommendation/service";
 import { getCurrentUser } from "@/lib/auth/session";
+import { canAny } from "@/lib/permissions/check";
 
 // PATCH conditionally triggers embedPostBestEffort() -- real ONNX Runtime
 // inference (@huggingface/transformers, a native addon) that cannot run on
@@ -48,11 +50,11 @@ export const GET = withErrorHandling(
     // 회원탈퇴: a withdrawn author's leftover post is for admins only.
     if (post.removedAt) {
       const viewer = await getCurrentUser();
-      if (!viewer?.isAdmin) return jsonError(404, "게시물을 찾을 수 없습니다.");
+      if (!canAny(viewer, ["posts.manage", "posts.delete", "reports.view"])) return jsonError(404, "게시물을 찾을 수 없습니다.");
     }
     if (post.tempHiddenAt) {
       const viewer = await getCurrentUser();
-      if (!viewer || (viewer.id !== post.author.id && !viewer.isAdmin)) {
+      if (!viewer || (viewer.id !== post.author.id && !canAny(viewer, ["posts.manage", "posts.delete", "reports.view"]))) {
         return jsonError(404, "게시물을 찾을 수 없습니다.");
       }
     }
@@ -99,6 +101,12 @@ export const PATCH = withErrorHandling(
       body = await request.json();
     } catch {
       return jsonError(400, "잘못된 요청 본문입니다.");
+    }
+
+    if (body && typeof body === "object" && "management" in body) {
+      if (Object.keys(body).length !== 1) return jsonError(400, "관리 작업에는 다른 수정 항목을 함께 보낼 수 없습니다.");
+      const result = await managePost(auth.user.id, parsedParams.type, parsedParams.id, (body as { management: unknown }).management);
+      return "error" in result ? jsonError(result.status, result.error!) : jsonOk(result);
     }
 
     if (parsedParams.type === "lost") {

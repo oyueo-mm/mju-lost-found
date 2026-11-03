@@ -1,3 +1,4 @@
+import { readCustody, type CustodyInfo } from "./custodySchema";
 import { prisma } from "@/lib/db/prisma";
 import { deleteObjectSafely } from "@/lib/images/supabaseAdmin";
 import {
@@ -146,6 +147,9 @@ export type LostPostDTO = {
 };
 
 export type FoundPostDTO = {
+  custodyOrganizationId?: number | null;
+  pendingTransferOrganizationId?: number | null;
+  custody?: CustodyInfo | null;
   id: number;
   type: "found";
   // Legal pre-beta Phase: set while temporarily hidden (임시 숨김) -- only
@@ -189,7 +193,7 @@ export type PostMutationResult<T> =
       // validateOrganizationPosting() (see organization/service.ts) when a
       // create request carries a non-null organizationId -- not_owner/
       // suspended are unchanged from before this phase.
-      reason: "not_owner" | "suspended" | "organization_not_found" | "organization_inactive" | "organization_not_member";
+      reason: "custody_managed" | "not_owner" | "suspended" | "organization_not_found" | "organization_inactive" | "organization_not_member";
     };
 
 type Page = { page: number; limit: number };
@@ -398,6 +402,9 @@ export function toLostPostDTO(row: {
   images?: PostImageSummary[];
 }): LostPostDTO {
   const { user, status, organization, lostDate, ...rest } = row;
+  delete (rest as Record<string, unknown>).activityAudience;
+  delete (rest as Record<string, unknown>).activityRole;
+  delete (rest as Record<string, unknown>).activityOrganizationId;
   return {
     type: "lost",
     ...rest,
@@ -410,6 +417,7 @@ export function toLostPostDTO(row: {
 }
 
 export function toFoundPostDTO(row: {
+  custody?: unknown;
   id: number;
   title: string;
   description: string;
@@ -432,8 +440,13 @@ export function toFoundPostDTO(row: {
   organization: { id: number; name: string } | null;
   images?: PostImageSummary[];
 }): FoundPostDTO {
-  const { user, status, organization, foundDate, ...rest } = row;
+  const { user, status, organization, foundDate, custody, ...rest } = row;
+  delete (rest as Record<string, unknown>).activityAudience;
+  delete (rest as Record<string, unknown>).activityRole;
+  delete (rest as Record<string, unknown>).activityOrganizationId;
+  const custodyInfo = readCustody(custody);
   return {
+    custody: custodyInfo ? { ...custodyInfo, confirmedBy: null } : null,
     type: "found",
     ...rest,
     foundDate: foundDate ? dbDateToDateOnly(foundDate) : null,
@@ -604,8 +617,8 @@ export async function getLatestStatusChange(
 ): Promise<{ fromStatus: string; toStatus: string; createdAt: Date } | null> {
   try {
     return await prisma.postStatusChange.findFirst({
-      where: { postType: type, postId },
-      orderBy: { createdAt: "desc" },
+      where: { postType: type, postId, OR: [{ action: null }, { action: { in: ["owner_status", "complete", "reopen"] } }] },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: { fromStatus: true, toStatus: true, createdAt: true },
     });
   } catch (error) {

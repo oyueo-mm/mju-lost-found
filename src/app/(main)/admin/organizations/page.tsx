@@ -1,9 +1,10 @@
 import Link from "next/link";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { listOrganizationsForAdmin } from "@/lib/organization/service";
 import { ORGANIZATION_STATUSES, ORGANIZATION_STATUS_LABELS } from "@/lib/organization/schema";
 import { ShieldIcon } from "@/components/icons";
+import { InstitutionRegisterForm } from "@/components/admin/InstitutionRegisterForm";
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" }).format(date);
@@ -18,7 +19,7 @@ export default async function AdminOrganizationsPage({
 }: {
   searchParams: Promise<{ status?: string; q?: string; page?: string }>;
 }) {
-  const admin = await requireAdmin(); // redirects unless logged in, ready, and DB-flagged admin
+  const admin = await requirePermission("institutions.manage"); // redirects unless logged in, ready, and DB-flagged admin
 
   const { status: statusParam, q, page: pageParam } = await searchParams;
   const status = ORGANIZATION_STATUSES.find((s) => s === statusParam);
@@ -53,6 +54,8 @@ export default async function AdminOrganizationsPage({
           단체 생성 신청 →
         </Link>
       </div>
+
+      <InstitutionRegisterForm organizations={items.map((o) => ({ id: o.id, name: o.name }))} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-1">

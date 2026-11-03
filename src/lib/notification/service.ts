@@ -15,6 +15,7 @@ import type { NotificationType as PrismaNotificationType } from "@/generated/pri
 // actual lowercase string values instead, since that's what the type
 // genuinely means and what a future UI label lookup keys off of.
 const NOTIFICATION_TYPE_FROM_DB: Record<PrismaNotificationType, string> = {
+  POST_MANAGED: "post_managed",
   MESSAGE: "message",
   MATCH: "match",
   REPORT_PROCESSED: "report_processed",
@@ -44,6 +45,7 @@ const NOTIFICATION_TYPE_FROM_DB: Record<PrismaNotificationType, string> = {
 
 // Same Korean labels as the legacy pages/8_알림.py's TYPE_LABELS.
 export const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
+  post_managed: "물품 처리 안내",
   message: "새 메시지",
   match: "새 매칭",
   report_processed: "신고 처리 결과",

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { listOrganizationCreationRequestsForAdmin } from "@/lib/organization/service";
 import {
   ORGANIZATION_REQUEST_STATUSES,
@@ -24,7 +24,7 @@ export default async function AdminOrganizationRequestsPage({
 }: {
   searchParams: Promise<{ status?: string; page?: string }>;
 }) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("institutions.manage");
 
   const { status: statusParam, page: pageParam } = await searchParams;
   const status = ORGANIZATION_REQUEST_STATUSES.find((s) => s === statusParam);

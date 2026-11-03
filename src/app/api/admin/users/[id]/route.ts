@@ -15,7 +15,7 @@ import { updateUserByAdmin } from "@/lib/admin/users";
 // via a query/body dispatch.
 export const PATCH = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-    const auth = await requireAdminForApi();
+    const auth = await requireAdminForApi(["users.sanction", "permissions.manage"]);
     if ("response" in auth) return auth.response;
 
     const { id: idParam } = await params;

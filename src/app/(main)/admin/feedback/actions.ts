@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { updateFeedbackStatus } from "@/lib/feedback/service";
 import { updateFeedbackStatusSchema } from "@/lib/feedback/schema";
 import { recordAdminActivity } from "@/lib/admin/activityLog";
@@ -19,7 +19,7 @@ export async function updateFeedbackStatusAction(
   id: number,
   input: { status: string; adminNote?: string },
 ): Promise<UpdateFeedbackStatusState> {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("settings.manage");
 
   const parsed = updateFeedbackStatusSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };

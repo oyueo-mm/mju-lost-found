@@ -5,8 +5,8 @@ import { ko } from "@/lib/i18n/messages/ko";
 import { categoryBodyFields, initialCategoryState, shouldShowSuggestion, suggestionKey } from "./categoryFormState";
 
 describe("initialCategoryState", () => {
-  it("starts empty for a new post", () => {
-    expect(initialCategoryState()).toEqual({ categoryCode: null, subcategory: null, legacyUnmapped: null });
+  it("defaults a new post to the existing 기타 category without selecting a subcategory", () => {
+    expect(initialCategoryState()).toEqual({ categoryCode: "etc", subcategory: null, legacyUnmapped: null });
   });
 
   it("restores a migrated post's own codes", () => {

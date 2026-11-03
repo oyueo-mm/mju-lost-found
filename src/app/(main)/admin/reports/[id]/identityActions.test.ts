@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // A server action can be posted to by anyone: a non-admin must be stopped
 // before anything is read or logged.
 const requireAdmin = vi.fn();
-vi.mock("@/lib/auth/session", () => ({ requireAdmin }));
+vi.mock("@/lib/auth/session", () => ({ requireAdmin, requirePermission: requireAdmin, requireAnyPermission: requireAdmin }));
 const viewIdentityForReport = vi.fn();
 vi.mock("@/lib/identity/service", () => ({ viewIdentityForReport }));
 

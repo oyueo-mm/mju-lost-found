@@ -75,6 +75,7 @@ export default async function EditPostPage({
           images: (post.images ?? []).map((img) => ({ id: img.id, imageUrl: img.imageUrl })),
           organizationId: post.organizationId,
           organizationName: post.organizationName,
+          custody: post.type === "found" ? post.custody : null,
         }}
       />
     </div>

@@ -20,6 +20,8 @@ export function StatsExportPanel({
   daysLabel,
   visitDays,
   visitDaysLabel,
+  allowedDatasets,
+  canWorkbook = true,
 }: {
   preset: PeriodPreset;
   from?: string;
@@ -29,9 +31,14 @@ export function StatsExportPanel({
   daysLabel: string;
   visitDays: string;
   visitDaysLabel: string;
+  // The viewer's statistics permissions: the Excel workbook holds both 운영 and
+  // 사용자 통계, so it needs both; a CSV holds one dataset the viewer may see.
+  allowedDatasets?: string[];
+  canWorkbook?: boolean;
 }) {
-  const [format, setFormat] = useState<"xlsx" | "csv">("xlsx");
-  const [dataset, setDataset] = useState<string>("summary");
+  const datasets = allowedDatasets ? DATASETS.filter((d) => allowedDatasets.includes(d.key)) : DATASETS;
+  const [format, setFormat] = useState<"xlsx" | "csv">(canWorkbook ? "xlsx" : "csv");
+  const [dataset, setDataset] = useState<string>(datasets[0]?.key ?? "summary");
   const [message, setMessage] = useState<{ kind: "error" | "ok"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -62,7 +69,7 @@ export function StatsExportPanel({
               ["xlsx", "Excel (.xlsx) · 권장"],
               ["csv", "CSV (.csv)"],
             ] as const
-          ).map(([value, label]) => (
+          ).filter(([value]) => value === "csv" || canWorkbook).map(([value, label]) => (
             <label
               key={value}
               className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${
@@ -79,7 +86,7 @@ export function StatsExportPanel({
         <label className="flex max-w-xs flex-col gap-1">
           CSV 데이터 (파일 1개에 1종류)
           <select className={field} value={dataset} onChange={(e) => setDataset(e.target.value)}>
-            {DATASETS.map((d) => (
+            {datasets.map((d) => (
               <option key={d.key} value={d.key}>
                 {d.name}
               </option>

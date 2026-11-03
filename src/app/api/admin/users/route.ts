@@ -10,7 +10,7 @@ import { listUsersForAdmin } from "@/lib/admin/users";
 // re-checks isAdmin() itself regardless -- same belt-and-suspenders
 // pattern api/admin/reports/route.ts already uses.
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  const auth = await requireAdminForApi();
+  const auth = await requireAdminForApi("users.view");
   if ("response" in auth) return auth.response;
 
   const query = listUsersForAdminQuerySchema.parse(Object.fromEntries(request.nextUrl.searchParams));

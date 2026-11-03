@@ -4,7 +4,7 @@ const requireAdmin = vi.fn();
 const setOrganizationStatusForAdmin = vi.fn();
 const revalidatePath = vi.fn();
 
-vi.mock("@/lib/auth/session", () => ({ requireAdmin }));
+vi.mock("@/lib/auth/session", () => ({ requireAdmin, requirePermission: requireAdmin, requireAnyPermission: requireAdmin }));
 vi.mock("@/lib/organization/service", () => ({ setOrganizationStatusForAdmin }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 

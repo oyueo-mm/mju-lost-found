@@ -20,7 +20,7 @@ const patchSettingsSchema = z.object({
 // non-admin is UX only, same convention every other admin mutation in
 // this app already follows.
 export const PATCH = withErrorHandling(async (request: NextRequest) => {
-  const auth = await requireAdminForApi();
+  const auth = await requireAdminForApi("settings.manage");
   if ("response" in auth) return auth.response;
 
   let body: unknown;

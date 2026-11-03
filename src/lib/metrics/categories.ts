@@ -73,9 +73,9 @@ const kst = Prisma.raw(`(("created_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Se
 export async function loadCategoryCounts(from: string, until: string): Promise<CategoryRow[]> {
   const rows = await prisma.$queryRaw<{ type: "lost" | "found"; code: string | null; n: bigint | number }[]>`
     SELECT 'lost' AS type, "category_code" AS code, count(*) AS n FROM "LostPost"
-      WHERE ${kst} >= ${from}::date AND ${kst} < ${until}::date GROUP BY 2
+      WHERE "activity_audience" = 'member' AND ${kst} >= ${from}::date AND ${kst} < ${until}::date GROUP BY 2
     UNION ALL
     SELECT 'found', "category_code", count(*) FROM "FoundPost"
-      WHERE ${kst} >= ${from}::date AND ${kst} < ${until}::date GROUP BY 2`;
+      WHERE "activity_audience" = 'member' AND ${kst} >= ${from}::date AND ${kst} < ${until}::date GROUP BY 2`;
   return categoryRows(rows.map((r) => ({ type: r.type, code: r.code, n: Number(r.n) })));
 }

@@ -5,10 +5,10 @@ import {
   NotificationType as PrismaNotificationType,
   type User,
 } from "@/generated/prisma/client";
-import { isAdmin } from "@/lib/moderation/service";
 import { fanOutToAdmins } from "@/lib/notification/adminFanout";
 import type { CreateFeedbackInput, FeedbackCategoryValue, FeedbackStatusValue, UpdateFeedbackStatusInput } from "./schema";
 import { FEEDBACK_CATEGORY_LABELS } from "./schema";
+import { can } from "@/lib/permissions/check";
 
 // Phase 11-5: "서비스 개선 제안" -- deliberately separate from Report (see
 // schema.prisma's own comment on the Feedback model for why). Every
@@ -126,7 +126,7 @@ export async function createFeedback(user: User, input: CreateFeedbackInput): Pr
       content: `[${FEEDBACK_CATEGORY_LABELS[input.category]}] ${input.title}`,
       relatedType: "feedback",
       relatedId: feedback.id,
-    });
+    }, "settings.manage");
     return feedback;
   });
   return { kind: "ok", data: toFeedbackDTO(created) };
@@ -165,7 +165,7 @@ export async function listFeedbackForAdmin(
   admin: User,
   { status, page, limit }: { status?: FeedbackStatusValue; page: number; limit: number },
 ): Promise<FeedbackMutationResult<PagedFeedback>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "settings.manage")) return { kind: "forbidden" };
 
   const where = status ? { status: STATUS_TO_DB[status] } : {};
   const skip = (page - 1) * limit;
@@ -194,7 +194,7 @@ export async function listFeedbackForAdmin(
 
 // Admin-only detail read.
 export async function getFeedbackForAdmin(admin: User, id: number): Promise<FeedbackMutationResult<FeedbackAdminDTO>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "settings.manage")) return { kind: "forbidden" };
 
   const row = await prisma.feedback.findUnique({ where: { id }, include: { user: { select: AUTHOR_SELECT } } });
   if (!row) return { kind: "not_found" };
@@ -230,7 +230,7 @@ export async function updateFeedbackStatus(
   id: number,
   input: UpdateFeedbackStatusInput,
 ): Promise<FeedbackMutationResult<FeedbackAdminDTO>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "settings.manage")) return { kind: "forbidden" };
 
   const existing = await prisma.feedback.findUnique({ where: { id } });
   if (!existing) return { kind: "not_found" };

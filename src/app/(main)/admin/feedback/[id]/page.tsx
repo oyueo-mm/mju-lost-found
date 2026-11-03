@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { getFeedbackForAdmin } from "@/lib/feedback/service";
 import { FEEDBACK_CATEGORY_LABELS } from "@/lib/feedback/schema";
 import { FeedbackStatusForm } from "@/components/admin/FeedbackStatusForm";
@@ -24,7 +24,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 // 상태 변경 sections) -- getFeedbackForAdmin() re-checks isAdmin() itself
 // regardless of this page's own requireAdmin() gate.
 export default async function AdminFeedbackDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("settings.manage");
 
   const { id: idParam } = await params;
   const id = Number(idParam);

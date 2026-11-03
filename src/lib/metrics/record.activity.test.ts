@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/lib/metrics/audience", () => ({ classifyActor: async (u: { isAdmin: boolean }) => ({ audience: u.isAdmin ? "internal" : "member", role: u.isAdmin ? "service" : "member", organizationId: null }) }));
 
 // $queryRaw is a tagged template: keep each statement's SQL and values.
 const queries: { sql: string; values: unknown[] }[] = [];
@@ -31,7 +32,7 @@ async function pendingCounters(): Promise<Record<string, number>> {
   const { flushTimings } = await import("./record");
   await flushTimings();
   const json = executeCalls.find((v) => typeof v[0] === "string" && (v[0] as string).startsWith("[{\"day\""))?.[0] as string | undefined;
-  return Object.fromEntries(((json ? JSON.parse(json) : []) as { metric: string; value: number }[]).map((r) => [r.metric, r.value]));
+  return Object.fromEntries(((json ? JSON.parse(json) : []) as { metric: string; value: number }[]).map((r) => [r.metric.replace(/^audience_v[23]\./, ""), r.value]));
 }
 
 beforeEach(async () => {
@@ -82,7 +83,7 @@ describe("recordMemberActivity", () => {
     expect(sql).toContain(`"deleted_at" IS NULL AND "withdrawn_at" IS NULL`);
     expect(sql).toContain(`"last_active_at" IS NOT DISTINCT FROM (?::timestamptz AT TIME ZONE 'UTC')`);
     expect(sql).toContain(`INSERT INTO "ActivityDay"`);
-    expect(values).toEqual(["2026-10-17T05:30:15.250Z", 7, "2026-10-16T14:58:00.123Z", "2026-10-17", activityActor(7), true]);
+    expect(values).toEqual(["2026-10-17T05:30:15.250Z", 7, "2026-10-16T14:58:00.123Z", "2026-10-17", activityActor(7), "member", "member", null, true]);
     expect(await pendingCounters()).toEqual({ "active.member.hour.14": 1 });
   });
 

@@ -12,6 +12,7 @@ let audience: "anon" | "member" | "internal" = "anon";
 vi.mock("@/lib/metrics/record", () => ({
   addDailyCount: (metric: string, n = 1) => counts.set(metric, (counts.get(metric) ?? 0) + n),
   currentAudience: async () => audience,
+  recordRoleDimensions: async () => {},
 }));
 
 const { recordVisitsAction } = await import("./visitActions");
@@ -63,7 +64,7 @@ describe("방문 통계 server action", () => {
   it("keeps admins' views apart", async () => {
     audience = "internal";
     await recordVisitsAction([{ kind: "home", sessionStart: true, ref: "direct" }, { kind: "lost", sessionStart: false }]);
-    expect(Object.fromEntries(counts)).toEqual({ "visit.internal.pv": 2 });
+    expect(Object.fromEntries(counts)).toEqual({ "visit.internal.pv": 2, "visit.internal.session": 1 });
   });
 
   it("drops bots, unknown kinds, unsafe UTM values and anything past the per-call cap", async () => {
@@ -101,7 +102,7 @@ describe("방문 통계 server action", () => {
   it("an opted-out browser: admin views stay internal, anyone else's are dropped", async () => {
     audience = "internal";
     expect(await recordVisitsAction([{ kind: "home", sessionStart: true, ref: "direct" }], { optedOut: true })).toEqual({ admin: true });
-    expect(Object.fromEntries(counts)).toEqual({ "visit.internal.pv": 1 });
+    expect(Object.fromEntries(counts)).toEqual({ "visit.internal.pv": 1, "visit.internal.session": 1 });
 
     counts.clear();
     for (const who of ["anon", "member"] as const) {

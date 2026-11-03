@@ -11,6 +11,10 @@ import { useI18n } from "@/lib/i18n/client";
 type UserActionButtonsProps = {
   user: AdminUserDTO;
   isSelf: boolean;
+  // 사용자 제재 (suspend/unsuspend) and 권한 관리 (full-administrator status) are
+  // separate permissions; the server checks each again.
+  canSanction?: boolean;
+  canManageAdmin?: boolean;
 };
 
 type SuspendChoice = `${(typeof SUSPEND_DURATION_DAY_OPTIONS)[number]}` | "permanent" | "custom";
@@ -34,7 +38,7 @@ const MAX_CUSTOM_DAYS = 365;
 // user.currentlySuspended -- the isCurrentlySuspended()-derived field from
 // admin/users.ts -- not the raw isSuspended flag, so an admin never sees
 // "정지 해제" for a timed suspension that has already expired.
-export function UserActionButtons({ user, isSelf }: UserActionButtonsProps) {
+export function UserActionButtons({ user, isSelf, canSanction = true, canManageAdmin = true }: UserActionButtonsProps) {
   const { t } = useI18n();
   const router = useRouter();
   const [pending, setPending] = useState<"role" | "suspend" | null>(null);
@@ -108,7 +112,7 @@ export function UserActionButtons({ user, isSelf }: UserActionButtonsProps) {
     const label = user.nickname ?? user.email;
     const message = user.isAdmin
       ? `${label}님의 관리자 권한을 해제하시겠습니까?`
-      : `${label}님을 관리자로 지정하시겠습니까?`;
+      : `${label}님을 전체 관리자로 지정하시겠습니까? 다른 관리자의 승인이 필요합니다.`;
     if (!confirm(message)) return;
     callAction(user.isAdmin ? "demote" : "promote", "role");
   }
@@ -156,16 +160,18 @@ export function UserActionButtons({ user, isSelf }: UserActionButtonsProps) {
   return (
     <div className="flex shrink-0 flex-col items-end gap-1.5">
       <div className="flex gap-2">
-        <Button
-          type="button"
-          variant={user.isAdmin ? "secondary" : "primary"}
-          size="sm"
-          onClick={handleToggleRole}
-          disabled={pending !== null || (isSelf && user.isAdmin)}
-        >
-          {pending === "role" ? "처리 중..." : user.isAdmin ? "관리자 해제" : "관리자 지정"}
-        </Button>
-        {user.currentlySuspended ? (
+        {canManageAdmin && (
+          <Button
+            type="button"
+            variant={user.isAdmin ? "secondary" : "primary"}
+            size="sm"
+            onClick={handleToggleRole}
+            disabled={pending !== null || (isSelf && user.isAdmin)}
+          >
+            {pending === "role" ? "처리 중..." : user.isAdmin ? "관리자 해제" : "전체 관리자 지정"}
+          </Button>
+        )}
+        {!canSanction ? null : user.currentlySuspended ? (
           <Button type="button" variant="secondary" size="sm" onClick={handleUnsuspend} disabled={pending !== null}>
             {pending === "suspend" ? "처리 중..." : "정지 해제"}
           </Button>

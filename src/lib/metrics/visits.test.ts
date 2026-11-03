@@ -18,8 +18,8 @@ describe("방문 통계: what a page view is reduced to", () => {
     expect(pageKindOf("/policy/privacy")).toBe("policy");
     expect(pageKindOf("/privacy-consent")).toBe("onboarding");
     expect(pageKindOf("/something-new")).toBe("other");
-    expect(pageKindOf("/admin")).toBeNull();
-    expect(pageKindOf("/admin/stats")).toBeNull();
+    expect(pageKindOf("/admin")).toBe("admin");
+    expect(pageKindOf("/admin/stats")).toBe("admin");
   });
 
   it("reduces a referrer to a fixed category, never the URL", () => {

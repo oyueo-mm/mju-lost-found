@@ -4,7 +4,7 @@ const requireAdmin = vi.fn();
 const updateFeedbackStatus = vi.fn();
 const revalidatePath = vi.fn();
 
-vi.mock("@/lib/auth/session", () => ({ requireAdmin }));
+vi.mock("@/lib/auth/session", () => ({ requireAdmin, requirePermission: requireAdmin, requireAnyPermission: requireAdmin }));
 vi.mock("@/lib/feedback/service", () => ({ updateFeedbackStatus }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 

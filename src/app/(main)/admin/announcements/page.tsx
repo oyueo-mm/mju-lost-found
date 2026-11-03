@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { listAnnouncementsForAdmin } from "@/lib/announcement/service";
 import { CreateAnnouncementForm } from "@/components/admin/CreateAnnouncementForm";
 import { AnnouncementRow } from "@/components/admin/AnnouncementRow";
@@ -24,7 +24,7 @@ export default async function AdminAnnouncementsPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("settings.manage");
 
   const { page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);

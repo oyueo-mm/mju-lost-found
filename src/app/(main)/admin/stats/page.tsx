@@ -1,9 +1,16 @@
+import { AdminRoleFilters } from "@/components/admin/AdminRoleFilters";
+import { prisma } from "@/lib/db/prisma";
+import { AdminOperations } from "@/components/admin/AdminOperations";
+import { AUDIENCE_NOTICE, loadAdminOperations } from "@/lib/metrics/operations";
 import Link from "next/link";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requireAnyPermission } from "@/lib/auth/session";
+import { can } from "@/lib/permissions/check";
+import { UtmLinkBuilder } from "@/components/admin/UtmLinkBuilder";
+import { summarizePermissionComposition } from "@/lib/permissions/service";
 import { FREE_LIMITS_MB, METRICS, percentileMs, VISIT_SERIES, type Granularity, type TimingRow } from "@/lib/metrics/dashboard";
 import { describeRoute, methodOf } from "@/lib/metrics/apiRoutes";
-import { PERIOD_PRESETS, type PeriodPreset } from "@/lib/metrics/exportOptions";
+import { DATASETS, PERIOD_PRESETS, type PeriodPreset } from "@/lib/metrics/exportOptions";
 import { kstDay } from "@/lib/metrics/record";
 import {
   apiCoverage,
@@ -15,6 +22,7 @@ import {
   meanDuration,
   medianBucket,
   resolvePeriod,
+  daysBetween,
   testDataNotice,
   sinceLabel,
   summarizeTimings,
@@ -48,7 +56,7 @@ import { PREVIEW_ALIAS } from "@/lib/devstats/vercelDeployment.mjs";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
 import { AdminActivityView, type DashboardOptions } from "@/components/admin/AdminActivityView";
 import { CategoryStats } from "@/components/admin/CategoryStats";
-import { isTimelineKind, loadAdminActivity, STRIP_DAYS } from "@/lib/metrics/adminActivity";
+import { isTimelineKind, loadAdminActivity } from "@/lib/metrics/adminActivity";
 import { canViewAllAdminActivity } from "@/lib/admin/activityLog";
 import { AlertIcon, ChevronRightIcon, InfoIcon } from "@/components/icons";
 
@@ -161,20 +169,30 @@ function SeriesTable({ report, columns }: { report: Report; columns: { label: st
 export default async function AdminStatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[]; a?: string; day?: string; k?: string; p?: string; hm?: string; dm?: string; vd?: string; dp?: string; df?: string; dt?: string; dd?: string | string[]; du?: string; da?: string; dn?: string; de?: string }>;
+  searchParams: Promise<{ ar?: string; ao?: string; ac?: string; aa?: string; period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[]; a?: string; day?: string; k?: string; p?: string; hm?: string; dm?: string; vd?: string; dp?: string; df?: string; dt?: string; dd?: string | string[]; du?: string; da?: string; dn?: string; de?: string }>;
 }) {
-  const admin = await requireAdmin();
+  // Each tab has its own permission; the 개발 통계 tab (deploy history) stays
+  // with full administrators. A tab the viewer lacks is never rendered.
+  const admin = await requireAnyPermission(["stats.operations", "stats.users", "stats.admins", "promotion.manage"]);
+  const tabAccess = {
+    ops: can(admin, "stats.operations"),
+    users: can(admin, "stats.users"),
+    admins: can(admin, "stats.admins"),
+    promo: can(admin, "promotion.manage"),
+    dev: Boolean(admin.isAdmin),
+  };
   const params = await searchParams;
   const today = kstDay();
-  const preset = (PERIOD_PRESETS.some((p) => p.key === params.period) ? params.period : "month") as PeriodPreset;
+  const preset = (PERIOD_PRESETS.some((p) => p.key === params.period) ? params.period : params.p === "7" ? "week" : "month") as PeriodPreset;
   const asked = resolvePeriod({ preset, from: params.from, to: params.to }, today);
   // A bad custom range falls back to 이번 달, with the reason shown.
   const period = "error" in asked ? (resolvePeriod({ preset: "month" }, today) as Exclude<typeof asked, { error: string }>) : asked;
   const periodError = "error" in asked ? asked.error : null;
   const unit = period.range.unit;
   // (시간대 분석 is a section of 운영 통계; an old ?tab=hourly link opens 운영 통계)
-  const tab: "ops" | "users" | "admins" | "dev" =
-    params.tab === "users" ? "users" : params.tab === "admins" ? "admins" : params.tab === "dev" ? "dev" : "ops";
+  const asked_tab = params.tab === "users" || params.tab === "admins" || params.tab === "dev" || params.tab === "promo" ? params.tab : "ops";
+  const firstAllowed = (["ops", "users", "admins", "promo", "dev"] as const).find((t) => tabAccess[t]) ?? "ops";
+  const tab: "ops" | "users" | "admins" | "promo" | "dev" = tabAccess[asked_tab] ? asked_tab : firstAllowed;
   // 시간대 분석: the calendar's days (`d`) and metric (`m`), kept across
   // period changes on 운영 통계
   const dParam = params.d === undefined ? null : [params.d].flat().join(",");
@@ -208,12 +226,13 @@ export default async function AdminStatsPage({
         <h1 className="text-xl font-semibold text-foreground">운영 통계</h1>
         <p className="text-xs leading-relaxed text-muted-foreground">
           {tab === "admins"
-            ? `최근 ${STRIP_DAYS}일 · 한국 시간 기준 · 관리자 본인의 운영 기록만 다룹니다.`
+            ? `${period.label} · 한국 시간 기준 · 조회 권한에 따라 관리자 활동을 표시합니다.`
             : tab === "dev"
               ? "서비스 개발·배포 이력: GitHub 커밋과 Vercel 배포(Production·Preview) · 한국 시간 기준 · 이용자 통계와는 별개입니다."
               : `${period.label} · ${UNIT_TEXT[unit]} 집계 · 한국 시간 기준(진행 중인 기간은 오늘 현재까지) · 개인정보와 검색어 원문은 수집하지 않습니다.`}
         </p>
       </div>
+      <p role="note" className="text-xs text-muted-foreground">{AUDIENCE_NOTICE}</p>
       {notice && (
         <p role="note" className="flex gap-2 rounded-card border border-warning/40 bg-warning/10 px-3 py-2 text-xs leading-relaxed text-foreground">
           <AlertIcon className="mt-0.5 size-4 shrink-0" />
@@ -221,20 +240,33 @@ export default async function AdminStatsPage({
         </p>
       )}
       <nav className="flex gap-1 border-b border-border" aria-label="통계 종류">
-        <Link href={`/admin/stats?${periodQuery}`} aria-current={tab === "ops" ? "page" : undefined} className={tabClass(tab === "ops")}>
-          운영 통계
-        </Link>
-        <Link href={`/admin/stats?tab=users&${periodQuery}`} aria-current={tab === "users" ? "page" : undefined} className={tabClass(tab === "users")}>
-          사용자 통계
-        </Link>
-        <Link href="/admin/stats?tab=admins" aria-current={tab === "admins" ? "page" : undefined} className={tabClass(tab === "admins")}>
-          관리자 활동
-        </Link>
-        <Link href="/admin/stats?tab=dev" aria-current={tab === "dev" ? "page" : undefined} className={tabClass(tab === "dev")}>
-          개발 통계
-        </Link>
+        {tabAccess.ops && (
+          <Link href={`/admin/stats?${periodQuery}`} aria-current={tab === "ops" ? "page" : undefined} className={tabClass(tab === "ops")}>
+            일반 사용자 운영 통계
+          </Link>
+        )}
+        {tabAccess.users && (
+          <Link href={`/admin/stats?tab=users&${periodQuery}`} aria-current={tab === "users" ? "page" : undefined} className={tabClass(tab === "users")}>
+            사용자 통계
+          </Link>
+        )}
+        {tabAccess.admins && (
+          <Link href={`/admin/stats?tab=admins&${periodQuery}`} aria-current={tab === "admins" ? "page" : undefined} className={tabClass(tab === "admins")}>
+            관리자 활동
+          </Link>
+        )}
+        {tabAccess.promo && !tabAccess.ops && (
+          <Link href="/admin/stats?tab=promo" aria-current={tab === "promo" ? "page" : undefined} className={tabClass(tab === "promo")}>
+            홍보 링크
+          </Link>
+        )}
+        {tabAccess.dev && (
+          <Link href="/admin/stats?tab=dev" aria-current={tab === "dev" ? "page" : undefined} className={tabClass(tab === "dev")}>
+            개발 통계
+          </Link>
+        )}
       </nav>
-      {(tab === "ops" || tab === "users") && (
+      {(tab === "ops" || tab === "users" || tab === "admins") && (
         <>
           <div className="flex flex-col gap-2">
             <StatsPeriodPicker
@@ -244,15 +276,15 @@ export default async function AdminStatsPage({
               today={today}
               openByDefault={period.selection.preset === "custom" || !!periodError}
               tab={tab}
-              keep={tab === "ops" ? keepQuery : undefined}
+              keep={tab === "ops" ? keepQuery : tab === "admins" ? new URLSearchParams(Object.fromEntries(["ar", "ao", "ac", "aa"].flatMap((k) => { const v = params[k as keyof typeof params]; return typeof v === "string" ? [[k, v]] : []; }))).toString() : undefined}
             />
             {periodError && (
               <p role="alert" className="text-xs text-destructive">
-                {periodError} 이번 달 기준으로 보여 줍니다.
+                {periodError} 최근 30일 기준으로 보여 줍니다.
               </p>
             )}
           </div>
-          <details className="group rounded-card border border-border bg-card">
+          {(tab === "ops" || tab === "users") && <details className="group rounded-card border border-border bg-card">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-card px-4 py-3 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
               운영·사용자 통계 내보내기 (Excel · CSV)
               <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
@@ -267,9 +299,11 @@ export default async function AdminStatsPage({
                 daysLabel={selection.days.length ? `${selection.days.length}일: ${describeDays(selection.days)}` : "고른 날짜 없음"}
                 visitDays={visitDaysParam}
                 visitDaysLabel={visitDays.length ? `${visitDays.length}일: ${describeDays(visitDays)}` : "고른 날짜 없음"}
+                allowedDatasets={DATASETS.filter((d) => (d.key === "users" ? tabAccess.users : tabAccess.ops)).map((d) => d.key)}
+                canWorkbook={tabAccess.ops}
               />
             </div>
-          </details>
+          </details>}
         </>
       )}
     </div>
@@ -278,11 +312,12 @@ export default async function AdminStatsPage({
   if (tab === "admins") {
     // 관리자별 상세 기록: every admin's only for the viewers named in
     // ADMIN_ACTIVITY_VIEWER_IDS; any other admin sees only their own
-    const all = canViewAllAdminActivity(admin);
+    const all = canViewAllAdminActivity(admin); // 관리자 통계 조회 권한을 가진 계정에 한함
+    const actorFilter = { role: params.ar === "service" || params.ar === "officer" ? params.ar : undefined, organizationId: /^\d+$/.test(params.ao ?? "") ? Number(params.ao) : undefined, campus: ["\uC778\uBB38\uCEA0\uD37C\uC2A4", "\uC790\uC5F0\uCEA0\uD37C\uC2A4", "\uC591\uCABD"].includes(params.ac ?? "") ? params.ac : undefined, actor: /^\d+$/.test(params.aa ?? "") ? Number(params.aa) : undefined };
     // timeline filter: admin (only for those viewers), KST day, kind
     // dashboard: period (7 / 30 days) and the metrics of its two switches
     const options: DashboardOptions = {
-      period: params.p === "7" ? 7 : 30,
+      period: daysBetween(period.range.from, period.range.until),
       hourMetric: params.hm === "login" ? "login" : "visit",
       dayMetric: params.dm === "visit" || params.dm === "login" ? params.dm : "task",
     };
@@ -292,11 +327,27 @@ export default async function AdminStatsPage({
       kind: isTimelineKind(params.k) ? params.k : null,
       period: options.period,
     };
-    const activity = await loadAdminActivity({ viewer: admin.id, all, filter });
+    const [activity, operations] = await Promise.all([loadAdminActivity({ viewer: admin.id, all, filter, range: period.range, actorFilter }), loadAdminOperations(period.range, admin.id, all, actorFilter)]);
+    const [institutions, accounts] = await Promise.all([prisma.organization.findMany({ where: { managementCampus: { not: null } }, select: { id: true, name: true, managementCampus: true } }), prisma.user.findMany({ where: { OR: [{ isAdmin: true }, { adminPermissions: { some: {} } }, { id: { in: activity.admins?.map((a) => a.id) ?? [] } }] }, select: { id: true, nickname: true } })]);
+    const composition = await summarizePermissionComposition();
     return (
       <div className="flex flex-col gap-6">
         {header}
+        <p className="rounded-card border border-border bg-card p-3 text-xs text-muted-foreground">
+          현재 권한 구성: 전체 관리자 {composition.admins}명 · {composition.rows.map((r) => `${r.label} ${r.count}명`).join(" · ")} (프리셋은 고정 역할이 아니라 현재 보유한 권한 조합으로 분류합니다)
+        </p>
+        <AdminRoleFilters filter={actorFilter} from={period.range.from} to={addDays(period.range.until, -1)} institutions={institutions} accounts={accounts} />
+        <AdminOperations report={operations} label={period.label} all={all} />
         <AdminActivityView report={activity} viewer={admin.id} all={all} options={options} />
+      </div>
+    );
+  }
+
+  if (tab === "promo") {
+    return (
+      <div className="flex flex-col gap-6">
+        {header}
+        <UtmLinkBuilder />
       </div>
     );
   }
@@ -627,7 +678,7 @@ export default async function AdminStatsPage({
         >
           {dayVisits && <DayVisitsView report={dayVisits} />}
           {multiDayVisits && <MultiDayVisitsView report={multiDayVisits} />}
-          {inflow && <InflowView report={inflow} />}
+          {inflow && <InflowView report={inflow} canPromote={tabAccess.promo} />}
           {visitDays.length === 0 && <p className="text-xs text-muted-foreground">날짜 선택에서 날짜를 골라 주세요.</p>}
         </DayVisitsSection>
       </div>

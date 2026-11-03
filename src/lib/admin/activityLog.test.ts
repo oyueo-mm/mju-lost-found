@@ -7,19 +7,11 @@ vi.mock("@/lib/db/prisma", () => ({ prisma: { adminActivityLog: { create }, $exe
 const { canViewAllAdminActivity, recordAdminActivity, recordAdminVisit, ADMIN_ACTIVITY_FAILED_METRIC, ADMIN_VISIT_FAILED_METRIC, ADMIN_VISIT_GAP_MINUTES } = await import("./activityLog");
 const { Prisma } = await import("@/generated/prisma/client");
 
-describe("canViewAllAdminActivity (관리자별 상세 기록 전체 보기)", () => {
-  it("only an admin whose id is listed", () => {
-    expect(canViewAllAdminActivity({ id: 13, isAdmin: true }, "13")).toBe(true);
-    expect(canViewAllAdminActivity({ id: 13, isAdmin: true }, " 4, 13 ")).toBe(true);
-    expect(canViewAllAdminActivity({ id: 20, isAdmin: true }, "4,13")).toBe(false);
-    // listed but no longer an admin
+describe("service administrator activity visibility", () => {
+  it("allows all service administrators, but never ordinary users or officers", () => {
+    expect(canViewAllAdminActivity({ id: 20, isAdmin: true }, "13")).toBe(true);
+    expect(canViewAllAdminActivity({ id: 20, isAdmin: true }, undefined)).toBe(true);
     expect(canViewAllAdminActivity({ id: 13, isAdmin: false }, "13")).toBe(false);
-  });
-
-  it("nobody when unset, empty or malformed (fails closed)", () => {
-    expect(canViewAllAdminActivity({ id: 13, isAdmin: true }, undefined)).toBe(false);
-    expect(canViewAllAdminActivity({ id: 13, isAdmin: true }, "")).toBe(false);
-    expect(canViewAllAdminActivity({ id: 13, isAdmin: true }, "13abc,1e1,*")).toBe(false);
   });
 });
 

@@ -13,6 +13,7 @@ import { getMembership } from "@/lib/organization/authz";
 import { fanOutToOrganizationManagers } from "@/lib/notification/adminFanout";
 import { broadcastChatEvent } from "./realtimeAdmin";
 import { MESSAGE_PAGE_SIZE } from "./schema";
+import { can } from "@/lib/permissions/check";
 
 // Same placeholder text as the legacy HIDDEN_MESSAGE_PLACEHOLDER --
 // Message.hiddenAt/hiddenByUserId/hiddenReason exist in schema.prisma for
@@ -721,7 +722,7 @@ export async function isReportForChatRoom(reportId: number, chatRoomId: number):
 }
 
 export async function getChatRoomForAdmin(chatRoomId: number, reportId: number, admin: User): Promise<AdminChatRoomResult> {
-  if (!admin.isAdmin) return { kind: "forbidden" };
+  if (!can(admin, "reports.view")) return { kind: "forbidden" };
   if (!(await isReportForChatRoom(reportId, chatRoomId))) return { kind: "forbidden" };
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };

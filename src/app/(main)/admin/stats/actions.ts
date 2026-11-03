@@ -2,7 +2,8 @@
 
 import { z } from "zod";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requireAnyPermission } from "@/lib/auth/session";
+import { can } from "@/lib/permissions/check";
 import { DATASETS, exportFileName, toCsv, toXlsx } from "@/lib/metrics/export";
 import { PERIOD_PRESETS } from "@/lib/metrics/exportOptions";
 import { kstDay } from "@/lib/metrics/record";
@@ -40,10 +41,18 @@ export type StatsExportInput = z.input<typeof inputSchema>;
 export type StatsExportResult = { ok: true; filename: string; mime: string; base64: string } | { ok: false; error: string };
 
 export async function exportStatsAction(input: StatsExportInput): Promise<StatsExportResult> {
-  await requireAdmin();
+  const admin = await requireAnyPermission(["stats.operations", "stats.users"]);
   const parsed = inputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "내보내기 조건을 확인해 주세요." };
   const { format, preset, from, to, dataset, days, visitDays } = parsed.data;
+  // The same permission as viewing: 사용자 통계 data needs 사용자 통계 조회 and
+  // the rest needs 운영 통계 조회. The workbook is the 운영 통계 file; its
+  // 사용자 통계 sheet is left out unless the viewer may see it.
+  const ops = can(admin, "stats.operations");
+  const usersAllowed = can(admin, "stats.users");
+  if (format === "xlsx" ? !ops : dataset === "users" ? !usersAllowed : !ops) {
+    return { ok: false, error: "이 통계를 내보낼 권한이 없습니다." };
+  }
 
   const today = kstDay();
   const period = resolvePeriod({ preset: preset as (typeof PERIOD_PRESETS)[number]["key"], from, to }, today);
@@ -54,7 +63,7 @@ export async function exportStatsAction(input: StatsExportInput): Promise<StatsE
   try {
     const [report, users, hourly, dayVisits, inflow] = await Promise.all([
       loadReport(period.range),
-      loadUserReport(period.range),
+      usersAllowed ? loadUserReport(period.range) : Promise.resolve(undefined),
       loadHourlyCells(selection.days),
       visit.length === 1 ? loadDayVisits(visit[0]) : visit.length > 1 ? loadMultiDayVisits(visit) : undefined,
       visit.length ? loadInflow(visit) : undefined,

@@ -164,10 +164,10 @@ export function resolvePeriod(selection: PeriodSelection, today = kstDay()): Res
       from = today;
       break;
     case "week":
-      from = periodStart(today, "week");
+      from = addPeriods(today, "day", -6);
       break;
     case "month":
-      from = periodStart(today, "month");
+      from = addPeriods(today, "day", -29);
       break;
     case "year":
       from = `${today.slice(0, 4)}-01-01`;
@@ -289,7 +289,7 @@ const TIMESTAMP_SOURCES: { key: MetricKey; table: string }[] = [
 // A poster marking the post 찾음/완료 and not putting it back since (the
 // latest status change of that post). Not a confirmed hand-over.
 const COMPLETED_WHERE = Prisma.raw(
-  `"to_status" IN ('찾음', '완료') AND NOT EXISTS (SELECT 1 FROM "PostStatusChange" l WHERE l."post_type" = "PostStatusChange"."post_type" AND l."post_id" = "PostStatusChange"."post_id" AND l."created_at" > "PostStatusChange"."created_at")`,
+  `"from_status" <> "to_status" AND "to_status" IN ('찾음', '완료') AND NOT EXISTS (SELECT 1 FROM "PostStatusChange" l WHERE l."post_type" = "PostStatusChange"."post_type" AND l."post_id" = "PostStatusChange"."post_id" AND l."from_status" <> l."to_status" AND (l."created_at", l."id") > ("PostStatusChange"."created_at", "PostStatusChange"."id"))`,
 );
 const DAILY_SOURCES: Partial<Record<MetricKey, string>> = {
   searchKeyword: "search.keyword",
@@ -306,6 +306,8 @@ export function kstNow(at = new Date()): string {
 }
 
 export async function loadReport(range: ReportRange, { now = new Date() } = {}): Promise<Report> {
+  const snapshotRows = await prisma.$queryRaw<{ day: Date | string | null }[]>`SELECT min(day) AS day FROM "OperationalMetricDaily" WHERE metric = 'meta.since.audience_snapshot'`;
+  const snapshotSince = snapshotRows[0]?.day ? asDay(snapshotRows[0].day) : null;
   const buckets = bucketsOf(range);
   const { from, until } = range;
   const trunc = Prisma.raw(`'${range.unit}'`);
@@ -330,7 +332,7 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
       const rows = await prisma.$queryRaw<Row[]>`
         SELECT date_trunc(${trunc}, ${kst("created_at")})::date AS bucket, count(*) AS n
         FROM ${Prisma.raw(`"${table}"`)}
-        WHERE ${kst("created_at")} >= ${from}::date AND ${kst("created_at")} < ${until}::date
+        WHERE "activity_audience" = 'member' AND ${kst("created_at")} >= ${from}::date AND ${kst("created_at")} < ${until}::date
         GROUP BY 1`;
       put(core[key], rows);
     }),
@@ -338,7 +340,7 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
       const rows = await prisma.$queryRaw<(Row & { post_type: string })[]>`
         SELECT date_trunc(${trunc}, ${kst("created_at")})::date AS bucket, "post_type", count(*) AS n
         FROM "PostStatusChange"
-        WHERE ${kst("created_at")} >= ${from}::date AND ${kst("created_at")} < ${until}::date AND ${COMPLETED_WHERE}
+        WHERE "activity_audience" = 'member' AND ${kst("created_at")} >= ${from}::date AND ${kst("created_at")} < ${until}::date AND ${COMPLETED_WHERE}
         GROUP BY 1, 2`;
       put(core.completed, rows);
       put(completedByType.lost, rows.filter((r) => r.post_type === "lost"));
@@ -347,7 +349,7 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
     ...Object.entries(DAILY_SOURCES).map(async ([key, metric]) => {
       const rows = await prisma.$queryRaw<Row[]>`
         SELECT date_trunc(${trunc}, "day")::date AS bucket, sum("value") AS n
-        FROM "MetricDaily" WHERE "metric" = ${metric} AND "day" >= ${from}::date AND "day" < ${until}::date
+        FROM "OperationalMetricDaily" WHERE "metric" = ${metric + ".member"} AND "day" >= ${from}::date AND "day" < ${until}::date
         GROUP BY 1`.catch(() => [] as Row[]);
       put(core[key as MetricKey], rows);
     }),
@@ -357,10 +359,10 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
       const [rows, total] = await Promise.all([
         prisma.$queryRaw<Row[]>`
           SELECT date_trunc(${trunc}, "day")::date AS bucket, count(DISTINCT "actor") AS n
-          FROM "ActivityDay" WHERE "day" >= ${from}::date AND "day" < ${until}::date
+          FROM "ActivityDay" WHERE "activity_audience" = 'member' AND "day" >= ${from}::date AND "day" < ${until}::date
           GROUP BY 1`.catch(() => [] as Row[]),
         prisma.$queryRaw<{ n: bigint }[]>`
-          SELECT count(DISTINCT "actor") AS n FROM "ActivityDay" WHERE "day" >= ${from}::date AND "day" < ${until}::date`.catch(() => []),
+          SELECT count(DISTINCT "actor") AS n FROM "ActivityDay" WHERE "activity_audience" = 'member' AND "day" >= ${from}::date AND "day" < ${until}::date`.catch(() => []),
       ]);
       put(core.active, rows);
       activeTotal = Number(total[0]?.n ?? 0);
@@ -368,7 +370,7 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
     (async () => {
       const rows = await prisma.$queryRaw<(Row & { metric: string })[]>`
         SELECT date_trunc(${trunc}, "day")::date AS bucket, "metric", sum("value") AS n
-        FROM "MetricDaily"
+        FROM "OperationalMetricDaily"
         WHERE ("metric" LIKE 'visit.%' OR "metric" LIKE 'search.%.%') AND "day" >= ${from}::date AND "day" < ${until}::date
         GROUP BY 1, 2`.catch(() => []);
       const seriesOf = new Map<string, VisitSeriesKey>(VISIT_SERIES.flatMap((s) => s.metrics.map((m) => [m, s.key] as const)));
@@ -386,16 +388,16 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
   const [timings, capacity, firstDevice, flowFirsts, perDay, categories] = await Promise.all([
     loadTimingsBetween(from, until),
     loadCapacity(),
-    prisma.$queryRaw<{ day: Date | string | null }[]>`SELECT min("day") AS day FROM "MetricDaily" WHERE "metric" LIKE 'visit.device.%'`.catch(() => []),
+    prisma.$queryRaw<{ day: Date | string | null }[]>`SELECT min("day") AS day FROM "OperationalMetricDaily" WHERE "metric" LIKE 'visit.device.%'`.catch(() => []),
     prisma.$queryRaw<{ start_day: Date | string | null; flow_day: Date | string | null }[]>`
       SELECT min("day") FILTER (WHERE "metric" LIKE 'visit.start.%') AS start_day, min("day") FILTER (WHERE "metric" LIKE 'visit.flow.%') AS flow_day
-      FROM "MetricDaily" WHERE "metric" LIKE 'visit.start.%' OR "metric" LIKE 'visit.flow.%'`.catch(() => []),
+      FROM "OperationalMetricDaily" WHERE "metric" LIKE 'visit.start.%' OR "metric" LIKE 'visit.flow.%'`.catch(() => []),
     // per KST day (for weekdays): sessions started, and flow sessions
     prisma.$queryRaw<{ day: Date | string; starts: bigint | number | null; flows: bigint | number | null }[]>`
       SELECT "day",
         sum("value") FILTER (WHERE "metric" IN ('visit.session.anon', 'visit.session.member')) AS starts,
         sum("value") FILTER (WHERE "metric" LIKE 'visit.flow.sessions.%') AS flows
-      FROM "MetricDaily"
+      FROM "OperationalMetricDaily"
       WHERE "day" >= ${from}::date AND "day" < ${until}::date
         AND ("metric" IN ('visit.session.anon', 'visit.session.member') OR "metric" LIKE 'visit.flow.sessions.%')
       GROUP BY 1`.catch(() => []),
@@ -421,7 +423,10 @@ export async function loadReport(range: ReportRange, { now = new Date() } = {}):
   for (const [key, values] of all) {
     const source = SOURCE_OF[key];
     // 활성 회원 also stops being measured once its marks are past retention.
-    const coverOf = (f: string, u: string) => (key === "active" ? activityCoverageOf(f, u, kstDay(now)) : coverageOf(source, f, u));
+    const coverOf = (f: string, u: string) => {
+      const base = key === "active" ? activityCoverageOf(f, u, kstDay(now)) : coverageOf(source, f, u);
+      return worstOf(base, coverageSinceDay(snapshotSince, f, u));
+    };
     coverage[key] = buckets.map((b) => {
       const span = bucketSpan(range, b);
       return coverOf(span.from, span.until);
@@ -659,7 +664,7 @@ async function withPageViewsSinceFlow(flow: FlowReport, from: string, until: str
   if (!flow.since || flow.coverage === "none") return flow;
   const start = flow.since > from ? flow.since : from;
   const rows = await prisma.$queryRaw<{ metric: string; n: bigint | number }[]>`
-    SELECT "metric", sum("value") AS n FROM "MetricDaily"
+    SELECT "metric", sum("value") AS n FROM "OperationalMetricDaily"
     WHERE "metric" LIKE 'visit.page.%' AND "day" >= ${start}::date AND "day" < ${until}::date
     GROUP BY 1`.catch(() => []);
   for (const r of rows) {

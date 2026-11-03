@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { getUserDetailForAdmin } from "@/lib/admin/users";
 import { UserActionButtons } from "@/components/admin/UserActionButtons";
 import { AuthorLink } from "@/components/user/AuthorLink";
 import { MyCommentList } from "@/components/comment/MyCommentList";
 import { ShieldIcon } from "@/components/icons";
+import { AdminPermissionEditor } from "@/components/admin/AdminPermissionEditor";
+import { can } from "@/lib/permissions/check";
+import { PERMISSION_INFO } from "@/lib/permissions/definitions";
+import { listManagementInstitutions, listPermissionHistory, loadPermissionStates } from "@/lib/permissions/service";
 import { COLLECTION_SINCE } from "@/lib/metrics/report";
 import { LAST_ACTIVE_INTERVAL_MINUTES } from "@/lib/metrics/activityTime";
 import { ACTIVITY_RETENTION_DAYS } from "@/lib/retention/policy";
@@ -53,7 +57,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 // route -- avoids adding another Vercel Serverless Function for what's only
 // ever rendered here (see this app's function-count constraint).
 export default async function AdminUserDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("users.view");
 
   const { id: idParam } = await params;
   const id = Number(idParam);
@@ -82,6 +86,17 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
     reportsAgainstCount,
     comments,
   } = result.data;
+
+  const canManagePermissions = can(admin, "permissions.manage");
+  const canSanction = can(admin, "users.sanction");
+  const [states, institutions, history] = await Promise.all([
+    loadPermissionStates([user.id]),
+    canManagePermissions ? listManagementInstitutions() : Promise.resolve([]),
+    canManagePermissions ? listPermissionHistory(user.id) : Promise.resolve([]),
+  ]);
+  const permissionState = states.get(user.id);
+  const names = (keys: unknown) => (Array.isArray(keys) ? keys.map((k) => PERMISSION_INFO[k as keyof typeof PERMISSION_INFO]?.label ?? "알 수 없는 권한").join(", ") : "");
+  const ACTION_LABELS: Record<string, string> = { permissions_grant: "권한 부여", permissions_update: "권한 변경", permissions_revoke: "권한 회수" };
 
   return (
     <div className="flex flex-col gap-6">
@@ -126,8 +141,41 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
         <Section title="계정 정보">
           <Field label="계정 생성일" value={formatDateTime(user.createdAt)} />
           <Field label="구글 계정 연동" value={googleLinked ? "연동됨" : "연동 안 됨"} />
-          <Field label="관리자 권한" value={user.isAdmin ? "있음" : "없음"} />
+          <Field label="전체 관리자" value={user.isAdmin ? "예" : "아니오"} />
+          <Field label="세부 관리 권한" value={user.isAdmin ? "모든 권한" : permissionState?.permissions.length ? permissionState.permissions.map((k) => PERMISSION_INFO[k].label).join(" · ") : "없음"} />
+          {!user.isAdmin && permissionState?.permissions.length ? <Field label="담당 기관" value={permissionState.organizationName ? `${permissionState.organizationName}${permissionState.facility ? ` · ${permissionState.facility}` : ""}` : "미지정"} /> : null}
+          <Field label="마지막 권한 변경" value={permissionState?.changedAt ? formatDateTime(permissionState.changedAt) : "기록 없음"} />
         </Section>
+
+        {canManagePermissions && (
+          <section className="rounded-card border border-border bg-card p-4">
+            <h2 className="mb-3 text-sm font-semibold text-foreground">관리 권한</h2>
+            <AdminPermissionEditor
+              userId={user.id}
+              label={user.nickname ?? user.email}
+              current={permissionState?.permissions ?? []}
+              organizationId={permissionState?.organizationId ?? null}
+              facility={permissionState?.facility ?? ""}
+              institutions={institutions}
+              targetIsAdmin={user.isAdmin}
+              isSelf={user.id === admin.id}
+            />
+            {history.length > 0 && (
+              <details className="mt-3 text-xs">
+                <summary className="cursor-pointer font-medium text-foreground">권한 변경 이력 ({history.length})</summary>
+                <ul className="mt-2 flex flex-col gap-1.5 text-muted-foreground">
+                  {history.map((h) => (
+                    <li key={h.id}>
+                      {formatDateTime(h.createdAt)} · {h.actorNickname ?? `계정 #${h.actorUserId}`} · {ACTION_LABELS[h.action] ?? h.action}
+                      {" — "}{names((h.before as { permissions?: unknown } | null)?.permissions) || "없음"} → {names((h.after as { permissions?: unknown } | null)?.permissions) || "없음"}
+                      {h.reason ? ` (${h.reason})` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </section>
+        )}
 
         {/* Three different records: the last completed Google sign-in, the
             last detected signed-in activity (stored every few minutes), and
@@ -225,7 +273,7 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
       </div>
 
       <div className="flex justify-end">
-        <UserActionButtons user={user} isSelf={user.id === admin.id} />
+        <UserActionButtons user={user} isSelf={user.id === admin.id} canSanction={canSanction} canManageAdmin={canManagePermissions} />
       </div>
     </div>
   );

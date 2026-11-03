@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { listSuspensionActionsForAdmin } from "@/lib/moderation/service";
 import { listSuspensionAppealsForAdmin } from "@/lib/moderation/appeals";
 import { AppealReviewButton } from "@/components/admin/AppealReviewButton";
@@ -25,7 +25,7 @@ export default async function AdminSanctionsPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
-  const admin = await requireAdmin(); // redirects unless logged in, ready, and DB-flagged admin
+  const admin = await requirePermission("users.sanction"); // redirects unless logged in, ready, and DB-flagged admin
 
   const { page: pageParam } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);

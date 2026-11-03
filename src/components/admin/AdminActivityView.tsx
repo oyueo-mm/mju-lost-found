@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PERMISSION_INFO, type GrantablePermissionKey } from "@/lib/permissions/definitions";
 import type { ReactNode } from "react";
 
 import { ADMIN_ACTIVITY_ACTIONS, ADMIN_TASK_CATEGORIES, ADMIN_VISIT_GAP_MINUTES, LOGGED_CATEGORIES, type AdminTaskCategory } from "@/lib/admin/activityLog";
@@ -88,6 +89,12 @@ function hrefOf(ctx: Ctx, patch: Record<string, string | number | null>, hash = 
     ...patch,
   };
   const q = new URLSearchParams({ tab: "admins" });
+  if (ctx.report.selectedRange) {
+    q.set("period", "custom");
+    q.set("from", ctx.report.selectedRange.from);
+    q.set("to", ctx.report.days.at(-1)!);
+  }
+  for (const [key, field] of [["ar", "role"], ["ao", "organizationId"], ["ac", "campus"], ["aa", "actor"]] as const) { const value = ctx.report.selectedActorFilter?.[field]; if (value !== undefined) q.set(key, String(value)); }
   for (const [k, v] of Object.entries(state)) if (v !== null && v !== "") q.set(k, String(v));
   return `/admin/stats?${q.toString()}${hash}`;
 }
@@ -223,7 +230,7 @@ function Comparison({ ctx, figures }: { ctx: Ctx; figures: AdminPeriodFigures[] 
                 <th scope="row" className="py-1.5 pr-2 text-left font-medium text-foreground">
                   {r.nickname}
                   {r.id === ctx.viewer && <span className="ml-1 rounded-full bg-primary-muted px-1.5 text-[10px] text-primary">나</span>}
-                  {!r.isAdmin && <span className="ml-1 text-[10px] font-normal text-muted-foreground">(현재 관리자 아님)</span>}
+                  <span className="ml-1 text-[10px] font-normal text-muted-foreground">({r.currentRole === "officer" ? "관리 권한 보유" : r.isAdmin ? "전체 관리자" : "현재 일반 사용자"})</span>
                 </th>
                 <td className="py-1.5 pr-2 font-semibold text-foreground">{fmt(r.tasks)}건</td>
                 <td className="py-1.5 pr-2 text-foreground">{r.visits === null ? <span className="text-muted-foreground">미측정</span> : `${fmt(r.visits)}회`}</td>
@@ -504,7 +511,8 @@ function AdminDetail({ ctx, row }: { ctx: Ctx; row: AdminActivityRow }) {
           {row.nickname}
           <span className="text-xs font-normal text-muted-foreground">#{row.id}</span>
           {row.id === ctx.viewer && <span className="rounded-full bg-primary-muted px-2 py-0.5 text-[11px] font-medium text-primary">나</span>}
-          {!row.isAdmin && <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">현재 관리자 아님</span>}
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">{row.currentRole === "officer" ? "관리 권한 보유" : row.isAdmin ? "전체 관리자" : "현재 일반 사용자"}</span>
+          {row.currentRole === "officer" && row.permissions && row.permissions.length > 0 && <span className="text-[11px] font-normal text-muted-foreground">{row.permissions.map((k) => PERMISSION_INFO[k as GrantablePermissionKey]?.label ?? k).join(" · ")}</span>}
         </p>
         <Link href={`/admin/users/${row.id}`} className="text-xs text-primary hover:underline">
           회원 상세
@@ -559,6 +567,8 @@ function TimelineFilterForm({ ctx }: { ctx: Ctx }) {
   return (
     <form method="get" action="/admin/stats#timeline" className="flex flex-wrap items-end gap-2" aria-label="타임라인 필터">
       <input type="hidden" name="tab" value="admins" />
+      {report.selectedRange && <><input type="hidden" name="period" value="custom" /><input type="hidden" name="from" value={report.selectedRange.from} /><input type="hidden" name="to" value={report.days.at(-1)!} /></>}
+      {Object.entries(ctx.report.selectedActorFilter ?? {}).map(([key, value]) => <input key={key} type="hidden" name={({ role: "ar", organizationId: "ao", campus: "ac", actor: "aa" } as Record<string, string>)[key]} value={value} />)}
       {ctx.all && ctx.admin !== null && <input type="hidden" name="a" value={ctx.admin} />}
       <input type="hidden" name="p" value={options.period} />
       <input type="hidden" name="hm" value={options.hourMetric} />
@@ -699,6 +709,8 @@ function FilterBar({ ctx }: { ctx: Ctx }) {
       {ctx.all && (
         <form method="get" action="/admin/stats" className="flex items-end gap-2" aria-label="관리자 선택">
           <input type="hidden" name="tab" value="admins" />
+          {Object.entries(report.selectedActorFilter ?? {}).map(([key, value]) => <input key={key} type="hidden" name={({ role: "ar", organizationId: "ao", campus: "ac", actor: "aa" } as Record<string, string>)[key]} value={value} />)}
+          {report.selectedRange && <><input type="hidden" name="period" value="custom" /><input type="hidden" name="from" value={report.selectedRange.from} /><input type="hidden" name="to" value={report.days.at(-1)!} /></>}
           <input type="hidden" name="p" value={options.period} />
           <input type="hidden" name="hm" value={options.hourMetric} />
           <input type="hidden" name="dm" value={options.dayMetric} />
@@ -718,13 +730,13 @@ function FilterBar({ ctx }: { ctx: Ctx }) {
           </button>
         </form>
       )}
-      <div className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+      {!report.selectedRange && <div className="flex flex-col gap-1 text-[11px] text-muted-foreground">
         기간
         <Segmented
           label="기간"
           items={([7, 30] as const).map((p) => ({ href: hrefOf(ctx, { p, day: null }), text: `최근 ${p}일`, active: options.period === p }))}
         />
-      </div>
+      </div>}
       {ctx.all && ctx.admin !== null && (
         <Link href={hrefOf(ctx, { a: null, day: null })} className="h-9 text-xs leading-9 text-primary hover:underline">
           ← 전체 관리자 비교

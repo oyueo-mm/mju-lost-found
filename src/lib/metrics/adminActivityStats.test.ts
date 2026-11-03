@@ -89,6 +89,6 @@ describe("period views", () => {
       [1, 2],
       [3, 2],
     ]);
-    expect(totalsOf(figs, v)).toEqual({ visits: 19, signIns: 6, tasks: 7, activeAdmins: 2 });
+    expect(totalsOf(figs, v)).toEqual({ visits: 19, signIns: 6, tasks: 7, activeAdmins: 3 });
   });
 });

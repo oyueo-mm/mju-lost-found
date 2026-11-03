@@ -38,7 +38,7 @@ const tx = {
     findUnique: (...args: unknown[]) => findUnique(...args),
   },
 };
-vi.mock("@/lib/db/prisma", () => ({ prisma: { user: { findUnique: (...a: unknown[]) => findUnique(...a) }, $transaction: (fn: (t: typeof tx) => unknown) => fn(tx) } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { user: { findUnique: (...a: unknown[]) => findUnique(...a) }, adminPermissionGrant: { findMany: async () => [] }, $transaction: (fn: (t: typeof tx) => unknown) => fn(tx) } }));
 
 const productionMember = {
   id: 1,

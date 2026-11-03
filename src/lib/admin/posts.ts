@@ -1,5 +1,4 @@
 import type { User } from "@/generated/prisma/client";
-import { isAdmin } from "@/lib/moderation/service";
 import {
   deleteFoundPost,
   deleteLostPost,
@@ -10,6 +9,7 @@ import {
   type PagedResult,
 } from "@/lib/posts/service";
 import type { PostType } from "@/lib/posts/schema";
+import { can, canAny } from "@/lib/permissions/check";
 
 // Phase 28-2: admin post management -- deliberately does NOT reimplement
 // deletion or Storage cleanup. listLostPosts/listFoundPosts and
@@ -41,7 +41,7 @@ export async function listPostsForAdmin(
     limit,
   }: { type: PostType; q?: string; category?: string; authorQuery?: string; page: number; limit: number },
 ): Promise<AdminPostMutationResult<PagedResult<LostPostDTO> | PagedResult<FoundPostDTO>>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!canAny(admin, ["posts.manage", "posts.delete"])) return { kind: "forbidden" };
 
   const params = { q, category, authorQuery, page, limit };
   const data = type === "lost" ? await listLostPosts(params) : await listFoundPosts(params);
@@ -59,7 +59,7 @@ export async function deletePostForAdmin(
   type: PostType,
   id: number,
 ): Promise<AdminPostMutationResult<{ id: number }>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "posts.delete")) return { kind: "forbidden" };
 
   const result =
     type === "lost"

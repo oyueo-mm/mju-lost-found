@@ -146,13 +146,13 @@ export async function loadHourlyCells(days: string[], { now = new Date() } = {})
   const [rows, markers, firsts] = await Promise.all([
     wanted.length
       ? prisma.$queryRaw<{ day: Date | string; metric: string; n: bigint | number }[]>`
-          SELECT "day", "metric", "value" AS n FROM "MetricDaily"
+          SELECT "day", "metric", "value" AS n FROM "OperationalMetricDaily"
           WHERE "day" = ANY(${wanted}::date[])
             AND ("metric" LIKE 'visit.member.hour.%' OR "metric" LIKE 'visit.anon.hour.%' OR "metric" LIKE 'visit.start.hour.%'
               OR "metric" LIKE 'active.member.hour.%' OR "metric" LIKE 'auth.login.hour.%')`.catch(() => [])
       : Promise.resolve([]),
     prisma.$queryRaw<{ metric: string; day: Date | string; value: number }[]>`
-      SELECT DISTINCT ON ("metric") "metric", "day", "value" FROM "MetricDaily"
+      SELECT DISTINCT ON ("metric") "metric", "day", "value" FROM "OperationalMetricDaily"
       WHERE "metric" IN (${USER_HOURLY_SINCE_METRIC}, ${TRAFFIC_HOURLY_SINCE_METRIC})
       ORDER BY "metric", "day"`.catch(() => []),
     prisma.$queryRaw<Record<Counter, Date | string | null>[]>`
@@ -161,7 +161,7 @@ export async function loadHourlyCells(days: string[], { now = new Date() } = {})
              min("day") FILTER (WHERE "metric" LIKE 'visit.start.hour.%') AS "session",
              min("day") FILTER (WHERE "metric" LIKE 'active.member.hour.%') AS "active",
              min("day") FILTER (WHERE "metric" LIKE 'auth.login.hour.%') AS "login"
-      FROM "MetricDaily" WHERE "metric" LIKE '%.hour.%'`.catch(() => []),
+      FROM "OperationalMetricDaily" WHERE "metric" LIKE '%.hour.%'`.catch(() => []),
   ]);
   const marker = (metric: string): Since | null => {
     const m = markers.find((r) => r.metric === metric);

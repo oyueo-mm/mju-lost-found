@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // In-memory stand-ins for the tables the loader reads. $queryRaw is told
 // apart by its SQL text.
-type Member = { id: number; createdAt: Date; withdrawnAt: Date | null; deletedAt: Date | null; isAdmin: boolean; isSuspended: boolean; nickname: string | null; privacyConsentVersion: string | null; termsVersion: string | null; userType: string };
+type Member = { activityAudience: "member" | "internal"; id: number; createdAt: Date; withdrawnAt: Date | null; deletedAt: Date | null; isAdmin: boolean; isSuspended: boolean; nickname: string | null; privacyConsentVersion: string | null; termsVersion: string | null; userType: string };
 let members: Member[] = [];
-let activity: { day: string; actor: string }[] = [];
+let activity: { day: string; actor: string; activityAudience?: string }[] = [];
 let metrics: { metric: string; n: number }[] = [];
 let firstDays: { pv: string | null; login: string | null } = { pv: null, login: null };
 let sinceRows: { day: string; value: number }[] = [];
@@ -15,17 +15,18 @@ let newChatters: number[] = [];
 
 vi.mock("@/lib/db/prisma", () => ({
   prisma: {
-    user: { findMany: async () => members },
+    user: { findMany: async () => members.filter((m) => m.activityAudience === "member") },
     $queryRaw: async (strings: TemplateStringsArray) => {
       const sql = strings.join("?");
-      if (sql.includes('FROM "ActivityDay"')) return activity;
+      if (sql.includes("meta.since.audience_snapshot")) return [{ day: "2026-10-15" }];
+      if (sql.includes('FROM "ActivityDay"')) return activity.filter((m) => m.activityAudience !== "internal");
       if (sql.includes("min(\"day\") FILTER")) return [firstDays];
       if (sql.includes("LIMIT 1")) return sinceRows;
-      if (sql.includes('FROM "MetricDaily"')) return metrics;
-      if (sql.includes('JOIN "User" u ON u."id" = p."user_id"')) return newPosters.map((id) => ({ id }));
-      if (sql.includes('JOIN "User" u ON u."id" = m."sender_user_id"')) return newChatters.map((id) => ({ id }));
-      if (sql.includes('FROM "Message"')) return chatters.map((id) => ({ id }));
-      if (sql.includes('"LostPost"')) return posters.map((id) => ({ id }));
+      if (sql.includes('FROM "OperationalMetricDaily"')) return metrics;
+      if (sql.includes('JOIN "User" u ON u."id" = p."user_id"')) return newPosters.filter((id) => members.find((m) => m.id === id)?.activityAudience !== "internal").map((id) => ({ id }));
+      if (sql.includes('JOIN "User" u ON u."id" = m."sender_user_id"')) return newChatters.filter((id) => members.find((m) => m.id === id)?.activityAudience !== "internal").map((id) => ({ id }));
+      if (sql.includes('FROM "Message"')) return chatters.filter((id) => members.find((m) => m.id === id)?.activityAudience !== "internal").map((id) => ({ id }));
+      if (sql.includes('"LostPost"')) return posters.filter((id) => members.find((m) => m.id === id)?.activityAudience !== "internal").map((id) => ({ id }));
       throw new Error(`unexpected query: ${sql}`);
     },
   },
@@ -37,6 +38,7 @@ const { CURRENT_PRIVACY_VERSION } = await import("@/lib/auth/terms");
 
 const member = (id: number, createdAt: string, over: Partial<Member> = {}): Member => ({
   id,
+  activityAudience: over.isAdmin ? "internal" : "member",
   createdAt: new Date(createdAt),
   withdrawnAt: null,
   deletedAt: null,
@@ -48,7 +50,7 @@ const member = (id: number, createdAt: string, over: Partial<Member> = {}): Memb
   userType: "STUDENT",
   ...over,
 });
-const active = (id: number, ...days: string[]) => days.map((day) => ({ day, actor: activityActor(id) }));
+const active = (id: number, ...days: string[]) => days.map((day) => ({ day, actor: activityActor(id), activityAudience: members.find((m) => m.id === id)?.activityAudience ?? "member" }));
 const NOW = new Date("2026-10-31T03:00:00Z"); // 2026-10-31 12:00 KST
 
 beforeEach(() => {
@@ -92,6 +94,13 @@ describe("사용자 통계: 가입 (KST)", () => {
 });
 
 describe("사용자 통계: 활동", () => {
+  it("preserves activity recorded as a member after the account becomes an admin", async () => {
+    members = [member(1, "2026-10-16T00:00:00Z", { isAdmin: true, activityAudience: "member" })];
+    activity = [{ day: "2026-10-20", actor: activityActor(1), activityAudience: "member" }];
+    const r = await loadUserReport({ from: "2026-10-16", until: "2026-10-31", unit: "day" }, { now: NOW });
+    expect(r.signups.inRange).toBe(1);
+    expect(r.activity.unique).toBe(1);
+  });
   it("counts distinct members (no double counting), leaves admins out and splits new / existing", async () => {
     members = [member(1, "2026-10-10T00:00:00Z"), member(2, "2026-10-28T00:00:00Z"), member(9, "2026-10-01T00:00:00Z", { isAdmin: true })];
     activity = [...active(1, "2026-10-28", "2026-10-29", "2026-10-30"), ...active(2, "2026-10-28", "2026-10-30"), ...active(9, "2026-10-30")];
@@ -267,7 +276,7 @@ describe("사용자 통계: DAU·WAU·MAU 부분 측정", () => {
     const r = await loadUserReport({ from: "2026-10-16", until: "2026-10-17", unit: "day" }, { now: at });
     expect(r.activity.windows).toEqual({ dau: "full", wau: "partial", mau: "partial" });
     expect(r.activity.dau).toBe(1);
-    expect(windowNote(r.activity.windows.wau, 7, r.activity)).toBe("기준일 포함 7일 · 부분 측정(2026-10-15 03:35부터만 기록)");
+    expect(windowNote(r.activity.windows.wau, 7, r.activity)).toBe("기준일 포함 7일 · 부분 측정(2026-10-15부터만 기록)");
     expect(windowNote(r.activity.windows.dau, 1, r.activity)).toBe("2026-10-16 기준");
     const first = await loadUserReport({ from: "2026-10-15", until: "2026-10-16", unit: "day" }, { now: at });
     expect(first.activity.windows.dau).toBe("partial"); // began at 03:35

@@ -26,6 +26,8 @@ describe("비로그인 홈 첫 화면", () => {
     // two short lines, no promise that AI finds or returns the item
     expect(ko["landing.subtitle"].split("\n")).toHaveLength(2);
     expect(ko["landing.subtitle"]).not.toMatch(/찾아드|반드시|보장/);
+    expect(ko["landing.subtitle"]).toBe("물건을 설명하거나 사진을 올리면\n비슷한 습득물을 보여줘요.");
+    expect(html).toMatch(/<p class="[^"]*break-keep whitespace-pre-line/);
   });
 
   it("then posting, lost and found side by side; no sign-in link or repeated 'no sign-in' note", () => {

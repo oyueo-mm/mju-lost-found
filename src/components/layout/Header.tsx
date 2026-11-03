@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getUnreadNotificationCount } from "@/lib/notification/service";
 import { countUnreadMessagesForUser } from "@/lib/chat/service";
-import { isAdmin } from "@/lib/moderation/service";
+import { hasAnyAdminPermission } from "@/lib/permissions/check";
 import { DesktopNav } from "./DesktopNav";
 import { NotificationBell } from "./NotificationBell";
 import { LogoMark } from "./Logo";
@@ -79,7 +79,7 @@ export async function Header() {
 
         <DesktopNav
           unreadChatCount={unreadChat}
-          isAdmin={Boolean(user && isAdmin(user))}
+          isAdmin={hasAnyAdminPermission(user)}
           onSignOut={signOutFromDesktopNav}
         />
 

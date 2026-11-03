@@ -11,10 +11,11 @@ let recent: unknown[] = [];
 let visits: unknown[] = [];
 let signIns: unknown[] = [];
 let earliest: { log: string | null; presence: string | null } = { log: null, presence: null };
+let roleSince: string | null = "2026-10-15";
 const $queryRaw = vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
   const q = Prisma.sql(strings, ...values);
   raws.push({ sql: q.sql, values: q.values });
-  if (q.sql.includes("LEAST(")) return [earliest];
+  if (q.sql.includes("LEAST(")) return [{ ...earliest, roles_since: roleSince }];
   if (q.sql.includes("GROUP BY 1, 2, 3")) return daily;
   if (q.sql.includes("max(e.at)")) return totals;
   if (q.sql.includes('"AdminVisit"')) return visits;
@@ -33,7 +34,7 @@ const { activityActor } = await import("./record");
 // 2026-10-17 21:00 KST: the 30 days are 9/18 .. 10/17; 활동일 collection
 // began 10/15 03:35, so 10/15 is partial and earlier days 미측정
 const NOW = new Date("2026-10-17T12:00:00Z");
-const admin = (id: number, extra: object = {}) => ({ id, nickname: `관리자${id}`, isAdmin: true, lastLoginAt: null, lastActiveAt: null, withdrawnAt: null, ...extra });
+const admin = (id: number, extra: object = {}) => ({ id, nickname: `관리자${id}`, isAdmin: true, lastLoginAt: null, lastActiveAt: null, withdrawnAt: null, adminPermissions: [], ...extra });
 // the per-admin queries (all but the record-start lookup)
 const scoped = () => raws.filter((r) => !r.sql.includes("LEAST("));
 const timelineQuery = () => raws.find((r) => r.sql.includes("ORDER BY e.at DESC"));
@@ -47,6 +48,7 @@ beforeEach(() => {
   visits = [];
   signIns = [];
   earliest = { log: null, presence: null };
+  roleSince = "2026-10-15";
   user.findMany.mockResolvedValue([admin(13), admin(20)]);
   user.aggregate.mockResolvedValue({ _min: { lastActiveAt: null } });
   metricDaily.findFirst.mockResolvedValue(null);
@@ -79,13 +81,20 @@ describe("관리자 활동: who is shown", () => {
     totals = [{ admin_id: 5, kind: "report.actioned", n: 2, last: "2026-10-01T00:00:00.000Z" }];
     user.findMany.mockResolvedValue([admin(5, { isAdmin: false }), admin(13)]);
     const r = await loadAdminActivity({ viewer: 13, all: true, now: NOW });
-    expect(user.findMany.mock.calls[0][0].where).toEqual({ OR: [{ isAdmin: true }, { id: { in: [5] } }] });
+    expect(user.findMany.mock.calls[0][0].where).toMatchObject({ OR: [{ OR: [{ isAdmin: true }, { isAdmin: false, adminPermissions: { some: {} } }] }, { id: { in: [5] } }] });
     expect(r.admins.map((a) => a.id)).toEqual([13, 5]);
     expect(r.admins[1].tasksAll.report).toBe(2);
   });
 });
 
 describe("관리자 활동: 활동일", () => {
+  it("marks dates before role snapshots as unmeasured, even when older activity exists", async () => {
+    roleSince = "2026-10-17";
+    earliest = { log: null, presence: "2026-10-10T00:00:00.000Z" };
+    const r = await loadAdminActivity({ viewer: 13, all: true, now: NOW });
+    expect(r.dayStatus.slice(-3)).toEqual(["none", "none", "partial"]);
+    expect(r.presenceStatus.slice(-3)).toEqual(["none", "none", "partial"]);
+  });
   it("counts only measured days; before collection is 미측정, never 0", async () => {
     const mark = (id: number, day: string) => ({ actor: activityActor(id), day: new Date(`${day}T00:00:00Z`) });
     activityDay.findMany.mockResolvedValue([mark(13, "2026-10-15"), mark(13, "2026-10-17"), mark(20, "2026-10-16")]);

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { reviewNoteSchema, reviewRejoinRequest } from "@/lib/auth/rejoin";
 
 export type RejoinReviewActionState = { error: string } | { ok: true };
@@ -14,7 +14,7 @@ export async function reviewRejoinRequestAction(
   decision: "approve" | "reject",
   note: string,
 ): Promise<RejoinReviewActionState> {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("users.sanction");
   if (decision !== "approve" && decision !== "reject") return { error: "잘못된 요청입니다." };
   const parsedNote = reviewNoteSchema.safeParse(note ?? "");
   if (!parsedNote.success) return { error: parsedNote.error.issues[0]?.message ?? "메모를 확인해주세요." };

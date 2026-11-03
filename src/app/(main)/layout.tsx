@@ -12,7 +12,7 @@ import { PRIVACY_NOTICE_COOKIE, privacyNotice, privacyNoticeDismissed } from "@/
 import { getCurrentUser, getRejoinIdentityId, hasRequiredConsents } from "@/lib/auth/session";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { countUnreadMessagesForUser } from "@/lib/chat/service";
-import { isAdmin } from "@/lib/moderation/service";
+import { hasAnyAdminPermission } from "@/lib/permissions/check";
 
 export default async function MainLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -150,7 +150,7 @@ export default async function MainLayout({ children }: { children: React.ReactNo
         {children}
       </main>
       <Footer />
-      <BottomNav unreadChatCount={unreadChat} isAdmin={Boolean(user && isAdmin(user))} />
+      <BottomNav unreadChatCount={unreadChat} isAdmin={hasAnyAdminPermission(user)} />
     </div>
   );
 }

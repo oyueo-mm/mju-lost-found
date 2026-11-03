@@ -1,4 +1,4 @@
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { listExternalAccessGrants } from "@/lib/externalAccess/service";
 import { ExternalAccessForm } from "@/components/admin/ExternalAccessForm";
 import { ExternalAccessRow } from "@/components/admin/ExternalAccessRow";
@@ -12,7 +12,7 @@ function formatDate(date: Date): string {
 // 관리자 센터 dashboard tile. Same page-level requireAdmin() as every other
 // /admin page; the list call and every action re-check admin rights.
 export default async function AdminExternalAccessPage() {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("access.external");
   const result = await listExternalAccessGrants(admin);
   const grants = result.kind === "ok" ? result.data : [];
   const activeCount = grants.filter((g) => g.status === "ACTIVE").length;
@@ -51,6 +51,7 @@ export default async function AdminExternalAccessPage() {
                   name: g.name,
                   affiliation: g.affiliation,
                   campus: g.campus,
+                  canManageItems: g.canManageItems,
                   status: g.status,
                   createdAtLabel: formatDate(g.createdAt),
                   createdByNickname: g.createdByNickname,

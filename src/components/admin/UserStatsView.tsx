@@ -41,6 +41,7 @@ export function UserStatsView({ report }: { report: UserReport }) {
 
   return (
     <div className="flex flex-col gap-6">
+        <p className="text-xs text-muted-foreground">계정 현황은 조회 시점에 일반 사용자인 계정 기준입니다. 가입·방문·검색·게시글 등 과거 활동은 발생 당시 역할을 따르므로, 이후 관리 권한이 부여되어도 이전 일반 활동은 유지됩니다.</p>
       <div className="flex flex-col gap-2 rounded-card border border-border bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
         <p>
           <b className="font-semibold text-foreground">가입</b>: 처음 Google 로그인으로 계정이 만들어진 시각(동의·닉네임 완료 전 포함).{" "}
@@ -150,7 +151,7 @@ export function UserStatsView({ report }: { report: UserReport }) {
           <Card title="동의 미완료·재동의 필요" value={fmt(accounts.notOnboarded)} sub="회원 기능 이용 전" />
           <Card title="비활성화" value={fmt(accounts.deactivated)} sub="로그인 불가 · 다시 로그인하면 복구(탈퇴 아님)" />
           <Card title="이용 정지 중" value={fmt(accounts.suspended)} />
-          <Card title="관리자 · 외부 계정" value={`${fmt(accounts.admins)} · ${fmt(accounts.external)}`} sub="가입 수에 포함" />
+          <Card title="일반 사용자 중 외부 계정" value={fmt(accounts.external)} sub="현재 일반 사용자 계정 기준" />
         </div>
       </Section>
 

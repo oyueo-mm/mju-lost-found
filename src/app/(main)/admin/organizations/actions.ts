@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { setOrganizationStatusForAdmin } from "@/lib/organization/service";
 import { recordAdminActivity } from "@/lib/admin/activityLog";
 
@@ -18,7 +18,7 @@ export async function setOrganizationStatusAction(
   organizationId: number,
   nextStatus: "active" | "inactive",
 ): Promise<SetOrganizationStatusState> {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("institutions.manage");
 
   const result = await setOrganizationStatusForAdmin(admin, organizationId, nextStatus);
   if (result.kind === "forbidden") return { error: "권한이 없습니다." };

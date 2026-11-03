@@ -11,7 +11,7 @@ import { getReportForAdmin } from "@/lib/moderation/service";
 // ModerationAction. Same double-gate as the list endpoint.
 export const GET = withErrorHandling(
   async (_request: Request, { params }: { params: Promise<{ id: string }> }) => {
-    const auth = await requireAdminForApi();
+    const auth = await requireAdminForApi("reports.view");
     if ("response" in auth) return auth.response;
 
     const { id: idParam } = await params;

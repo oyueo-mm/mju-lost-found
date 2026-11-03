@@ -8,7 +8,6 @@ import {
   Prisma,
   type User,
 } from "@/generated/prisma/client";
-import { isAdmin } from "@/lib/moderation/service";
 import {
   canAppointAdmin,
   canDeactivateOrganization,
@@ -25,6 +24,7 @@ import type {
   RejectOrganizationCreationRequestInput,
   ReviewOrganizationJoinRequestInput,
 } from "./schema";
+import { can } from "@/lib/permissions/check";
 
 // Phase 12-2: DB/service layer only -- see the Phase 12-1 design report
 // for the full rationale and prisma/schema.prisma's own model comments
@@ -458,7 +458,7 @@ export async function approveOrganizationCreationRequest(
   requestId: number,
   input?: ApproveOrganizationCreationRequestInput,
 ): Promise<OrganizationMutationResult<{ organizationId: number }>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "institutions.manage")) return { kind: "forbidden" };
 
   const existing = await prisma.organizationCreationRequest.findUnique({ where: { id: requestId } });
   if (!existing) return { kind: "not_found" };
@@ -519,7 +519,7 @@ export async function rejectOrganizationCreationRequest(
   requestId: number,
   input: RejectOrganizationCreationRequestInput,
 ): Promise<OrganizationMutationResult<{ id: number }>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "institutions.manage")) return { kind: "forbidden" };
 
   const existing = await prisma.organizationCreationRequest.findUnique({ where: { id: requestId } });
   if (!existing) return { kind: "not_found" };
@@ -569,7 +569,7 @@ export async function listOrganizationCreationRequestsForAdmin(
   admin: User,
   { status, page, limit }: { status?: "pending" | "approved" | "rejected" | "cancelled"; page: number; limit: number },
 ): Promise<OrganizationMutationResult<PagedOrganizationCreationRequests>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "institutions.manage")) return { kind: "forbidden" };
 
   const where = status ? { status: REQUEST_STATUS_TO_DB[status] } : {};
   const skip = (page - 1) * limit;
@@ -601,7 +601,7 @@ export async function getOrganizationCreationRequestForAdmin(
   admin: User,
   id: number,
 ): Promise<OrganizationMutationResult<OrganizationCreationRequestAdminDTO>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "institutions.manage")) return { kind: "forbidden" };
 
   const row = await prisma.organizationCreationRequest.findUnique({
     where: { id },
@@ -1048,7 +1048,7 @@ export async function listOrganizationsForAdmin(
   admin: User,
   { status, q, page, limit }: { status?: "active" | "inactive"; q?: string; page: number; limit: number },
 ): Promise<OrganizationMutationResult<PagedOrganizationsForAdmin>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "institutions.manage")) return { kind: "forbidden" };
 
   const where = {
     ...(status && { status: STATUS_TO_DB[status] }),
@@ -1103,7 +1103,7 @@ export async function getOrganizationForAdmin(
   admin: User,
   id: number,
 ): Promise<OrganizationMutationResult<OrganizationAdminDetailDTO>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "institutions.manage")) return { kind: "forbidden" };
 
   const organization = await getOrganizationById(id);
   if (!organization) return { kind: "not_found" };
@@ -1131,7 +1131,7 @@ export async function setOrganizationStatusForAdmin(
   organizationId: number,
   nextStatus: "active" | "inactive",
 ): Promise<OrganizationMutationResult<{ id: number }>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "institutions.manage")) return { kind: "forbidden" };
 
   const currentStatus = nextStatus === "active" ? PrismaOrganizationStatus.INACTIVE : PrismaOrganizationStatus.ACTIVE;
 

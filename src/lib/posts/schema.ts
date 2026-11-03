@@ -1,3 +1,4 @@
+import { custodyInputSchema } from "./custodySchema";
 import { z } from "zod";
 
 import { DATE_ONLY, EVENT_PERIODS, kstDateOnly, kstStartOfDay, resolveEventRange } from "./eventPeriod";
@@ -438,6 +439,7 @@ export const updateLostPostSchema = lostPostFields.partial().transform((data, ct
 export type UpdateLostPostInput = z.infer<typeof updateLostPostSchema>;
 
 const foundPostFields = z.object({
+  custody: custodyInputSchema.optional(),
   title,
   description,
   ...categoryFields,

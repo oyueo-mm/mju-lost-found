@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/db/prisma";
 import { ACTIVE_RECIPIENT_WHERE } from "@/lib/notification/recipients";
 import { NotificationType, type User } from "@/generated/prisma/client";
-import { isAdmin } from "@/lib/moderation/service";
 import type { CreateAnnouncementInput, UpdateAnnouncementInput } from "./schema";
+import { can } from "@/lib/permissions/check";
 
 // Phase M: admin-authored announcements, delivered to every user through
 // the existing Notification system (one row per user, fanned out inside
@@ -64,7 +64,7 @@ export async function listAnnouncementsForAdmin(
   admin: User,
   { page, limit }: { page: number; limit: number },
 ): Promise<AnnouncementMutationResult<PagedAnnouncements>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "settings.manage")) return { kind: "forbidden" };
 
   const skip = (page - 1) * limit;
   const [rows, total] = await Promise.all([
@@ -114,7 +114,7 @@ export async function createAnnouncement(
   admin: User,
   input: CreateAnnouncementInput,
 ): Promise<AnnouncementMutationResult<AnnouncementDTO>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "settings.manage")) return { kind: "forbidden" };
 
   const created = await prisma.$transaction(async (tx) => {
     const announcement = await tx.announcement.create({
@@ -154,7 +154,7 @@ export async function updateAnnouncement(
   id: number,
   input: UpdateAnnouncementInput,
 ): Promise<AnnouncementMutationResult<AnnouncementDTO>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "settings.manage")) return { kind: "forbidden" };
 
   const existing = await prisma.announcement.findUnique({ where: { id } });
   if (!existing) return { kind: "not_found" };
@@ -177,7 +177,7 @@ export async function deleteAnnouncement(
   admin: User,
   id: number,
 ): Promise<AnnouncementMutationResult<{ id: number }>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "settings.manage")) return { kind: "forbidden" };
 
   const existing = await prisma.announcement.findUnique({ where: { id } });
   if (!existing) return { kind: "not_found" };

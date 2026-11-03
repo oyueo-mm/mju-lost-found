@@ -41,10 +41,10 @@ export function ExternalAccessForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3 rounded-card border border-border bg-card p-4">
-      <h2 className="text-sm font-semibold text-foreground">외부 관계자 승인 등록</h2>
+      <h2 className="text-sm font-semibold text-foreground">외부 관계자 로그인 승인</h2>
       <p className="text-xs text-muted-foreground">
         명지대학교 계정이 없는 경비원·시설관리자·협력업체 담당자 등의 Google 계정 이메일을 등록하면, 그 계정으로 로그인해
-        일반 이용자와 같은 기능을 쓸 수 있습니다. 관리자 권한은 주어지지 않습니다. 한 사람당 한 계정만 등록해주세요.
+        일반 이용자와 같은 기능을 쓸 수 있습니다. 물품 관리 등 관리 권한은 로그인 후 ‘사용자 관리’의 관리 권한 설정에서 별도로 지정합니다. 한 사람당 한 계정만 등록해주세요.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5 text-sm">

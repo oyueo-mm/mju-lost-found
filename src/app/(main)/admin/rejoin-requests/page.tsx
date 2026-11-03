@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { HOLD_REASON_LABELS, listRejoinRequestsForAdmin } from "@/lib/auth/rejoin";
 import { RejoinReviewButtons } from "@/components/admin/RejoinReviewButtons";
 import { ShieldIcon } from "@/components/icons";
@@ -15,7 +15,7 @@ const STATUS_LABELS = { PENDING: "대기", APPROVED: "승인", REJECTED: "거절
 // matter still open. Approving never restores the old account -- the
 // person's next sign-in creates a new one, unlinked from the old content.
 export default async function AdminRejoinRequestsPage() {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("users.sanction");
   const requests = (await listRejoinRequestsForAdmin(admin)) ?? [];
   const pendingCount = requests.filter((r) => r.status === "PENDING").length;
 

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { ExternalAccessStatus, Prisma, UserType, type User } from "@/generated/prisma/client";
 import type { CreateExternalAccessInput, UpdateExternalAccessInput } from "./schema";
+import { can } from "@/lib/permissions/check";
 
 // Admin management of approved external accounts (ExternalAccessGrant).
 // Every function re-checks that the caller is an admin even though the
@@ -14,6 +15,7 @@ export type ExternalAccessGrantDTO = {
   name: string;
   affiliation: string;
   campus: string;
+  canManageItems: boolean;
   status: "ACTIVE" | "REVOKED";
   createdAt: Date;
   createdByNickname: string | null;
@@ -43,6 +45,7 @@ function toDTO(row: GrantRow, account: ExternalAccessGrantDTO["account"]): Exter
     name: row.name,
     affiliation: row.affiliation,
     campus: row.campus,
+    canManageItems: row.canManageItems,
     status: row.status,
     createdAt: row.createdAt,
     createdByNickname: row.createdBy.nickname,
@@ -62,7 +65,7 @@ async function accountsByEmail(emails: string[]) {
 }
 
 export async function listExternalAccessGrants(admin: User): Promise<ExternalAccessResult<ExternalAccessGrantDTO[]>> {
-  if (!admin.isAdmin) return { kind: "forbidden" };
+  if (!can(admin, "access.external")) return { kind: "forbidden" };
   const rows = await prisma.externalAccessGrant.findMany({
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     include: GRANT_INCLUDE,
@@ -86,7 +89,7 @@ export async function createExternalAccessGrant(
   admin: User,
   input: CreateExternalAccessInput,
 ): Promise<ExternalAccessResult<{ id: number }>> {
-  if (!admin.isAdmin) return { kind: "forbidden" };
+  if (!can(admin, "access.external")) return { kind: "forbidden" };
   try {
     const row = await prisma.$transaction(async (tx) => {
       const created = await tx.externalAccessGrant.create({
@@ -95,6 +98,7 @@ export async function createExternalAccessGrant(
           name: input.name,
           affiliation: input.affiliation,
           campus: input.campus,
+          canManageItems: false,
           createdByUserId: admin.id,
         },
         select: { id: true },
@@ -114,7 +118,7 @@ export async function updateExternalAccessGrant(
   id: number,
   input: UpdateExternalAccessInput,
 ): Promise<ExternalAccessResult<{ id: number }>> {
-  if (!admin.isAdmin) return { kind: "forbidden" };
+  if (!can(admin, "access.external")) return { kind: "forbidden" };
   const { count } = await prisma.externalAccessGrant.updateMany({
     where: { id },
     data: { name: input.name, affiliation: input.affiliation, campus: input.campus },
@@ -126,7 +130,7 @@ export async function updateExternalAccessGrant(
 // session.ts's per-request check, and it can't sign in again (not even in
 // test mode) until re-approved.
 export async function revokeExternalAccessGrant(admin: User, id: number): Promise<ExternalAccessResult<{ id: number }>> {
-  if (!admin.isAdmin) return { kind: "forbidden" };
+  if (!can(admin, "access.external")) return { kind: "forbidden" };
   const { count } = await prisma.externalAccessGrant.updateMany({
     where: { id, status: ExternalAccessStatus.ACTIVE },
     data: { status: ExternalAccessStatus.REVOKED, revokedAt: new Date(), revokedByUserId: admin.id },
@@ -136,7 +140,7 @@ export async function revokeExternalAccessGrant(admin: User, id: number): Promis
 }
 
 export async function reactivateExternalAccessGrant(admin: User, id: number): Promise<ExternalAccessResult<{ id: number }>> {
-  if (!admin.isAdmin) return { kind: "forbidden" };
+  if (!can(admin, "access.external")) return { kind: "forbidden" };
   const grant = await prisma.externalAccessGrant.findUnique({ where: { id }, select: { email: true } });
   if (!grant) return { kind: "not_found" };
   await prisma.$transaction(async (tx) => {

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { approveOrganizationCreationRequest, rejectOrganizationCreationRequest } from "@/lib/organization/service";
 import { approveOrganizationCreationRequestSchema, rejectOrganizationCreationRequestSchema } from "@/lib/organization/schema";
 
@@ -18,7 +18,7 @@ export async function approveOrganizationCreationRequestAction(
   requestId: number,
   input?: { adminNote?: string },
 ): Promise<ApproveOrganizationRequestState> {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("institutions.manage");
 
   const parsed = approveOrganizationCreationRequestSchema.safeParse(input ?? {});
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
@@ -39,7 +39,7 @@ export async function rejectOrganizationCreationRequestAction(
   requestId: number,
   input: { rejectionReason: string; adminNote?: string },
 ): Promise<RejectOrganizationRequestState> {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("institutions.manage");
 
   const parsed = rejectOrganizationCreationRequestSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "거절 사유를 입력해주세요." };

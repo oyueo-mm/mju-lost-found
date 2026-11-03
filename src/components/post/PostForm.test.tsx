@@ -35,6 +35,17 @@ function render(initialValues?: ReturnType<typeof editValues>) {
 
 const input = (markup: string, name: string) => markup.match(new RegExp(`<input[^>]*name="${name}"[^>]*>`))?.[0] ?? "";
 
+describe("new-post category defaults", () => {
+  it.each(["lost", "found"] as const)("selects 기타 on a new %s form", (type) => {
+    const html = renderToStaticMarkup(<I18nProvider locale="ko" messages={ko}><PostForm type={type} /></I18nProvider>);
+    expect(html).toMatch(/<option value="etc" selected="">기타<\/option>/);
+  });
+
+  it("keeps the existing category when editing", () => {
+    expect(render(editValues(null, null))).toMatch(/<option value="wallet" selected="">지갑<\/option>/);
+  });
+});
+
 const toggle = (markup: string, label: string) =>
   markup.match(new RegExp(`<div role="group" aria-label="${label}"[^>]*>.*?</div>`))?.[0] ?? "";
 const checkbox = (markup: string) => markup.match(/<input type="checkbox"[^>]*>/)?.[0] ?? "";

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+vi.mock("@/lib/metrics/audience", () => ({ classifyActor: async (u: { isAdmin: boolean }) => ({ audience: u.isAdmin ? "internal" : "member", role: u.isAdmin ? "service" : "member", organizationId: null }) }));
 
 // Captures what auth.ts hands to NextAuth and to the Google provider.
 type Callbacks = {

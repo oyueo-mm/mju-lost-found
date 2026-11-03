@@ -10,7 +10,7 @@ import { listReportsForAdmin } from "@/lib/moderation/service";
 // trusts a single gate to be the only thing standing between a non-admin
 // and this data.
 export const GET = withErrorHandling(async (request: NextRequest) => {
-  const auth = await requireAdminForApi();
+  const auth = await requireAdminForApi("reports.view");
   if ("response" in auth) return auth.response;
 
   const query = listReportsForAdminQuerySchema.parse(Object.fromEntries(request.nextUrl.searchParams));

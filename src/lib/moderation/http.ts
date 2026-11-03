@@ -1,8 +1,9 @@
 import type { NextResponse } from "next/server";
 
 import { jsonError, requireUserForApi } from "@/lib/posts/http";
-import type { User } from "@/generated/prisma/client";
-import { isAdmin } from "./service";
+import type { CurrentUser } from "@/lib/auth/session";
+import { can } from "@/lib/permissions/check";
+import type { PermissionKey } from "@/lib/permissions/definitions";
 
 export { jsonError, jsonOk, withErrorHandling } from "@/lib/posts/http";
 export { adminMutationResultToResponse } from "./response";
@@ -14,9 +15,15 @@ export { adminMutationResultToResponse } from "./response";
 // Mirrors legacy ui/auth.py::require_admin() being a UX gate on top of
 // db._require_admin(), which every admin-only service function below also
 // calls itself -- so this is the first line of defense, not the only one.
-export async function requireAdminForApi(): Promise<{ user: User } | { response: NextResponse }> {
+//
+// `permission` is the admin permission the endpoint needs; omitted means a full
+// administrator only (the safe default for anything not yet mapped).
+export async function requireAdminForApi(permission?: PermissionKey | PermissionKey[]): Promise<{ user: CurrentUser } | { response: NextResponse }> {
   const auth = await requireUserForApi();
   if ("response" in auth) return auth;
-  if (!isAdmin(auth.user)) return { response: jsonError(403, "관리자 권한이 필요합니다.") };
-  return { user: auth.user };
+  const allowed = permission
+    ? [permission].flat().some((p) => can(auth.user, p))
+    : Boolean(auth.user.isAdmin);
+  if (!allowed) return { response: jsonError(403, "관리자 권한이 필요합니다.") };
+  return { user: auth.user as CurrentUser };
 }

@@ -621,7 +621,7 @@ export const ko = {
   "landing.registerLost": "분실물 등록하기",
   "landing.registerFound": "습득물 등록하기",
   "landing.searchCta": "잃어버린 물건 찾기",
-  "landing.subtitle": "물건을 설명하거나 사진을 올리면\nAI가 비슷한 습득물을 보여줘요.",
+  "landing.subtitle": "물건을 설명하거나 사진을 올리면\n비슷한 습득물을 보여줘요.",
   "landing.features.title": "핵심 기능",
   "landing.features.subtitle": "분실물 찾기부터 채팅까지, 필요한 기능은 다 있습니다.",
   "landing.feature.register.title": "분실물 · 습득물 등록",

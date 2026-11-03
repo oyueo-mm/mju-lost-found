@@ -20,6 +20,7 @@ import { removeCommentInTx } from "@/lib/comment/remove";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { createAdminActionProposal, type AdminActionProposalDTO } from "@/lib/admin/proposals";
 import { ACTION_TYPES_FOR_TARGET, type ModerationActionTypeValue } from "./schema";
+import { can } from "@/lib/permissions/check";
 
 // Same duplication tradeoff as notification/service.ts's
 // NOTIFICATION_TYPE_FROM_DB: posts/service.ts already has this exact
@@ -282,7 +283,7 @@ export async function listReportsForAdmin(
     urgentOnly,
   }: { status?: ReportStatusValue; targetType?: ReportTargetType; page: number; limit: number; urgentOnly?: boolean },
 ): Promise<AdminMutationResult<PagedReportsForAdmin>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "reports.view")) return { kind: "forbidden" };
 
   const where: Prisma.ReportWhereInput = {
     ...(status && { status: STATUS_TO_DB(status) }),
@@ -357,7 +358,7 @@ export async function getReportTargetType(id: number): Promise<ReportTargetType 
 }
 
 export async function getReportForAdmin(admin: User, id: number): Promise<AdminMutationResult<ReportAdminDTO>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "reports.view")) return { kind: "forbidden" };
 
   const row = await prisma.report.findUnique({ where: { id }, include: REPORT_INCLUDE_FOR_ADMIN });
   if (!row) return { kind: "not_found" };
@@ -377,7 +378,7 @@ export async function dismissReport(
   reportId: number,
   adminNote?: string,
 ): Promise<AdminMutationResult<ReportDTO>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "reports.process")) return { kind: "forbidden" };
 
   const report = await prisma.report.findUnique({ where: { id: reportId } });
   if (!report) return { kind: "not_found" };
@@ -435,7 +436,11 @@ export async function applyReportAction(
     suspendDurationDays,
   }: { actionReasonCategory?: string; actionReason?: string; adminNote?: string; suspendDurationDays?: number },
 ): Promise<AdminMutationResult<ReportDTO>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "reports.process")) return { kind: "forbidden" };
+  // Processing a report may delete content or suspend someone; those need the
+  // matching permission on top of 신고 처리.
+  if ((actionType === "delete_post" || actionType === "delete_comment") && !can(admin, "posts.delete")) return { kind: "forbidden" };
+  if (actionType === "suspend_user" && !can(admin, "users.sanction")) return { kind: "forbidden" };
 
   const report = await prisma.report.findUnique({ where: { id: reportId } });
   if (!report) return { kind: "not_found" };
@@ -664,7 +669,7 @@ function tempHiddenNotice(userId: number, what: "게시물" | "댓글", reportId
 // the report already holds its TEMP_HIDE action) with the admin and a
 // reason naming the report, and the author is notified.
 export async function restoreTempHiddenContent(admin: User, reportId: number): Promise<AdminMutationResult<{ reportId: number }>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "reports.process")) return { kind: "forbidden" };
   const report = await prisma.report.findUnique({ where: { id: reportId }, include: { moderationAction: true } });
   if (!report) return { kind: "not_found" };
   const action = report.moderationAction?.actionType;
@@ -760,7 +765,7 @@ export async function listSuspensionActionsForAdmin(
   admin: User,
   { page, limit }: { page: number; limit: number },
 ): Promise<AdminMutationResult<PagedSuspensionActions>> {
-  if (!isAdmin(admin)) return { kind: "forbidden" };
+  if (!can(admin, "users.sanction")) return { kind: "forbidden" };
 
   const where = { actionType: PrismaModerationActionType.SUSPEND_USER } as const;
   const skip = (page - 1) * limit;

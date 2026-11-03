@@ -137,13 +137,13 @@ export async function loadInflow(days: string[]): Promise<InflowReport> {
   const [rows, first] = await Promise.all([
     wanted.length
       ? prisma.$queryRaw<{ day: Date | string; metric: string; n: bigint | number }[]>`
-          SELECT "day", "metric", sum("value") AS n FROM "MetricDaily"
+          SELECT "day", "metric", sum("value") AS n FROM "OperationalMetricDaily"
           WHERE "day" = ANY(${wanted}::date[])
             AND ("metric" LIKE 'visit.src.%' OR "metric" LIKE 'visit.entry.%' OR "metric" LIKE 'visit.utm\\_%'
               OR "metric" LIKE 'visit.ref.%' OR "metric" IN ('visit.session.anon', 'visit.session.member'))
           GROUP BY 1, 2`.catch(() => [])
       : Promise.resolve([]),
-    prisma.$queryRaw<{ day: Date | string | null }[]>`SELECT min("day") AS day FROM "MetricDaily" WHERE "metric" LIKE 'visit.src.%'`.catch(() => []),
+    prisma.$queryRaw<{ day: Date | string | null }[]>`SELECT min("day") AS day FROM "OperationalMetricDaily" WHERE "metric" LIKE 'visit.src.%'`.catch(() => []),
   ]);
   return buildInflow(
     wanted,

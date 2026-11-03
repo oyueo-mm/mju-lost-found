@@ -12,6 +12,8 @@ import { recordingSince } from "./activityTime";
 import { addPeriods } from "./dashboard";
 import { activityActor, kstDay, TRAFFIC_HOURLY_SINCE_METRIC } from "./record";
 import { activityRetainedFrom, COLLECTION_SINCE, type Coverage } from "./report";
+import type { ReportRange } from "./report";
+import { daysBetween } from "./daySelection";
 
 // 관리자 활동 tab of /admin/stats. Read-only, except the one marker row
 // below. Everything comes from records the app already keeps:
@@ -39,36 +41,43 @@ const TIMELINE_TASK_CAP = 2000;
 // One row per completed task: admin, UTC wall time, kind, target. `kind`
 // is mapped to a category and label by describeKind() below.
 const EVENTS = Prisma.sql`
-  SELECT "processed_by_user_id" AS admin_id, "processed_at" AS at, 'report.' || "status"::text AS kind, 'report' AS target_type, "id" AS target_id
+  SELECT "changed_by_user_id" AS admin_id, "created_at" AS at, 'item.' || COALESCE("action", 'status') AS kind, "post_type" || '_post' AS target_type, "post_id" AS target_id, "activity_role" AS actor_role, "activity_organization_id" AS actor_org
+    FROM "PostStatusChange" WHERE "activity_audience" = 'internal' AND "activity_role" IN ('service','officer')
+  UNION ALL
+  SELECT actor_user_id, created_at, 'officer.' || action, 'user', target_user_id, 'service'::text,
+    COALESCE((after->>'organizationId')::int, (before->>'organizationId')::int)
+    FROM "InstitutionOfficerAudit"
+  UNION ALL
+  SELECT "processed_by_user_id" AS admin_id, "processed_at" AS at, 'report.' || "status"::text AS kind, 'report' AS target_type, "id" AS target_id, 'service'::text AS actor_role, NULL::int AS actor_org
     FROM "Report" WHERE "processed_by_user_id" IS NOT NULL AND "processed_at" IS NOT NULL AND "status"::text <> 'pending'
   UNION ALL
-  SELECT "admin_user_id", "created_at", 'moderation.' || "action_type"::text, "target_type"::text, "target_id" FROM "ModerationAction"
+  SELECT "admin_user_id", "created_at", 'moderation.' || "action_type"::text, "target_type"::text, "target_id", 'service'::text AS actor_role, NULL::int AS actor_org FROM "ModerationAction"
   UNION ALL
-  SELECT l."actor_user_id", l."created_at", 'proposal.' || l."event"::text || '.' || p."action_type"::text, 'user', p."target_user_id"
+  SELECT l."actor_user_id", l."created_at", 'proposal.' || l."event"::text || '.' || p."action_type"::text, 'user', p."target_user_id", 'service'::text AS actor_role, NULL::int AS actor_org
     FROM "AdminActionAuditLog" l JOIN "AdminActionProposal" p ON p."id" = l."proposal_id"
     WHERE l."actor_user_id" IS NOT NULL AND l."event"::text IN ('created', 'approved', 'cancelled')
   UNION ALL
-  SELECT "reviewed_by_user_id", "reviewed_at", 'appeal.reviewed', 'appeal', "id"
+  SELECT "reviewed_by_user_id", "reviewed_at", 'appeal.reviewed', 'appeal', "id", 'service'::text AS actor_role, NULL::int AS actor_org
     FROM "SuspensionAppeal" WHERE "reviewed_by_user_id" IS NOT NULL AND "reviewed_at" IS NOT NULL
   UNION ALL
-  SELECT "reviewed_by_user_id", "reviewed_at", 'rejoin.' || "status"::text, 'rejoin_request', "id"
+  SELECT "reviewed_by_user_id", "reviewed_at", 'rejoin.' || "status"::text, 'rejoin_request', "id", 'service'::text AS actor_role, NULL::int AS actor_org
     FROM "RejoinRequest" WHERE "reviewed_by_user_id" IS NOT NULL AND "reviewed_at" IS NOT NULL
   UNION ALL
-  SELECT "reviewed_by_user_id", "reviewed_at", 'org_request.' || "status"::text, 'organization_request', "id"
+  SELECT "reviewed_by_user_id", "reviewed_at", 'org_request.' || "status"::text, 'organization_request', "id", 'service'::text AS actor_role, NULL::int AS actor_org
     FROM "OrganizationCreationRequest" WHERE "reviewed_by_user_id" IS NOT NULL AND "reviewed_at" IS NOT NULL
   UNION ALL
-  SELECT "created_by_user_id", "created_at", 'external.created', 'external_access', "id" FROM "ExternalAccessGrant"
+  SELECT "created_by_user_id", "created_at", 'external.created', 'external_access', "id", 'service'::text AS actor_role, NULL::int AS actor_org FROM "ExternalAccessGrant"
   UNION ALL
-  SELECT "revoked_by_user_id", "revoked_at", 'external.revoked', 'external_access', "id"
+  SELECT "revoked_by_user_id", "revoked_at", 'external.revoked', 'external_access', "id", 'service'::text AS actor_role, NULL::int AS actor_org
     FROM "ExternalAccessGrant" WHERE "revoked_by_user_id" IS NOT NULL AND "revoked_at" IS NOT NULL
   UNION ALL
-  SELECT "created_by_user_id", "created_at", 'announcement.created', 'announcement', "id" FROM "Announcement" WHERE "created_by_user_id" IS NOT NULL
+  SELECT "created_by_user_id", "created_at", 'announcement.created', 'announcement', "id", 'service'::text AS actor_role, NULL::int AS actor_org FROM "Announcement" WHERE "created_by_user_id" IS NOT NULL
   UNION ALL
-  SELECT "admin_user_id", "accessed_at", 'access.chat', 'report', "report_id" FROM "AdminAccessLog"
+  SELECT "admin_user_id", "accessed_at", 'access.chat', 'report', "report_id", 'service'::text AS actor_role, NULL::int AS actor_org FROM "AdminAccessLog"
   UNION ALL
-  SELECT "admin_user_id", "accessed_at", 'access.identity', 'report', "report_id" FROM "IdentityAccessLog"
+  SELECT "admin_user_id", "accessed_at", 'access.identity', 'report', "report_id", 'service'::text AS actor_role, NULL::int AS actor_org FROM "IdentityAccessLog"
   UNION ALL
-  SELECT "admin_user_id", "created_at", 'log.' || "action", "target_type", "target_id" FROM "AdminActivityLog" WHERE "action" <> ${ADMIN_SIGN_IN_ACTION}`;
+  SELECT "admin_user_id", "created_at", 'log.' || "action", "target_type", "target_id", "activity_role" AS actor_role, "activity_organization_id" AS actor_org FROM "AdminActivityLog" WHERE "action" <> ${ADMIN_SIGN_IN_ACTION}`;
 
 const MODERATION_LABELS: Record<string, string> = {
   delete_post: "게시글 삭제",
@@ -88,6 +97,26 @@ const PROPOSAL_TYPES: Record<string, { label: string; category: AdminTaskCategor
 };
 const PROPOSAL_EVENTS: Record<string, string> = { created: "요청", approved: "승인", cancelled: "요청 취소" };
 const FIXED_KINDS: Record<string, { label: string; category: AdminTaskCategory }> = {
+  "officer.grant": { label: "기관 담당자 지정", category: "role" },
+  "officer.update": { label: "기관 담당자 소속·권한 변경", category: "role" },
+  "officer.deactivate": { label: "기관 담당자 권한 회수", category: "role" },
+  "officer.permissions_grant": { label: "관리 권한 부여", category: "role" },
+  "officer.permissions_update": { label: "관리 권한 변경", category: "role" },
+  "officer.permissions_revoke": { label: "관리 권한 회수", category: "role" },
+  "officer.migrate_to_permissions": { label: "기관 담당자를 세부 권한으로 이전", category: "role" },
+  "officer.institution_create": { label: "관리 기관 등록", category: "operations" },
+  "officer.migrate_explicit_grant": { label: "기존 명시적 담당 권한 이전", category: "role" },
+  "item.confirm": { label: "물품 접수 확인", category: "content" },
+  "item.location": { label: "보관 장소 변경", category: "content" },
+  "item.complete": { label: "찾음·반환 완료", category: "content" },
+  "item.reopen": { label: "완료 복구", category: "content" },
+  "item.owner_status": { label: "본인 게시글 상태 변경", category: "content" },
+  "item.transfer_request": { label: "기관 인계 요청", category: "content" },
+  "item.transfer_accept": { label: "기관 인계 수령", category: "content" },
+  "item.transfer_cancel": { label: "기관 인계 취소", category: "content" },
+  "item.correct_institution": { label: "관리 기관 정정", category: "content" },
+  "item.release": { label: "접수 확인 해제", category: "content" },
+  "item.owner_custody": { label: "본인 보관 정보 변경", category: "content" },
   "report.actioned": { label: "신고 처리 (조치)", category: "report" },
   "report.dismissed": { label: "신고 처리 (기각)", category: "report" },
   "appeal.reviewed": { label: "이의신청 확인", category: "sanction" },
@@ -160,13 +189,20 @@ const utcParam = (at: Date) => Prisma.sql`(${at.toISOString()}::timestamptz AT T
 // UTC wall time out as ISO text, so the driver's local-time handling never applies
 const isoText = (column: Prisma.Sql) => Prisma.sql`to_char(${column}, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 
-type Scope = { adminId: number | null };
-const scopeFilter = ({ adminId }: Scope) => (adminId === null ? Prisma.empty : Prisma.sql`AND e.admin_id = ${adminId}`);
+type Scope = { adminId: number | null; role?: string; organizationId?: number; campus?: string };
+const scopeFilter = ({ adminId, role, organizationId, campus }: Scope) => Prisma.sql`
+  ${adminId === null ? Prisma.empty : Prisma.sql`AND e.admin_id = ${adminId}`}
+  ${role ? Prisma.sql`AND e.actor_role = ${role}` : Prisma.empty}
+  ${organizationId ? Prisma.sql`AND e.actor_org = ${organizationId}` : Prisma.empty}
+  ${campus ? Prisma.sql`AND e.actor_org IN (SELECT id FROM "Organization" WHERE management_campus = ${campus})` : Prisma.empty}`;
 
 export type CategoryCounts = Record<AdminTaskCategory, number>;
 const zeroCounts = (): CategoryCounts => ({ report: 0, content: 0, sanction: 0, role: 0, review: 0, operations: 0, access: 0 });
 
 export type AdminActivityRow = {
+  currentRole?: "service" | "officer" | "member";
+  // the account's current admin permissions (empty for a full administrator, who holds all)
+  permissions?: string[];
   id: number;
   nickname: string;
   isAdmin: boolean;
@@ -214,10 +250,12 @@ export type TimelineItem = {
 };
 
 // period: the last 7 or 30 KST days (the timeline's span when no day is chosen)
-export type ActivityPeriod = 7 | 30;
+export type ActivityPeriod = number;
 export type TimelineFilter = { admin: number | null; day: string | null; kind: TimelineKind | null; period?: ActivityPeriod };
 
 export type AdminActivityReport = {
+  selectedActorFilter?: { role?: string; organizationId?: number; campus?: string; actor?: number };
+  selectedRange?: ReportRange;
   today: string;
   days: string[];
   // per day of `days`: whether 활동일 was recorded that day
@@ -277,8 +315,8 @@ async function startMarker(metric: string, now: Date): Promise<{ day: Date; valu
 const perDay = (days: string[], rows: { day: Date; value: number }[]) =>
   days.map((d) => rows.filter((f) => f.day.toISOString().slice(0, 10) === d).reduce((a, f) => a + f.value, 0));
 
-const VISITS = Prisma.sql`SELECT "admin_user_id" AS admin_id, "started_at" AS at, "last_active_at" AS last FROM "AdminVisit"`;
-const SIGN_INS = Prisma.sql`SELECT "admin_user_id" AS admin_id, "created_at" AS at FROM "AdminActivityLog" WHERE "action" = ${ADMIN_SIGN_IN_ACTION}`;
+const VISITS = Prisma.sql`SELECT "admin_user_id" AS admin_id, "started_at" AS at, "last_active_at" AS last, "activity_role" AS actor_role, "activity_organization_id" AS actor_org FROM "AdminVisit" WHERE activity_role IN ('service','officer')`;
+const SIGN_INS = Prisma.sql`SELECT "admin_user_id" AS admin_id, "created_at" AS at, "activity_role" AS actor_role, "activity_organization_id" AS actor_org FROM "AdminActivityLog" WHERE "action" = ${ADMIN_SIGN_IN_ACTION} AND activity_role IN ('service','officer')`;
 
 // `all`: every admin's records (the viewer may see them); otherwise only
 // the viewer's own. `filter` narrows the timeline (its admin only when `all`).
@@ -287,32 +325,37 @@ export async function loadAdminActivity({
   all,
   filter = { admin: null, day: null, kind: null, period: STRIP_DAYS },
   now = new Date(),
+  range,
+  actorFilter = {},
 }: {
   viewer: number;
   all: boolean;
   filter?: TimelineFilter;
   now?: Date;
+  range?: ReportRange;
+  actorFilter?: { role?: string; organizationId?: number; campus?: string; actor?: number };
 }): Promise<AdminActivityReport> {
-  const today = kstDay(now);
-  const days = Array.from({ length: STRIP_DAYS }, (_, i) => addPeriods(today, "day", i - STRIP_DAYS + 1));
+  const today = range ? addPeriods(range.until, "day", -1) : kstDay(now);
+  const days = range ? daysBetween(range.from, today) : Array.from({ length: STRIP_DAYS }, (_, i) => addPeriods(today, "day", i - STRIP_DAYS + 1));
   const fromAt = kstMidnight(days[0]);
-  const scope: Scope = { adminId: all ? null : viewer };
+  const selectedEnd = range ? Prisma.sql`AND e.at < ${utcParam(kstMidnight(range.until))}` : Prisma.empty;
+  const scope: Scope = { adminId: all ? actorFilter.actor ?? null : viewer, ...actorFilter };
   const f: TimelineFilter = {
     admin: all ? filter.admin : null,
     day: filter.day && days.includes(filter.day) ? filter.day : null,
     kind: filter.kind,
-    period: filter.period === 7 ? 7 : STRIP_DAYS,
+    period: range ? days.length : filter.period === 7 ? 7 : STRIP_DAYS,
   };
-  const timelineScope: Scope = { adminId: all ? f.admin : viewer };
+  const timelineScope: Scope = { ...scope, adminId: all ? actorFilter.actor ?? f.admin : viewer };
   const dayFrom = f.day ? kstMidnight(f.day) : kstMidnight(days[days.length - (f.period ?? STRIP_DAYS)]);
-  const dayUntil = f.day ? kstMidnight(addPeriods(f.day, "day", 1)) : null;
+  const dayUntil = f.day ? kstMidnight(addPeriods(f.day, "day", 1)) : range ? kstMidnight(range.until) : null;
   const untilFilter = dayUntil ? Prisma.sql`AND e.at < ${utcParam(dayUntil)}` : Prisma.empty;
   const wantTasks = f.kind === null || (f.kind !== "login" && f.kind !== "visit");
 
   const [daily, totals, recent, visitRows, signInRows, marker, presenceMarker, earliest, activeMarker, earliestActive, failures] = await Promise.all([
     prisma.$queryRaw<{ admin_id: number; kind: string; day: string; n: number }[]>`
       SELECT e.admin_id, e.kind, to_char(e.at + interval '9 hours', 'YYYY-MM-DD') AS day, count(*)::int AS n
-      FROM (${EVENTS}) e WHERE e.at >= ${utcParam(fromAt)} ${scopeFilter(scope)} GROUP BY 1, 2, 3`,
+      FROM (${EVENTS}) e WHERE e.at >= ${utcParam(fromAt)} ${selectedEnd} ${scopeFilter(scope)} GROUP BY 1, 2, 3`,
     prisma.$queryRaw<{ admin_id: number; kind: string; n: number; last: string }[]>`
       SELECT e.admin_id, e.kind, count(*)::int AS n, ${isoText(Prisma.sql`max(e.at)`)} AS last
       FROM (${EVENTS}) e WHERE TRUE ${scopeFilter(scope)} GROUP BY 1, 2`,
@@ -324,14 +367,15 @@ export async function loadAdminActivity({
       : Promise.resolve([]),
     prisma.$queryRaw<{ admin_id: number; at: string; last: string }[]>`
       SELECT e.admin_id, ${isoText(Prisma.sql`e.at`)} AS at, ${isoText(Prisma.sql`e.last`)} AS last
-      FROM (${VISITS}) e WHERE e.at >= ${utcParam(fromAt)} ${scopeFilter(scope)}`,
+      FROM (${VISITS}) e WHERE e.at >= ${utcParam(fromAt)} ${selectedEnd} ${scopeFilter(scope)}`,
     prisma.$queryRaw<{ admin_id: number; at: string }[]>`
-      SELECT e.admin_id, ${isoText(Prisma.sql`e.at`)} AS at FROM (${SIGN_INS}) e WHERE e.at >= ${utcParam(fromAt)} ${scopeFilter(scope)}`,
+      SELECT e.admin_id, ${isoText(Prisma.sql`e.at`)} AS at FROM (${SIGN_INS}) e WHERE e.at >= ${utcParam(fromAt)} ${selectedEnd} ${scopeFilter(scope)}`,
     startMarker(ADMIN_ACTIVITY_SINCE_METRIC, now),
     startMarker(ADMIN_PRESENCE_SINCE_METRIC, now),
-    prisma.$queryRaw<{ log: string | null; presence: string | null }[]>`
+    prisma.$queryRaw<{ log: string | null; presence: string | null; roles_since: string | null }[]>`
       SELECT ${isoText(Prisma.sql`(SELECT min("created_at") FROM "AdminActivityLog" WHERE "action" <> ${ADMIN_SIGN_IN_ACTION})`)} AS log,
-             ${isoText(Prisma.sql`LEAST((SELECT min("started_at") FROM "AdminVisit"), (SELECT min("created_at") FROM "AdminActivityLog" WHERE "action" = ${ADMIN_SIGN_IN_ACTION}))`)} AS presence`,
+             ${isoText(Prisma.sql`LEAST((SELECT min("started_at") FROM "AdminVisit"), (SELECT min("created_at") FROM "AdminActivityLog" WHERE "action" = ${ADMIN_SIGN_IN_ACTION}))`)} AS presence,
+             (SELECT min(day)::text FROM "OperationalMetricDaily" WHERE metric = 'meta.since.institution_roles') AS roles_since`,
     prisma.metricDaily
       .findFirst({ where: { metric: TRAFFIC_HOURLY_SINCE_METRIC }, orderBy: { day: "asc" }, select: { day: true, value: true } })
       .catch(() => null),
@@ -346,24 +390,31 @@ export async function loadAdminActivity({
 
   // the admins shown: every current admin (or just the viewer), plus anyone
   // with an admin task on record who is no longer an admin
-  const actorIds = [...new Set(totals.map((t) => t.admin_id))];
+  const actorIds = [...new Set([...totals, ...visitRows, ...signInRows].map((t) => t.admin_id))];
+  const officerWhere: Prisma.InstitutionOfficerWhereInput = { active: true, organization: { status: "ACTIVE", managementCampus: { not: null } }, ...(actorFilter.organizationId && { organizationId: actorFilter.organizationId }), ...(actorFilter.campus && { organization: { status: "ACTIVE", managementCampus: actorFilter.campus } }) };
+  // "officer" now means: holds at least one admin permission (and, when an agency or campus is chosen, works in it)
+  const scoped = Boolean(actorFilter.organizationId || actorFilter.campus);
+  const holderWhere: Prisma.UserWhereInput = { isAdmin: false, adminPermissions: { some: {} }, ...(scoped && { institutionOfficer: { is: officerWhere } }) };
+  const currentWhere: Prisma.UserWhereInput = actorFilter.role === "officer" ? holderWhere : actorFilter.role === "service" ? { isAdmin: true } : { OR: [{ isAdmin: true }, holderWhere] };
   const users = await prisma.user.findMany({
-    where: all ? { OR: [{ isAdmin: true }, { id: { in: actorIds } }] } : { id: viewer },
-    select: { id: true, nickname: true, isAdmin: true, lastLoginAt: true, lastActiveAt: true, withdrawnAt: true },
+    where: all ? { OR: [currentWhere, { id: { in: actorIds } }], ...(actorFilter.actor && { id: actorFilter.actor }) } : { id: viewer },
+    select: { id: true, nickname: true, isAdmin: true, lastLoginAt: true, lastActiveAt: true, withdrawnAt: true, adminPermissions: { select: { permission: true } } },
     orderBy: { id: "asc" },
   });
 
   // 활동일: which days were recorded at all (the first day only from the
   // minute collection began)
-  const collectionDay = COLLECTION_SINCE.ops.slice(0, 10);
+  const roleDay = earliest[0]?.roles_since ?? null;
+  const collectionDay = roleDay && roleDay > COLLECTION_SINCE.ops.slice(0, 10) ? roleDay : COLLECTION_SINCE.ops.slice(0, 10);
   const firstMeasured = [activityRetainedFrom(today), collectionDay].sort().at(-1)!;
   const dayStatus: Coverage[] = days.map((d) =>
-    d < firstMeasured ? "none" : d === collectionDay && !COLLECTION_SINCE.ops.endsWith("T00:00") ? "partial" : "full",
+    !roleDay || d < firstMeasured ? "none" : d === collectionDay ? "partial" : "full",
   );
   // a withdrawn account's marks are never read
   const actors = new Map(users.filter((u) => !u.withdrawnAt).map((u) => [activityActor(u.id), u.id]));
+  const activityOrgIds = actorFilter.campus ? await prisma.organization.findMany({ where: { managementCampus: actorFilter.campus }, select: { id: true } }) : null;
   const marks = await prisma.activityDay.findMany({
-    where: { actor: { in: [...actors.keys()] }, day: { gte: dayDate(days[0]), lte: dayDate(today) } },
+    where: { activityAudience: "internal", activityRole: actorFilter.role ? actorFilter.role : { in: ["service", "officer"] }, ...(actorFilter.organizationId && { activityOrganizationId: actorFilter.organizationId }), ...(activityOrgIds && { AND: [{ activityOrganizationId: { in: activityOrgIds.map((o) => o.id) } }] }), actor: { in: [...actors.keys()] }, day: { gte: dayDate(days[0]), lte: dayDate(today) } },
     select: { day: true, actor: true },
   });
   const activeOn = new Map<number, Set<string>>();
@@ -374,7 +425,9 @@ export async function loadAdminActivity({
 
   const first = earliest[0];
   const logSince = recordingSince(marker, first?.log ? new Date(first.log) : null);
-  const presenceSince = recordingSince(presenceMarker, first?.presence ? new Date(first.presence) : null);
+  const recordedPresenceSince = recordingSince(presenceMarker, first?.presence ? new Date(first.presence) : null);
+  const roleBoundary = roleDay ? `${roleDay} 00:00` : null;
+  const presenceSince = roleBoundary && recordedPresenceSince ? [roleBoundary, recordedPresenceSince].sort().at(-1)! : null;
   const recordFailures = perDay(days, failures.filter((x) => x.metric === ADMIN_ACTIVITY_FAILED_METRIC));
   const visitFailures = perDay(days, failures.filter((x) => x.metric === ADMIN_VISIT_FAILED_METRIC));
   // a day is fully covered only once the log had begun before it, and had
@@ -438,6 +491,8 @@ export async function loadAdminActivity({
       id: u.id,
       nickname: u.nickname ?? `회원 #${u.id}`,
       isAdmin: u.isAdmin,
+      currentRole: u.withdrawnAt ? "member" : u.isAdmin ? "service" : u.adminPermissions.length > 0 ? "officer" : "member",
+      permissions: u.isAdmin ? [] : u.adminPermissions.map((g) => g.permission),
       lastLoginAt: u.lastLoginAt,
       lastActiveAt: u.withdrawnAt ? null : u.lastActiveAt,
       lastTaskAt: lastTask.get(u.id) ?? null,
@@ -481,6 +536,8 @@ export async function loadAdminActivity({
   const matched = items.filter((x) => f.kind === null || x.kind === f.kind).sort((a, b) => b.at.getTime() - a.at.getTime());
 
   return {
+    selectedRange: range,
+    selectedActorFilter: actorFilter,
     today,
     days,
     dayStatus,
@@ -488,7 +545,7 @@ export async function loadAdminActivity({
     measuredDays30,
     dailyTasks,
     taskCoverage,
-    dailyActiveAdmins: days.map((_, i) => (dayStatus[i] === "none" ? null : admins.filter((a) => a.isAdmin && a.strip[i] === "active").length)),
+    dailyActiveAdmins: days.map((_, i) => (dayStatus[i] === "none" ? null : admins.filter((a) => a.strip[i] === "active").length)),
     dailyVisits: countPerDay(visitRows, null),
     dailySignIns: countPerDay(signInRows, null),
     presenceStatus,

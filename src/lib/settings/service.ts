@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { can } from "@/lib/permissions/check";
 
 // Phase H-3: singleton row (id=1) -- see schema.prisma's own comment on
 // AppSettings for why this stays a single-row table rather than a
@@ -58,7 +59,7 @@ export async function setGoogleTestMode(
   // the NextAuth signIn callback, see auth.ts) doesn't pull in that
   // module's own heavier transitive imports (report/service.ts, report
   // targets, etc.) into the auth bundle for a single boolean field read.
-  if (!admin.isAdmin) return { kind: "forbidden" };
+  if (!can(admin, "settings.manage")) return { kind: "forbidden" };
 
   const row = await prisma.appSettings.upsert({
     where: { id: SETTINGS_ID },

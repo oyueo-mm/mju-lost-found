@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requireAnyPermission } from "@/lib/auth/session";
 import { listPostsForAdmin } from "@/lib/admin/posts";
 import { CATEGORIES, postTypeSchema } from "@/lib/posts/schema";
 import { AdminPostDeleteButton } from "@/components/admin/AdminPostDeleteButton";
@@ -33,7 +33,7 @@ export default async function AdminPostsPage({
 }: {
   searchParams: Promise<{ type?: string; q?: string; category?: string; author?: string; page?: string }>;
 }) {
-  const admin = await requireAdmin();
+  const admin = await requireAnyPermission(["posts.manage", "posts.delete"]);
 
   const { type: typeParam, q, category, author, page: pageParam } = await searchParams;
   const typeResult = postTypeSchema.safeParse(typeParam);

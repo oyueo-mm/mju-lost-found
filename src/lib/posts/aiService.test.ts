@@ -887,7 +887,7 @@ describe("updateLostPost", () => {
       expect(($queryRaw.mock.calls[0][0] as string[]).join("?")).toMatch(/FROM "FoundPost" WHERE id = \? FOR UPDATE/);
       expect(foundPost.update).toHaveBeenCalledWith(expect.objectContaining({ data: { status: "KEEPING" } }));
       expect(postStatusChange.create).toHaveBeenCalledWith({
-        data: { postType: "found", postId: 2, fromStatus: "완료", toStatus: "보관 중", changedByUserId: 1 },
+        data: { postType: "found", postId: 2, fromStatus: "완료", toStatus: "보관 중", changedByUserId: 1, action: "owner_status" },
       });
       expect(embedPostBestEffort).not.toHaveBeenCalled();
     });
@@ -931,7 +931,7 @@ describe("updateLostPost", () => {
       expect(result.kind).toBe("ok");
       expect(($queryRaw.mock.calls[0][0] as string[]).join("?")).toMatch(/FROM "LostPost" WHERE id = \? FOR UPDATE/);
       expect(postStatusChange.create).toHaveBeenCalledWith({
-        data: { postType: "lost", postId: 1, fromStatus: "찾는 중", toStatus: "찾음", changedByUserId: 1 },
+        data: { postType: "lost", postId: 1, fromStatus: "찾는 중", toStatus: "찾음", changedByUserId: 1, action: "owner_status" },
       });
     });
 

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireAdmin } from "@/lib/auth/session";
+import { requirePermission } from "@/lib/auth/session";
 import { createExternalAccessSchema, updateExternalAccessSchema } from "@/lib/externalAccess/schema";
 import {
   createExternalAccessGrant,
@@ -24,8 +24,9 @@ export async function createExternalAccessAction(input: {
   name: string;
   affiliation: string;
   campus: string;
+  canManageItems?: boolean;
 }): Promise<ExternalAccessActionState> {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("access.external");
   const parsed = createExternalAccessSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
 
@@ -38,9 +39,9 @@ export async function createExternalAccessAction(input: {
 
 export async function updateExternalAccessAction(
   id: number,
-  input: { name: string; affiliation: string; campus: string },
+  input: { name: string; affiliation: string; campus: string; canManageItems?: boolean },
 ): Promise<ExternalAccessActionState> {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("access.external");
   const parsed = updateExternalAccessSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
 
@@ -52,7 +53,7 @@ export async function updateExternalAccessAction(
 }
 
 export async function revokeExternalAccessAction(id: number): Promise<ExternalAccessActionState> {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("access.external");
   const result = await revokeExternalAccessGrant(admin, id);
   if (result.kind !== "ok") return { error: "승인을 취소하지 못했습니다." };
   revalidatePath("/admin/external-access");
@@ -60,7 +61,7 @@ export async function revokeExternalAccessAction(id: number): Promise<ExternalAc
 }
 
 export async function reactivateExternalAccessAction(id: number): Promise<ExternalAccessActionState> {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("access.external");
   const result = await reactivateExternalAccessGrant(admin, id);
   if (result.kind !== "ok") return { error: "다시 승인하지 못했습니다." };
   await recordAdminActivity(admin.id, "external_access.reactivate", { type: "external_access", id });
