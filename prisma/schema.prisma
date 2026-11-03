@@ -88,6 +88,8 @@ enum ReportTargetType {
   // sign-encoding trick in report/targets.ts) -- so, like MESSAGE/USER
   // above, no encoding is needed for a comment target_id either.
   COMMENT @map("comment")
+  // 감사 쪽지 신고 (ThankNote.id)
+  THANK_NOTE @map("thank_note")
 }
 
 enum ReportStatus {
@@ -110,6 +112,8 @@ enum ModerationActionType {
   TEMP_HIDE_COMMENT @map("temp_hide_comment")
   RESTORE_POST      @map("restore_post")
   RESTORE_COMMENT   @map("restore_comment")
+  // 감사 쪽지 신고 처리: hides the note everywhere (ThankNote.adminHiddenAt)
+  HIDE_THANK_NOTE   @map("hide_thank_note")
 }
 
 enum NotificationType {
@@ -180,6 +184,8 @@ enum NotificationType {
   CONTENT_TEMP_HIDDEN            @map("content_temp_hidden")
   POST_MANAGED @map("post_managed")
   CONTENT_RESTORED               @map("content_restored")
+  // 감사 쪽지 수신 (relatedType "thank_note", relatedId ThankNote.id) -- in-app only, never web push
+  THANK_NOTE                     @map("thank_note")
 }
 
 // Phase 관리자 승인제: the four direct User-row mutations that become a
@@ -456,6 +462,11 @@ model User {
   counterpartChatRooms         ChatRoom[]                    @relation("ChatRoomCounterpart")
   sentMessages                 Message[]                     @relation("MessageSender")
   sentThankNotes               ThankNote[]                   @relation("ThankNoteSender")
+  returnsCompleted             PostReturn[]                  @relation("PostReturnCompletedBy")
+  returnsAsOwner               PostReturn[]                  @relation("PostReturnOwner")
+  returnsAsFinder              PostReturn[]                  @relation("PostReturnFinder")
+  pushSubscriptions            PushSubscription[]
+  chatPresences                ChatPresence[]
   receivedThankNotes           ThankNote[]                   @relation("ThankNoteReceiver")
   hiddenMessages               Message[]                     @relation("MessageHiddenBy")
   // Phase N: this user's own read cursor in each room they're part of --
@@ -900,6 +911,8 @@ model ChatRoom {
   messages  Message[]
   chatReads ChatRead[]
   thankNotes ThankNote[]
+  returns    PostReturn[]
+  presences  ChatPresence[]
 
   // The legacy SQLite indexes use `WHERE direct_lost_post_id IS NOT NULL`
   // partial indexes. Unlike MySQL (which can't express those at all),
@@ -1021,6 +1034,7 @@ model Message {
   @@index([chatRoomId, createdAt(sort: Desc), id(sort: Desc)], map: "idx_message_chat_room_created_id")
   @@index([replyToMessageId], map: "idx_message_reply_to")
   @@map("Message")
+  pushOutbox PushOutbox?
 }
 
 // ---------- ChatRead (Phase N) ----------
@@ -2127,6 +2141,12 @@ model ThankNote {
   receiverUserId Int       @map("receiver_user_id")
   receiver       User      @relation("ThankNoteReceiver", fields: [receiverUserId], references: [id], onDelete: Restrict)
   body           String    @db.Text
+  // the return this note thanks for (null: notes written before returns were
+  // recorded -- kept as they are, never re-linked by guessing)
+  returnId       Int?        @map("return_id")
+  postReturn     PostReturn? @relation(fields: [returnId], references: [id], onDelete: SetNull)
+  // hidden by an administrator after a report (shown nowhere)
+  adminHiddenAt  DateTime?   @map("admin_hidden_at")
   publishedAt    DateTime? @map("published_at")
   hiddenAt       DateTime? @map("hidden_at")
   createdAt      DateTime  @default(now()) @map("created_at")
@@ -2135,4 +2155,81 @@ model ThankNote {
   @@index([receiverUserId, createdAt], map: "idx_thanknote_receiver")
   @@index([senderUserId, createdAt], map: "idx_thanknote_sender")
   @@map("ThankNote")
+}
+
+// ---------- PostReturn ----------
+// 반환 연결: written only when the author marks the post done from a chat
+// room (lib/posts/returns.ts) -- that room's other person is the return
+// partner, never chosen or guessed. owner = the one who got the item back
+// (lost: author; found: partner), finder = the one who returned it. At most
+// one active row per post (partial unique index in the migration); undoing
+// the completion sets revokedAt and keeps the row for the record.
+model PostReturn {
+  id                Int         @id @default(autoincrement())
+  postType          String      @map("post_type")
+  postId            Int         @map("post_id")
+  chatRoomId        Int?        @map("chat_room_id")
+  chatRoom          ChatRoom?   @relation(fields: [chatRoomId], references: [id], onDelete: SetNull)
+  completedByUserId Int         @map("completed_by_user_id")
+  completedBy       User        @relation("PostReturnCompletedBy", fields: [completedByUserId], references: [id], onDelete: Restrict)
+  ownerUserId       Int         @map("owner_user_id")
+  owner             User        @relation("PostReturnOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  finderUserId      Int         @map("finder_user_id")
+  finder            User        @relation("PostReturnFinder", fields: [finderUserId], references: [id], onDelete: Restrict)
+  createdAt         DateTime    @default(now()) @map("created_at")
+  revokedAt         DateTime?   @map("revoked_at")
+  thankNotes        ThankNote[]
+
+  @@index([postType, postId], map: "idx_postreturn_post")
+  @@map("PostReturn")
+}
+
+// ---------- Web push (chat messages only) ----------
+// One row per browser/device subscription (endpoint is unique). Keys are the
+// browser's public ones; the VAPID private key lives only in the server env.
+model PushSubscription {
+  id           Int       @id @default(autoincrement())
+  userId       Int       @map("user_id")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint     String    @unique @db.Text
+  p256dh       String    @db.Text
+  auth         String    @db.Text
+  deviceLabel  String?   @map("device_label") @db.Text
+  createdAt    DateTime  @default(now()) @map("created_at")
+  lastSuccessAt DateTime? @map("last_success_at")
+  failureCount Int       @default(0) @map("failure_count")
+
+  @@index([userId], map: "idx_pushsubscription_user")
+  @@map("PushSubscription")
+}
+
+// Durable "push this message" queue, written in the message's own
+// transaction; delivery runs after the response and is retried on later
+// chat activity. One row per message (idempotent).
+model PushOutbox {
+  id        Int       @id @default(autoincrement())
+  messageId Int       @unique @map("message_id")
+  message   Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    Int       @map("user_id")
+  createdAt DateTime  @default(now()) @map("created_at")
+  attempts  Int       @default(0)
+  sentAt    DateTime? @map("sent_at")
+  skipped   String?
+  lastError String?   @map("last_error")
+
+  @@index([sentAt, createdAt], map: "idx_pushoutbox_pending")
+  @@map("PushOutbox")
+}
+
+// The chat room a user is looking at right now (visible tab), refreshed every
+// ~25 s; a push is skipped only while this is fresh.
+model ChatPresence {
+  userId     Int      @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatRoomId Int      @map("chat_room_id")
+  chatRoom   ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  seenAt     DateTime @map("seen_at")
+
+  @@id([userId, chatRoomId])
+  @@map("ChatPresence")
 }
