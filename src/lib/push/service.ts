@@ -20,10 +20,18 @@ import { Prisma } from "@/generated/prisma/client";
 
 export const PUSH_TTL_SECONDS = 3600;
 export const PUSH_MAX_ATTEMPTS = 3;
-// a push is skipped while the receiver is looking at that room
-export const PRESENCE_FRESH_MS = 45_000;
+// a push is skipped while the receiver is looking at that room: the visible
+// tab reports it every 10 s and the mark counts for 25 s. A tab closed
+// abruptly (no chance to say so) can therefore still suppress a push for up
+// to ~25 s -- a known, bounded limit.
+export const PRESENCE_FRESH_MS = 25_000;
 // rows older than this are not retried (a late chat ping is noise)
 export const PUSH_RETRY_WINDOW_MS = 15 * 60_000;
+// a failed push is tried once more shortly after (same background run); later
+// retries (swept by newer chat activity) only touch rows at least this old, so
+// a push is never hammered and its 3 attempts are spread out
+export const PUSH_RETRY_DELAY_MS = 3_000;
+export const PUSH_SWEEP_MIN_AGE_MS = 15_000;
 
 export type PushConfig = { publicKey: string; privateKey: string; subject: string };
 export function pushConfig(): PushConfig | null {
@@ -167,10 +175,20 @@ export async function deliverPush(outboxId: number, { send, now = new Date() }: 
   return "retry";
 }
 
+// One delivery run: the push, and one more try a few seconds later if the
+// push service answered with a temporary failure.
+export async function deliverWithRetry(outboxId: number, opts: { send?: Sender; now?: () => Date; wait?: (ms: number) => Promise<void> } = {}): Promise<DeliverOutcome> {
+  const wait = opts.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const first = await deliverPush(outboxId, { send: opts.send, now: opts.now?.() });
+  if (first !== "retry") return first;
+  await wait(PUSH_RETRY_DELAY_MS);
+  return deliverPush(outboxId, { send: opts.send, now: opts.now?.() });
+}
+
 // Retry a few recent unsent rows (called after later chat sends).
 export async function sweepPendingPushes(limit = 5, { now = new Date(), send }: { now?: Date; send?: Sender } = {}): Promise<number> {
   const rows = await prisma.pushOutbox.findMany({
-    where: { sentAt: null, skipped: null, attempts: { lt: PUSH_MAX_ATTEMPTS }, createdAt: { gte: new Date(now.getTime() - PUSH_RETRY_WINDOW_MS) } },
+    where: { sentAt: null, skipped: null, attempts: { lt: PUSH_MAX_ATTEMPTS }, createdAt: { gte: new Date(now.getTime() - PUSH_RETRY_WINDOW_MS), lte: new Date(now.getTime() - PUSH_SWEEP_MIN_AGE_MS) } },
     orderBy: { createdAt: "asc" },
     take: limit,
     select: { id: true },

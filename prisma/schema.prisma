@@ -2222,7 +2222,7 @@ model PushOutbox {
 }
 
 // The chat room a user is looking at right now (visible tab), refreshed every
-// ~25 s; a push is skipped only while this is fresh.
+// ~10 s; a push is skipped only while this is fresh (< 25 s).
 model ChatPresence {
   userId     Int      @map("user_id")
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)

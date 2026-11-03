@@ -150,6 +150,21 @@ describe("POST /api/admin/reports/[id]/process", () => {
     expect(applyReportAction).toHaveBeenCalledWith(admin, 1, "delete_post", expect.any(Object));
   });
 
+  it("accepts hiding a 감사 쪽지 as a selectable action, and defaults to it for a note report", async () => {
+    requireAdminForApi.mockResolvedValueOnce({ user: admin });
+    getReportTargetType.mockResolvedValueOnce("thank_note");
+    applyReportAction.mockResolvedValueOnce({ kind: "ok", data: {} });
+    const res = await POST(req({ decision: "action", actionType: "hide_thank_note" }), params("1"));
+    expect(res.status).not.toBe(400);
+    expect(applyReportAction).toHaveBeenCalledWith(admin, 1, "hide_thank_note", expect.any(Object));
+
+    requireAdminForApi.mockResolvedValueOnce({ user: admin });
+    getReportTargetType.mockResolvedValueOnce("thank_note");
+    applyReportAction.mockResolvedValueOnce({ kind: "ok", data: {} });
+    await POST(req({ decision: "action" }), params("1"));
+    expect(applyReportAction).toHaveBeenLastCalledWith(admin, 1, "hide_thank_note", expect.any(Object));
+  });
+
   it("rejects an actionType that isn't a selectable action (restore_* is never chosen here)", async () => {
     requireAdminForApi.mockResolvedValueOnce({ user: admin });
 

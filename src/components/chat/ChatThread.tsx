@@ -240,7 +240,7 @@ export function ChatThread({
   }, [chatRoomId]);
 
   // 채팅 웹 푸시: tell the server this room is on screen (visible tab only),
-  // every 25 s, and that it no longer is when hidden or left. A push to this
+  // every 10 s, and that it no longer is when hidden or left. A push to this
   // user for this room is skipped only while that mark is fresh.
   useEffect(() => {
     const ping = (visible: boolean) => void chatPresenceAction(chatRoomId, visible).catch(() => {});
@@ -250,7 +250,7 @@ export function ChatThread({
       if (timer !== null) window.clearInterval(timer);
       timer = null;
       ping(visible);
-      if (visible) timer = window.setInterval(() => ping(true), 25_000);
+      if (visible) timer = window.setInterval(() => ping(true), 10_000);
     };
     update();
     document.addEventListener("visibilitychange", update);

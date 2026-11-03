@@ -114,13 +114,13 @@ export const processReportSchema = z.discriminatedUnion("decision", [
     // Legal pre-beta Phase: lets the admin pick a temporary hide instead of
     // the default action for a post/comment report. Checked against
     // ACTION_TYPES_FOR_TARGET server-side; omitted = the default action.
-    actionType: z.enum(["delete_post", "temp_hide_post", "delete_comment", "temp_hide_comment", "hide_message", "suspend_user"]).optional(),
+    actionType: z.enum(["delete_post", "temp_hide_post", "delete_comment", "temp_hide_comment", "hide_message", "suspend_user", "hide_thank_note"]).optional(),
   }),
 ]);
 export type ProcessReportInput = z.infer<typeof processReportSchema>;
 
 export const REPORT_STATUSES_FOR_FILTER = ["pending", "dismissed", "actioned"] as const;
-export const REPORT_TARGET_TYPES_FOR_FILTER = ["post", "message", "user", "comment"] as const;
+export const REPORT_TARGET_TYPES_FOR_FILTER = ["post", "message", "user", "comment", "thank_note"] as const;
 
 export const DEFAULT_ADMIN_PAGE = 1;
 export const DEFAULT_ADMIN_LIMIT = 20;

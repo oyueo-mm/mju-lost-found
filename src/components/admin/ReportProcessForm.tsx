@@ -104,7 +104,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted, allowTe
           ? { decision: "dismiss" as const, adminNote: adminNote || undefined }
           : {
               decision: "action" as const,
-              actionType: actionType as "delete_post" | "temp_hide_post" | "delete_comment" | "temp_hide_comment" | "hide_message" | "suspend_user",
+              actionType: actionType as "delete_post" | "temp_hide_post" | "delete_comment" | "temp_hide_comment" | "hide_message" | "suspend_user" | "hide_thank_note",
               actionReasonCategory: actionType === "suspend_user" ? actionReasonCategory : undefined,
               actionReason: actionReason || undefined,
               adminNote: adminNote || undefined,

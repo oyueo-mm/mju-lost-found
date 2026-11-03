@@ -1,4 +1,4 @@
-import { deliverPush, enqueueChatPush, sweepPendingPushes } from "@/lib/push/service";
+import { deliverWithRetry, enqueueChatPush, sweepPendingPushes } from "@/lib/push/service";
 import { after } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
@@ -1222,7 +1222,7 @@ export async function sendMessage(
   after(async () => {
     await broadcastChatEvent(chatRoomId, { event: "message", payload: { messageId: message.id } });
     try {
-      if (pushOutboxId !== null) await deliverPush(pushOutboxId);
+      if (pushOutboxId !== null) await deliverWithRetry(pushOutboxId);
       await sweepPendingPushes(3);
     } catch (error) {
       console.error("Chat push delivery failed", (error as Error)?.message);

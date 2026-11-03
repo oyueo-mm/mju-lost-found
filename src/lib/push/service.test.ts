@@ -9,7 +9,7 @@ const db = {
 };
 vi.mock("@/lib/db/prisma", () => ({ prisma: db }));
 vi.mock("web-push", () => ({ default: { sendNotification: vi.fn() } }));
-const { chatPushPayload, deliverPush, enqueueChatPush, sweepPendingPushes, validSubscription, PRESENCE_FRESH_MS } = await import("./service");
+const { chatPushPayload, deliverPush, deliverWithRetry, enqueueChatPush, sweepPendingPushes, validSubscription, PRESENCE_FRESH_MS, PUSH_SWEEP_MIN_AGE_MS, PUSH_RETRY_DELAY_MS } = await import("./service");
 const { pushEnvironment } = await import("./environment");
 
 const NOW = new Date("2026-11-03T12:00:00Z");
@@ -112,6 +112,21 @@ describe("deliverPush", () => {
     const where = db.pushOutbox.findMany.mock.calls[0][0].where;
     expect(where).toMatchObject({ sentAt: null, skipped: null, attempts: { lt: 3 } });
     expect(where.createdAt.gte.getTime()).toBe(NOW.getTime() - 15 * 60_000);
+    // a push that just failed is not hammered: only rows at least 15 s old
+    expect(where.createdAt.lte.getTime()).toBe(NOW.getTime() - PUSH_SWEEP_MIN_AGE_MS);
+  });
+
+  it("a temporary failure is tried once more after a short wait, then left for later activity", async () => {
+    const down = vi.fn(async () => { throw Object.assign(new Error("down"), { statusCode: 503 }); });
+    const wait = vi.fn(async () => {});
+    db.pushOutbox.findUnique.mockResolvedValueOnce(row()).mockResolvedValueOnce(row({ attempts: 1 }));
+    expect(await deliverWithRetry(1, { send: down, wait, now: () => NOW })).toBe("retry");
+    expect(wait).toHaveBeenCalledWith(PUSH_RETRY_DELAY_MS);
+    expect(down).toHaveBeenCalledTimes(4); // 2 devices x 2 tries
+    // success on the first try never waits
+    wait.mockClear();
+    expect(await deliverWithRetry(1, { send: ok, wait, now: () => NOW })).toBe("sent");
+    expect(wait).not.toHaveBeenCalled();
   });
 });
 
