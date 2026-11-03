@@ -22,6 +22,7 @@ import { describeDays } from "./daySelection";
 import { changeOf, type DayVisitReport, type MultiDayReport } from "./dayVisits";
 import type { InflowReport } from "./inflow";
 import { DURATION_BUCKETS, DURATION_LABELS, PAGES_BUCKETS, PAGES_LABELS } from "./flow";
+import { CATEGORY_BASES, CATEGORY_BASIS_LABELS, CATEGORY_SCOPES, CATEGORY_SCOPE_LABELS, type CategoryBasis, type CategoryScope } from "./categories";
 import { DEVICE_KINDS, DEVICE_LABELS, PAGE_KIND_LABELS, REF_SOURCE_LABELS, type PageKind, type RefSource } from "./visits";
 import { buildCsv, buildXlsx, columnName, type Cell, type Sheet } from "./xlsx";
 
@@ -642,22 +643,26 @@ function opsDatasets(report: Report): Dataset[] {
 }
 
 export const CATEGORY_NOTES = [
-  "기간 중 등록된 분실물·습득물을 대분류별로 셉니다. 운영 요약의 분실물·습득물 등록과 같은 기준입니다(관리자 임시 숨김 포함, 삭제된 게시글은 제외).",
-  "미분류: 아직 대분류가 정해지지 않은 게시글(카테고리 체계 이전에 등록된 글 등)입니다. 현재 체계에 없는 코드는 '알 수 없는 분류'로 따로 표시합니다.",
+  "물품 현황입니다: 기본(전체)은 관리자와 일반 사용자가 등록한 게시글을 모두 셉니다. 일반 사용자·관리자는 작성 당시 역할 기준이며, 역할 기록 도입(2026-11-03) 전 게시글은 관리자 지정·해제 이력으로 당시 역할을 확인합니다. 확인할 수 없는 글은 전체에만 들어갑니다.",
+  "조회 기간 등록 = 기간 중 작성된 게시글, 전체 누적 = 지금 DB에 있는 모든 게시글(관리자 임시 숨김 포함, 삭제된 게시글은 남은 기록이 없어 제외).",
+  "운영 요약의 분실물·습득물 등록은 일반 사용자 활동 통계라 일반 사용자 게시글만 셉니다. 이 표의 '조회 기간 등록 · 일반 사용자'와 같습니다.",
+  "미분류: 아직 대분류가 정해지지 않은 게시글입니다. 현재 체계에 없는 코드는 '알 수 없는 분류'로 따로 표시합니다.",
   "비율은 같은 유형(분실물 또는 습득물) 안에서의 비율이고, 순위는 유형별 건수 순위입니다(같은 건수는 같은 순위, 0건은 순위 없음).",
 ];
 
+const CATEGORY_TABLES: { basis: CategoryBasis; scope: CategoryScope }[] = CATEGORY_BASES.flatMap((basis) => CATEGORY_SCOPES.map((scope) => ({ basis, scope })));
+
 function categoryDataset(report: Report): Dataset {
-  const rows = report.categories;
-  const lostTotal = rows.reduce((a, r) => a + r.lost, 0);
-  const foundTotal = rows.reduce((a, r) => a + r.found, 0);
   return {
     key: "categories",
     name: "카테고리별 현황",
     widths: [16, 10, 10, 10, 10, 10, 10, 10],
-    tables: [
-      {
-        title: "카테고리별 분실물·습득물 등록(기간 합계, 합계 많은 순)",
+    tables: CATEGORY_TABLES.map(({ basis, scope }): Table => {
+      const rows = report.categories.views[basis][scope];
+      const lostTotal = rows.reduce((a, r) => a + r.lost, 0);
+      const foundTotal = rows.reduce((a, r) => a + r.found, 0);
+      return {
+        title: `카테고리별 분실물·습득물 — ${CATEGORY_BASIS_LABELS[basis]} · ${CATEGORY_SCOPE_LABELS[scope]} (합계 많은 순)`,
         columns: [
           { label: "카테고리", kind: "text" },
           { label: "분실물", kind: "int" },
@@ -671,8 +676,8 @@ function categoryDataset(report: Report): Dataset {
         // "-": no posts of that type (never 미측정 -- these counts go back to the start)
         rows: rows.map((r) => [r.label, r.lost, r.lostShare ?? "-", r.lostRank ?? "-", r.found, r.foundShare ?? "-", r.foundRank ?? "-", r.total]),
         total: ["합계", lostTotal, lostTotal ? 1 : "-", "", foundTotal, foundTotal ? 1 : "-", "", lostTotal + foundTotal],
-      },
-    ],
+      };
+    }),
     notes: CATEGORY_NOTES,
   };
 }

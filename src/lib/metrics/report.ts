@@ -20,7 +20,7 @@ import { kstDay } from "./record";
 import { EARLIEST_SELECTABLE_DAY } from "./daySelection";
 import { DURATION_BUCKETS, PAGES_BUCKETS, type DurationBucket, type PagesBucket } from "./flow";
 import { DEVICE_KINDS, PAGE_KINDS, type DeviceKind, type PageKind } from "./visits";
-import { loadCategoryCounts, type CategoryRow } from "./categories";
+import { loadCategoryCounts, type CategoryReport } from "./categories";
 import { loadClassifiedMarks, tableAudienceSql } from "./legacyAudience";
 
 // 운영 통계 for any KST date range -- the one loader behind both the
@@ -273,8 +273,8 @@ export type Report = {
   };
   timings: TimingRow[];
   capacity: Awaited<ReturnType<typeof loadCapacity>>;
-  // 카테고리별 현황: the period's lost / found registrations by category
-  categories: CategoryRow[];
+  // 카테고리별 현황: lost / found posts by category, per scope and basis
+  categories: CategoryReport;
 };
 
 // created_at columns store UTC wall time without a zone.

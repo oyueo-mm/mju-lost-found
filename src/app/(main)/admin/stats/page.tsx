@@ -56,6 +56,7 @@ import { PREVIEW_ALIAS } from "@/lib/devstats/vercelDeployment.mjs";
 import { StatsOptOutToggle } from "@/components/admin/StatsOptOutToggle";
 import { AdminActivityView, type DashboardOptions } from "@/components/admin/AdminActivityView";
 import { CategoryStats } from "@/components/admin/CategoryStats";
+import { isCategoryBasis, isCategoryScope } from "@/lib/metrics/categories";
 import { isTimelineKind, loadAdminActivity } from "@/lib/metrics/adminActivity";
 import { canViewAllAdminActivity } from "@/lib/admin/activityLog";
 import { AlertIcon, ChevronRightIcon, InfoIcon } from "@/components/icons";
@@ -169,7 +170,7 @@ function SeriesTable({ report, columns }: { report: Report; columns: { label: st
 export default async function AdminStatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ar?: string; ao?: string; ac?: string; aa?: string; period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[]; a?: string; day?: string; k?: string; p?: string; hm?: string; dm?: string; vd?: string; dp?: string; df?: string; dt?: string; dd?: string | string[]; du?: string; da?: string; dn?: string; de?: string }>;
+  searchParams: Promise<{ ar?: string; ao?: string; ac?: string; aa?: string; period?: string; from?: string; to?: string; tab?: string; m?: string; d?: string | string[]; a?: string; day?: string; k?: string; p?: string; hm?: string; dm?: string; vd?: string; dp?: string; df?: string; dt?: string; dd?: string | string[]; du?: string; da?: string; dn?: string; de?: string; cs?: string; cb?: string }>;
 }) {
   // Each tab has its own permission; the 개발 통계 tab (deploy history) stays
   // with full administrators. A tab the viewer lacks is never rendered.
@@ -207,6 +208,10 @@ export default async function AdminStatsPage({
   const visitDays = visitSelection.days;
   const visitDaysParam = encodeDays(visitDays);
   const keepQuery = params.vd !== undefined ? `${hourlyQuery}&vd=${visitDaysParam}` : hourlyQuery;
+  // 카테고리별 현황's scope / basis, kept when the period changes
+  const categoryScope = isCategoryScope(params.cs) ? params.cs : "all";
+  const categoryBasis = isCategoryBasis(params.cb) ? params.cb : "period";
+  const opsKeep = `${keepQuery}&cs=${categoryScope}&cb=${categoryBasis}`;
   const periodQuery =
     period.selection.preset === "custom"
       ? `period=custom&from=${period.selection.from}&to=${period.selection.to}`
@@ -276,7 +281,7 @@ export default async function AdminStatsPage({
               today={today}
               openByDefault={period.selection.preset === "custom" || !!periodError}
               tab={tab}
-              keep={tab === "ops" ? keepQuery : tab === "admins" ? new URLSearchParams(Object.fromEntries(["ar", "ao", "ac", "aa"].flatMap((k) => { const v = params[k as keyof typeof params]; return typeof v === "string" ? [[k, v]] : []; }))).toString() : undefined}
+              keep={tab === "ops" ? opsKeep : tab === "admins" ? new URLSearchParams(Object.fromEntries(["ar", "ao", "ac", "aa"].flatMap((k) => { const v = params[k as keyof typeof params]; return typeof v === "string" ? [[k, v]] : []; }))).toString() : undefined}
             />
             {periodError && (
               <p role="alert" className="text-xs text-destructive">
@@ -986,7 +991,13 @@ export default async function AdminStatsPage({
         </More>
       </Section>
 
-      <CategoryStats rows={report.categories} periodLabel={period.label} />
+      <CategoryStats
+        report={report.categories}
+        scope={categoryScope}
+        basis={categoryBasis}
+        periodLabel={period.label}
+        query={`${periodQuery}&${keepQuery}`}
+      />
 
       <Section
         title="서버 상태"

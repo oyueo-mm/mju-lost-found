@@ -4,15 +4,27 @@ import { CATEGORY_CODES } from "@/lib/posts/categoryTaxonomy";
 import { ko } from "@/lib/i18n/messages/ko";
 import { tableAudienceSql } from "./legacyAudience";
 
-// 운영 통계 > 카테고리별 현황: lost / found posts registered in the period, by
-// main category (categoryCode). Counted exactly like the period's 분실물 /
-// 습득물 등록 (report.ts): every row created in the KST range, temporarily
-// hidden ones included (a deleted post has no row left). A post with no
-// categoryCode yet (older posts before the taxonomy, awaiting review) is
-// 미분류; a code the taxonomy no longer lists keeps its own row, so the
-// rows always add up to the period's totals.
+// 운영 통계 > 카테고리별 현황: lost / found posts by main category
+// (categoryCode). This is an item count (물품 현황), not member activity: by
+// default every post is counted, whoever wrote it. The scope narrows it to
+// posts written as a member or as an administrator (event-time audience,
+// legacyAudience.ts); a legacy post whose author's role at the time cannot be
+// shown is in 전체 only, never guessed into either. The basis is the period's
+// registrations (rows created in the KST range) or everything the DB holds
+// now (누적). Temporarily hidden posts are included (a deleted post has no
+// row left). A post with no categoryCode yet is 미분류; a code the taxonomy no
+// longer lists keeps its own row, so the rows always add up to the totals.
 
 export const UNCLASSIFIED_LABEL = "미분류";
+
+export const CATEGORY_SCOPES = ["all", "member", "internal"] as const;
+export type CategoryScope = (typeof CATEGORY_SCOPES)[number];
+export const CATEGORY_SCOPE_LABELS: Record<CategoryScope, string> = { all: "전체", member: "일반 사용자", internal: "관리자" };
+export const CATEGORY_BASES = ["period", "cumulative"] as const;
+export type CategoryBasis = (typeof CATEGORY_BASES)[number];
+export const CATEGORY_BASIS_LABELS: Record<CategoryBasis, string> = { period: "조회 기간 등록", cumulative: "전체 누적" };
+export const isCategoryScope = (v: unknown): v is CategoryScope => (CATEGORY_SCOPES as readonly unknown[]).includes(v);
+export const isCategoryBasis = (v: unknown): v is CategoryBasis => (CATEGORY_BASES as readonly unknown[]).includes(v);
 
 export type CategoryRow = {
   code: string | null;
@@ -20,12 +32,24 @@ export type CategoryRow = {
   lost: number;
   found: number;
   total: number;
-  // share of the period's lost / found registrations (null: none that period)
+  // share of the lost / found posts counted (null: none)
   lostShare: number | null;
   foundShare: number | null;
   // rank within each type by count (1 = most; ties share a rank; null: 0 posts)
   lostRank: number | null;
   foundRank: number | null;
+};
+
+// One group of posts: type, main category, event-time audience, and whether it
+// was created in the period.
+export type CategoryCount = { type: "lost" | "found"; code: string | null; audience: "member" | "internal" | "unclassified"; inPeriod: boolean; n: number };
+
+export type CategoryReport = {
+  counts: CategoryCount[];
+  // rows per basis and scope
+  views: Record<CategoryBasis, Record<CategoryScope, CategoryRow[]>>;
+  // posts in 전체 whose author's role at the time is unknown (in neither scope)
+  unclassifiedAudience: Record<CategoryBasis, number>;
 };
 
 const labelOf = (code: string | null) => {
@@ -67,16 +91,40 @@ export function categoryRows(counts: { type: "lost" | "found"; code: string | nu
   return rows.sort((a, b) => b.total - a.total);
 }
 
+const inScope = (scope: CategoryScope, c: CategoryCount) => scope === "all" || c.audience === scope;
+const inBasis = (basis: CategoryBasis, c: CategoryCount) => basis === "cumulative" || c.inPeriod;
+
+export function categoryReport(counts: CategoryCount[]): CategoryReport {
+  const views = Object.fromEntries(
+    CATEGORY_BASES.map((basis) => [basis, Object.fromEntries(CATEGORY_SCOPES.map((scope) => [scope, categoryRows(counts.filter((c) => inBasis(basis, c) && inScope(scope, c)))]))]),
+  ) as CategoryReport["views"];
+  const unclassifiedAudience = Object.fromEntries(
+    CATEGORY_BASES.map((basis) => [basis, counts.filter((c) => inBasis(basis, c) && c.audience === "unclassified").reduce((a, c) => a + c.n, 0)]),
+  ) as CategoryReport["unclassifiedAudience"];
+  return { counts, views, unclassifiedAudience };
+}
+
 // created_at columns store UTC wall time without a zone
 const kst = Prisma.raw(`(("created_at" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Seoul')`);
 
-// KST days [from, until)
-export async function loadCategoryCounts(from: string, until: string): Promise<CategoryRow[]> {
-  const rows = await prisma.$queryRaw<{ type: "lost" | "found"; code: string | null; n: bigint | number }[]>`
-    SELECT 'lost' AS type, "category_code" AS code, count(*) AS n FROM "LostPost"
-      WHERE ${tableAudienceSql("LostPost")} = 'member' AND ${kst} >= ${from}::date AND ${kst} < ${until}::date GROUP BY 2
+// Every post the DB holds, grouped; the period is KST days [from, until).
+// A failure is thrown, never shown as 0.
+export async function loadCategoryCounts(from: string, until: string): Promise<CategoryReport> {
+  const rows = await prisma.$queryRaw<{ type: "lost" | "found"; code: string | null; audience: string | null; in_period: boolean; n: bigint | number }[]>`
+    SELECT 'lost' AS type, "category_code" AS code, ${tableAudienceSql("LostPost")} AS audience,
+        (${kst} >= ${from}::date AND ${kst} < ${until}::date) AS in_period, count(*) AS n
+      FROM "LostPost" GROUP BY 2, 3, 4
     UNION ALL
-    SELECT 'found', "category_code", count(*) FROM "FoundPost"
-      WHERE ${tableAudienceSql("FoundPost")} = 'member' AND ${kst} >= ${from}::date AND ${kst} < ${until}::date GROUP BY 2`;
-  return categoryRows(rows.map((r) => ({ type: r.type, code: r.code, n: Number(r.n) })));
+    SELECT 'found', "category_code", ${tableAudienceSql("FoundPost")},
+        (${kst} >= ${from}::date AND ${kst} < ${until}::date), count(*)
+      FROM "FoundPost" GROUP BY 2, 3, 4`;
+  return categoryReport(
+    rows.map((r) => ({
+      type: r.type,
+      code: r.code,
+      audience: r.audience === "member" || r.audience === "internal" ? r.audience : "unclassified",
+      inPeriod: r.in_period === true,
+      n: Number(r.n),
+    })),
+  );
 }

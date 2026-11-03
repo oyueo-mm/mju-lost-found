@@ -5,7 +5,7 @@ vi.mock("@/lib/db/prisma", () => ({ prisma: {} }));
 
 const { datasetsOf, toCsv, toSheets, toXlsx, CAVEATS } = await import("./export");
 const { buildCsv, crc32, safeText } = await import("./xlsx");
-const { categoryRows } = await import("./categories");
+const { categoryReport } = await import("./categories");
 type Report = import("./report").Report;
 
 // A three-day report: 10/14 is before 방문 통계 began (미측정), 10/15 partial.
@@ -106,11 +106,13 @@ function fakeReport(): Report {
       { route: "ai:text-embed", count: 3, errors: 0, avgMs: 600, p50: "≤ 800ms", p95: "≤ 800ms", totalMs: 1800, buckets: [0, 0, 0, 0, 0, 3, 0, 0, 0, 0] },
     ],
     capacity: { day: "2026-10-16", dbMb: 17, storageMb: 13 },
-    categories: categoryRows([
-      { type: "lost", code: "wallet", n: 3 },
-      { type: "found", code: "wallet", n: 1 },
-      { type: "found", code: "phone", n: 2 },
-      { type: "lost", code: null, n: 1 },
+    categories: categoryReport([
+      { type: "lost", code: "wallet", audience: "member", inPeriod: true, n: 2 },
+      { type: "lost", code: "wallet", audience: "internal", inPeriod: true, n: 1 },
+      { type: "found", code: "wallet", audience: "internal", inPeriod: true, n: 1 },
+      { type: "found", code: "phone", audience: "member", inPeriod: true, n: 2 },
+      { type: "lost", code: null, audience: "unclassified", inPeriod: true, n: 1 },
+      { type: "found", code: "bag", audience: "internal", inPeriod: false, n: 5 },
     ]),
   };
 }
@@ -300,7 +302,14 @@ describe("카테고리별 현황 내보내기", () => {
   it("one sheet / CSV with counts, shares and ranks per category, 미분류 included, totals matching", () => {
     const ds = datasetsOf(fakeReport()).find((d) => d.key === "categories")!;
     expect(ds.name).toBe("카테고리별 현황");
-    const [table] = ds.tables;
+    // 조회 기간 / 전체 누적 x 전체 / 일반 사용자 / 관리자
+    expect(ds.tables).toHaveLength(6);
+    const [table, member, internal, cumulative] = ds.tables;
+    expect(table.title).toContain("조회 기간 등록 · 전체");
+    expect(member.total).toEqual(["합계", 2, 1, "", 2, 1, "", 4]);
+    expect(internal.total).toEqual(["합계", 1, 1, "", 1, 1, "", 2]);
+    expect(cumulative.title).toContain("전체 누적 · 전체");
+    expect(cumulative.total).toEqual(["합계", 4, 1, "", 8, 1, "", 12]);
     expect(table.rows[0]).toEqual(["지갑", 3, 0.75, 1, 1, 1 / 3, 2, 4]);
     expect(table.rows.find((r) => r[0] === "휴대폰")).toEqual(["휴대폰", 0, 0, "-", 2, 2 / 3, 1, 2]);
     expect(table.rows.find((r) => r[0] === "미분류")).toEqual(["미분류", 1, 0.25, 2, 0, 0, "-", 1]);
