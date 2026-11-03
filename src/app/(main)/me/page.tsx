@@ -2,6 +2,9 @@ import Link from "next/link";
 
 import { requireReadyUser } from "@/lib/auth/session";
 import { signOut } from "@/lib/auth/auth";
+import { forgetThisDevicePush } from "@/lib/push/forgetDevice";
+import { pushConfig } from "@/lib/push/service";
+import { ChatPushSettings } from "@/components/settings/ChatPushSettings";
 import { getUnreadNotificationCount } from "@/lib/notification/service";
 import { hasAnyAdminPermission } from "@/lib/permissions/check";
 import { UserIcon, ChevronRightIcon, BellIcon, ShieldIcon, LogoutIcon, ChatBubbleIcon, SearchIcon } from "@/components/icons";
@@ -157,6 +160,8 @@ export default async function MePage() {
         </section>
       )}
 
+      <ChatPushSettings vapidPublicKey={pushConfig()?.publicKey ?? null} />
+
       <InstallAppPrompt />
 
       <ThemeSettings />
@@ -170,6 +175,8 @@ export default async function MePage() {
           // immediately bounces to /login since there's no session left.
           // Landing on "/" instead shows LandingHero (see Home()'s own
           // !user branch), which is the intended logged-out experience.
+          // this device stops receiving the account's chat pushes
+          await forgetThisDevicePush(user.id);
           await signOut({ redirectTo: "/" });
         }}
       >

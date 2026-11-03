@@ -1,3 +1,4 @@
+import { prunePushOutbox } from "@/lib/push/service";
 import { NextRequest } from "next/server";
 import { z } from "zod";
 
@@ -67,6 +68,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       deployments = feed.deployments.length;
     }
   }
-  console.log("retention run", JSON.stringify({ ...result, capacity, deployments }));
+  // 채팅 웹 푸시: delivery rows older than 7 days (never fails the clean-up)
+  const pushOutboxPruned = await prunePushOutbox().catch(() => null);
+  console.log("retention run", JSON.stringify({ ...result, capacity, deployments, pushOutboxPruned }));
   return jsonOk(result);
 });

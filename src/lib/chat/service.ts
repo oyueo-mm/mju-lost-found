@@ -1,3 +1,4 @@
+import { deliverPush, enqueueChatPush, sweepPendingPushes } from "@/lib/push/service";
 import { after } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
@@ -1165,6 +1166,7 @@ export async function sendMessage(
   }
 
   let message;
+  let pushOutboxId: number | null = null;
   try {
     message = await prisma.$transaction(async (tx) => {
       const created = await tx.message.create({
@@ -1177,6 +1179,11 @@ export async function sendMessage(
         },
         include: { sender: { select: { nickname: true } } },
       });
+
+      // 채팅 웹 푸시: direct rooms only, queued with the message itself
+      if (notifyUserId !== null && room.organizationId === null) {
+        pushOutboxId = await enqueueChatPush(tx, created.id, notifyUserId);
+      }
 
       if (notifyUserId !== null) {
         await notifyUser(tx, {
@@ -1209,7 +1216,18 @@ export async function sendMessage(
   // authorized GET endpoint; this push only ever carries the new
   // message's bare id.
   // after(): see markChatRoomRead's own comment.
-  after(() => broadcastChatEvent(chatRoomId, { event: "message", payload: { messageId: message.id } }));
+  // After the response: the realtime event, then the push (a failure never
+  // fails the message), then a retry of a few earlier unsent pushes (a lost
+  // background run is picked up here).
+  after(async () => {
+    await broadcastChatEvent(chatRoomId, { event: "message", payload: { messageId: message.id } });
+    try {
+      if (pushOutboxId !== null) await deliverPush(pushOutboxId);
+      await sweepPendingPushes(3);
+    } catch (error) {
+      console.error("Chat push delivery failed", (error as Error)?.message);
+    }
+  });
 
   return {
     kind: "ok",

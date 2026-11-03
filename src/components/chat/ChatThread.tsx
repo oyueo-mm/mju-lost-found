@@ -9,6 +9,7 @@ import { formatAbsoluteTime, formatRelativeTime } from "@/lib/time/relativeTime"
 import { useI18n } from "@/lib/i18n/client";
 import { MessageActionMenu } from "@/components/chat/MessageActionMenu";
 import { useChatRoomRealtime } from "@/components/chat/useChatRoomRealtime";
+import { chatPresenceAction } from "@/app/(main)/me/push/actions";
 import { dispatchChatUnreadCount } from "@/components/layout/chatUnreadEvent";
 import { CameraIcon, UserIcon } from "@/components/icons";
 import { LOCALE_INTL_TAG } from "@/lib/i18n/config";
@@ -236,6 +237,31 @@ export function ChatThread({
       // as an error banner; the next natural fetch (pagination, a future
       // event) catches up regardless.
     }
+  }, [chatRoomId]);
+
+  // 채팅 웹 푸시: tell the server this room is on screen (visible tab only),
+  // every 25 s, and that it no longer is when hidden or left. A push to this
+  // user for this room is skipped only while that mark is fresh.
+  useEffect(() => {
+    const ping = (visible: boolean) => void chatPresenceAction(chatRoomId, visible).catch(() => {});
+    let timer: number | null = null;
+    const update = () => {
+      const visible = document.visibilityState === "visible";
+      if (timer !== null) window.clearInterval(timer);
+      timer = null;
+      ping(visible);
+      if (visible) timer = window.setInterval(() => ping(true), 25_000);
+    };
+    update();
+    document.addEventListener("visibilitychange", update);
+    const leave = () => ping(false);
+    window.addEventListener("pagehide", leave);
+    return () => {
+      document.removeEventListener("visibilitychange", update);
+      window.removeEventListener("pagehide", leave);
+      if (timer !== null) window.clearInterval(timer);
+      ping(false);
+    };
   }, [chatRoomId]);
 
   useChatRoomRealtime(chatRoomId, {

@@ -10,11 +10,14 @@ import { LogoMark } from "./Logo";
 import { LinkButton } from "@/components/ui/Button";
 import { getTranslator } from "@/lib/i18n/server";
 import { signOut } from "@/lib/auth/auth";
+import { forgetThisDevicePush } from "@/lib/push/forgetDevice";
 import { DesktopProfileDropdown } from "./DesktopNavDropdown";
 
 async function signOutFromDesktopNav(formData: FormData) {
   "use server";
   void formData;
+  // this device stops receiving the account's chat pushes
+  await forgetThisDevicePush((await getCurrentUser())?.id);
   await signOut({ redirectTo: "/" });
 }
 
