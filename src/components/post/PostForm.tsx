@@ -26,6 +26,7 @@ import {
   type GalleryItem,
 } from "@/lib/images/galleryState";
 import { PostImageManager } from "./PostImageManager";
+import { ChevronRightIcon } from "@/components/icons";
 import { CategoryPicker } from "./CategoryPicker";
 import { categoryBodyFields, initialCategoryState, type CategoryFormValue } from "./categoryFormState";
 import { Button } from "@/components/ui/Button";
@@ -182,7 +183,10 @@ function KnownToggle({
 }
 
 export function PostForm({ type, postId, initialValues, myOrganizations = [], defaults = null, draftOwnerId = null }: PostFormProps) {
-  const [custody, setCustody] = useState<CustodyInput>(initialValues?.custody ? { state: initialValues.custody.state, place: initialValues.custody.place } : { state: "UNKNOWN", place: "" });
+  // null: not answered yet -- a new found post must pick one (no default is
+  // assumed); an older post without custody info keeps none until changed.
+  const initialCustody: CustodyInput | null = initialValues?.custody ? { state: initialValues.custody.state, place: initialValues.custody.place } : null;
+  const [custody, setCustody] = useState<CustodyInput | null>(initialCustody);
   const router = useRouter();
   const { t } = useI18n();
   const [error, setError] = useState<string | null>(null);
@@ -353,7 +357,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
     dateUnknown,
     exactTime,
     organizationId,
-    ...(type === "found" && { custody }),
+    ...(type === "found" && custody && { custody }),
     photoCount: items.filter((item) => item.kind === "new").length,
   });
 
@@ -644,7 +648,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
 
     const body = {
       type,
-      ...(type === "found" && (!isEdit || JSON.stringify(custody) !== JSON.stringify(initialValues?.custody ? { state: initialValues.custody.state, place: initialValues.custody.place } : { state: "UNKNOWN", place: "" })) && { custody }),
+      ...(type === "found" && custody && (!isEdit || JSON.stringify(custody) !== JSON.stringify(initialCustody)) && { custody }),
       ...fieldIfChanged(isEdit, "title", title, initialValues?.title),
       ...fieldIfChanged(isEdit, "description", description, initialValues?.description),
       // 카테고리 대분류-소분류: categoryCode/subcategory only; the server
@@ -848,46 +852,6 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
           />
         </label>
 
-        {/* LOST112 연계 Phase §8: 습득물 작성 화면 전용 -- 필수 입력 필드나
-            별도 인증 절차를 추가하지 않고, 설명란 바로 아래에 순수 안내
-            문구만 덧붙인다. 새로운 "비공개 사진"/"소유권 인증" 기능은
-            없다 -- 습득자가 스스로 어떤 특징을 설명에서 빼둘지 판단하도록
-            돕는 텍스트일 뿐이다. */}
-        {/* 유실물법 안내: posting here is not the official hand-in -- the
-            finder must still return the item, hand it in to the police
-            (법 제1조), or hand it to the building manager (제10조), within
-            the 7 days of 제9조. Text only; no new procedure is implemented. */}
-        {/* 등록 안내 개선: one restrained notice per board -- the key points
-            up front, the full legal text (unchanged, form.foundLegalNotice /
-            form.lostRewardNotice) behind a toggle. */}
-        <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
-          <p className="font-medium text-foreground">{t("form.notice.title")}</p>
-          <ul className="flex list-disc flex-col gap-1 pl-4">
-            {type === "found" ? (
-              <>
-                <li>{t("form.found.noticeHandover")}</li>
-                <li>{t("form.found.noticeVerify")}</li>
-              </>
-            ) : (
-              <>
-                <li>{t("form.lostRewardPrivacyNotice")}</li>
-                <li>{t("form.lost.noticeReward")}</li>
-              </>
-            )}
-          </ul>
-          <details className="group">
-            <summary className="cursor-pointer select-none font-medium text-primary marker:text-primary">
-              {t(type === "found" ? "form.found.noticeMore" : "form.lost.noticeMore")}
-            </summary>
-            <div className="mt-2 flex flex-col gap-2">
-              {(type === "found" ? (["form.foundLegalNotice", "form.foundNotice"] as const) : (["form.lostRewardNotice"] as const)).map(
-                (key) => (
-                  <p key={key}>{t(key).replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "")}</p>
-                ),
-              )}
-            </div>
-          </details>
-        </div>
       </section>
 
       {/* Phase 12-8 §1: 개인/단체 토글 + (단체 선택 시) 대표 단체 드롭다운 --
@@ -1046,7 +1010,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
           </div>
         </div>
 
-        {type === "found" && <><CustodyFields value={custody} onChange={setCustody} disabled={fieldsLocked || Boolean(initialValues?.custody?.confirmedAt)} />{initialValues?.custody?.confirmedAt && <p className="text-xs text-muted-foreground">기관에서 접수한 물품의 보관 정보 변경은 담당 기관에 요청해주세요.</p>}</>}
+        {type === "found" && <><CustodyFields value={custody} onChange={setCustody} campus={campus} required={postId === undefined} disabled={fieldsLocked || Boolean(initialValues?.custody?.confirmedAt)} />{initialValues?.custody?.confirmedAt && <p className="text-xs text-muted-foreground">기관에서 접수한 물품의 보관 정보 변경은 담당 기관에 요청해주세요.</p>}</>}
 
         <div className="flex flex-col gap-2 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1096,7 +1060,15 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
         <h2 className="text-sm font-semibold text-foreground">
           {t("form.photos")} <span className="font-normal text-muted-foreground">{t("form.photosOptional")}</span>
         </h2>
-        <p className="text-xs leading-relaxed text-muted-foreground">{t("form.photoPrivacyNotice")}</p>
+        {/* 짧은 한 줄 + 펼치면 가릴 정보 전체(form.photoPrivacyNotice, 그대로). */}
+        <details className="group text-xs leading-relaxed text-muted-foreground">
+          <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+            <span className="text-foreground">{t("form.photoPrivacyShort")}</span>
+            <span className="font-medium text-primary">{t("form.photoPrivacyMore")}</span>
+            <ChevronRightIcon className="size-3.5 shrink-0 text-primary transition-transform group-open:rotate-90" aria-hidden />
+          </summary>
+          <p className="mt-1.5">{t("form.photoPrivacyNotice").replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "")}</p>
+        </details>
         <PostImageManager
           items={items}
           disabled={pending}
@@ -1122,6 +1094,37 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
           <p>{t("draft.privacyNote")}</p>
         </div>
       )}
+
+      {/* 등록 전 유의사항: collapsed into one line next to the submit button so
+          the fields come first. Nothing is dropped: the key points and the
+          full legal text (form.foundLegalNotice / form.lostRewardNotice,
+          unchanged) are all inside. Errors and required fields never live
+          here. */}
+      <details className="group rounded-lg border border-border text-xs leading-relaxed text-muted-foreground">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-lg px-3.5 py-2.5 font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+          {t("form.notice.title")}
+          <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" aria-hidden />
+        </summary>
+        <div className="flex flex-col gap-2 border-t border-border px-3.5 py-3">
+          <ul className="flex list-disc flex-col gap-1 pl-4">
+            {type === "found" ? (
+              <>
+                <li>{t("form.found.noticeHandover")}</li>
+                <li>{t("form.found.noticeVerify")}</li>
+              </>
+            ) : (
+              <>
+                <li>{t("form.lostRewardPrivacyNotice")}</li>
+                <li>{t("form.lost.noticeReward")}</li>
+              </>
+            )}
+          </ul>
+          <p className="font-medium text-foreground">{t(type === "found" ? "form.found.noticeMore" : "form.lost.noticeMore")}</p>
+          {(type === "found" ? (["form.foundLegalNotice", "form.foundNotice"] as const) : (["form.lostRewardNotice"] as const)).map((key) => (
+            <p key={key}>{t(key).replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "")}</p>
+          ))}
+        </div>
+      </details>
 
       <Button type="submit" disabled={pending} className="w-full sm:w-auto sm:self-start">
         {pending

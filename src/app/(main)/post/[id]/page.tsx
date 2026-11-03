@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { managementScope, inManagementScope, managementHistory } from "@/lib/posts/management";
 import { PostManagement } from "@/components/post/PostManagement";
-import { CUSTODY_STATES, MANAGEMENT_ACTION_LABELS } from "@/lib/posts/custodySchema";
+import { custodySummary, MANAGEMENT_ACTION_LABELS } from "@/lib/posts/custodySchema";
 import { FallbackImage } from "@/components/ui/FallbackImage";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -420,9 +420,14 @@ export default async function PostDetailPage({
       </div>
 
       {post.type === "found" && <div className="rounded-card border border-border bg-card p-4 text-sm space-y-1">
-        <p>보관 장소: {custody?.place || (custody?.state === "SELF" ? "본인 보관 (개인 위치 비공개)" : "미등록")}</p>
-        <p>보관 상태: {post.status === "완료" ? "반환 완료 표시" : custody?.confirmedAt ? "기관 보관 중" : CUSTODY_STATES[custody?.state ?? "UNKNOWN"]}</p>
-        <p className="text-muted-foreground">{custody?.confirmedAt ? `기관 접수 확인 완료 (${custody.institution})` : custody ? "작성자 신고 · 관리자 미확인" : "보관 정보 미등록"}</p>
+        {(() => {
+          const summary = custodySummary(custody, post.status === "완료");
+          return <>
+            <p>보관 장소: {summary.place}</p>
+            <p>보관 상태: {summary.state}</p>
+            <p className="text-muted-foreground">{summary.note}</p>
+          </>;
+        })()}
       </div>}
       {canManage && <PostManagement key={post.updatedAt.toISOString()} id={post.id} type={type} updatedAt={post.updatedAt.toISOString()} completed={post.status === "완료" || post.status === "찾음"} confirmedCustody={Boolean(custody?.confirmedAt)} platform={scope!.platform} scopeOrganizationId={scope!.organizationId} permissions={scope!.permissions} organizationId={post.type === "found" ? post.custodyOrganizationId : null} pendingOrganizationId={post.type === "found" ? post.pendingTransferOrganizationId : null} institutions={institutions} />}
       {canManage && history.length > 0 && <details className="rounded-card border border-border p-4 text-sm"><summary>물품 처리 이력</summary><ul className="mt-3 space-y-2">{history.map((h) => <li key={h.id}>{formatDate(h.createdAt, locale)} · {h.changedBy?.nickname ?? "담당자"} · {h.institution ?? "작성자"} · {MANAGEMENT_ACTION_LABELS[h.action ?? ""] ?? "상태 변경"} · {h.fromStatus} → {h.toStatus}{h.reason && <p className="text-muted-foreground">사유: {h.reason}</p>}</li>)}</ul></details>}

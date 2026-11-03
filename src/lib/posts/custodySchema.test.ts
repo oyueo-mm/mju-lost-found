@@ -5,8 +5,9 @@ describe("보관 정보", () => {
   it("does not accept owner-forged verification", () => {
     expect(custodyInputSchema.safeParse({ state: "REPORTED", place: "경비실", confirmedAt: new Date().toISOString() }).success).toBe(false);
   });
-  it("requires a handover location and suppresses private self-storage locations", () => {
-    expect(custodyInputSchema.safeParse({ state: "PLANNED", place: "" }).success).toBe(false);
+  // An undecided (PLANNED) or unknown (REPORTED) place is stored empty, never guessed.
+  it("allows an empty handover place and suppresses private self-storage locations", () => {
+    expect(custodyInputSchema.parse({ state: "PLANNED", place: "" })).toEqual({ state: "PLANNED", place: "" });
     expect(custodyInputSchema.parse({ state: "SELF", place: "집 주소" })).toEqual({ state: "SELF", place: "" });
     expect(readCustody({ state: "REPORTED", place: "경비실" })?.confirmedAt).toBeNull();
   });
