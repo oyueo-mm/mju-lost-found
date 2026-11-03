@@ -120,6 +120,7 @@ export default async function MePage() {
       <section className="overflow-hidden rounded-card border border-border bg-card">
         <MenuRow href="/posts/mine" icon={<UserIcon className="size-4.5" />} label={t("me.myPosts")} />
         <MenuRow href="/me/comments" icon={<ChatBubbleIcon className="size-4.5" />} label={t("me.myComments")} />
+        <MenuRow href="/me/thanks" icon={<ChatBubbleIcon className="size-4.5" />} label={t("me.thankNotes")} />
         {/* Phase 11-5: "서비스 개선 제안" -- 제출 폼과 "내가 보낸 의견" 목록이
             함께 있는 /feedback으로 연결. Report(신고)와 혼동하지 않도록
             별도 아이콘/문구를 쓴다. */}

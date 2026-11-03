@@ -509,6 +509,7 @@ export const zh: Dictionary = {
   "me.activity": "我的活动",
   "me.myPosts": "我发布的帖子",
   "me.myComments": "我发表的评论",
+  "me.thankNotes": "收到的感谢留言",
   "me.feedback": "服务改进建议",
   "me.organizations": "团体",
   "me.notifications": "通知",

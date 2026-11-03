@@ -512,6 +512,7 @@ export const vi: Dictionary = {
   "me.activity": "Hoạt động của tôi",
   "me.myPosts": "Bài đăng của tôi",
   "me.myComments": "Bình luận của tôi",
+  "me.thankNotes": "Lời cảm ơn đã nhận",
   "me.feedback": "Góp ý cải thiện dịch vụ",
   "me.organizations": "Tổ chức",
   "me.notifications": "Thông báo",

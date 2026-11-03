@@ -514,6 +514,7 @@ export const mn: Dictionary = {
   "me.activity": "Миний үйл ажиллагаа",
   "me.myPosts": "Миний бичсэн нийтлэл",
   "me.myComments": "Миний бичсэн сэтгэгдэл",
+  "me.thankNotes": "Ирсэн талархлын захидал",
   "me.feedback": "Санал хүсэлт илгээх",
   "me.organizations": "Байгууллага",
   "me.notifications": "Мэдэгдэл",

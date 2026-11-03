@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { getPublicProfile } from "@/lib/user/service";
+import { listPublicThankNotes } from "@/lib/thanks/service";
 import { listPostsByUser } from "@/lib/posts/service";
 import { DEFAULT_LIMIT, DEFAULT_PAGE } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
@@ -58,6 +59,13 @@ export default async function ProfilePage({
   const pageParam = Number(raw.page);
   const page = Number.isInteger(pageParam) && pageParam >= 1 ? pageParam : DEFAULT_PAGE;
 
+  // 감사 쪽지 the profile owner chose to publish (no sender shown); a failure
+  // only leaves the section out.
+  const thankNotes = await listPublicThankNotes(profile.userId).catch((error) => {
+    console.error("Failed to load public thank notes", error);
+    return [];
+  });
+
   let posts;
   try {
     posts = await listPostsByUser(profile.userId, { page, limit: DEFAULT_LIMIT });
@@ -97,6 +105,23 @@ export default async function ProfilePage({
           />
         )}
       </section>
+
+      {thankNotes.length > 0 && (
+        <section className="flex flex-col gap-3 rounded-card border border-border bg-card p-5" aria-labelledby="profile-thanks">
+          <h2 id="profile-thanks" className="text-sm font-semibold text-foreground">
+            받은 감사 쪽지
+          </h2>
+          <ul className="flex flex-col gap-2">
+            {thankNotes.map((n) => (
+              <li key={n.id} className="rounded-lg bg-muted/40 px-3.5 py-2.5 text-sm">
+                <p className="break-words whitespace-pre-line text-foreground">{n.body}</p>
+                <p className="mt-1 text-xs text-muted-foreground">물건을 돌려받은 분 · {formatJoinDate(n.publishedAt, t.locale)} 공개</p>
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-muted-foreground">받은 분이 직접 공개한 쪽지예요. 서비스가 반환 사실을 확인한 것은 아니에요.</p>
+        </section>
+      )}
 
       <section className="grid grid-cols-2 gap-3">
         <div className="flex flex-col items-center gap-1.5 rounded-card border border-border bg-card p-4 text-center">

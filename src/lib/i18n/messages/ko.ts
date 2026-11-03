@@ -540,6 +540,7 @@ export const ko = {
   "me.activity": "내 활동",
   "me.myPosts": "내가 쓴 게시글",
   "me.myComments": "내가 쓴 댓글",
+  "me.thankNotes": "받은 감사 쪽지",
   "me.feedback": "서비스 개선 제안",
   "me.organizations": "단체",
   "me.notifications": "알림",

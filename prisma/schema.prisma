@@ -455,6 +455,8 @@ model User {
   // computed as "the post's current author".
   counterpartChatRooms         ChatRoom[]                    @relation("ChatRoomCounterpart")
   sentMessages                 Message[]                     @relation("MessageSender")
+  sentThankNotes               ThankNote[]                   @relation("ThankNoteSender")
+  receivedThankNotes           ThankNote[]                   @relation("ThankNoteReceiver")
   hiddenMessages               Message[]                     @relation("MessageHiddenBy")
   // Phase N: this user's own read cursor in each room they're part of --
   // see ChatRead's own comment.
@@ -897,6 +899,7 @@ model ChatRoom {
 
   messages  Message[]
   chatReads ChatRead[]
+  thankNotes ThankNote[]
 
   // The legacy SQLite indexes use `WHERE direct_lost_post_id IS NOT NULL`
   // partial indexes. Unlike MySQL (which can't express those at all),
@@ -2104,4 +2107,32 @@ model AdminPermissionGrant {
   createdAt DateTime @default(now()) @map("created_at")
   @@id([userId, permission])
   @@index([permission])
+}
+
+// ---------- ThankNote ----------
+// 감사 쪽지: an optional note from the person who got an item back to the
+// one who helped, tied to a completed post and the direct chat room in which
+// both of them wrote (lib/thanks). A note is private to its receiver until
+// the receiver publishes it (publishedAt), and can be unpublished or hidden
+// by the receiver at any time. Completion is the poster's own mark, so a
+// note never says a hand-over was verified. One note per post and sender.
+model ThankNote {
+  id             Int       @id @default(autoincrement())
+  postType       String    @map("post_type")
+  postId         Int       @map("post_id")
+  chatRoomId     Int?      @map("chat_room_id")
+  chatRoom       ChatRoom? @relation(fields: [chatRoomId], references: [id], onDelete: SetNull)
+  senderUserId   Int       @map("sender_user_id")
+  sender         User      @relation("ThankNoteSender", fields: [senderUserId], references: [id], onDelete: Restrict)
+  receiverUserId Int       @map("receiver_user_id")
+  receiver       User      @relation("ThankNoteReceiver", fields: [receiverUserId], references: [id], onDelete: Restrict)
+  body           String    @db.Text
+  publishedAt    DateTime? @map("published_at")
+  hiddenAt       DateTime? @map("hidden_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@unique([postType, postId, senderUserId], map: "uq_thanknote_post_sender")
+  @@index([receiverUserId, createdAt], map: "idx_thanknote_receiver")
+  @@index([senderUserId, createdAt], map: "idx_thanknote_sender")
+  @@map("ThankNote")
 }

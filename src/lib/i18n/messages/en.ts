@@ -514,6 +514,7 @@ export const en: Dictionary = {
   "me.activity": "My activity",
   "me.myPosts": "My posts",
   "me.myComments": "My comments",
+  "me.thankNotes": "Thank-you notes",
   "me.feedback": "Send feedback",
   "me.organizations": "Organizations",
   "me.notifications": "Notifications",

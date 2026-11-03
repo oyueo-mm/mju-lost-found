@@ -1,0 +1,35 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+
+import { requireUser } from "@/lib/auth/session";
+import { hideThankNote, sendThankNote, setThankNotePublished, type SendThankResult } from "@/lib/thanks/service";
+
+// 감사 쪽지. The acting account is always the session's (requireUser);
+// the client only names the post, the receiver and the note.
+
+export async function sendThankNoteAction(input: { postType: string; postId: number; receiverId: number; body: string }): Promise<SendThankResult> {
+  const user = await requireUser();
+  if ((input.postType !== "lost" && input.postType !== "found") || !Number.isInteger(input.postId) || !Number.isInteger(input.receiverId)) {
+    return { ok: false, error: "잘못된 요청이에요." };
+  }
+  const result = await sendThankNote(user.id, { postType: input.postType, postId: input.postId, receiverId: input.receiverId, body: input.body });
+  if (result.ok) revalidatePath(`/post/${input.postId}`);
+  return result;
+}
+
+export async function setThankNotePublishedAction(noteId: number, published: boolean): Promise<{ ok: boolean }> {
+  const user = await requireUser();
+  if (!Number.isInteger(noteId)) return { ok: false };
+  const ok = await setThankNotePublished(user.id, noteId, published === true);
+  if (ok) revalidatePath("/me/thanks");
+  return { ok };
+}
+
+export async function hideThankNoteAction(noteId: number): Promise<{ ok: boolean }> {
+  const user = await requireUser();
+  if (!Number.isInteger(noteId)) return { ok: false };
+  const ok = await hideThankNote(user.id, noteId);
+  if (ok) revalidatePath("/me/thanks");
+  return { ok };
+}
