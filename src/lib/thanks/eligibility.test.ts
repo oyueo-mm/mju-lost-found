@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { thankCandidates, validateThankBody, type ThankRoom } from "./eligibility";
+import { looksPersonal, thankCandidates, validateThankBody, type ThankRoom } from "./eligibility";
 
 // people: 10 = lost-post author (owner) / found-post author (finder), 20 / 30 = others
 const room = (id: number, initiator: number, counterpart: number, writers: number[], organizationId: number | null = null): ThankRoom => ({
@@ -68,5 +68,14 @@ describe("validateThankBody", () => {
     expect(validateThankBody("가".repeat(500)).ok).toBe(true);
     expect(validateThankBody("가".repeat(501)).ok).toBe(false);
     expect(validateThankBody("😀".repeat(500)).ok).toBe(true);
+  });
+});
+
+describe("looksPersonal (publishing guard)", () => {
+  it("flags phone numbers, e-mail, long digit runs and messenger IDs", () => {
+    for (const t of ["010-1234-5678", "01012345678", "02-123-4567", "a.b@mju.ac.kr", "학번 60201234", "900101-1234567", "카톡 아이디: mju_find"]) expect(looksPersonal(`고마워요 ${t}`), t).toBe(true);
+  });
+  it("lets ordinary thanks through", () => {
+    for (const t of ["지갑 찾아주셔서 정말 감사합니다!", "11월 3일에 받았어요, 3층 경비실 덕분이에요", "커피 한 잔 사드리고 싶어요 :)"]) expect(looksPersonal(t), t).toBe(false);
   });
 });

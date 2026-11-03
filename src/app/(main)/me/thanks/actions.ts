@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireUser } from "@/lib/auth/session";
-import { hideThankNote, sendThankNote, setThankNotePublished, type SendThankResult } from "@/lib/thanks/service";
+import { hideThankNote, sendThankNote, setThankNotePublished, type PublishResult, type SendThankResult } from "@/lib/thanks/service";
 
 // 감사 쪽지. The acting account is always the session's (requireUser);
 // the client only names the post, the receiver and the note.
@@ -18,12 +18,12 @@ export async function sendThankNoteAction(input: { postType: string; postId: num
   return result;
 }
 
-export async function setThankNotePublishedAction(noteId: number, published: boolean): Promise<{ ok: boolean }> {
+export async function setThankNotePublishedAction(noteId: number, published: boolean): Promise<PublishResult> {
   const user = await requireUser();
-  if (!Number.isInteger(noteId)) return { ok: false };
-  const ok = await setThankNotePublished(user.id, noteId, published === true);
-  if (ok) revalidatePath("/me/thanks");
-  return { ok };
+  if (!Number.isInteger(noteId)) return { ok: false, reason: "not_found" };
+  const result = await setThankNotePublished(user.id, noteId, published === true);
+  if (result.ok) revalidatePath("/me/thanks");
+  return result;
 }
 
 export async function hideThankNoteAction(noteId: number): Promise<{ ok: boolean }> {

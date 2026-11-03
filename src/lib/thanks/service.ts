@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { Prisma } from "@/generated/prisma/client";
-import { THANK_NOTES_PER_DAY, thankCandidates, validateThankBody, type ThankRoom } from "./eligibility";
+import { looksPersonal, THANK_NOTES_PER_DAY, thankCandidates, validateThankBody, type ThankRoom } from "./eligibility";
 
 // 감사 쪽지 storage and permissions. Every write re-derives who may thank
 // whom from the database (eligibility.ts); nothing the client sends is
@@ -71,7 +71,7 @@ export async function sendThankNote(viewerId: number, input: { postType: PostTyp
   }
 }
 
-export type ReceivedThankNote = { id: number; body: string; createdAt: Date; published: boolean; postType: PostType; postId: number; postTitle: string | null; senderNickname: string | null };
+export type ReceivedThankNote = { id: number; body: string; createdAt: Date; published: boolean; personal: boolean; postType: PostType; postId: number; postTitle: string | null; senderNickname: string | null };
 
 export async function listReceivedThankNotes(userId: number): Promise<ReceivedThankNote[]> {
   const rows = await prisma.thankNote.findMany({
@@ -85,6 +85,7 @@ export async function listReceivedThankNotes(userId: number): Promise<ReceivedTh
     body: r.body,
     createdAt: r.createdAt,
     published: r.publishedAt !== null,
+    personal: looksPersonal(r.body),
     postType: r.postType as PostType,
     postId: r.postId,
     postTitle: r.chatRoom?.postTitle ?? null,
@@ -93,9 +94,16 @@ export async function listReceivedThankNotes(userId: number): Promise<ReceivedTh
 }
 
 // Only the receiver can publish, unpublish or hide, and only its own notes.
-export async function setThankNotePublished(userId: number, noteId: number, published: boolean): Promise<boolean> {
+// A note that looks like it holds contact / ID details is never published.
+export type PublishResult = { ok: true } | { ok: false; reason: "not_found" | "personal" };
+export async function setThankNotePublished(userId: number, noteId: number, published: boolean): Promise<PublishResult> {
+  if (published) {
+    const note = await prisma.thankNote.findFirst({ where: { id: noteId, receiverUserId: userId, hiddenAt: null }, select: { body: true } });
+    if (!note) return { ok: false, reason: "not_found" };
+    if (looksPersonal(note.body)) return { ok: false, reason: "personal" };
+  }
   const r = await prisma.thankNote.updateMany({ where: { id: noteId, receiverUserId: userId, hiddenAt: null }, data: { publishedAt: published ? new Date() : null } });
-  return r.count === 1;
+  return r.count === 1 ? { ok: true } : { ok: false, reason: "not_found" };
 }
 export async function hideThankNote(userId: number, noteId: number): Promise<boolean> {
   const r = await prisma.thankNote.updateMany({ where: { id: noteId, receiverUserId: userId, hiddenAt: null }, data: { hiddenAt: new Date(), publishedAt: null } });

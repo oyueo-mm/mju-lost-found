@@ -58,3 +58,20 @@ export function validateThankBody(raw: unknown): ThankBodyResult {
   if ([...body].length > THANK_NOTE_MAX_LENGTH) return { ok: false, error: `${THANK_NOTE_MAX_LENGTH}자 이내로 적어 주세요.` };
   return { ok: true, body };
 }
+
+// A published note is readable by anyone, so a note that looks like it
+// carries contact or ID details (phone, e-mail, 학번 / 주민번호-like digit
+// runs, kakao/insta IDs) is kept private: it can be read by its receiver but
+// not published. A heuristic, not a guarantee -- the sender is also asked not
+// to write such details.
+const PERSONAL_PATTERNS: RegExp[] = [
+  /01[016789][-.\s]?\d{3,4}[-.\s]?\d{4}/, // mobile phone
+  /0\d{1,2}[-.\s]\d{3,4}[-.\s]\d{4}/, // landline
+  /[\w.+-]+@[\w-]+\.[\w.-]+/, // e-mail
+  /\d{6}[-\s]?[1-8]\d{6}/, // 주민등록번호-like
+  /(?<!\d)\d{8,}(?!\d)/, // 학번 / account-like digit run
+  /(카톡|카카오톡|오픈채팅|인스타|instagram|insta)\s*(아이디|id)?\s*[:：]?\s*[@\w.]{3,}/i,
+];
+export function looksPersonal(body: string): boolean {
+  return PERSONAL_PATTERNS.some((re) => re.test(body));
+}

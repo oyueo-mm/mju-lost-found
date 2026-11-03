@@ -7,7 +7,7 @@ const db = {
   chatRoom: { findMany: vi.fn() },
   message: { groupBy: vi.fn() },
   user: { findMany: vi.fn() },
-  thankNote: { count: vi.fn(), create: vi.fn(), updateMany: vi.fn(), findMany: vi.fn() },
+  thankNote: { count: vi.fn(), create: vi.fn(), updateMany: vi.fn(), findMany: vi.fn(), findFirst: vi.fn() },
   $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(db)),
 };
 vi.mock("@/lib/db/prisma", () => ({ prisma: db }));
@@ -60,14 +60,24 @@ describe("sendThankNote", () => {
 
 describe("publishing", () => {
   it("only the receiver's own, not hidden note can be published / hidden", async () => {
+    db.thankNote.findFirst.mockResolvedValue({ body: "고마워요" });
     db.thankNote.updateMany.mockResolvedValue({ count: 1 });
-    expect(await setThankNotePublished(20, 3, true)).toBe(true);
+    expect(await setThankNotePublished(20, 3, true)).toEqual({ ok: true });
+    expect(db.thankNote.findFirst.mock.calls[0][0].where).toEqual({ id: 3, receiverUserId: 20, hiddenAt: null });
     expect(db.thankNote.updateMany.mock.calls[0][0].where).toEqual({ id: 3, receiverUserId: 20, hiddenAt: null });
     expect(db.thankNote.updateMany.mock.calls[0][0].data.publishedAt).toBeInstanceOf(Date);
     await hideThankNote(20, 3);
     expect(db.thankNote.updateMany.mock.calls[1][0].data).toMatchObject({ publishedAt: null });
+    db.thankNote.findFirst.mockResolvedValue(null);
+    expect(await setThankNotePublished(99, 3, true)).toEqual({ ok: false, reason: "not_found" });
     db.thankNote.updateMany.mockResolvedValue({ count: 0 });
-    expect(await setThankNotePublished(99, 3, true)).toBe(false);
+    expect(await setThankNotePublished(99, 3, false)).toEqual({ ok: false, reason: "not_found" });
+  });
+
+  it("a note that looks like it holds contact details is never published", async () => {
+    db.thankNote.findFirst.mockResolvedValue({ body: "감사해요! 010-1234-5678로 연락주세요" });
+    expect(await setThankNotePublished(20, 3, true)).toEqual({ ok: false, reason: "personal" });
+    expect(db.thankNote.updateMany).not.toHaveBeenCalled();
   });
 
   it("a profile lists published, not hidden notes, without any sender field", async () => {
