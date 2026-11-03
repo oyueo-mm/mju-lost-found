@@ -11,6 +11,7 @@ import { ChatReturnPanel } from "@/components/chat/ChatReturnPanel";
 import { canCompleteFromChat, chatRoomPostState, roomStatusEvents } from "@/lib/posts/returns";
 import { thankComposerForRoom } from "@/lib/thanks/service";
 import { prisma } from "@/lib/db/prisma";
+import { pushConfig } from "@/lib/push/service";
 import { ReportButton } from "@/components/report/ReportButton";
 import { AuthorLink } from "@/components/user/AuthorLink";
 import { ImageOffIcon, ShieldIcon } from "@/components/icons";
@@ -190,6 +191,7 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
         chatRoomId={room.id}
         currentUserId={user.id}
         statusEvents={returnState?.events ?? []}
+        trackPresence={pushConfig() !== null}
         sendBlockedNotice={
           // 실명·학과: the conversation stays readable; sending waits for
           // the member's details (the API refuses it as well).

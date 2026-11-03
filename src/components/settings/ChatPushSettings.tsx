@@ -72,7 +72,7 @@ export function ChatPushSettings({ vapidPublicKey }: { vapidPublicKey: string | 
   }, []);
 
   const enable = async () => {
-    if (!vapidPublicKey) return setError(t("push.failed"));
+    if (!vapidPublicKey) return;
     setBusy(true);
     setError(null);
     try {
@@ -109,6 +109,9 @@ export function ChatPushSettings({ vapidPublicKey }: { vapidPublicKey: string | 
       setBusy(false);
     }
   };
+
+  // not configured on this deployment (no VAPID keys): the feature does not exist for users
+  if (!vapidPublicKey) return null;
 
   const guide = env?.kind === "in_app" ? t("push.inApp") : env?.kind === "ios_tab" ? t("push.iosHome") : env?.kind === "unsupported" ? t("push.unsupported") : env?.kind === "denied" ? t("push.denied") : null;
   const canToggle = env?.kind === "ready" && !!vapidPublicKey;

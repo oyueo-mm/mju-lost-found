@@ -1,4 +1,4 @@
-import { deliverWithRetry, enqueueChatPush, sweepPendingPushes } from "@/lib/push/service";
+import { deliverWithRetry, enqueueChatPush, pushConfig, sweepPendingPushes } from "@/lib/push/service";
 import { after } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
@@ -1167,6 +1167,9 @@ export async function sendMessage(
 
   let message;
   let pushOutboxId: number | null = null;
+  // 채팅 웹 푸시 exists only where VAPID keys are configured: elsewhere a
+  // message costs not a single extra query
+  const pushOn = pushConfig() !== null;
   try {
     message = await prisma.$transaction(async (tx) => {
       const created = await tx.message.create({
@@ -1181,7 +1184,7 @@ export async function sendMessage(
       });
 
       // 채팅 웹 푸시: direct rooms only, queued with the message itself
-      if (notifyUserId !== null && room.organizationId === null) {
+      if (pushOn && notifyUserId !== null && room.organizationId === null) {
         pushOutboxId = await enqueueChatPush(tx, created.id, notifyUserId);
       }
 
@@ -1221,6 +1224,7 @@ export async function sendMessage(
   // background run is picked up here).
   after(async () => {
     await broadcastChatEvent(chatRoomId, { event: "message", payload: { messageId: message.id } });
+    if (!pushOn) return;
     try {
       if (pushOutboxId !== null) await deliverWithRetry(pushOutboxId);
       await sweepPendingPushes(3);

@@ -88,11 +88,14 @@ export function ChatThread({
   currentUserId,
   sendBlockedNotice,
   statusEvents = [],
+  trackPresence = false,
 }: {
   chatRoomId: number;
   currentUserId: number;
   sendBlockedNotice?: ReactNode;
   statusEvents?: ChatStatusEvent[];
+  // chat push is configured on this deployment: report the room on screen
+  trackPresence?: boolean;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -243,6 +246,7 @@ export function ChatThread({
   // every 10 s, and that it no longer is when hidden or left. A push to this
   // user for this room is skipped only while that mark is fresh.
   useEffect(() => {
+    if (!trackPresence) return;
     const ping = (visible: boolean) => void chatPresenceAction(chatRoomId, visible).catch(() => {});
     let timer: number | null = null;
     const update = () => {
@@ -262,7 +266,7 @@ export function ChatThread({
       if (timer !== null) window.clearInterval(timer);
       ping(false);
     };
-  }, [chatRoomId]);
+  }, [chatRoomId, trackPresence]);
 
   useChatRoomRealtime(chatRoomId, {
     onMessage: syncLatest,
