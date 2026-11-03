@@ -16,6 +16,7 @@ type ChatRoomRealtimeHandlers = {
   onMessage?: () => void;
   onReaction?: () => void;
   onRead?: (payload: { userId: number; lastReadMessageId: number }) => void;
+  onPostStatus?: () => void;
 };
 
 export function useChatRoomRealtime(chatRoomId: number, handlers: ChatRoomRealtimeHandlers): void {
@@ -38,6 +39,7 @@ export function useChatRoomRealtime(chatRoomId: number, handlers: ChatRoomRealti
       .on("broadcast", { event: "message" }, () => handlersRef.current.onMessage?.())
       .on("broadcast", { event: "reaction" }, () => handlersRef.current.onReaction?.())
       .on("broadcast", { event: "read" }, ({ payload }) => handlersRef.current.onRead?.(payload))
+      .on("broadcast", { event: "post_status" }, () => handlersRef.current.onPostStatus?.())
       .subscribe();
 
     return () => {

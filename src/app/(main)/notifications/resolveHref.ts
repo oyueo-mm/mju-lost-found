@@ -60,6 +60,12 @@ export async function resolveHref(
   // (no crash, notification still renders) if the announcement was since
   // deleted -- same graceful-degradation precedent as the "match" case
   // just above.
+  // 감사 쪽지 수신: only for the note's receiver, while it is still visible
+  if (relatedType === "thank_note") {
+    const note = await prisma.thankNote.findUnique({ where: { id: relatedId }, select: { receiverUserId: true, hiddenAt: true, adminHiddenAt: true } });
+    return note && note.receiverUserId === userId && !note.hiddenAt && !note.adminHiddenAt ? "/me/thanks" : null;
+  }
+
   if (relatedType === "announcement") {
     const announcement = await getAnnouncement(relatedId);
     return announcement ? `/announcements/${announcement.id}` : null;

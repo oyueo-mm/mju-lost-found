@@ -1,61 +1,47 @@
-// 감사 쪽지: who may thank whom for a post. Pure, so the rules are tested
-// without a database (service.ts loads the inputs and re-checks them on
-// every write).
+// 감사 쪽지: who may thank whom. Pure, so the rules are tested without a
+// database (service.ts loads the inputs and re-checks them on every write).
 //
-// A note needs a real connection made through the service, not a proof of
-// hand-over -- completion is only the poster's own mark:
-//   * the post is marked done (분실물 찾음 / 습득물 완료);
-//   * a direct 1:1 chat room about this post exists in which BOTH people
-//     wrote at least one message (an organization room has no single person
-//     to thank and is left out);
-//   * the sender is the one who got the item back: on a lost post its author,
-//     on a found post the other person in the room (the author is the finder);
-//   * never oneself, never a suspended or withdrawn account, once per post.
+// A note thanks one recorded return (PostReturn): the author marked the post
+// done from a chat room, which made that room's other person the return
+// partner. Only the one who got the item back (the return's owner) may
+// thank, and only the one who returned it (its finder) receives -- never
+// derived from who pressed 찾음 완료, never chosen by the client. A post
+// completed from its own page has no return, so nobody gets to thank
+// automatically. Completion is the poster's own mark, not a verified
+// hand-over, so a note never says one was verified.
+//
+// Also required: the post is still done and the return still active, both
+// people wrote in the linked room, neither account is suspended or
+// withdrawn, and the owner has not thanked for this post yet.
 
 export const THANK_NOTE_MAX_LENGTH = 500;
 export const THANK_NOTES_PER_DAY = 5;
 
-export type ThankRoom = {
-  id: number;
-  initiatorUserId: number | null;
-  counterpartUserId: number | null;
-  organizationId: number | null;
-  // users who sent at least one message in the room
+export type ThankReturn = { id: number; chatRoomId: number | null; ownerUserId: number; finderUserId: number; revoked: boolean };
+export type ThankContext = {
+  completed: boolean;
+  ret: ThankReturn | null;
+  // users who sent at least one message in the return's room
   writers: number[];
+  unavailable: Set<number>;
+  alreadySent: boolean;
 };
-export type ThankPost = { type: "lost" | "found"; authorId: number; completed: boolean };
-export type ThankCandidate = { receiverId: number; chatRoomId: number };
+export type ThankTarget = { receiverId: number; chatRoomId: number; returnId: number };
 
-export function thankCandidates(
-  post: ThankPost,
-  viewerId: number,
-  rooms: ThankRoom[],
-  { unavailable = new Set<number>(), alreadySent = false }: { unavailable?: Set<number>; alreadySent?: boolean } = {},
-): ThankCandidate[] {
-  if (!post.completed || alreadySent || unavailable.has(viewerId)) return [];
-  const out = new Map<number, ThankCandidate>();
-  for (const room of rooms) {
-    if (room.organizationId !== null || room.initiatorUserId === null || room.counterpartUserId === null) continue;
-    const people = [room.initiatorUserId, room.counterpartUserId];
-    if (!people.includes(viewerId)) continue;
-    const other = people.find((id) => id !== viewerId);
-    if (other === undefined || other === viewerId) continue;
-    // both sides wrote in this room
-    if (!room.writers.includes(viewerId) || !room.writers.includes(other)) continue;
-    // lost: the author (owner) thanks the finder; found: the owner thanks the author (finder)
-    const viewerIsAuthor = viewerId === post.authorId;
-    if (post.type === "lost" ? !viewerIsAuthor : viewerIsAuthor || other !== post.authorId) continue;
-    if (unavailable.has(other)) continue;
-    if (!out.has(other)) out.set(other, { receiverId: other, chatRoomId: room.id });
-  }
-  return [...out.values()];
+export function thankTarget(viewerId: number, ctx: ThankContext): ThankTarget | null {
+  const r = ctx.ret;
+  if (!ctx.completed || !r || r.revoked || r.chatRoomId === null || ctx.alreadySent) return null;
+  if (r.ownerUserId !== viewerId || r.finderUserId === viewerId) return null;
+  if (ctx.unavailable.has(viewerId) || ctx.unavailable.has(r.finderUserId)) return null;
+  if (!ctx.writers.includes(viewerId) || !ctx.writers.includes(r.finderUserId)) return null;
+  return { receiverId: r.finderUserId, chatRoomId: r.chatRoomId, returnId: r.id };
 }
 
-export type ThankBodyResult = { ok: true; body: string } | { ok: false; error: string };
+export type ThankBodyResult = { ok: true; body: string } | { ok: false; error: "empty" | "too_long" };
 export function validateThankBody(raw: unknown): ThankBodyResult {
   const body = typeof raw === "string" ? raw.replace(/\r\n/g, "\n").trim() : "";
-  if (!body) return { ok: false, error: "감사 인사를 적어 주세요." };
-  if ([...body].length > THANK_NOTE_MAX_LENGTH) return { ok: false, error: `${THANK_NOTE_MAX_LENGTH}자 이내로 적어 주세요.` };
+  if (!body) return { ok: false, error: "empty" };
+  if ([...body].length > THANK_NOTE_MAX_LENGTH) return { ok: false, error: "too_long" };
   return { ok: true, body };
 }
 

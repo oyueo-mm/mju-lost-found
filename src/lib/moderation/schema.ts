@@ -16,6 +16,7 @@ export const MODERATION_ACTION_TYPES = [
   "temp_hide_comment",
   "restore_post",
   "restore_comment",
+  "hide_thank_note",
 ] as const;
 export type ModerationActionTypeValue = (typeof MODERATION_ACTION_TYPES)[number];
 
@@ -28,17 +29,19 @@ export const MODERATION_ACTION_TYPE_LABELS: Record<ModerationActionTypeValue, st
   temp_hide_comment: "댓글 임시 숨김",
   restore_post: "게시물 임시 숨김 해제",
   restore_comment: "댓글 임시 숨김 해제",
+  hide_thank_note: "감사 쪽지 숨김",
 };
 
 // The actions an admin may pick for a report of each target type. The
 // first is the default. A temporary hide is offered only for posts and
 // comments, and applyReportAction() additionally requires the report's
 // reason to be a rights-infringement one (report/schema.ts).
-export const ACTION_TYPES_FOR_TARGET: Record<"post" | "message" | "user" | "comment", readonly ModerationActionTypeValue[]> = {
+export const ACTION_TYPES_FOR_TARGET: Record<"post" | "message" | "user" | "comment" | "thank_note", readonly ModerationActionTypeValue[]> = {
   post: ["delete_post", "temp_hide_post"],
   message: ["hide_message"],
   user: ["suspend_user"],
   comment: ["delete_comment", "temp_hide_comment"],
+  thank_note: ["hide_thank_note"],
 };
 
 // The one action_type valid for each Report.targetType -- enforced in
@@ -52,6 +55,7 @@ export const TARGET_TYPE_TO_ACTION_TYPE: Record<ReportTargetType, ModerationActi
   message: "hide_message",
   user: "suspend_user",
   comment: "delete_comment",
+  thank_note: "hide_thank_note",
 };
 
 // Phase F-2: expanded from the legacy's ("7일"/"30일") to also offer 1일/3일

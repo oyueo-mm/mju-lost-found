@@ -1,13 +1,16 @@
 import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
-import { Prisma } from "@/generated/prisma/client";
-import { looksPersonal, THANK_NOTES_PER_DAY, thankCandidates, validateThankBody, type ThankRoom } from "./eligibility";
+import { NotificationType, Prisma, ReportStatus, ReportTargetType } from "@/generated/prisma/client";
+import { notifyUser } from "@/lib/notification/recipients";
+import { chatRoomPostState } from "@/lib/posts/returns";
+import { looksPersonal, THANK_NOTES_PER_DAY, thankTarget, validateThankBody } from "./eligibility";
 
 // 감사 쪽지 storage and permissions. Every write re-derives who may thank
-// whom from the database (eligibility.ts); nothing the client sends is
-// trusted beyond the post and the chosen receiver. Notes are private to
-// their receiver until the receiver publishes them; a published note is
-// shown without its sender.
+// whom from the database (eligibility.ts) -- the client names only the post
+// and the text, never the sender or the receiver. Notes are private to their
+// receiver until the receiver publishes them; a published note is shown
+// without its sender. A note's receiver gets an in-app notification (never a
+// web push).
 
 type PostType = "lost" | "found";
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -15,58 +18,76 @@ type Db = Prisma.TransactionClient | typeof prisma;
 async function loadContext(db: Db, viewerId: number, postType: PostType, postId: number) {
   const post =
     postType === "lost"
-      ? await db.lostPost.findUnique({ where: { id: postId }, select: { userId: true, status: true, title: true } })
-      : await db.foundPost.findUnique({ where: { id: postId }, select: { userId: true, status: true, title: true } });
+      ? await db.lostPost.findUnique({ where: { id: postId }, select: { status: true } })
+      : await db.foundPost.findUnique({ where: { id: postId }, select: { status: true } });
   if (!post) return null;
   const completed = postType === "lost" ? post.status === "FOUND" : post.status === "COMPLETED";
-  const rooms = await db.chatRoom.findMany({
-    where: postType === "lost" ? { directLostPostId: postId } : { directFoundPostId: postId },
-    select: { id: true, initiatorUserId: true, counterpartUserId: true, organizationId: true },
-  });
-  const writers = rooms.length
-    ? await db.message.groupBy({ by: ["chatRoomId", "senderUserId"], where: { chatRoomId: { in: rooms.map((r) => r.id) } } })
+  const ret = await db.postReturn.findFirst({ where: { postType, postId, revokedAt: null }, orderBy: { id: "desc" } });
+  const writers = ret?.chatRoomId
+    ? (await db.message.groupBy({ by: ["senderUserId"], where: { chatRoomId: ret.chatRoomId } })).map((w) => w.senderUserId)
     : [];
-  const thankRooms: ThankRoom[] = rooms.map((r) => ({ ...r, writers: writers.filter((w) => w.chatRoomId === r.id).map((w) => w.senderUserId) }));
-  const people = [...new Set([viewerId, ...rooms.flatMap((r) => [r.initiatorUserId, r.counterpartUserId]).filter((id): id is number => id !== null)])];
+  const people = [viewerId, ...(ret ? [ret.ownerUserId, ret.finderUserId] : [])];
   const users = await db.user.findMany({ where: { id: { in: people } }, select: { id: true, nickname: true, isSuspended: true, suspendedUntil: true, withdrawnAt: true } });
   const unavailable = new Set(users.filter((u) => u.withdrawnAt !== null || isCurrentlySuspended(u)).map((u) => u.id));
   const alreadySent = (await db.thankNote.count({ where: { postType, postId, senderUserId: viewerId } })) > 0;
-  const candidates = thankCandidates({ type: postType, authorId: post.userId, completed }, viewerId, thankRooms, { unavailable, alreadySent });
-  return { post, candidates, alreadySent, nicknames: new Map(users.map((u) => [u.id, u.nickname])) };
+  const target = thankTarget(viewerId, {
+    completed,
+    ret: ret && { id: ret.id, chatRoomId: ret.chatRoomId, ownerUserId: ret.ownerUserId, finderUserId: ret.finderUserId, revoked: ret.revokedAt !== null },
+    writers,
+    unavailable,
+    alreadySent,
+  });
+  // "already sent" is only worth saying to the owner of the active return
+  const ownerOfReturn = ret?.ownerUserId === viewerId;
+  return { target, alreadySent: alreadySent && ownerOfReturn, returnId: ret?.id ?? null, nicknames: new Map(users.map((u) => [u.id, u.nickname])) };
 }
 
-export type ThankComposerState = { alreadySent: boolean; receivers: { id: number; nickname: string | null }[] };
+export type ThankComposerState = { alreadySent: boolean; returnId: number | null; receiver: { id: number; nickname: string | null } | null };
 
-// What the post page offers the viewer (null: nothing to show).
+// What the viewer is offered for a post (null: nothing to show).
 export async function thankComposerFor(viewerId: number, postType: PostType, postId: number): Promise<ThankComposerState | null> {
   const ctx = await loadContext(prisma, viewerId, postType, postId);
   if (!ctx) return null;
-  if (ctx.alreadySent) return { alreadySent: true, receivers: [] };
-  if (ctx.candidates.length === 0) return null;
-  return { alreadySent: false, receivers: ctx.candidates.map((c) => ({ id: c.receiverId, nickname: ctx.nicknames.get(c.receiverId) ?? null })) };
+  if (ctx.alreadySent) return { alreadySent: true, returnId: ctx.returnId, receiver: null };
+  if (!ctx.target) return null;
+  return { alreadySent: false, returnId: ctx.target.returnId, receiver: { id: ctx.target.receiverId, nickname: ctx.nicknames.get(ctx.target.receiverId) ?? null } };
 }
 
-export type SendThankResult = { ok: true } | { ok: false; error: string };
+// The same, inside a chat room: only the room the return was recorded in.
+export async function thankComposerForRoom(viewerId: number, chatRoomId: number): Promise<(ThankComposerState & { postType: PostType; postId: number }) | null> {
+  const state = await chatRoomPostState(prisma, chatRoomId, viewerId);
+  if (!state || !state.completed) return null;
+  const ret = await prisma.postReturn.findFirst({ where: { postType: state.postType, postId: state.postId, revokedAt: null }, select: { chatRoomId: true } });
+  if (!ret || ret.chatRoomId !== chatRoomId) return null;
+  const c = await thankComposerFor(viewerId, state.postType, state.postId);
+  return c && { ...c, postType: state.postType, postId: state.postId };
+}
 
-export async function sendThankNote(viewerId: number, input: { postType: PostType; postId: number; receiverId: number; body: unknown }): Promise<SendThankResult> {
+export type SendThankError = "empty" | "too_long" | "already_sent" | "not_eligible" | "daily_limit";
+export type SendThankResult = { ok: true } | { ok: false; error: SendThankError };
+
+export async function sendThankNote(viewerId: number, input: { postType: PostType; postId: number; body: unknown }): Promise<SendThankResult> {
   const body = validateThankBody(input.body);
   if (!body.ok) return body;
   try {
     return await prisma.$transaction(async (tx) => {
       const ctx = await loadContext(tx, viewerId, input.postType, input.postId);
-      if (ctx?.alreadySent) return { ok: false, error: "이 게시글에는 이미 감사 쪽지를 보냈어요." };
-      const candidate = ctx?.candidates.find((c) => c.receiverId === input.receiverId);
-      if (!candidate) return { ok: false, error: "이 게시글로 연결된 상대에게만 감사 쪽지를 보낼 수 있어요." };
+      if (ctx?.alreadySent) return { ok: false, error: "already_sent" } as const;
+      if (!ctx?.target) return { ok: false, error: "not_eligible" } as const;
       const today = await tx.thankNote.count({ where: { senderUserId: viewerId, createdAt: { gte: new Date(Date.now() - 24 * 3600_000) } } });
-      if (today >= THANK_NOTES_PER_DAY) return { ok: false, error: "감사 쪽지는 하루에 최대 5개까지 보낼 수 있어요." };
-      await tx.thankNote.create({
-        data: { postType: input.postType, postId: input.postId, chatRoomId: candidate.chatRoomId, senderUserId: viewerId, receiverUserId: candidate.receiverId, body: body.body },
+      if (today >= THANK_NOTES_PER_DAY) return { ok: false, error: "daily_limit" } as const;
+      const note = await tx.thankNote.create({
+        data: { postType: input.postType, postId: input.postId, chatRoomId: ctx.target.chatRoomId, returnId: ctx.target.returnId, senderUserId: viewerId, receiverUserId: ctx.target.receiverId, body: body.body },
+      });
+      // 수신 알림 (in-app; the unique notification key makes it once per note)
+      await notifyUser(tx, {
+        data: { userId: ctx.target.receiverId, type: NotificationType.THANK_NOTE, title: "새로운 감사 쪽지가 도착했어요.", content: "물건을 돌려받은 분이 감사 쪽지를 보냈어요.", relatedType: "thank_note", relatedId: note.id },
       });
       return { ok: true } as const;
     });
   } catch (error) {
     // the unique (post, sender) index: a second tap or a parallel request
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { ok: false, error: "이 게시글에는 이미 감사 쪽지를 보냈어요." };
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { ok: false, error: "already_sent" };
     throw error;
   }
 }
@@ -75,7 +96,7 @@ export type ReceivedThankNote = { id: number; body: string; createdAt: Date; pub
 
 export async function listReceivedThankNotes(userId: number): Promise<ReceivedThankNote[]> {
   const rows = await prisma.thankNote.findMany({
-    where: { receiverUserId: userId, hiddenAt: null },
+    where: { receiverUserId: userId, hiddenAt: null, adminHiddenAt: null },
     orderBy: { createdAt: "desc" },
     take: 100,
     select: { id: true, body: true, createdAt: true, publishedAt: true, postType: true, postId: true, sender: { select: { nickname: true } }, chatRoom: { select: { postTitle: true } } },
@@ -97,12 +118,13 @@ export async function listReceivedThankNotes(userId: number): Promise<ReceivedTh
 // A note that looks like it holds contact / ID details is never published.
 export type PublishResult = { ok: true } | { ok: false; reason: "not_found" | "personal" };
 export async function setThankNotePublished(userId: number, noteId: number, published: boolean): Promise<PublishResult> {
+  const mine = { id: noteId, receiverUserId: userId, hiddenAt: null, adminHiddenAt: null };
   if (published) {
-    const note = await prisma.thankNote.findFirst({ where: { id: noteId, receiverUserId: userId, hiddenAt: null }, select: { body: true } });
+    const note = await prisma.thankNote.findFirst({ where: mine, select: { body: true } });
     if (!note) return { ok: false, reason: "not_found" };
     if (looksPersonal(note.body)) return { ok: false, reason: "personal" };
   }
-  const r = await prisma.thankNote.updateMany({ where: { id: noteId, receiverUserId: userId, hiddenAt: null }, data: { publishedAt: published ? new Date() : null } });
+  const r = await prisma.thankNote.updateMany({ where: mine, data: { publishedAt: published ? new Date() : null } });
   return r.count === 1 ? { ok: true } : { ok: false, reason: "not_found" };
 }
 export async function hideThankNote(userId: number, noteId: number): Promise<boolean> {
@@ -110,13 +132,18 @@ export async function hideThankNote(userId: number, noteId: number): Promise<boo
   return r.count === 1;
 }
 
-// A profile's published notes: body and day only, never the sender.
+// A profile's published notes: body and day only, never the sender. A note
+// with a pending report is held back until an admin has looked at it.
 export async function listPublicThankNotes(receiverId: number, take = 10): Promise<{ id: number; body: string; publishedAt: Date }[]> {
   const rows = await prisma.thankNote.findMany({
-    where: { receiverUserId: receiverId, hiddenAt: null, publishedAt: { not: null } },
+    where: { receiverUserId: receiverId, hiddenAt: null, adminHiddenAt: null, publishedAt: { not: null } },
     orderBy: { publishedAt: "desc" },
-    take,
+    take: take + 10,
     select: { id: true, body: true, publishedAt: true },
   });
-  return rows.map((r) => ({ id: r.id, body: r.body, publishedAt: r.publishedAt! }));
+  if (!rows.length) return [];
+  const reported = new Set(
+    (await prisma.report.findMany({ where: { targetType: ReportTargetType.THANK_NOTE, targetId: { in: rows.map((r) => r.id) }, status: ReportStatus.PENDING }, select: { targetId: true } })).map((r) => r.targetId),
+  );
+  return rows.filter((r) => !reported.has(r.id)).slice(0, take).map((r) => ({ id: r.id, body: r.body, publishedAt: r.publishedAt! }));
 }

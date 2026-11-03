@@ -109,17 +109,27 @@ export default async function ProfilePage({
       {thankNotes.length > 0 && (
         <section className="flex flex-col gap-3 rounded-card border border-border bg-card p-5" aria-labelledby="profile-thanks">
           <h2 id="profile-thanks" className="text-sm font-semibold text-foreground">
-            받은 감사 쪽지
+            {t("thanks.profile.title")}
           </h2>
           <ul className="flex flex-col gap-2">
             {thankNotes.map((n) => (
               <li key={n.id} className="rounded-lg bg-muted/40 px-3.5 py-2.5 text-sm">
                 <p className="break-words whitespace-pre-line text-foreground">{n.body}</p>
-                <p className="mt-1 text-xs text-muted-foreground">물건을 돌려받은 분 · {formatJoinDate(n.publishedAt, t.locale)} 공개</p>
+                <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">{t("thanks.profile.from", { date: formatJoinDate(n.publishedAt, t.locale) })}</p>
+                  {canReport && (
+                    <ReportButton
+                      targetType="thank_note"
+                      targetId={n.id}
+                      buttonLabel={t("thanks.report")}
+                      triggerClassName="rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                    />
+                  )}
+                </div>
               </li>
             ))}
           </ul>
-          <p className="text-xs text-muted-foreground">받은 분이 직접 공개한 쪽지예요. 서비스가 반환 사실을 확인한 것은 아니에요.</p>
+          <p className="text-xs text-muted-foreground">{t("thanks.profile.note")}</p>
         </section>
       )}
 

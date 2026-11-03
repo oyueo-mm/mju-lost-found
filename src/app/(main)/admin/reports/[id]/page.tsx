@@ -148,6 +148,15 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
               게시물로 이동
             </Link>
           </div>
+        ) : report.targetInfo.kind === "thank_note" ? (
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-foreground">대상 감사 쪽지</span>
+            <span className="whitespace-pre-line text-muted-foreground">{report.targetInfo.body}</span>
+            <span className="text-xs text-muted-foreground">
+              보낸 사람: {report.targetInfo.senderNickname ?? "알 수 없음"} · 받은 사람: {report.targetInfo.receiverNickname ?? "알 수 없음"} · 작성일:{" "}
+              {formatDate(report.targetInfo.createdAt)} · {report.targetInfo.adminHidden ? "관리자 숨김됨" : report.targetInfo.published ? "프로필에 공개 중" : "비공개"}
+            </span>
+          </div>
         ) : (
           <div className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-foreground">대상 사용자</span>

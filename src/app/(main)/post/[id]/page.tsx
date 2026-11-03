@@ -140,8 +140,9 @@ export default async function PostDetailPage({
   const canManage = scope && (post.type === "found" || scope.platform) && inManagementScope(scope, post.campus, custody, post.type === "found" ? post.custodyOrganizationId : null, post.type === "found" ? post.pendingTransferOrganizationId : null);
   const institutions = canManage ? await prisma.organization.findMany({ where: { managementCampus: { not: null }, status: "ACTIVE" }, select: { id: true, name: true } }) : [];
   const history = canManage && currentUser ? await managementHistory(currentUser.id, type, post.id) : [];
-  // 감사 쪽지: offered only after the post is marked done, to the person who
-  // got the item back (lib/thanks). A failure only hides the offer.
+  // 감사 쪽지: offered only after the post was marked done from a chat room,
+  // to the person who got the item back through that return (lib/thanks).
+  // A failure only hides the offer.
   const thankComposer =
     currentUser && (post.status === "완료" || post.status === "찾음")
       ? await thankComposerFor(currentUser.id, type, post.id).catch((error) => {
@@ -441,7 +442,7 @@ export default async function PostDetailPage({
         })()}
       </div>}
       {canManage && <PostManagement key={post.updatedAt.toISOString()} id={post.id} type={type} updatedAt={post.updatedAt.toISOString()} completed={post.status === "완료" || post.status === "찾음"} confirmedCustody={Boolean(custody?.confirmedAt)} platform={scope!.platform} scopeOrganizationId={scope!.organizationId} permissions={scope!.permissions} organizationId={post.type === "found" ? post.custodyOrganizationId : null} pendingOrganizationId={post.type === "found" ? post.pendingTransferOrganizationId : null} institutions={institutions} />}
-      {thankComposer && <ThankNoteComposer postType={type} postId={post.id} receivers={thankComposer.receivers} alreadySent={thankComposer.alreadySent} />}
+      {thankComposer && <ThankNoteComposer postType={type} postId={post.id} receiverName={thankComposer.receiver?.nickname ?? null} alreadySent={thankComposer.alreadySent} returnId={thankComposer.returnId} />}
       {canManage && history.length > 0 && <details className="rounded-card border border-border p-4 text-sm"><summary>물품 처리 이력</summary><ul className="mt-3 space-y-2">{history.map((h) => <li key={h.id}>{formatDate(h.createdAt, locale)} · {h.changedBy?.nickname ?? "담당자"} · {h.institution ?? "작성자"} · {MANAGEMENT_ACTION_LABELS[h.action ?? ""] ?? "상태 변경"} · {h.fromStatus} → {h.toStatus}{h.reason && <p className="text-muted-foreground">사유: {h.reason}</p>}</li>)}</ul></details>}
 
       {post.type === "lost" && (

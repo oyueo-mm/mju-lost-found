@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const user = vi.fn(), grants = vi.fn(), grant = vi.fn(), org = vi.fn(), find = vi.fn(), update = vi.fn(), history = vi.fn(), notification = vi.fn();
-const tx = { user: { findUnique: user }, institutionOfficer: { findUnique: grant }, adminPermissionGrant: { findMany: grants }, organization: { findUnique: org }, foundPost: { findUnique: find, update }, lostPost: { findUnique: find, update }, postStatusChange: { create: history }, notification: { create: notification }, $queryRaw: vi.fn() };
+const tx = { user: { findUnique: user }, institutionOfficer: { findUnique: grant }, adminPermissionGrant: { findMany: grants }, organization: { findUnique: org }, foundPost: { findUnique: find, update }, lostPost: { findUnique: find, update }, postStatusChange: { create: history }, postReturn: { updateMany: vi.fn() }, notification: { create: notification }, $queryRaw: vi.fn() };
 vi.mock("@/lib/db/prisma", () => ({ prisma: { $transaction: (fn: (db: typeof tx) => unknown) => fn(tx) } }));
 const { managePost, inManagementScope } = await import("./management");
 const ITEM_FOUR = ["items.receive", "items.custody", "items.return", "items.transfer"];

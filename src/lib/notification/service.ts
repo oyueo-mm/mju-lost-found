@@ -37,6 +37,8 @@ const NOTIFICATION_TYPE_FROM_DB: Record<PrismaNotificationType, string> = {
   // sent to every current LEADER/ADMIN of an organization when a new
   // inquiry ChatRoom is created.
   ORGANIZATION_CHAT_RECEIVED: "organization_chat_received",
+  // 감사 쪽지 수신 (in-app only)
+  THANK_NOTE: "thank_note",
   // 키워드 알림 Phase: see schema.prisma's own comment on this enum value.
   KEYWORD_ALERT_MATCH: "keyword_alert_match",
   CONTENT_TEMP_HIDDEN: "content_temp_hidden",

@@ -1,4 +1,5 @@
 import { readCustody } from "./custodySchema";
+import { broadcastPostStatus } from "./returns";
 import { after } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
@@ -134,7 +135,7 @@ export async function createLostPost(
 // without its record (or the record without the change). The post row is
 // locked and its status re-read first, so the recorded "from" is the
 // status this update actually replaced, even when two edits race.
-type StatusTx = Pick<Prisma.TransactionClient, "lostPost" | "foundPost" | "postStatusChange" | "$queryRaw">;
+type StatusTx = Pick<Prisma.TransactionClient, "lostPost" | "foundPost" | "postStatusChange" | "postReturn" | "$queryRaw">;
 
 export async function updateLostPost(
   id: number,
@@ -182,6 +183,8 @@ export async function updateLostPost(
             await tx.postStatusChange.create({
               data: { postType: "lost", postId: id, fromStatus: LOST_STATUS_FROM_DB[current.status], toStatus: status, changedByUserId: userId, action: "owner_status" },
             });
+            // undoing 찾음 ends the chat-room return link (kept, marked revoked)
+            if (updated.status !== "FOUND") await tx.postReturn.updateMany({ where: { postType: "lost", postId: id, revokedAt: null }, data: { revokedAt: new Date() } });
           }
           return updated;
         });
@@ -205,6 +208,8 @@ export async function updateLostPost(
       await invalidateRecommendationCache("lost", row.id);
     });
   }
+  // open chat rooms of the post re-read its state
+  if (status !== undefined) after(() => broadcastPostStatus("lost", id));
   return { kind: "ok", data: toLostPostDTO(row) };
 }
 
@@ -294,6 +299,7 @@ export async function updateFoundPost(
             await tx.postStatusChange.create({
               data: { postType: "found", postId: id, fromStatus: FOUND_STATUS_FROM_DB[current.status], toStatus: FOUND_STATUS_FROM_DB[updated.status], changedByUserId: userId, action: "owner_status" },
             });
+            if (updated.status !== "COMPLETED") await tx.postReturn.updateMany({ where: { postType: "found", postId: id, revokedAt: null }, data: { revokedAt: new Date() } });
           }
           if (input.custody !== undefined || input.campus !== undefined) {
             await tx.postStatusChange.create({ data: { postType: "found", postId: id, fromStatus: FOUND_STATUS_FROM_DB[current!.status], toStatus: FOUND_STATUS_FROM_DB[updated.status], changedByUserId: userId, action: "owner_custody", beforeCustody: current!.custody ?? undefined, afterCustody: updated.custody ?? undefined } });
@@ -311,6 +317,7 @@ export async function updateFoundPost(
     });
   }
   if (!row) return { kind: "forbidden", reason: "custody_managed" };
+  if (status !== undefined) after(() => broadcastPostStatus("found", id));
   return { kind: "ok", data: toFoundPostDTO(row) };
 }
 

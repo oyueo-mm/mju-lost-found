@@ -26,7 +26,9 @@ import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
 export type ChatBroadcastEvent =
   | { event: "message"; payload: { messageId: number } }
   | { event: "reaction"; payload: { messageId: number } }
-  | { event: "read"; payload: { userId: number; lastReadMessageId: number } };
+  | { event: "read"; payload: { userId: number; lastReadMessageId: number } }
+  // the room's post changed state (찾음 완료 / reopened): re-read the room
+  | { event: "post_status"; payload: { postType: "lost" | "found"; postId: number } };
 
 function channelNameFor(chatRoomId: number): string {
   return `chat-room-${chatRoomId}`;

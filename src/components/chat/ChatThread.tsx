@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 
 import { ImageProcessingError, uploadChatImage, validateImageFile } from "@/lib/images/client";
@@ -66,16 +67,37 @@ function formatChatDay(date: Date, locale: keyof typeof LOCALE_INTL_TAG): string
 // sendBlockedNotice (실명·학과 not entered yet): the conversation stays
 // readable, and this notice takes the place of the message box -- the
 // server refuses sending anyway (requireIdentityForApi).
+// 상태 안내 줄 (찾음 완료 / 다시 진행 중): drawn from the post's status history
+// between the messages by time. Not messages: they never count as anyone
+// writing, as unread, or for a push.
+export type ChatStatusEvent = { id: number; at: string; kind: "completed" | "reopened" };
+
+function StatusLine({ event, label, time }: { event: ChatStatusEvent; label: string; time: string }) {
+  return (
+    <div role="status" className="my-2 flex justify-center" data-status-event={event.kind}>
+      <span className="rounded-full border border-dashed border-border bg-muted/60 px-3 py-1 text-center text-xs text-muted-foreground">
+        {label} <span className="text-muted-foreground/70">· {time}</span>
+      </span>
+    </div>
+  );
+}
+
 export function ChatThread({
   chatRoomId,
   currentUserId,
   sendBlockedNotice,
+  statusEvents = [],
 }: {
   chatRoomId: number;
   currentUserId: number;
   sendBlockedNotice?: ReactNode;
+  statusEvents?: ChatStatusEvent[];
 }) {
   const { t, locale } = useI18n();
+  const router = useRouter();
+  const statusLabel = (e: ChatStatusEvent) => (e.kind === "completed" ? t("chat.status.completed") : t("chat.status.reopened"));
+  const statusLine = (e: ChatStatusEvent) => <StatusLine key={`s${e.id}`} event={e} label={statusLabel(e)} time={formatAbsoluteTime(new Date(e.at), locale)} />;
+  const eventsUpTo = (fromMs: number, toMs: number) => statusEvents.filter((e) => { const at = Date.parse(e.at); return at > fromMs && at <= toMs; });
   const [messages, setMessages] = useState<MessageItem[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -219,6 +241,8 @@ export function ChatThread({
   useChatRoomRealtime(chatRoomId, {
     onMessage: syncLatest,
     onReaction: syncLatest,
+    // the post was marked done / reopened (here or elsewhere): re-read the room
+    onPostStatus: () => router.refresh(),
     onRead: (payload) => {
       // Ignore my own read-cursor advancing -- this event exists so the
       // *other* participant's client can show "읽음" on messages I sent,
@@ -523,8 +547,11 @@ export function ChatThread({
             const groupEnd = !isSameMessageGroup(m, nextMessage);
             const dateChanged = !isSameCalendarDay(previousMessage, m);
 
+            const beforeThis = eventsUpTo(previousMessage ? Date.parse(String(previousMessage.createdAt)) : -Infinity, Date.parse(String(m.createdAt)));
+            const afterLast = nextMessage ? [] : eventsUpTo(Date.parse(String(m.createdAt)), Infinity);
             return (
             <div key={m.id} className="flex flex-col">
+              {beforeThis.map(statusLine)}
               {dateChanged && (
                 <div className="my-2 flex items-center gap-3 text-xs text-muted-foreground" role="separator">
                   <span className="h-px flex-1 bg-border" />
@@ -683,9 +710,11 @@ export function ChatThread({
                 {m.isMine ? ` · ${isReadByCounterpart(m) ? t("chatThread.read") : t("chatThread.unread")}` : ""}
               </span>}
               </div>
+              {afterLast.map(statusLine)}
             </div>
           )})
         )}
+        {messages !== null && messages.length === 0 && statusEvents.map(statusLine)}
         {/* Bottom sentinel -- scrollIntoView({ block: "end" }) targets this
             empty marker rather than the list container itself, so the
             scroll lands exactly past the last message regardless of its

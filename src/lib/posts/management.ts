@@ -1,3 +1,4 @@
+import { revokeActiveReturn } from "./returns";
 import { prisma } from "@/lib/db/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { officerScope } from "@/lib/institution/service";
@@ -77,6 +78,8 @@ export async function managePost(userId: number, type: PostType, id: number, raw
     const toStatus = action === "complete" ? type === "found" ? "완료" : "찾음" : action === "reopen" ? type === "found" ? "보관 중" : "찾는 중" : fromStatus;
     const updated = type === "found" ? await tx.foundPost.update({ where: { id }, data: { status: toStatus === "완료" ? "COMPLETED" : "KEEPING", custodyOrganizationId: organizationId, pendingTransferOrganizationId: nextPending, custody: custody ?? Prisma.DbNull } })
       : await tx.lostPost.update({ where: { id }, data: { status: toStatus === "찾음" ? "FOUND" : "SEARCHING" } });
+    // reopening ends the chat-room return link (kept, marked revoked)
+    if (action === "reopen") await revokeActiveReturn(tx, type, id);
     const change = await tx.postStatusChange.create({ data: { postType: type, postId: id, changedByUserId: userId, fromStatus, toStatus, action, institution: custody?.institution ?? scope.institution,
       organizationId: action === "transfer_accept" ? pendingOrg : currentOrg ?? organizationId, targetOrganizationId: receipt ? organizationId : nextPending, reason: input.reason,
       beforeCustody: before ?? Prisma.JsonNull, afterCustody: custody ?? Prisma.JsonNull } });

@@ -1,3 +1,4 @@
+import { resolveThankNoteTarget } from "./targets";
 import { prisma } from "@/lib/db/prisma";
 import {
   Prisma,
@@ -23,12 +24,14 @@ export const TARGET_TYPE_TO_DB: Record<ReportTargetType, PrismaReportTargetType>
   message: PrismaReportTargetType.MESSAGE,
   user: PrismaReportTargetType.USER,
   comment: PrismaReportTargetType.COMMENT,
+  thank_note: PrismaReportTargetType.THANK_NOTE,
 };
 export const TARGET_TYPE_FROM_DB: Record<PrismaReportTargetType, ReportTargetType> = {
   POST: "post",
   MESSAGE: "message",
   USER: "user",
   COMMENT: "comment",
+  THANK_NOTE: "thank_note",
 };
 export const STATUS_FROM_DB: Record<PrismaReportStatus, ReportStatusValue> = {
   PENDING: "pending",
@@ -102,6 +105,13 @@ export async function createReport(reporter: User, input: CreateReportInput): Pr
     const target = await resolveCommentTarget(input.targetId);
     if (!target) return { kind: "target_not_found" };
     if (target.authorUserId === reporter.id) return { kind: "self_report" };
+  } else if (input.targetType === "thank_note") {
+    // only someone who can see the note: its receiver, or anyone while it is
+    // published; never its own sender
+    const target = await resolveThankNoteTarget(input.targetId);
+    if (!target) return { kind: "target_not_found" };
+    if (target.senderUserId === reporter.id) return { kind: "self_report" };
+    if (target.receiverUserId !== reporter.id && !target.published) return { kind: "target_not_found" };
   } else {
     const target = await resolveUserTarget(input.targetId);
     if (!target) return { kind: "target_not_found" };

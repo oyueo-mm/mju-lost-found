@@ -1,79 +1,57 @@
 import { describe, expect, it } from "vitest";
-import { looksPersonal, thankCandidates, validateThankBody, type ThankRoom } from "./eligibility";
+import { looksPersonal, thankTarget, validateThankBody, type ThankContext } from "./eligibility";
 
-// people: 10 = lost-post author (owner) / found-post author (finder), 20 / 30 = others
-const room = (id: number, initiator: number, counterpart: number, writers: number[], organizationId: number | null = null): ThankRoom => ({
-  id,
-  initiatorUserId: initiator,
-  counterpartUserId: counterpart,
-  organizationId,
-  writers,
-});
-const lost = { type: "lost" as const, authorId: 10, completed: true };
-const found = { type: "found" as const, authorId: 10, completed: true };
+// a return recorded from room 7: owner 10 (got it back), finder 20
+const ret = { id: 3, chatRoomId: 7, ownerUserId: 10, finderUserId: 20, revoked: false };
+const ctx = (over: Partial<ThankContext> = {}): ThankContext => ({ completed: true, ret, writers: [10, 20], unavailable: new Set(), alreadySent: false, ...over });
 
-describe("감사 쪽지: who may thank whom", () => {
-  it("분실물: the author (who got it back) thanks the finder they chatted with", () => {
-    expect(thankCandidates(lost, 10, [room(1, 20, 10, [10, 20])])).toEqual([{ receiverId: 20, chatRoomId: 1 }]);
-    // the finder cannot thank themselves into the owner's place
-    expect(thankCandidates(lost, 20, [room(1, 20, 10, [10, 20])])).toEqual([]);
+describe("감사 쪽지: thankTarget (who may thank whom)", () => {
+  it("the owner of the recorded return thanks its finder, through that room", () => {
+    expect(thankTarget(10, ctx())).toEqual({ receiverId: 20, chatRoomId: 7, returnId: 3 });
   });
 
-  it("습득물: the owner who contacted the finder thanks the author; the author cannot", () => {
-    expect(thankCandidates(found, 20, [room(1, 20, 10, [10, 20])])).toEqual([{ receiverId: 10, chatRoomId: 1 }]);
-    expect(thankCandidates(found, 10, [room(1, 20, 10, [10, 20])])).toEqual([]);
+  it("the finder, a third person or the completer-who-is-the-finder cannot", () => {
+    expect(thankTarget(20, ctx())).toBeNull();
+    expect(thankTarget(30, ctx())).toBeNull();
   });
 
-  it("needs the post marked done", () => {
-    expect(thankCandidates({ ...lost, completed: false }, 10, [room(1, 20, 10, [10, 20])])).toEqual([]);
+  it("no return recorded (completed from the post page) gives nobody the right", () => {
+    expect(thankTarget(10, ctx({ ret: null }))).toBeNull();
   });
 
-  it("needs both people to have written in the room (no note from an unanswered chat)", () => {
-    expect(thankCandidates(lost, 10, [room(1, 20, 10, [20])])).toEqual([]);
-    expect(thankCandidates(lost, 10, [room(1, 20, 10, [10])])).toEqual([]);
-    expect(thankCandidates(lost, 10, [room(1, 20, 10, [])])).toEqual([]);
+  it("an undone completion or a revoked return gives nothing", () => {
+    expect(thankTarget(10, ctx({ completed: false }))).toBeNull();
+    expect(thankTarget(10, ctx({ ret: { ...ret, revoked: true } }))).toBeNull();
+    expect(thankTarget(10, ctx({ ret: { ...ret, chatRoomId: null } }))).toBeNull();
   });
 
-  it("an outsider with no room, an organization room and a broken room give nothing", () => {
-    expect(thankCandidates(found, 30, [room(1, 20, 10, [10, 20])])).toEqual([]);
-    expect(thankCandidates(lost, 10, [room(1, 20, 10, [10, 20], 7)])).toEqual([]);
-    expect(thankCandidates(lost, 10, [{ id: 2, initiatorUserId: 20, counterpartUserId: null, organizationId: 7, writers: [10, 20] }])).toEqual([]);
+  it("both people must have written in the linked room", () => {
+    expect(thankTarget(10, ctx({ writers: [20] }))).toBeNull();
+    expect(thankTarget(10, ctx({ writers: [10] }))).toBeNull();
   });
 
-  it("never oneself, even in a malformed self-room", () => {
-    expect(thankCandidates(lost, 10, [room(1, 10, 10, [10])])).toEqual([]);
-  });
-
-  it("once per post, and not to or from a suspended / withdrawn account", () => {
-    const rooms = [room(1, 20, 10, [10, 20])];
-    expect(thankCandidates(lost, 10, rooms, { alreadySent: true })).toEqual([]);
-    expect(thankCandidates(lost, 10, rooms, { unavailable: new Set([20]) })).toEqual([]);
-    expect(thankCandidates(lost, 10, rooms, { unavailable: new Set([10]) })).toEqual([]);
-  });
-
-  it("several finders who chatted: each is a choice, once", () => {
-    const rooms = [room(1, 20, 10, [10, 20]), room(2, 30, 10, [10, 30]), room(3, 20, 10, [10, 20])];
-    expect(thankCandidates(lost, 10, rooms)).toEqual([
-      { receiverId: 20, chatRoomId: 1 },
-      { receiverId: 30, chatRoomId: 2 },
-    ]);
+  it("once per post; not to or from a suspended / withdrawn account; never oneself", () => {
+    expect(thankTarget(10, ctx({ alreadySent: true }))).toBeNull();
+    expect(thankTarget(10, ctx({ unavailable: new Set([20]) }))).toBeNull();
+    expect(thankTarget(10, ctx({ unavailable: new Set([10]) }))).toBeNull();
+    expect(thankTarget(10, ctx({ ret: { ...ret, finderUserId: 10 } }))).toBeNull();
   });
 });
 
 describe("validateThankBody", () => {
   it("trims, rejects empty and over-long notes (code points, like the DB check)", () => {
     expect(validateThankBody("  고마워요  ")).toEqual({ ok: true, body: "고마워요" });
-    expect(validateThankBody("   ").ok).toBe(false);
-    expect(validateThankBody(undefined).ok).toBe(false);
+    expect(validateThankBody("   ")).toEqual({ ok: false, error: "empty" });
+    expect(validateThankBody(undefined)).toEqual({ ok: false, error: "empty" });
     expect(validateThankBody("가".repeat(500)).ok).toBe(true);
-    expect(validateThankBody("가".repeat(501)).ok).toBe(false);
+    expect(validateThankBody("가".repeat(501))).toEqual({ ok: false, error: "too_long" });
     expect(validateThankBody("😀".repeat(500)).ok).toBe(true);
   });
 });
 
 describe("looksPersonal (publishing guard)", () => {
-  it("flags phone numbers, e-mail, long digit runs and messenger IDs", () => {
-    for (const t of ["010-1234-5678", "01012345678", "02-123-4567", "a.b@mju.ac.kr", "학번 60201234", "900101-1234567", "카톡 아이디: mju_find"]) expect(looksPersonal(`고마워요 ${t}`), t).toBe(true);
+  it("flags phone numbers, e-mail, long digit runs, 주민번호-like and messenger IDs", () => {
+    for (const t of ["010-1234-5678", "01012345678", "02-123-4567", "a.b@mju.ac.kr", "학번 60201234", "900101-1234567", "카톡 아이디: mju_find", "insta: mju.find"]) expect(looksPersonal(`고마워요 ${t}`), t).toBe(true);
   });
   it("lets ordinary thanks through", () => {
     for (const t of ["지갑 찾아주셔서 정말 감사합니다!", "11월 3일에 받았어요, 3층 경비실 덕분이에요", "커피 한 잔 사드리고 싶어요 :)"]) expect(looksPersonal(t), t).toBe(false);

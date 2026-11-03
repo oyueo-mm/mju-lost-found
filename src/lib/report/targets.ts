@@ -70,3 +70,15 @@ export async function resolveCommentTarget(targetId: number): Promise<ResolvedCo
   if (!comment || comment.deletedAt) return null;
   return { id: comment.id, authorUserId: comment.authorUserId, parentId: comment.parentId };
 }
+
+// 감사 쪽지: visible (not hidden by its receiver or an admin) notes only.
+export type ResolvedThankNoteTarget = { id: number; senderUserId: number; receiverUserId: number; published: boolean };
+
+export async function resolveThankNoteTarget(targetId: number): Promise<ResolvedThankNoteTarget | null> {
+  const note = await prisma.thankNote.findUnique({
+    where: { id: targetId },
+    select: { id: true, senderUserId: true, receiverUserId: true, publishedAt: true, hiddenAt: true, adminHiddenAt: true },
+  });
+  if (!note || note.adminHiddenAt) return null;
+  return { id: note.id, senderUserId: note.senderUserId, receiverUserId: note.receiverUserId, published: note.publishedAt !== null && note.hiddenAt === null };
+}

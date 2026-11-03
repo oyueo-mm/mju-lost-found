@@ -7,6 +7,10 @@ import { hasIdentityInfo } from "@/lib/identity/service";
 import { LinkButton } from "@/components/ui/Button";
 import { getChatRoomForUser } from "@/lib/chat/service";
 import { ChatThread } from "@/components/chat/ChatThread";
+import { ChatReturnPanel } from "@/components/chat/ChatReturnPanel";
+import { canCompleteFromChat, chatRoomPostState, roomStatusEvents } from "@/lib/posts/returns";
+import { thankComposerForRoom } from "@/lib/thanks/service";
+import { prisma } from "@/lib/db/prisma";
 import { ReportButton } from "@/components/report/ReportButton";
 import { AuthorLink } from "@/components/user/AuthorLink";
 import { ImageOffIcon, ShieldIcon } from "@/components/icons";
@@ -47,6 +51,26 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
     { key: "post", id: room.post.id, type: room.post.type, title: room.post.title, imageUrl: room.post.imageUrl },
   ];
   const postDeleted = room.post.deleted;
+
+  // 채팅방 찾음 완료 / 감사 쪽지 안내 / 상태 안내 줄 (lib/posts/returns.ts).
+  // A failure here only leaves them out; the chat itself is unaffected.
+  const returnState = await (async () => {
+    try {
+      const state = postDeleted ? null : await chatRoomPostState(prisma, room.id, user.id);
+      if (!state) return null;
+      const partner = state.partnerId === null ? null : await prisma.user.findUnique({ where: { id: state.partnerId }, select: { withdrawnAt: true } });
+      const [thank, events] = await Promise.all([thankComposerForRoom(user.id, room.id), roomStatusEvents(state.postType, state.postId)]);
+      return {
+        canComplete: canCompleteFromChat(state, user.id) && !!partner && partner.withdrawnAt === null,
+        completed: state.completed,
+        thank: thank && { postType: thank.postType, postId: thank.postId, receiverName: thank.receiver?.nickname ?? null, alreadySent: thank.alreadySent, returnId: thank.returnId },
+        events,
+      };
+    } catch (error) {
+      console.error("Failed to load the room's return state", error);
+      return null;
+    }
+  })();
 
   return (
     // h-[70dvh], not h-[70vh]: `dvh` (dynamic viewport height) tracks the
@@ -158,9 +182,14 @@ export default async function ChatRoomPage({ params }: { params: Promise<{ id: s
         ))}
       </div>
 
+      {returnState && (returnState.canComplete || returnState.thank) && (
+        <ChatReturnPanel chatRoomId={room.id} canComplete={returnState.canComplete} completed={returnState.completed} thank={returnState.thank} />
+      )}
+
       <ChatThread
         chatRoomId={room.id}
         currentUserId={user.id}
+        statusEvents={returnState?.events ?? []}
         sendBlockedNotice={
           // 실명·학과: the conversation stays readable; sending waits for
           // the member's details (the API refuses it as well).

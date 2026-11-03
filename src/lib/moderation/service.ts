@@ -45,6 +45,7 @@ const ACTION_TYPE_TO_DB: Record<ModerationActionTypeValue, PrismaModerationActio
   temp_hide_comment: PrismaModerationActionType.TEMP_HIDE_COMMENT,
   restore_post: PrismaModerationActionType.RESTORE_POST,
   restore_comment: PrismaModerationActionType.RESTORE_COMMENT,
+  hide_thank_note: PrismaModerationActionType.HIDE_THANK_NOTE,
 };
 const ACTION_TYPE_FROM_DB: Record<PrismaModerationActionType, ModerationActionTypeValue> = {
   DELETE_POST: "delete_post",
@@ -55,6 +56,7 @@ const ACTION_TYPE_FROM_DB: Record<PrismaModerationActionType, ModerationActionTy
   TEMP_HIDE_COMMENT: "temp_hide_comment",
   RESTORE_POST: "restore_post",
   RESTORE_COMMENT: "restore_comment",
+  HIDE_THANK_NOTE: "hide_thank_note",
 };
 
 // DB-sourced admin check only -- the caller must have obtained `admin` via
@@ -119,7 +121,8 @@ export type ReportTargetInfo =
   // Phase C-3: postType/postId let the admin UI link to the post the
   // comment belongs to (see resolveCommentTarget's own comment on why no
   // separate "does the post still exist" check is needed here).
-  | { kind: "comment"; content: string; authorNickname: string | null; createdAt: Date; postType: "lost" | "found"; postId: number; parentId: number | null; tempHidden: boolean };
+  | { kind: "comment"; content: string; authorNickname: string | null; createdAt: Date; postType: "lost" | "found"; postId: number; parentId: number | null; tempHidden: boolean }
+  | { kind: "thank_note"; body: string; senderNickname: string | null; receiverNickname: string | null; createdAt: Date; published: boolean; adminHidden: boolean };
 
 async function loadTargetInfo(targetType: ReportTargetType, targetId: number): Promise<ReportTargetInfo | null> {
   if (targetType === "post") {
@@ -193,6 +196,23 @@ async function loadTargetInfo(targetType: ReportTargetType, targetId: number): P
       postId: (comment.lostPostId ?? comment.foundPostId)!,
       parentId: comment.parentId,
       tempHidden: Boolean(comment.tempHiddenAt),
+    };
+  }
+
+  if (targetType === "thank_note") {
+    const note = await prisma.thankNote.findUnique({
+      where: { id: targetId },
+      include: { sender: { select: { nickname: true } }, receiver: { select: { nickname: true } } },
+    });
+    if (!note) return null;
+    return {
+      kind: "thank_note",
+      body: note.body,
+      senderNickname: note.sender.nickname,
+      receiverNickname: note.receiver.nickname,
+      createdAt: note.createdAt,
+      published: note.publishedAt !== null && note.hiddenAt === null,
+      adminHidden: note.adminHiddenAt !== null,
     };
   }
 
@@ -553,6 +573,11 @@ export async function applyReportAction(
             relatedId: reportId,
           },
         });
+      } else if (targetType === "thank_note") {
+        // 감사 쪽지: hidden everywhere (receiver list, profile); the row stays
+        const note = await tx.thankNote.findUnique({ where: { id: report.targetId }, select: { id: true } });
+        if (!note) return { outcome: "target_gone" as const };
+        await tx.thankNote.update({ where: { id: note.id }, data: { adminHiddenAt: new Date(), publishedAt: null } });
       } else if (targetType === "comment") {
         // Phase C-3: comment deletion, no target-owner notification -- see
         // this phase's own report for why (notification behavior is kept

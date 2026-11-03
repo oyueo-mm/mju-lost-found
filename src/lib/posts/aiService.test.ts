@@ -24,9 +24,10 @@ const matchCandidateCache = { deleteMany: vi.fn() };
 // callback gets the same mocks as the transaction client, plus the row
 // lock ($queryRaw).
 const postStatusChange = { create: vi.fn() };
+const postReturn = { updateMany: vi.fn() };
 const $queryRaw = vi.fn();
 const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
-  fn({ lostPost, foundPost, postStatusChange, $queryRaw }),
+  fn({ lostPost, foundPost, postStatusChange, postReturn, $queryRaw }),
 );
 
 // Phase H-5-1: createLostPost/createFoundPost/updateLostPost/updateFoundPost
@@ -889,6 +890,8 @@ describe("updateLostPost", () => {
       expect(postStatusChange.create).toHaveBeenCalledWith({
         data: { postType: "found", postId: 2, fromStatus: "완료", toStatus: "보관 중", changedByUserId: 1, action: "owner_status" },
       });
+      // putting it back ends the chat-room return link in the same transaction (the row is kept)
+      expect(postReturn.updateMany).toHaveBeenCalledWith({ where: { postType: "found", postId: 2, revokedAt: null }, data: { revokedAt: expect.any(Date) } });
       expect(embedPostBestEffort).not.toHaveBeenCalled();
     });
 
