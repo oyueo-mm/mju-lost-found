@@ -14,8 +14,8 @@ import { getTranslator } from "@/lib/i18n/server";
 // arriving at another service: Hero (the two-line headline, the one-line
 // subtitle, the AI search with its popular searches, the blue glow, and the
 // 분실물·습득물 등록 buttons -- signed out, those go through sign-in and back to
-// the form; signed in, straight to the form), then LandingStats (the real
-// registration counts and the links into the two boards).
+// the form; signed in, straight to the form) and the links into the two
+// boards. The real registration counts (LandingStats) come after the posts.
 //
 // Both then show the newest lost / found posts as two slowly drifting card
 // rows (RecentPostsSections) -- signed in after the category shortcuts,
@@ -33,19 +33,21 @@ export default async function Home() {
 
   return (
     <div className="flex flex-col">
-      <Hero />
-      <LandingStats />
+      <Hero compact />
 
       {/* Each section below fades up the first time it's scrolled to
           (ScrollReveal -- no-op for content already on screen and for
-          prefers-reduced-motion). */}
-      <div className="flex flex-col gap-10 pt-6 md:pt-8">
+          prefers-reduced-motion). 모바일 홈 밀도 개선: real posts first, then
+          the category shortcuts, the service's counts last. */}
+      <div className="flex flex-col gap-10 pt-4 md:pt-8">
+        <RecentPostsSections />
+
         <ScrollReveal className="flex flex-col gap-4 text-center">
           <h2 className="text-lg font-semibold text-foreground">{t("home.categories.title")}</h2>
           <CategoryShortcuts />
         </ScrollReveal>
 
-        <RecentPostsSections />
+        <LandingStats />
       </div>
     </div>
   );

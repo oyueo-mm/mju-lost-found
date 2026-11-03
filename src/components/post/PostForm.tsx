@@ -1062,10 +1062,12 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
         </h2>
         {/* 짧은 한 줄 + 펼치면 가릴 정보 전체(form.photoPrivacyNotice, 그대로). */}
         <details className="group text-xs leading-relaxed text-muted-foreground">
-          <summary className="inline-flex min-h-8 cursor-pointer list-none items-center gap-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+          <summary className="flex min-h-8 cursor-pointer list-none flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
             <span className="text-foreground">{t("form.photoPrivacyShort")}</span>
-            <span className="font-medium text-primary">{t("form.photoPrivacyMore")}</span>
-            <ChevronRightIcon className="size-3.5 shrink-0 text-primary transition-transform group-open:rotate-90" aria-hidden />
+            <span className="inline-flex items-center gap-0.5 font-medium whitespace-nowrap text-primary">
+              {t("form.photoPrivacyMore")}
+              <ChevronRightIcon className="size-3.5 shrink-0 transition-transform group-open:rotate-90" aria-hidden />
+            </span>
           </summary>
           <p className="mt-1.5">{t("form.photoPrivacyNotice").replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u, "")}</p>
         </details>

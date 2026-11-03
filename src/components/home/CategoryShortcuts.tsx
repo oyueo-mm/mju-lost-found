@@ -55,6 +55,8 @@ const CATEGORY_SEARCH_PARAMS = { searchMode: "keyword", type: "found" } as const
 // 검증하고, 실제 listQuerySchema로 파싱까지 해 본다).
 // 카테고리 대분류-소분류: 필터는 legacy `category`가 아니라 `categoryCode`로
 // 건다(SearchFilterBar의 대분류 select가 읽는 값과 같다).
+export const PHONE_SHORTCUTS = 7;
+
 export function categorySearchHref(categoryCode: CategoryCode): string {
   return `/search?${new URLSearchParams({ ...CATEGORY_SEARCH_PARAMS, categoryCode }).toString()}`;
 }
@@ -97,21 +99,31 @@ export async function CategoryShortcuts() {
     //   않는다.
     // - 카테고리명은 text-foreground 그대로 둔다 -- 아이콘(primary/70)
     //   보다 대비가 높아 여전히 이름이 먼저 읽힌다.
-    <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-7">
-      {CATEGORY_CODES.map((categoryCode) => {
+    // 모바일 홈 밀도 개선: phones and small tablets show the first
+    // PHONE_SHORTCUTS categories of the fixed order (2 rows of 4 with 전체
+    // 보기); from md every category is shown (2 rows of 7).
+    <div className="grid grid-cols-4 gap-2 md:grid-cols-7">
+      {CATEGORY_CODES.map((categoryCode, index) => {
         // URL에는 언어와 무관한 code가 들어가고, 버튼 글자만 현재 언어로 바뀐다.
         const Icon = CATEGORY_ICONS[categoryCode] ?? GridIcon;
         return (
           <Link
             key={categoryCode}
             href={categorySearchHref(categoryCode)}
-            className="group flex flex-col items-center gap-2 rounded-lg border border-border bg-muted/60 px-2 py-3 text-center transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:border-primary/40 hover:bg-primary-muted hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-safe:md:hover:-translate-y-1 motion-reduce:transition-none"
+            className={`group ${index >= PHONE_SHORTCUTS ? "hidden md:flex" : "flex"} min-h-11 flex-col items-center gap-1.5 rounded-lg border border-border bg-muted/60 px-1 py-2.5 text-center transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:border-primary/40 hover:bg-primary-muted hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-safe:md:hover:-translate-y-1 motion-reduce:transition-none`}
           >
             <Icon className="size-5 text-primary/70 transition-colors group-hover:text-primary" />
-            <span className="text-xs font-medium text-foreground">{t(taxonomyCategoryLabelKey(categoryCode))}</span>
+            <span className="text-xs font-medium break-keep text-foreground">{t(taxonomyCategoryLabelKey(categoryCode))}</span>
           </Link>
         );
       })}
+      <Link
+        href={`/search?${new URLSearchParams(CATEGORY_SEARCH_PARAMS).toString()}`}
+        className="flex min-h-11 flex-col items-center gap-1.5 rounded-lg border border-dashed border-border px-1 py-2.5 text-center hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 md:hidden"
+      >
+        <GridIcon className="size-5 text-primary/70" />
+        <span className="text-xs font-medium text-foreground">{t("home.categories.all")}</span>
+      </Link>
     </div>
   );
 }

@@ -1,6 +1,4 @@
 import { getPostStats } from "@/lib/posts/service";
-import { LinkButton } from "@/components/ui/Button";
-import { BoxIcon, ChevronRightIcon, HandboxIcon } from "@/components/icons";
 import { getTranslator } from "@/lib/i18n/server";
 
 // Phase P-4: real DB counts (getPostStats(), never a hardcoded/mock
@@ -43,18 +41,6 @@ export async function LandingStats() {
         </div>
       </div>
 
-      {/* Browsing the boards: plain links (with an arrow), so they never
-          read as the hero's "post an item" buttons. */}
-      <nav aria-label={t("landing.stats.browseLost") + " · " + t("landing.stats.browseFound")} className="flex flex-wrap items-center justify-center gap-x-1 gap-y-0.5 md:gap-x-3">
-        <LinkButton href="/lost" variant="ghost" size="sm" className="h-8 gap-1 px-1.5! text-[0.8125rem] hover:bg-muted/60 md:px-2.5! md:text-sm">
-          <BoxIcon className="size-4" /> {t("landing.stats.browseLost")}
-          <ChevronRightIcon className="size-3.5" />
-        </LinkButton>
-        <LinkButton href="/found" variant="ghost" size="sm" className="h-8 gap-1 px-1.5! text-[0.8125rem] hover:bg-muted/60 md:px-2.5! md:text-sm">
-          <HandboxIcon className="size-4" /> {t("landing.stats.browseFound")}
-          <ChevronRightIcon className="size-3.5" />
-        </LinkButton>
-      </nav>
     </section>
   );
 }

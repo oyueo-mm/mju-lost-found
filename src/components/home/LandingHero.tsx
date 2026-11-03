@@ -27,15 +27,12 @@ export function LandingHero() {
     <div className="flex flex-col">
       <Hero />
 
-      {/* Phase P-4: not wrapped in ScrollReveal, same reasoning as Hero
-          itself -- real numbers right under the headline are the "혹시 내
-          물건도 있지 않을까" hook this phase asks for, so they should be
-          there instantly rather than arrive on scroll. */}
-      <LandingStats />
-
-      {/* the real newest posts, the same rows a signed-in member sees */}
-      <div className="flex flex-col gap-10 pt-6 pb-4 md:pt-8">
+      {/* the real newest posts, the same rows a signed-in member sees; the
+          registration counts follow them (모바일 홈 밀도 개선: posts before
+          numbers) */}
+      <div className="flex flex-col gap-10 pt-4 pb-4 md:pt-8">
         <RecentPostsSections />
+        <LandingStats />
       </div>
 
       <ScrollReveal replay>
