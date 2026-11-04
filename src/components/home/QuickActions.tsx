@@ -5,7 +5,9 @@ import { getTranslator } from "@/lib/i18n/server";
 
 // 홈 빠른 기능 바로가기 (Soft Card): 찾아보기 두 곳과 등록 두 곳. 탐색은
 // 흰 카드 + 회색 아이콘, 등록은 연한 파란 카드 + 파란 아이콘으로 한눈에
-// 구분한다. 모바일 2열, 데스크톱 4열.
+// 구분한다. 모바일 2열, 데스크톱 4열. break-keep keeps Korean words whole;
+// overflow-wrap:anywhere still lets a language without spaces (ja, zh) wrap
+// at 320px instead of running past the card.
 const ACTIONS = [
   { href: "/found", title: "landing.stats.browseFound", desc: "home.quick.found.desc", Icon: HandboxIcon, primary: false },
   { href: "/lost", title: "landing.stats.browseLost", desc: "home.quick.lost.desc", Icon: BoxIcon, primary: false },
@@ -25,11 +27,11 @@ export async function QuickActions() {
             primary ? "border-primary/15 bg-primary-muted hover:border-primary/40" : "border-border bg-card hover:border-foreground/25"
           }`}
         >
-          <span className="flex items-center gap-1.5 text-[0.9375rem] font-semibold break-keep text-foreground">
+          <span className="flex items-center gap-1.5 text-[0.9375rem] font-semibold break-keep [overflow-wrap:anywhere] text-foreground">
             <Icon aria-hidden="true" className={`size-[1.125rem] shrink-0 ${primary ? "text-primary" : "text-muted-foreground"}`} />
             {t(title)}
           </span>
-          <span className="text-xs leading-snug break-keep text-muted-foreground">{t(desc)}</span>
+          <span className="text-xs leading-snug break-keep [overflow-wrap:anywhere] text-muted-foreground">{t(desc)}</span>
         </Link>
       ))}
     </nav>

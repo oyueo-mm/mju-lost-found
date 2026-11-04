@@ -26,4 +26,8 @@ describe("홈 빠른 기능 바로가기", () => {
     expect(html).toContain("md:grid-cols-4");
     expect(html).not.toMatch(/gradient|shadow-(md|lg|xl)/);
   });
+
+  it("lets a title without spaces (Japanese) wrap instead of overflowing a narrow card", () => {
+    expect(html).toMatch(/font-semibold break-keep \[overflow-wrap:anywhere\]/);
+  });
 });
