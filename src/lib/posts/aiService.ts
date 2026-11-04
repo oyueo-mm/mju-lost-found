@@ -1,4 +1,4 @@
-import { readCustody } from "./custodySchema";
+import { custodyInputOf, readCustody } from "./custodySchema";
 import { broadcastPostStatus } from "./returns";
 import { after } from "next/server";
 
@@ -14,7 +14,7 @@ import { cosineFromNormalizedScore } from "@/lib/ai/matching";
 import { invalidateRecommendationCache } from "@/lib/recommendation/service";
 import { validateOrganizationPosting } from "@/lib/organization/service";
 import { notifyKeywordAlertSubscribers } from "@/lib/keywordAlert/matcher";
-import type { Prisma, User } from "@/generated/prisma/client";
+import { Prisma, type User } from "@/generated/prisma/client";
 import type {
   CreateFoundPostInput,
   CreateLostPostInput,
@@ -270,7 +270,10 @@ export async function updateFoundPost(
     if (check.kind === "forbidden") return { kind: "forbidden", reason: "organization_not_member" };
   }
 
-  const { status, ...rest } = dropUnchangedLegacyCategory(input, existing.category);
+  // custody is applied explicitly below (null = cleared), never spread.
+  const { status, ...fields } = dropUnchangedLegacyCategory(input, existing.category);
+  const rest: Omit<typeof fields, "custody"> = { ...fields };
+  delete (rest as { custody?: unknown }).custody;
   let currentCustody = existing.custody;
   const update = (client: Pick<StatusTx, "foundPost">) =>
     client.foundPost.update({
@@ -279,7 +282,12 @@ export async function updateFoundPost(
         ...rest,
         ...(status !== undefined && { status: FOUND_STATUS_TO_DB[status] }),
         ...((input.custody !== undefined || input.campus !== undefined) && {
-          custody: input.custody ?? (readCustody(currentCustody) ? { state: readCustody(currentCustody)!.state, place: readCustody(currentCustody)!.place } : undefined),
+          // null: the finder cleared it. A campus-only change re-writes the
+          // current finder-entered custody unchanged (기타 keeps its note).
+          custody:
+            input.custody === null
+              ? Prisma.DbNull
+              : (input.custody ?? (readCustody(currentCustody) ? custodyInputOf(readCustody(currentCustody)!) : undefined)),
         }),
       },
       include: { user: { select: AUTHOR_SELECT }, organization: { select: POST_ORGANIZATION_SELECT } },

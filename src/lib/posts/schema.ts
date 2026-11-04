@@ -460,7 +460,9 @@ export const createFoundPostSchema = foundPostFields.transform((data, ctx) => {
 export type CreateFoundPostInput = z.infer<typeof createFoundPostSchema>;
 
 // See updateLostPostSchema's own comment -- identical shape/reasoning.
-export const updateFoundPostSchema = foundPostFields.partial().transform((data, ctx) => {
+// Phase 3-A: on edit, an explicit null clears custody (the finder unselected
+// it); omitted still means "leave unchanged".
+export const updateFoundPostSchema = foundPostFields.partial().extend({ custody: custodyInputSchema.nullable().optional() }).transform((data, ctx) => {
   const withCategory = updateWithCategory(data, ctx);
   return applyEventWrite(withCategory, ctx, "found", "update") as Omit<typeof withCategory, FoundEventKey> &
     Partial<ResolvedEvent<"foundDate", "foundAt">>;

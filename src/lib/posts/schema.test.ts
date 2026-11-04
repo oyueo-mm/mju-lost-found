@@ -247,6 +247,17 @@ describe("createFoundPostSchema", () => {
       expect(result.data.foundAt).toBeNull();
     }
   });
+
+  // Phase 3-A: a found post can be created with no custody at all.
+  it("accepts a post without custody (보관 상태 선택사항) and keeps it absent", () => {
+    const validFound = { ...validLost, foundAt: validLost.lostAt };
+    const result = createFoundPostSchema.safeParse(validFound);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.custody).toBeUndefined();
+    expect(createFoundPostSchema.safeParse({ ...validFound, custody: { state: "SELF", place: "" } }).success).toBe(true);
+    // the other required fields are as strict as before
+    expect(createFoundPostSchema.safeParse({ ...validFound, title: "" }).success).toBe(false);
+  });
 });
 
 describe("updateFoundPostSchema", () => {
@@ -268,6 +279,16 @@ describe("updateFoundPostSchema", () => {
     const result = updateFoundPostSchema.safeParse({ title: "새 제목", organizationId: null });
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.organizationId).toBeNull();
+  });
+  // Phase 3-A: 보관 상태 is optional; on edit, null clears it.
+  it("accepts custody: null on update (cleared), omitted (unchanged) and 기타 with text only", () => {
+    const cleared = updateFoundPostSchema.safeParse({ custody: null });
+    expect(cleared.success).toBe(true);
+    if (cleared.success) expect(cleared.data.custody).toBeNull();
+    const untouched = updateFoundPostSchema.safeParse({ title: "새 제목" });
+    expect(untouched.success && "custody" in untouched.data).toBe(false);
+    expect(updateFoundPostSchema.safeParse({ custody: { state: "OTHER", place: "", note: "" } }).success).toBe(false);
+    expect(updateFoundPostSchema.safeParse({ custody: { state: "OTHER", place: "", note: "경비실에 맡길 예정" } }).success).toBe(true);
   });
 });
 

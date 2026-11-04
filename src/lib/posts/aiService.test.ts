@@ -69,6 +69,7 @@ vi.mock("@/lib/db/prisma", () => ({
   prisma: { lostPost, foundPost, matchCandidateCache, postStatusChange, $queryRaw, $transaction },
 }));
 vi.mock("@/generated/prisma/client", () => ({
+  Prisma: { DbNull: "DbNull" },
   LostPostStatus: { SEARCHING: "SEARCHING", FOUND: "FOUND" },
   FoundPostStatus: { KEEPING: "KEEPING", COMPLETED: "COMPLETED" },
 }));
@@ -893,6 +894,62 @@ describe("updateLostPost", () => {
       // putting it back ends the chat-room return link in the same transaction (the row is kept)
       expect(postReturn.updateMany).toHaveBeenCalledWith({ where: { postType: "found", postId: 2, revokedAt: null }, data: { revokedAt: expect.any(Date) } });
       expect(embedPostBestEffort).not.toHaveBeenCalled();
+    });
+
+    // Phase 3-A: 보관 상태 is optional and editable to "not entered".
+    describe("보관 상태 (custody)", () => {
+      const keeping = { status: "KEEPING", custody: { state: "PLANNED", place: "국제관 경비실" }, custodyOrganizationId: null };
+
+      it("clears custody to a database NULL when the finder unselected it, and records the change", async () => {
+        foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, custody: keeping.custody }).mockResolvedValueOnce(keeping);
+        foundPost.update.mockResolvedValueOnce({ ...foundRow("KEEPING"), custody: null });
+
+        const result = await updateFoundPost(2, 1, { custody: null });
+
+        expect(result.kind).toBe("ok");
+        expect(foundPost.update).toHaveBeenCalledWith(expect.objectContaining({ data: { custody: "DbNull" } }));
+        expect(postStatusChange.create).toHaveBeenCalledWith({
+          data: expect.objectContaining({ action: "owner_custody", beforeCustody: keeping.custody, afterCustody: undefined }),
+        });
+      });
+
+      it("saves 기타 with its note", async () => {
+        foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, custody: null }).mockResolvedValueOnce({ ...keeping, custody: null });
+        foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
+
+        await updateFoundPost(2, 1, { custody: { state: "OTHER", place: "", note: "다른 학생이 보관 중" } });
+
+        expect(foundPost.update).toHaveBeenCalledWith(expect.objectContaining({ data: { custody: { state: "OTHER", place: "", note: "다른 학생이 보관 중" } } }));
+      });
+
+      it("a campus-only change re-writes the current custody unchanged (기타 keeps its note)", async () => {
+        const other = { state: "OTHER", place: "", note: "학과 사무실에 전달할 예정" };
+        foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, custody: other }).mockResolvedValueOnce({ ...keeping, custody: other });
+        foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
+
+        await updateFoundPost(2, 1, { campus: "자연캠퍼스" });
+
+        expect(foundPost.update).toHaveBeenCalledWith(expect.objectContaining({ data: { campus: "자연캠퍼스", custody: other } }));
+      });
+
+      it("a title-only edit never touches custody", async () => {
+        foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, custody: keeping.custody });
+        foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
+
+        await updateFoundPost(2, 1, { title: "새 제목" });
+
+        expect(foundPost.update).toHaveBeenCalledWith(expect.objectContaining({ data: { title: "새 제목" } }));
+        expect($transaction).not.toHaveBeenCalled();
+      });
+
+      it("an institution-managed item's custody stays locked for the finder (even clearing it)", async () => {
+        foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, custody: keeping.custody }).mockResolvedValueOnce({ ...keeping, custodyOrganizationId: 7 });
+
+        const result = await updateFoundPost(2, 1, { custody: null });
+
+        expect(result).toEqual({ kind: "forbidden", reason: "custody_managed" });
+        expect(foundPost.update).not.toHaveBeenCalled();
+      });
     });
 
     it("records the status the update actually replaced, read under the lock", async () => {
