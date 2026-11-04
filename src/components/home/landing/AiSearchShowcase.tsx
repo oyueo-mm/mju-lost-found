@@ -31,8 +31,8 @@ export async function AiSearchShowcase() {
       <div className="grid grid-cols-1 items-center gap-10 md:grid-cols-2 md:gap-16">
         <div className="flex flex-col gap-3 text-center md:text-left">
           <span className="text-xs font-medium text-primary">{t("landing.aiShowcase.badge")}</span>
-          <h2 className="text-xl font-bold text-foreground md:text-2xl">{t("landing.aiShowcase.title")}</h2>
-          <p className="text-sm text-muted-foreground md:text-base">
+          <h2 className="text-xl font-bold text-foreground md:text-2xl break-keep [overflow-wrap:anywhere]">{t("landing.aiShowcase.title")}</h2>
+          <p className="text-sm text-muted-foreground md:text-base break-keep [overflow-wrap:anywhere]">
             {t("landing.aiShowcase.description")}
           </p>
         </div>

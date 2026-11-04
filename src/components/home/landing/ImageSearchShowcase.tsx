@@ -18,7 +18,7 @@ export async function ImageSearchShowcase() {
         <div className="order-2 flex flex-col gap-3 text-center md:order-1 md:text-left">
           <span className="text-xs font-medium text-primary">{t("landing.imageShowcase.badge")}</span>
           <h2 className="text-xl font-bold text-foreground md:text-2xl">{t("landing.imageShowcase.title")}</h2>
-          <p className="text-sm text-muted-foreground md:text-base">
+          <p className="text-sm text-muted-foreground md:text-base break-keep [overflow-wrap:anywhere]">
             {t("landing.imageShowcase.description")}
           </p>
         </div>
