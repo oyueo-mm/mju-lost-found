@@ -10,6 +10,10 @@ type GalleryImage = { id: number; imageUrl: string; isPrimary: boolean };
 type PostImageGalleryProps = {
   images: GalleryImage[];
   title: string;
+  // size of the photo frame (default: the full-width page photo); the post
+  // page's photo column passes a bounded aspect ratio instead
+  frameClassName?: string;
+  sizes?: string;
 };
 
 // Previous/next wrap around: past the last photo is the first, before the
@@ -47,7 +51,7 @@ const NAV_BUTTON_CLASS =
 // Navigation: ‹ / › buttons over the photo, swipe on touch screens, and
 // the ←/→ keys (unless typing in a field); all wrap around, and the
 // thumbnail strip and the "n / total" badge follow the current photo.
-export function PostImageGallery({ images, title }: PostImageGalleryProps) {
+export function PostImageGallery({ images, title, frameClassName = "h-[45vh] md:h-[65vh]", sizes = "(min-width: 768px) 768px, 100vw" }: PostImageGalleryProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const count = images.length;
   const multiple = count > 1;
@@ -90,7 +94,7 @@ export function PostImageGallery({ images, title }: PostImageGalleryProps) {
           vertical scrolling to the browser while a sideways swipe changes
           the photo. */}
       <div
-        className="relative h-[45vh] w-full touch-pan-y overflow-hidden rounded-card border border-border bg-muted md:h-[65vh]"
+        className={`relative w-full touch-pan-y overflow-hidden rounded-card border border-border bg-muted ${frameClassName}`}
         aria-roledescription="carousel"
         aria-label={title}
         onTouchStart={(event) => {
@@ -111,7 +115,7 @@ export function PostImageGallery({ images, title }: PostImageGalleryProps) {
           src={selected.imageUrl}
           alt={multiple ? `${title} (${selectedIndex + 1}/${count})` : title}
           fill
-          sizes="(min-width: 768px) 768px, 100vw"
+          sizes={sizes}
           className="object-contain"
           priority
           fallback={

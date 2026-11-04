@@ -16,6 +16,8 @@ type DirectChatButtonProps = {
   // inquiry, based on the post's own organizationId (never trusts this
   // prop for anything but which words to show).
   isOrganizationPost?: boolean;
+  // the post page's main action: full width on a phone, taller
+  wide?: boolean;
 };
 
 // Client-side port of legacy pages/1,2's "💬 작성자와 채팅하기" button --
@@ -31,7 +33,7 @@ type DirectChatButtonProps = {
 // "단체에 문의하기" instead of "채팅하기" -- the underlying request is
 // unchanged, only the label communicates that the counterpart is the
 // organization, not the post's own (hidden) real author.
-export function DirectChatButton({ postType, postId, isOrganizationPost = false }: DirectChatButtonProps) {
+export function DirectChatButton({ postType, postId, isOrganizationPost = false, wide = false }: DirectChatButtonProps) {
   const router = useRouter();
   const { t } = useI18n();
   const [pending, setPending] = useState(false);
@@ -66,13 +68,13 @@ export function DirectChatButton({ postType, postId, isOrganizationPost = false 
   }
 
   return (
-    <div className="flex flex-col items-start gap-1">
+    <div className={`flex flex-col gap-1 ${wide ? "items-stretch sm:items-start" : "items-start"}`}>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <button
         type="button"
         onClick={handleClick}
         disabled={pending}
-        className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60"
+        className={`${wide ? "min-h-11 px-6" : "px-4 py-2"} rounded-full bg-primary text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60`}
       >
         {pending ? t("common.loading") : isOrganizationPost ? t("post.contactOrganization") : t("post.startChat")}
       </button>

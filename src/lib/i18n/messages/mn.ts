@@ -369,7 +369,7 @@ export const mn: Dictionary = {
   "identity.policyLink": "Нууцлалын бодлого",
   "post.registerNext.found": "Дараагийн олдсон эд зүйлийг бүртгэх",
   "post.registerNext.lost": "Өөр алдсан эд зүйл бүртгэх",
-  "post.noImage": "Хавсаргасан зураг алга.",
+  "post.detail.category": "Ангилал", "post.detail.lostPlace": "Гээсэн газар", "post.detail.foundPlace": "Олсон газар", "post.detail.views": "Үзсэн тоо", "post.description.more": "Цааш үзэх", "post.description.less": "Хураах", "post.notice.more": "Дэлгэрэнгүй", "post.foundContactNotice.short": "Нийтлэлд ороогүй онцлогийг хэлбэл эзнийг нь тогтооход хялбар болно.", "post.lostPropertyNotice.short": "Олсон эд зүйлийг нийтлэгчид буцааж өгөх эсвэл цагдаад хүлээлгэн өгнө үү.", "post.management.title": "Эд зүйл хүлээн авах, буцаах удирдлага", "post.custody.stateLabel": "Хадгалалтын байдал", "post.custody.placeLabel": "Хадгалж буй газар", "post.custody.none": "Хадгалалтын мэдээлэл оруулаагүй", "post.custody.state.returned": "Буцаан өгсөн", "post.custody.state.institutionConfirmed": "Байгууллага хадгалж байна", "post.custody.state.self": "Олсон хүн өөрөө хадгалж байна", "post.custody.state.reported": "Байгууллагад өгсөн", "post.custody.state.planned": "Байгууллагад өгөхөөр төлөвлөсөн", "post.custody.state.unheld": "Олсон газартаа үлдээсэн", "post.custody.state.unknown": "Хадгалж буй газар тодорхойгүй", "post.custody.state.other": "Бусад", "post.custody.place.unregistered": "Бүртгэлгүй", "post.custody.place.unknown": "Газар тодорхойгүй", "post.custody.place.undecided": "Газар шийдээгүй", "post.custody.note.confirmed": "Байгууллага хүлээн авснаа баталгаажуулсан ({institution})", "post.custody.note.self": "Хадгалж буй газрыг нийтэд харуулахгүй. Буцаах аргаа чатаар тохирно уу.", "post.custody.note.reported": "Нийтлэгчийн оруулсан мэдээлэл. Байгууллага хараахан баталгаажуулаагүй.", "form.section.placeTime.found": "Олсон газар ба хугацаа", "form.section.placeTime.lost": "Гээсэн газар ба хугацаа", "form.custody.title": "Эд зүйлийн одоогийн хадгалалтын байдал", "form.custody.optional": "Заавал биш", "form.custody.help": "Эд зүйл одоо хаана байгааг мэдэж байвал сонгоно уу.", "form.custody.self": "Өөрөө хадгалж байна", "form.custody.handed": "Байгууллагад өгсөн", "form.custody.other": "Бусад", "form.custody.clear": "Сонголтыг цуцлах", "form.custody.selfHelp": "Та өөрөө хадгалж байгаа гэж харагдана. Хадгалж буй газраа нийтлэх шаардлагагүй.", "form.custody.placeLabel": "Өгсөн байгууллага эсвэл хадгалах газар", "form.custody.placeOptional": "(мэдэж байвал)", "form.custody.placePlaceholder": "Жишээ: Жонхаб-гваны харуулын өрөө", "form.custody.placeHelp": "Санал болгох жагсаалт нь зөвхөн оруулахад туслах жишээ. Жагсаалтад байхгүй газрыг ч оруулж болно. Байгууллага бодитоор хүлээн авсан эсэхийг ажилтан баталгаажуулсны дараа харуулна.", "form.custody.suggest.registered": "Бүртгэлтэй", "form.custody.suggest.types": "Байгууллагын жишээ", "form.custody.suggest.buildings": "Барилга", "form.custody.suggest.none": "Тохирох санал алга. Оруулсан зүйл тань хэвээр хадгалагдана.", "form.custody.otherLabel": "Одоогийн хадгалалтын байдлаа бичих", "form.custody.otherPlaceholder": "Жишээ: Маргааш харуулын өрөөнд өгнө.", "form.custody.otherExamples": "Жишээ: Олсон газартаа үлдээсэн · Өөр оюутан хадгалж байгаа · Тэнхимийн оффист өгөхөөр төлөвлөсөн", "form.custody.otherRequired": "Хадгалалтын байдлаа бичих эсвэл сонголтоо цуцална уу.", "form.custody.legacy": "Өмнө оруулсан байдал: {state}.", "form.custody.legacyKeep": "Өөрчлөхгүй бол хэвээр үлдэнэ.", "form.custody.locked": "Байгууллагын хүлээн авсан эд зүйлийн хадгалалтын мэдээллийг өөрчлөхийг тухайн байгууллагаас хүснэ үү.", "form.custody.type.guard": "Сургуулийн харуулын өрөө", "form.custody.type.studentSupport": "Оюутны дэмжлэгийн баг", "form.custody.type.library": "Номын сангийн удирдлагын хэсэг", "post.noImage": "Хавсаргасан зураг алга.",
   "post.lostAt": "Гээгдсэн огноо",
   "post.foundAt": "Олдсон огноо",
   "post.manageMenu": "Нийтлэл удирдах цэс",
@@ -393,7 +393,7 @@ export const mn: Dictionary = {
 
   "recommend.title": "Санал",
   "recommend.description":
-    "Энэ нийтлэлтэй холбоотой {board} нийтлэлийг AI санал болгож байна. Яг ижил эд зүйл гэдгийг баталгаажуулахгүй.",
+    "Энэ нийтлэлтэй төстэй {board} нийтлэлүүд. Ижил эд зүйл эсэхийг чатаар шалгана уу.",
   "recommend.error": "Саналыг ачаалахад алдаа гарлаа.",
   "recommend.pending": "Санал бэлтгэгдэж байна. Хэсэг хүлээвэл энд автоматаар харагдана.",
   "recommend.empty.title": "Санал болгох {board} нийтлэл одоогоор алга.",
@@ -600,7 +600,7 @@ export const mn: Dictionary = {
   "form.lostLocation": "Гээсэн газар",
   "form.foundLocation": "Олсон газар",
   "form.lostLocationHelp": "Эд зүйлсээ гээсэн (эсвэл гээсэн гэж бодож буй) газар. Мэдэхгүй бол \"Мэдэхгүй\" хэвээр үлдээнэ үү.",
-  "form.foundLocationHelp": "Эд зүйлсийг олсон газар. Одоо хаана байгааг доорх 'Эд зүйл одоо хаана байна вэ?' хэсэгт сонгоно уу.",
+  "form.foundLocationHelp": "Эд зүйлийг олсон газар. Одоо хаана хадгалж байгааг доорх 'Эд зүйлийн одоогийн хадгалалтын байдал' хэсэгт бичнэ үү.",
   "form.locationPlaceholder": "Жишээ: Оюутны ордны 3 давхарт байрлах кафе",
   "form.suggestedPlaces": "Санал болгох байршил",
   "form.suggestedPlacesOpen": "{campus}-ийн санал болгох байршлын жагсаалтыг нээх",

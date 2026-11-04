@@ -3,7 +3,7 @@
 import type { PostType } from "@/lib/posts/schema";
 import type { PostDTO } from "@/lib/posts/service";
 import { PostCard } from "@/components/post/PostCard";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { SEARCH_RESULTS_GRID_CLASS } from "@/components/search/resultsLayout";
 import { useI18n } from "@/lib/i18n/client";
 import { postTypeLabelKey } from "@/lib/i18n/labels";
 
@@ -59,16 +59,16 @@ export function SimilarPostsSection({
   const boardLabel = t(postTypeLabelKey(targetType));
 
   return (
-    <div className="flex flex-col gap-3 border-t border-border pt-6">
+    <section className="flex flex-col gap-2 border-t border-border pt-6">
       <div className="flex flex-col gap-1">
-        <h2 className="font-semibold text-foreground">{t("recommend.title")}</h2>
-        <p className="text-xs text-muted-foreground">{t("recommend.description", { board: boardLabel })}</p>
+        <h2 className="text-base font-semibold text-foreground">{t("recommend.title")}</h2>
+        <p className="text-xs break-keep [overflow-wrap:anywhere] text-muted-foreground">{t("recommend.description", { board: boardLabel })}</p>
       </div>
 
       {loadFailed ? (
         <p className="text-sm text-destructive">{t("recommend.error")}</p>
       ) : recommendations.length === 0 && pending ? (
-        <div className="flex items-center gap-2 rounded-card border border-border bg-muted/30 px-4 py-6 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 rounded-lg bg-muted/60 px-4 py-3 text-sm text-muted-foreground">
           <span
             aria-hidden="true"
             className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground motion-reduce:animate-none"
@@ -76,12 +76,14 @@ export function SimilarPostsSection({
           {t("recommend.pending")}
         </div>
       ) : recommendations.length === 0 ? (
-        <EmptyState
-          title={t("recommend.empty.title", { board: boardLabel })}
-          description={t("recommend.empty.description", { board: boardLabel })}
-        />
+        // Phase 3-A: one small line instead of a large empty card
+        <p className="rounded-lg bg-muted/60 px-4 py-3 text-sm break-keep [overflow-wrap:anywhere] text-muted-foreground">
+          <span className="font-medium text-foreground">{t("recommend.empty.title", { board: boardLabel })}</span>{" "}
+          {t("recommend.empty.description", { board: boardLabel })}
+        </p>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        // Phase 3-A: the boards' text-left / photo-right rows
+        <div className={`${SEARCH_RESULTS_GRID_CLASS} border-t border-border`}>
           {recommendations.map((post) => (
             // AI 검색 고도화 Phase: shows "AI 유사도 0.xx" (scoreDisplay=
             // "decimal", see PostCard's own comment on why this is never
@@ -93,12 +95,13 @@ export function SimilarPostsSection({
             <PostCard
               key={`${post.type}-${post.id}`}
               post={post}
+              variant="list"
               scoreLabel={t("post.score.ai")}
               scoreDisplay={showScore ? "decimal" : "hidden"}
             />
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }

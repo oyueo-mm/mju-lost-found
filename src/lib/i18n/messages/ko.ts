@@ -386,7 +386,7 @@ export const ko = {
   "identity.policyLink": "개인정보처리방침",
   "post.registerNext.found": "다음 습득물 등록",
   "post.registerNext.lost": "분실물 하나 더 등록",
-  "post.noImage": "등록된 이미지가 없습니다.",
+  "post.detail.category": "카테고리", "post.detail.lostPlace": "분실 장소", "post.detail.foundPlace": "습득 장소", "post.detail.views": "조회수", "post.description.more": "더 보기", "post.description.less": "접기", "post.notice.more": "자세히", "post.foundContactNotice.short": "공개되지 않은 특징을 함께 알려주면 주인 확인이 쉬워져요.", "post.lostPropertyNotice.short": "주운 물건은 게시자에게 돌려주거나 경찰관서에 맡겨 주세요.", "post.management.title": "물품 접수·반환 관리", "post.custody.stateLabel": "보관 상태", "post.custody.placeLabel": "보관 장소", "post.custody.none": "보관 정보 미입력", "post.custody.state.returned": "반환 완료", "post.custody.state.institutionConfirmed": "기관 보관 중", "post.custody.state.self": "습득자가 직접 보관 중", "post.custody.state.reported": "기관에 맡김", "post.custody.state.planned": "기관에 맡길 예정", "post.custody.state.unheld": "발견한 자리에 그대로 둠", "post.custody.state.unknown": "보관 위치 모름", "post.custody.state.other": "기타", "post.custody.place.unregistered": "미등록", "post.custody.place.unknown": "장소 모름", "post.custody.place.undecided": "장소 미정", "post.custody.note.confirmed": "기관 접수 확인 완료 ({institution})", "post.custody.note.self": "보관 위치는 공개되지 않아요. 돌려받는 방법은 채팅으로 정해요.", "post.custody.note.reported": "작성자가 입력한 정보예요. 기관 확인 전이에요.", "form.section.placeTime.found": "발견한 장소와 날짜", "form.section.placeTime.lost": "분실한 장소와 날짜", "form.custody.title": "현재 물건의 보관 상태", "form.custody.optional": "선택사항", "form.custody.help": "현재 물건의 상태를 알고 있다면 선택해 주세요.", "form.custody.self": "직접 보관", "form.custody.handed": "기관에 맡김", "form.custody.other": "기타", "form.custody.clear": "선택 해제", "form.custody.selfHelp": "직접 보관 중인 것으로 표시됩니다. 개인 보관 위치를 공개할 필요는 없습니다.", "form.custody.placeLabel": "맡긴 기관 또는 보관 장소", "form.custody.placeOptional": "(알고 있다면)", "form.custody.placePlaceholder": "예: 종합관 경비실", "form.custody.placeHelp": "추천 목록은 입력을 돕는 예시예요. 목록에 없는 곳도 직접 입력할 수 있어요. 기관의 실제 접수 여부는 담당자가 확인한 뒤 표시돼요.", "form.custody.suggest.registered": "등록 기관", "form.custody.suggest.types": "기관 예시", "form.custody.suggest.buildings": "건물", "form.custody.suggest.none": "일치하는 추천이 없어요. 입력한 그대로 저장돼요.", "form.custody.otherLabel": "현재 보관 상태를 직접 입력", "form.custody.otherPlaceholder": "예: 내일 경비실에 맡길 예정이에요.", "form.custody.otherExamples": "예: 발견한 자리에 그대로 두었어요 · 다른 학생이 보관하고 있어요 · 학과 사무실에 전달할 예정이에요", "form.custody.otherRequired": "현재 보관 상태를 입력하거나 선택을 해제해 주세요.", "form.custody.legacy": "이전에 등록한 상태: {state}.", "form.custody.legacyKeep": "바꾸지 않으면 그대로 유지돼요.", "form.custody.locked": "기관에서 접수한 물품의 보관 정보 변경은 담당 기관에 요청해주세요.", "form.custody.type.guard": "교내 경비실", "form.custody.type.studentSupport": "학생지원팀", "form.custody.type.library": "도서관 관련 관리 기관", "post.noImage": "등록된 이미지가 없습니다.",
   "post.lostAt": "분실 일시",
   "post.foundAt": "습득 일시",
   "post.manageMenu": "게시글 관리 메뉴",
@@ -410,7 +410,7 @@ export const ko = {
 
   // ---------- AI 추천 ----------
   "recommend.title": "추천",
-  "recommend.description": "이 게시글과 관련된 {board}을 AI가 추천해요. 실제 동일 물건 여부를 보장하지는 않아요.",
+  "recommend.description": "이 게시글과 비슷한 {board} 게시글이에요. 같은 물건인지는 채팅으로 확인해 주세요.",
   "recommend.error": "추천을 불러오는 중 문제가 발생했습니다.",
   "recommend.pending": "추천을 준비하고 있어요. 잠시 후 이 화면에 자동으로 표시돼요.",
   "recommend.empty.title": "추천할 {board}이 아직 없어요.",
@@ -627,7 +627,7 @@ export const ko = {
   "form.lostLocation": "잃어버린 장소",
   "form.foundLocation": "발견한 장소",
   "form.lostLocationHelp": "물건을 잃어버린 곳(또는 짐작되는 곳)이에요. 모르면 '모름'으로 두세요.",
-  "form.foundLocationHelp": "물건을 주운 곳이에요. 지금 있는 곳은 아래 '지금 물건은 어디에 있나요?'에서 골라 주세요.",
+  "form.foundLocationHelp": "물건을 주운 곳이에요. 지금 보관 중인 곳은 아래 '현재 물건의 보관 상태'에서 알려 주세요.",
   "form.locationPlaceholder": "예: 학생회관 3층 카페",
   "form.suggestedPlaces": "추천 장소",
   "form.suggestedPlacesOpen": "{campus} 추천 장소 목록 열기",

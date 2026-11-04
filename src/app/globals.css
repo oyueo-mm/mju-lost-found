@@ -28,14 +28,17 @@
   --muted: #f6f8fa;
   --muted-foreground: #6b7280;
   --border: #e5e7eb;
-  --ring: #2867df;
+  --ring: #006ec7;
 
-  /* Primary: Soft Card redesign -- one restrained blue (4.9:1 on white),
-     used only for primary actions, the active nav/tab/filter, links and
-     focus. Body text and headings stay near-black. */
-  --primary: #2867df;
+  /* Primary: 명지 블루 (#006ec7, 5.0:1 on white) -- the same value the
+     runtime theme applies for the default accent "mjuBlue"
+     (lib/theme/constants.ts), so CSS and runtime never disagree. Used only
+     for primary actions, the active nav/tab/filter, links and focus; body
+     text and headings stay near-black. --primary-muted is that accent at
+     14% over white, as the runtime computes it. */
+  --primary: #006ec7;
   --primary-foreground: #ffffff;
-  --primary-muted: #edf3ff;
+  --primary-muted: #dbebf7;
 
   /* Semantic status colors -- exactly three, matching the only three
      states this app's UI actually needs to distinguish: an in-progress

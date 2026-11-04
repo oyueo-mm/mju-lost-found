@@ -436,8 +436,10 @@ export function CommentSection({
             depth, not just top-level. */}
         <div
           id={`comment-${node.id}`}
-          className={`flex flex-col gap-1 rounded-lg border p-3 text-sm ${
-            depth > 0 ? "border-l-2 border-primary/30 bg-muted/30" : "border-border"
+          // Soft Card: top-level comments are hairline-separated rows; a
+          // reply keeps its left rule on a light surface.
+          className={`flex flex-col gap-1 text-sm ${
+            depth > 0 ? "rounded-lg border-l-2 border-primary/30 bg-muted/40 p-3" : "border-b border-border py-3"
           }`}
         >
           {renderCommentBody(node)}
@@ -457,8 +459,8 @@ export function CommentSection({
   const tree = buildCommentTree(comments);
 
   return (
-    <div className="flex flex-col gap-4 border-t border-border pt-6">
-      <h2 className="flex items-center gap-1.5 font-semibold text-foreground">
+    <section className="flex flex-col gap-3 border-t border-border pt-6">
+      <h2 className="flex items-center gap-1.5 text-base font-semibold text-foreground">
         <ChatBubbleIcon className="size-4.5" />
         {t("comment.count", { count: comments.filter((c) => !c.isDeleted && !c.isHidden).length })}
       </h2>
@@ -468,7 +470,7 @@ export function CommentSection({
       {tree.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("comment.empty")}</p>
       ) : (
-        <div className="flex flex-col gap-3">{tree.map((node) => renderCommentNode(node, 0))}</div>
+        <div className="-mt-1 flex flex-col gap-2">{tree.map((node) => renderCommentNode(node, 0))}</div>
       )}
 
       {currentUser ? (
@@ -478,9 +480,9 @@ export function CommentSection({
             onChange={(e) => setNewContent(e.target.value)}
             placeholder={t("comment.placeholder")}
             maxLength={COMMENT_MAX_LENGTH}
-            rows={3}
+            rows={2}
             disabled={submitting}
-            className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground disabled:opacity-60"
+            className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-60"
           />
           <PostAsSelector
             organizations={myOrganizations}
@@ -502,6 +504,6 @@ export function CommentSection({
           {t("comment.loginRequiredSuffix")}
         </p>
       )}
-    </div>
+    </section>
   );
 }

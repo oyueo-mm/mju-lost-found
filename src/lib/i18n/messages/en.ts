@@ -369,7 +369,7 @@ export const en: Dictionary = {
   "identity.policyLink": "Privacy policy",
   "post.registerNext.found": "Register the next found item",
   "post.registerNext.lost": "Register another lost item",
-  "post.noImage": "No image was attached.",
+  "post.detail.category": "Category", "post.detail.lostPlace": "Where it was lost", "post.detail.foundPlace": "Where it was found", "post.detail.views": "Views", "post.description.more": "Show more", "post.description.less": "Show less", "post.notice.more": "More", "post.foundContactNotice.short": "Mention details that aren't in the post to help confirm the owner.", "post.lostPropertyNotice.short": "Please return a found item to the poster or hand it in to the police.", "post.management.title": "Item intake and return", "post.custody.stateLabel": "Custody", "post.custody.placeLabel": "Kept at", "post.custody.none": "No custody info", "post.custody.state.returned": "Returned", "post.custody.state.institutionConfirmed": "Kept by an institution", "post.custody.state.self": "Kept by the finder", "post.custody.state.reported": "Handed to an office", "post.custody.state.planned": "Will be handed to an office", "post.custody.state.unheld": "Left where it was found", "post.custody.state.unknown": "Location unknown", "post.custody.state.other": "Other", "post.custody.place.unregistered": "Not registered", "post.custody.place.unknown": "Place unknown", "post.custody.place.undecided": "Place not decided", "post.custody.note.confirmed": "Receipt confirmed by the institution ({institution})", "post.custody.note.self": "The storage location isn't shown. Arrange the return in chat.", "post.custody.note.reported": "Entered by the poster; not yet confirmed by the office.", "form.section.placeTime.found": "Where and when you found it", "form.section.placeTime.lost": "Where and when you lost it", "form.custody.title": "Where the item is now", "form.custody.optional": "Optional", "form.custody.help": "If you know where the item is now, choose one.", "form.custody.self": "I have it", "form.custody.handed": "Handed to an office", "form.custody.other": "Other", "form.custody.clear": "Clear", "form.custody.selfHelp": "It will show that you are keeping it. You don't need to share where.", "form.custody.placeLabel": "Office or place you left it with", "form.custody.placeOptional": "(if you know)", "form.custody.placePlaceholder": "e.g. Jonghap-gwan security office", "form.custody.placeHelp": "Suggestions are only typing help. You can enter any place. Whether an office actually received it is shown after staff confirm it.", "form.custody.suggest.registered": "Registered", "form.custody.suggest.types": "Office types", "form.custody.suggest.buildings": "Buildings", "form.custody.suggest.none": "No matching suggestions. What you typed will be saved.", "form.custody.otherLabel": "Describe where the item is now", "form.custody.otherPlaceholder": "e.g. I'll take it to the security office tomorrow.", "form.custody.otherExamples": "e.g. I left it where I found it · Another student has it · I'll take it to the department office", "form.custody.otherRequired": "Describe where the item is, or clear your choice.", "form.custody.legacy": "Previously entered: {state}.", "form.custody.legacyKeep": "It stays as it is unless you change it.", "form.custody.locked": "To change custody info for an item an office has received, ask that office.", "form.custody.type.guard": "Campus security office", "form.custody.type.studentSupport": "Student support team", "form.custody.type.library": "Library office", "post.noImage": "No image was attached.",
   "post.lostAt": "Lost at",
   "post.foundAt": "Found at",
   "post.manageMenu": "Post management menu",
@@ -393,7 +393,7 @@ export const en: Dictionary = {
 
   "recommend.title": "Suggestions",
   "recommend.description":
-    "AI suggests {board} posts related to this one. It does not guarantee that they are the same item.",
+    "Posts in {board} similar to this one. Check in chat whether it's the same item.",
   "recommend.error": "Something went wrong while loading suggestions.",
   "recommend.pending": "Suggestions are being prepared. They will appear here automatically in a moment.",
   "recommend.empty.title": "There are no {board} posts to suggest yet.",
@@ -600,7 +600,7 @@ export const en: Dictionary = {
   "form.lostLocation": "Where you lost it",
   "form.foundLocation": "Where you found it",
   "form.lostLocationHelp": "The place you lost it (or think you did). Leave it as \"Unknown\" if you're not sure.",
-  "form.foundLocationHelp": "Where you picked it up. Where it is now goes in 'Where is the item now?' below.",
+  "form.foundLocationHelp": "Where you picked it up. Where it is now goes in 'Where the item is now' below.",
   "form.locationPlaceholder": "e.g. Cafe on the 3rd floor of the student union",
   "form.suggestedPlaces": "Suggested places",
   "form.suggestedPlacesOpen": "Open suggested places for {campus}",

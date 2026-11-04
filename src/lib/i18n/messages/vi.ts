@@ -367,7 +367,7 @@ export const vi: Dictionary = {
   "identity.policyLink": "Chính sách quyền riêng tư",
   "post.registerNext.found": "Đăng đồ nhặt được tiếp theo",
   "post.registerNext.lost": "Đăng thêm đồ thất lạc khác",
-  "post.noImage": "Không có hình ảnh nào.",
+  "post.detail.category": "Danh mục", "post.detail.lostPlace": "Nơi bị mất", "post.detail.foundPlace": "Nơi nhặt được", "post.detail.views": "Lượt xem", "post.description.more": "Xem thêm", "post.description.less": "Thu gọn", "post.notice.more": "Chi tiết", "post.foundContactNotice.short": "Hãy cho biết đặc điểm không có trong bài để dễ xác nhận chủ nhân.", "post.lostPropertyNotice.short": "Hãy trả đồ nhặt được cho người đăng hoặc giao cho cơ quan công an.", "post.management.title": "Quản lý tiếp nhận và trả đồ", "post.custody.stateLabel": "Tình trạng giữ đồ", "post.custody.placeLabel": "Nơi giữ", "post.custody.none": "Chưa có thông tin giữ đồ", "post.custody.state.returned": "Đã trả", "post.custody.state.institutionConfirmed": "Cơ quan đang giữ", "post.custody.state.self": "Người nhặt đang tự giữ", "post.custody.state.reported": "Đã gửi cơ quan", "post.custody.state.planned": "Sẽ gửi cơ quan", "post.custody.state.unheld": "Để nguyên tại chỗ", "post.custody.state.unknown": "Không rõ nơi giữ", "post.custody.state.other": "Khác", "post.custody.place.unregistered": "Chưa đăng ký", "post.custody.place.unknown": "Không rõ nơi", "post.custody.place.undecided": "Chưa quyết định nơi", "post.custody.note.confirmed": "Cơ quan đã xác nhận tiếp nhận ({institution})", "post.custody.note.self": "Nơi giữ không được công khai. Hãy thỏa thuận cách trả qua trò chuyện.", "post.custody.note.reported": "Thông tin do người đăng nhập, cơ quan chưa xác nhận.", "form.section.placeTime.found": "Nơi và thời điểm nhặt được", "form.section.placeTime.lost": "Nơi và thời điểm bị mất", "form.custody.title": "Tình trạng giữ đồ hiện tại", "form.custody.optional": "Không bắt buộc", "form.custody.help": "Nếu biết hiện đồ đang ở đâu, hãy chọn.", "form.custody.self": "Tự giữ", "form.custody.handed": "Đã gửi cơ quan", "form.custody.other": "Khác", "form.custody.clear": "Bỏ chọn", "form.custody.selfHelp": "Bài sẽ hiển thị là bạn đang tự giữ. Không cần công khai nơi giữ.", "form.custody.placeLabel": "Cơ quan hoặc nơi đã gửi", "form.custody.placeOptional": "(nếu biết)", "form.custody.placePlaceholder": "Ví dụ: phòng bảo vệ Jonghap-gwan", "form.custody.placeHelp": "Danh sách gợi ý chỉ để hỗ trợ nhập. Bạn có thể nhập nơi không có trong danh sách. Việc cơ quan thực sự tiếp nhận sẽ hiển thị sau khi nhân viên xác nhận.", "form.custody.suggest.registered": "Đã đăng ký", "form.custody.suggest.types": "Loại cơ quan", "form.custody.suggest.buildings": "Tòa nhà", "form.custody.suggest.none": "Không có gợi ý phù hợp. Nội dung bạn nhập sẽ được lưu nguyên.", "form.custody.otherLabel": "Nhập tình trạng giữ đồ hiện tại", "form.custody.otherPlaceholder": "Ví dụ: Ngày mai tôi sẽ gửi ở phòng bảo vệ.", "form.custody.otherExamples": "Ví dụ: Để nguyên chỗ nhặt được · Một sinh viên khác đang giữ · Sẽ gửi văn phòng khoa", "form.custody.otherRequired": "Hãy nhập tình trạng giữ đồ hoặc bỏ chọn.", "form.custody.legacy": "Tình trạng đã nhập trước đây: {state}.", "form.custody.legacyKeep": "Nếu không thay đổi, thông tin sẽ được giữ nguyên.", "form.custody.locked": "Để thay đổi thông tin giữ đồ mà cơ quan đã tiếp nhận, hãy liên hệ cơ quan đó.", "form.custody.type.guard": "Phòng bảo vệ trong trường", "form.custody.type.studentSupport": "Phòng hỗ trợ sinh viên", "form.custody.type.library": "Bộ phận quản lý thư viện", "post.noImage": "Không có hình ảnh nào.",
   "post.lostAt": "Thời điểm mất",
   "post.foundAt": "Thời điểm nhặt được",
   "post.manageMenu": "Menu quản lý bài đăng",
@@ -391,7 +391,7 @@ export const vi: Dictionary = {
 
   "recommend.title": "Gợi ý",
   "recommend.description":
-    "AI gợi ý các bài {board} liên quan đến bài đăng này. Điều đó không đảm bảo đó là cùng một món đồ.",
+    "Các bài {board} tương tự bài này. Hãy xác nhận qua trò chuyện xem có phải cùng món đồ không.",
   "recommend.error": "Đã xảy ra sự cố khi tải gợi ý.",
   "recommend.pending": "Đang chuẩn bị gợi ý. Kết quả sẽ tự động hiện ở đây sau giây lát.",
   "recommend.empty.title": "Chưa có bài {board} nào để gợi ý.",
@@ -598,7 +598,7 @@ export const vi: Dictionary = {
   "form.lostLocation": "Nơi làm mất",
   "form.foundLocation": "Nơi nhặt được",
   "form.lostLocationHelp": "Nơi bạn làm mất (hoặc nghĩ là làm mất). Nếu không rõ, hãy để \"Không rõ\".",
-  "form.foundLocationHelp": "Nơi bạn nhặt được đồ. Đồ đang ở đâu thì chọn ở mục 'Đồ vật hiện đang ở đâu?' bên dưới.",
+  "form.foundLocationHelp": "Nơi bạn nhặt được đồ. Đồ đang được giữ ở đâu thì cho biết ở mục 'Tình trạng giữ đồ hiện tại' bên dưới.",
   "form.locationPlaceholder": "Ví dụ: Quán cà phê tầng 3 nhà sinh viên",
   "form.suggestedPlaces": "Địa điểm gợi ý",
   "form.suggestedPlacesOpen": "Mở danh sách địa điểm gợi ý của {campus}",

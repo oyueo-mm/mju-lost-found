@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { managementScope, inManagementScope, managementHistory } from "@/lib/posts/management";
 import { PostManagement } from "@/components/post/PostManagement";
-import { custodySummary, MANAGEMENT_ACTION_LABELS } from "@/lib/posts/custodySchema";
+import { custodyView, MANAGEMENT_ACTION_LABELS } from "@/lib/posts/custodySchema";
 import { FallbackImage } from "@/components/ui/FallbackImage";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -28,7 +28,9 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { AttributionLink } from "@/components/user/AttributionLink";
 import { StatusScreen } from "@/components/layout/StatusScreen";
 import { LinkButton } from "@/components/ui/Button";
-import { ImageOffIcon, PinIcon, ClockIcon, EyeIcon } from "@/components/icons";
+import { ChevronRightIcon, ImageOffIcon, EyeIcon } from "@/components/icons";
+import { ExpandableDescription } from "@/components/post/ExpandableDescription";
+import type { TranslationKey } from "@/lib/i18n/translate";
 import { getLocale, getTranslator } from "@/lib/i18n/server";
 import { LOCALE_INTL_TAG, type Locale } from "@/lib/i18n/config";
 import { campusLabelKey, postCategoryLabel, postTypeLabelKey, statusLabelKeyOrNull } from "@/lib/i18n/labels";
@@ -51,6 +53,27 @@ function formatDate(date: Date, locale: Locale): string {
 function formatDateOnly(dateOnly: string, locale: Locale): string {
   return new Intl.DateTimeFormat(LOCALE_INTL_TAG[locale], { dateStyle: "medium", timeZone: "UTC" }).format(
     dateOnlyToDb(dateOnly),
+  );
+}
+
+// The photo column: a bounded frame, the whole photo inside (object-contain).
+const PHOTO_FRAME = "aspect-[4/3] md:aspect-square";
+const PHOTO_SIZES = "(min-width: 1280px) 448px, (min-width: 768px) 384px, 100vw";
+
+// A notice kept short: one line, and the full text one tap away (nothing of
+// the legal / safety wording is dropped).
+function Notice({ short, full, more }: { short: string; full: string; more: string }) {
+  return (
+    <details className="group rounded-lg bg-muted/70 px-3.5 py-2.5 text-xs leading-relaxed text-muted-foreground">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-md break-keep [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-primary">
+        <span className="text-foreground">{short}</span>
+        <span className="inline-flex items-center gap-0.5 font-medium whitespace-nowrap text-primary">
+          {more}
+          <ChevronRightIcon aria-hidden="true" className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
+        </span>
+      </summary>
+      <p className="mt-1.5 [overflow-wrap:anywhere]">{full.replace(/^\p{Extended_Pictographic}️?\s*/u, "")}</p>
+    </details>
   );
 }
 
@@ -151,6 +174,8 @@ export default async function PostDetailPage({
         })
       : null;
   const dateLabel = post.type === "lost" ? t("post.lostAt") : t("post.foundAt");
+  const custodyInfo = post.type === "found" ? custodyView(custody, post.status === "완료") : null;
+  const hasPhotos = (post.images?.length ?? 0) >= 2 || Boolean(post.imageUrl);
   const dateText = formatEventDateTime(post);
 
   // Phase 23: plain Prisma reads (comments, view count already on `post`)
@@ -247,6 +272,10 @@ export default async function PostDetailPage({
     loadMyOrganizations(),
     loadOrganizationChatEligibility(),
   ]);
+  // Phase 12-11: an organization post's entry point follows organizationChat
+  // (open to its literal author too, unless a manager of that organization);
+  // a personal post is never offered to its own author.
+  const showChat = post.organizationId !== null ? organizationChat.show : !isOwner;
 
   return (
     <div className="flex flex-col gap-6">
@@ -272,98 +301,23 @@ export default async function PostDetailPage({
             {t("post.created")}
           </p>
         ))}
-      {/* Phase 11-4D: post.images (ordered by displayOrder, see
-          getLostPost/getFoundPost) is what decides which of the three
-          states renders -- post.imageUrl (the primary-image cache) still
-          agrees with post.images[0] by construction (see PostImage's own
-          sync invariant), so the 2+ case is the only one that changed
-          behavior here; 0 and 1 render exactly the same markup this page
-          already had before this phase. */}
-      {(post.images?.length ?? 0) >= 2 ? (
-        <PostImageGallery images={post.images!} title={post.title} />
-      ) : post.imageUrl ? (
-        // Phase H-3's `width/height` hint + `h-auto w-auto` pattern never
-        // upscales past the source photo's own pixel resolution (that's
-        // what `h-auto w-auto` is *for* -- it makes Next.js size the <img>
-        // from the loaded file's real intrinsic dimensions), which is why
-        // images "felt small" on a wide desktop column: a modest phone
-        // photo simply never grew to fill the space. `fill` inside an
-        // explicitly height-bounded box (`h-[45vh] md:h-[65vh]`, capped
-        // rather than open-ended so a very tall portrait still can't
-        // dominate the whole page) plus `object-contain` (never `-cover`)
-        // is the one combination that satisfies all of: genuinely larger
-        // on both mobile and desktop, uses the full available width,
-        // never crops, and never distorts a portrait or landscape photo
-        // -- any letterboxed leftover space uses the same neutral
-        // `bg-muted` tone as PostCard's own no-image placeholder instead
-        // of bare white/black.
-        <div className="relative h-[45vh] w-full overflow-hidden rounded-card border border-border bg-muted md:h-[65vh]">
-          <FallbackImage
-            src={post.imageUrl}
-            alt={post.title}
-            fill
-            sizes="(min-width: 768px) 768px, 100vw"
-            className="object-contain"
-            priority
-            fallback={
-              <span role="img" aria-label={post.title} className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                <ImageOffIcon aria-hidden="true" className="size-7" />
-              </span>
-            }
-          />
-        </div>
-      ) : (
-        <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-card border border-dashed border-border text-sm text-muted-foreground">
-          <ImageOffIcon className="size-7" />
-          {t("post.noImage")}
-        </div>
-      )}
-
-      {/* Phase H-3: title/status/장소/날짜/카테고리/조회수/설명 -- one card so
-          the reader's eye has a single, clearly-bounded "이 게시물의 핵심
-          정보" region instead of the info trailing off into plain page
-          background.
-          Phase H-6: author nickname now sits directly above the title
-          (largest single signal for "누가 올린 글인지") instead of buried in
-          a separate box below; title+status stayed the single most
-          prominent line and only grew (text-2xl on desktop). 작성일/수정일
-          shrank to one small caption line at the very bottom of the same
-          card -- still present, still unaltered data, just no longer
-          competing for attention with title/status/description. Edit/
-          delete/상태변경 collapsed into PostManageMenu's "⋯" trigger next to
-          the status badge (owner-only, same as the controls it replaces).
-          No field removed or renamed, only regrouped; StatusBadge/PinIcon/
-          ClockIcon/EyeIcon usages are unchanged. */}
-      <div className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 flex-col gap-1">
-            {/* Phase H-7: clickable, same as every other author display in
-                this app (PostCard/CommentSection/chat header) -- including
-                on the viewer's own post, which goes to their own profile,
-                same as anyone else's. Phase 12-8 §2/§3: an organization-
-                attributed post shows ONLY the organization here -- see
-                AttributionLink's own comment for why the real author is
-                never rendered alongside it. */}
-            <AttributionLink
-              organizationId={post.organizationId}
-              organizationName={post.organizationName}
-              author={post.author}
-              className="w-fit truncate text-sm font-medium text-primary hover:underline"
-              iconClassName="size-4 shrink-0"
-            />
-            <h1 className="text-xl font-semibold text-foreground [overflow-wrap:anywhere] md:text-2xl">
-              {post.title}
-            </h1>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <StatusBadge status={post.status} />
-            {/* Phase I section 8: 소유자는 관리 메뉴, 그 외 로그인 사용자는 신고
-                액션 -- 항상 둘 중 하나만(동시에 둘 다는 절대 없음) 같은 자리에
-                렌더링해서 "관리/보조 액션 영역"을 하나로 통일했다. 기존에는
-                신고 버튼이 콘텐츠 중앙(채팅하기/매칭 사이)에 별도 줄로
-                떠 있었는데, 그 자리를 없애고 여기로 옮긴 것뿐 -- 신고 API,
-                권한 검사(자기 신고 거부 등)는 ReportButton/createReport 그대로,
-                UI 위치와 트리거 스타일만 바뀌었다. */}
+      {/* Phase 3-A (B안, 정보 우선): what the item is, its state, where and when
+          and where it is kept now, then the main action -- on the left; the
+          photos on the right from md. A phone shows the same column first and
+          the photos after the main action. Nothing was dropped: author,
+          category, campus, place, date, views, 작성일, the last status change,
+          the manage menu / 신고, the custody facts and the notices all stay. */}
+      <article
+        className={`grid items-start gap-6 ${hasPhotos ? "md:grid-cols-[minmax(0,1fr)_minmax(0,20rem)] md:gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] wide-board:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]" : ""}`}
+      >
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">{t(postTypeLabelKey(type))}</span>
+              <StatusBadge status={post.status} />
+            </div>
+            {/* Phase I section 8: the owner gets the manage menu, any other
+                signed-in user 신고 -- never both, always in this one place. */}
             {isOwner ? (
               <PostManageMenu
                 id={post.id}
@@ -382,119 +336,177 @@ export default async function PostDetailPage({
               )
             )}
           </div>
-        </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
-          <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground">
-            {t(postTypeLabelKey(type))}
-          </span>
-          {/* 다국어(i18n) Phase: 카테고리/캠퍼스는 DB에 한국어 원문으로
-              저장돼 있다 -- 표시용 라벨만 번역하고, 목록에 없는 값(예전
-              자유 입력으로 들어간 카테고리 등)은 원문을 그대로 보여준다. */}
-          <span data-post-category>{categoryLine}</span>
-          <span className="rounded-full bg-primary-muted px-2.5 py-0.5 text-xs font-medium text-primary">
-            {campusKey ? t(campusKey) : post.campus}
-          </span>
-          <span className="flex items-center gap-1">
-            <PinIcon className="size-3.5" />
-            {post.location ?? t("post.locationUnknown")}
-          </span>
-          <span className="flex items-center gap-1">
-            <ClockIcon className="size-3.5" />
-            {dateText !== null
-              ? `${dateLabel}: ${dateText}`
-              : t(post.type === "lost" ? "post.lostDateUnknown" : "post.foundDateUnknown")}
-          </span>
-          <span className="flex items-center gap-1">
-            <EyeIcon className="size-3.5" />
-            {post.viewCount}
-          </span>
-        </div>
-        <p className="min-w-0 whitespace-pre-wrap border-t border-border pt-4 text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
-          {post.description}
-        </p>
-        <p className="text-xs text-muted-foreground/70">
-          {/* 작성일 only: updated_at used to move with every new view (fixed in
-              views.ts), so it is not a trustworthy edit time for existing
-              posts. Show a 수정일 again once real edits can be told apart
-              (e.g. an edit timestamp set only by updateLostPost /
-              updateFoundPost). */}
-          {t("post.createdAt", { created: formatDate(post.createdAt, locale) })}
-        </p>
-        {lastStatusChange && (
-          <p className="text-xs text-muted-foreground/70">
-            {t("post.lastStatusChange", {
-              from: statusText(lastStatusChange.fromStatus),
-              to: statusText(lastStatusChange.toStatus),
-              date: formatDate(lastStatusChange.createdAt, locale),
-            })}
-          </p>
-        )}
-      </div>
 
-      {post.type === "found" && <div className="rounded-card border border-border bg-card p-4 text-sm space-y-1">
-        {(() => {
-          const summary = custodySummary(custody, post.status === "완료");
-          return <>
-            <p>보관 장소: {summary.place}</p>
-            <p>보관 상태: {summary.state}</p>
-            <p className="text-muted-foreground">{summary.note}</p>
-          </>;
-        })()}
-      </div>}
-      {canManage && <PostManagement key={post.updatedAt.toISOString()} id={post.id} type={type} updatedAt={post.updatedAt.toISOString()} completed={post.status === "완료" || post.status === "찾음"} confirmedCustody={Boolean(custody?.confirmedAt)} platform={scope!.platform} scopeOrganizationId={scope!.organizationId} permissions={scope!.permissions} organizationId={post.type === "found" ? post.custodyOrganizationId : null} pendingOrganizationId={post.type === "found" ? post.pendingTransferOrganizationId : null} institutions={institutions} />}
-      {thankComposer && <ThankNoteComposer postType={type} postId={post.id} receiverName={thankComposer.receiver?.nickname ?? null} alreadySent={thankComposer.alreadySent} returnId={thankComposer.returnId} />}
-      {canManage && history.length > 0 && <details className="rounded-card border border-border p-4 text-sm"><summary>물품 처리 이력</summary><ul className="mt-3 space-y-2">{history.map((h) => <li key={h.id}>{formatDate(h.createdAt, locale)} · {h.changedBy?.nickname ?? "담당자"} · {h.institution ?? "작성자"} · {MANAGEMENT_ACTION_LABELS[h.action ?? ""] ?? "상태 변경"} · {h.fromStatus} → {h.toStatus}{h.reason && <p className="text-muted-foreground">사유: {h.reason}</p>}</li>)}</ul></details>}
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <h1 className="text-xl leading-snug font-bold text-foreground [overflow-wrap:anywhere] md:text-2xl">{post.title}</h1>
+            {/* Phase 12-8 §2/§3: an organization post shows ONLY the
+                organization (AttributionLink). */}
+            <AttributionLink
+              organizationId={post.organizationId}
+              organizationName={post.organizationName}
+              author={post.author}
+              className="w-fit max-w-full truncate text-sm font-medium text-muted-foreground hover:text-foreground hover:underline"
+              iconClassName="size-4 shrink-0"
+            />
+          </div>
 
-      {post.type === "lost" && (
-        <p className="rounded-lg bg-primary-muted px-3.5 py-3 text-xs leading-relaxed text-primary">
-          {t("post.lostPropertyNotice")}
-        </p>
-      )}
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 border-y border-border py-3.5 text-sm">
+            <dt className="text-muted-foreground">{t("post.detail.category")}</dt>
+            {/* 카테고리/캠퍼스: labels are translated; a value outside the
+                lists (an older free-text category) is shown as stored. */}
+            <dd className="min-w-0 text-foreground [overflow-wrap:anywhere]" data-post-category>
+              {categoryLine}
+            </dd>
+            <dt className="text-muted-foreground">{t(post.type === "lost" ? "post.detail.lostPlace" : "post.detail.foundPlace")}</dt>
+            <dd className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-foreground [overflow-wrap:anywhere]">
+              <span className="rounded-full bg-primary-muted px-2 py-px text-xs font-medium text-primary">{campusKey ? t(campusKey) : post.campus}</span>
+              <span className="min-w-0">{post.location ?? t("post.locationUnknown")}</span>
+            </dd>
+            <dt className="text-muted-foreground">{dateLabel}</dt>
+            <dd className="min-w-0 text-foreground">
+              {dateText ?? t(post.type === "lost" ? "post.lostDateUnknown" : "post.foundDateUnknown")}
+            </dd>
+            {custodyInfo && (
+              <>
+                <dt className="text-muted-foreground">{t("post.custody.stateLabel")}</dt>
+                <dd className="min-w-0 text-foreground [overflow-wrap:anywhere]" data-custody-state>
+                  {custodyInfo.stateText ?? t(custodyInfo.stateKey as TranslationKey)}
+                  {custodyInfo.noteKey && (
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      {t(custodyInfo.noteKey as TranslationKey, { institution: custodyInfo.institution ?? "" })}
+                    </span>
+                  )}
+                </dd>
+                {(custodyInfo.place || custodyInfo.placeKey) && (
+                  <>
+                    <dt className="text-muted-foreground">{t("post.custody.placeLabel")}</dt>
+                    <dd className="min-w-0 text-foreground [overflow-wrap:anywhere]">{custodyInfo.place ?? t(custodyInfo.placeKey as TranslationKey)}</dd>
+                  </>
+                )}
+              </>
+            )}
+            {post.type === "found" && !custodyInfo && (
+              <>
+                <dt className="text-muted-foreground">{t("post.custody.stateLabel")}</dt>
+                <dd className="min-w-0 text-muted-foreground" data-custody-state>
+                  {t("post.custody.none")}
+                </dd>
+              </>
+            )}
+          </dl>
 
-      {/* Phase 10: direct-chat entry point -- only a non-owner can message
-          the author this way (no Match required); the owner never sees
-          this (mirrors legacy pages/1,2, which only render the button on
-          someone else's post). Phase 14: a logged-out visitor now sees the
-          same entry point too, styled identically, but as a plain link
-          into /login (reason=chat, callbackUrl back to this post) instead
-          of the real chat-starting button -- rather than the button being
-          silently absent with no explanation. The API re-checks
-          ownership/suspension/post-existence regardless
-          (getOrCreateDirectChatRoom); this is UI guidance only. */}
-      {/* Phase 12-11 §1/§18: an organization-attributed post's chat entry
-          point is gated on organizationChat.show (never on isOwner alone
-          -- the literal author of an org post is very often not that
-          org's LEADER/ADMIN, and §2 explicitly requires this to stay open
-          to any logged-in user, including the literal author, as long as
-          they aren't a manager of that same org). A personal post keeps
-          its original !isOwner-only gate unchanged. */}
-      {/* LOST112 연계 Phase §9/§10: 습득물 게시글에 연락할 때만 -- 실제로
-          "내 물건일 수 있다"고 주장하며 반환을 요청하는 쪽은 항상 이
-          방향(분실자 -> 습득자)이다. 기존 채팅하기/단체에 문의하기 버튼은
-          그대로 두고, 그 위에 순수 안내 문구만 추가한다 -- 개인/단체 채팅
-          구조를 분리하지 않고 두 경우 모두 동일하게 보인다. */}
-      {(post.organizationId !== null ? organizationChat.show : !isOwner) &&
-        <div className="flex flex-col gap-2">
-          {post.type === "found" && (
-            <p className="rounded-lg bg-primary-muted px-3.5 py-3 text-xs text-primary">
-              {t("post.foundContactNotice")}
+          <ExpandableDescription text={post.description} className="text-[15px] leading-relaxed text-foreground" />
+
+          {/* The main action. Phase 10/14: someone else's post only (never a
+              chat with yourself); signed out, the same button goes through
+              sign-in and back. Phase 12-11: an organization post asks the
+              organization -- hidden from its own managers, disabled once the
+              organization is closed. The API re-checks all of it. */}
+          {showChat && (
+            <div className="flex flex-col gap-2">
+              {organizationChat.disabled ? (
+                <span className="w-fit rounded-full border border-border px-4 py-2 text-sm font-medium text-muted-foreground opacity-60">
+                  {t("post.closedOrganization")}
+                </span>
+              ) : currentUser ? (
+                <DirectChatButton postType={type} postId={post.id} isOrganizationPost={post.organizationId !== null} wide />
+              ) : (
+                <Link
+                  href={`/login?reason=chat&callbackUrl=${encodeURIComponent(`/post/${post.id}?type=${type}`)}`}
+                  className="flex min-h-11 w-full items-center justify-center rounded-full bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:w-fit"
+                >
+                  {post.organizationId !== null ? t("post.contactOrganization") : t("post.startChat")}
+                </Link>
+              )}
+              {/* LOST112 연계 §9/§10: contacting a found post's finder */}
+              {post.type === "found" && (
+                <Notice short={t("post.foundContactNotice.short")} full={t("post.foundContactNotice")} more={t("post.notice.more")} />
+              )}
+            </div>
+          )}
+          {post.type === "lost" && (
+            <Notice short={t("post.lostPropertyNotice.short")} full={t("post.lostPropertyNotice")} more={t("post.notice.more")} />
+          )}
+
+          <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              {/* 작성일 only: updated_at is not a trustworthy edit time for
+                  older posts (views used to move it). */}
+              <span>{t("post.createdAt", { created: formatDate(post.createdAt, locale) })}</span>
+              <span aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-1">
+                <EyeIcon aria-hidden="true" className="size-3.5" />
+                <span className="sr-only">{t("post.detail.views")}</span>
+                {post.viewCount}
+              </span>
+              {!hasPhotos && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="inline-flex items-center gap-1">
+                    <ImageOffIcon aria-hidden="true" className="size-3.5" />
+                    {t("post.noImage")}
+                  </span>
+                </>
+              )}
             </p>
-          )}
-          {organizationChat.disabled ? (
-            <span className="w-fit rounded-full border border-border px-4 py-2 text-sm font-medium text-muted-foreground opacity-60">
-              {t("post.closedOrganization")}
-            </span>
-          ) : currentUser ? (
-            <DirectChatButton postType={type} postId={post.id} isOrganizationPost={post.organizationId !== null} />
-          ) : (
-            <Link
-              href={`/login?reason=chat&callbackUrl=${encodeURIComponent(`/post/${post.id}?type=${type}`)}`}
-              className="w-fit rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-            >
-              {post.organizationId !== null ? t("post.contactOrganization") : t("post.startChat")}
-            </Link>
-          )}
-        </div>}
+            {lastStatusChange && (
+              <p>
+                {t("post.lastStatusChange", {
+                  from: statusText(lastStatusChange.fromStatus),
+                  to: statusText(lastStatusChange.toStatus),
+                  date: formatDate(lastStatusChange.createdAt, locale),
+                })}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Photos: a bounded frame (whole photo, object-contain) instead of a
+            65vh hero. Phase 11-4D: 2+ images use the gallery (swipe, arrows,
+            thumbnails); a single image the same frame; none, no frame at all
+            (the caption above says so). */}
+        {hasPhotos && (
+          <div className="min-w-0 md:sticky md:top-[calc(var(--header-height)+1rem)]">
+            {(post.images?.length ?? 0) >= 2 ? (
+              <PostImageGallery images={post.images!} title={post.title} frameClassName={PHOTO_FRAME} sizes={PHOTO_SIZES} />
+            ) : (
+              <div className={`relative w-full overflow-hidden rounded-card border border-border bg-muted ${PHOTO_FRAME}`}>
+                <FallbackImage
+                  src={post.imageUrl!}
+                  alt={post.title}
+                  fill
+                  sizes={PHOTO_SIZES}
+                  className="object-contain"
+                  priority
+                  fallback={
+                    <span role="img" aria-label={post.title} className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                      <ImageOffIcon aria-hidden="true" className="size-7" />
+                    </span>
+                  }
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </article>
+
+      {thankComposer && <ThankNoteComposer postType={type} postId={post.id} receiverName={thankComposer.receiver?.nickname ?? null} alreadySent={thankComposer.alreadySent} returnId={thankComposer.returnId} />}
+
+      {/* 물품 접수·반환 관리: officers only (managementScope / inManagementScope,
+          unchanged), apart from the post itself and folded so it never pushes
+          the post's own sections down. */}
+      {canManage && (
+        <details className="group rounded-card border border-border bg-card">
+          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-2 rounded-card px-4 py-3 text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-primary">
+            {t("post.management.title")}
+            <ChevronRightIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90" />
+          </summary>
+          <div className="flex flex-col gap-4 border-t border-border p-4">
+            <PostManagement key={post.updatedAt.toISOString()} id={post.id} type={type} updatedAt={post.updatedAt.toISOString()} completed={post.status === "완료" || post.status === "찾음"} confirmedCustody={Boolean(custody?.confirmedAt)} platform={scope!.platform} scopeOrganizationId={scope!.organizationId} permissions={scope!.permissions} organizationId={post.type === "found" ? post.custodyOrganizationId : null} pendingOrganizationId={post.type === "found" ? post.pendingTransferOrganizationId : null} institutions={institutions} />
+            {history.length > 0 && <details className="text-sm"><summary className="cursor-pointer">물품 처리 이력</summary><ul className="mt-3 space-y-2">{history.map((h) => <li key={h.id}>{formatDate(h.createdAt, locale)} · {h.changedBy?.nickname ?? "담당자"} · {h.institution ?? "작성자"} · {MANAGEMENT_ACTION_LABELS[h.action ?? ""] ?? "상태 변경"} · {h.fromStatus} → {h.toStatus}{h.reason && <p className="text-muted-foreground">사유: {h.reason}</p>}</li>)}</ul></details>}
+          </div>
+        </details>
+      )}
 
       {/* Phase J-2: one automatic "AI 추천" section replaces both the
           owner-only MatchPanel (매칭 후보 찾기 -> 매칭하기) and Phase I's
