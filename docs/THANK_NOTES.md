@@ -45,17 +45,25 @@
 코드는 이전 배포로 되돌릴 수 있다. 단, 감사 쪽지 알림(`NotificationType.thank_note`)이 이미 생긴 뒤에는
 이전 코드가 그 알림 유형을 모를 수 있으므로 되돌리기 전에 해당 알림 행을 확인한다. 스키마는 추가형이라 남겨 두어도 무해하다.
 
-## 1-1. 감사 후기 칭찬 태그 마이그레이션 (Phase 3-B, 승인 대기 · 미적용)
+## 1-1. 감사 후기 칭찬 태그 (Phase 3-B)
 
-- 브랜치 `feat/ui-phase3b-thanks-tags` (배포하지 않음). 마이그레이션 `prisma/migrations/20261120000000_thank_note_tags`.
-- `ThankNote.tags TEXT[] NOT NULL DEFAULT '{}'` 추가. 기존 행은 `{}`로 채워지고 다른 값은 바뀌지 않는다(태그를 지어내지 않음).
-- 본문 CHECK `1..500` → `<= 500` + `(btrim(body) <> '' OR cardinality(tags) > 0)` + 태그는 다섯 코드만
-  (`kind`, `quick_reply`, `kept_well`, `helpful`, `kept_promise`). 태그만/메시지만/둘 다 저장 가능, 둘 다 없으면 거부.
-- **이 브랜치 코드는 마이그레이션 적용 전 DB에 배포하면 안 된다**(Prisma가 `tags` 열을 조회한다).
-  순서: (Preview) 마이그레이션 적용 → 배포 → 검증 → (Production) 백업 → 마이그레이션 → 배포.
-- 되돌리기: 이전 코드로 롤백은 열이 남아 있어도 동작한다(이전 코드는 `tags`를 모름). 단, 태그만 있는 후기(본문 빈 행)는
-  이전 화면에서 본문 없이 보인다. 스키마 되돌리기 SQL은 마이그레이션 파일 머리말에 있고, 태그만 있는 후기가 0건일 때만 가능하다.
-- 로컬 PostgreSQL 리허설(기존 마이그레이션 → 쪽지 2건 → 신규 마이그레이션): 기존 행 보존·`{}`, 허용/거부 케이스 모두 기대대로.
+### 상태
+- **Preview DB 적용 완료(2026-11-04, `migrate deploy`). Production DB 미적용.** 적용 전 Preview 전체 백업
+  `C:/Users/hihi9/mju-lost-found-backups/preview-2026-11-04-pre-thank-tags`(복원 검증·마이그레이션 리허설 통과).
+- 마이그레이션 `prisma/migrations/20261120000000_thank_note_tags`(이름은 이 저장소의 순차 가상 날짜 관례, 마지막 적용분 `20261113…` 다음).
+- Preview `_prisma_migrations`에는 이 브랜치에 없는 `20261102000000_identity_access_purpose`(다른 브랜치에서 과거 적용)가 있다. ThankNote와 무관.
+
+### 스키마
+- `tags TEXT[] NOT NULL DEFAULT '{}'`. 기존 행은 `{}`(태그를 지어내지 않음), 다른 값은 그대로.
+- `ThankNote_body_check(1..500)` → `body_length_check(<=500)` + `content_check(본문에 공백 아닌 글자 OR 태그 1개 이상)`
+  + `tags_check(다섯 코드만)` + `tags_unique_check(중복 금지, IMMUTABLE 함수 thank_note_tags_unique)`.
+- 코드: `kind`, `quick_reply`, `kept_well`, `helpful`, `kept_promise` (표시 문구는 `thanks.tag.<code>`).
+
+### 배포 순서와 되돌리기
+- 태그 코드는 **마이그레이션 적용 후에만** 배포한다(Prisma가 `tags` 열을 조회). Production: 백업 → 마이그레이션 → 배포.
+- 마이그레이션 뒤 이전 코드: 태그를 모르는 클라이언트는 열을 무시하고, 새 쪽지는 기본값 `{}` + 비어 있지 않은 본문이라 제약을 통과한다.
+  태그만 있는 후기는 이전 화면에서 **본문이 빈 쪽지**로 보인다(태그는 안 보임) -- Preview 검증 결과는 Phase 3-B 보고서 참고.
+- 스키마 되돌리기 SQL은 마이그레이션 머리말. 태그만 있는 후기가 0건일 때만 가능(지워야 하므로 하지 않는다).
 
 ## 2. 기여도·랭킹 (검토만, 구현하지 않음)
 
