@@ -16,38 +16,30 @@ const at = (needle: string) => {
   return i;
 };
 
-describe("비로그인 홈 첫 화면", () => {
-  it("leads with a two-line headline (second line in the brand colour), one short line, then the search", () => {
-    expect(ko["landing.searchHeadline"]).toBe("잃어버린 물건,\n여기서 찾아보세요.");
-    expect(html).toMatch(/<h1[^>]*><span class="block">잃어버린 물건,<\/span><span class="text-headline-accent block">여기서 찾아보세요\.<\/span><\/h1>/);
+describe("홈 첫 화면 (Soft Card)", () => {
+  it("leads with a two-line black headline, one short line, then the search", () => {
+    expect(ko["landing.searchHeadline"]).toBe("잃어버린 물건,\n다시 찾을 수 있게.");
+    expect(html).toMatch(/<h1[^>]*><span class="block">잃어버린 물건,<\/span><span class="block">다시 찾을 수 있게\.<\/span><\/h1>/);
     expect(html).toMatch(/<h1[^>]*break-keep/); // never split inside a word
-    expect(at("여기서 찾아보세요.")).toBeLessThan(at(ko["landing.subtitle"]));
+    expect(at("다시 찾을 수 있게.")).toBeLessThan(at(ko["landing.subtitle"]));
     expect(at(ko["landing.subtitle"])).toBeLessThan(at('data-variant="landing"'));
-    // two short lines, no promise that AI finds or returns the item
-    expect(ko["landing.subtitle"].split("\n")).toHaveLength(2);
+    expect(ko["landing.subtitle"]).toBe("명지대 분실물과 습득물을 한곳에서 검색하고, 연락하고, 돌려받으세요.");
+    // no promise that AI finds or returns the item
     expect(ko["landing.subtitle"]).not.toMatch(/찾아드|반드시|보장/);
-    expect(ko["landing.subtitle"]).toBe("물건을 설명하거나 사진을 올리면\n비슷한 습득물을 보여줘요.");
-    expect(html).toMatch(/<p class="[^"]*break-keep whitespace-pre-line/);
   });
 
-  it("then posting, lost and found side by side; no sign-in link or repeated 'no sign-in' note", () => {
-    expect(at('data-variant="landing"')).toBeLessThan(at('href="/lost/new"'));
-    expect(at('href="/lost/new"')).toBeLessThan(at('href="/found/new"'));
-    expect(html).toContain(ko["landing.registerLost"]);
-    expect(html).toContain(ko["landing.registerFound"]);
+  it("is a plain soft card: no gradient, glow, blur or accent-coloured headline line", () => {
+    expect(html).not.toMatch(/gradient|blur|text-headline-accent|bg-primary\/10/);
+    expect(html).toMatch(/<section class="[^"]*rounded-3xl[^"]*border[^"]*bg-muted/);
+    expect(html).not.toMatch(/<section class="[^"]*-mt-/); // no negative margins reaching under the header
+  });
+
+  it("keeps the search anchor LandingStickyCta watches, and has no badge, sign-in link or 'no sign-in' note", () => {
+    expect(html).toContain('id="landing-hero-cta"');
+    expect(html.slice(0, html.indexOf("<h1"))).not.toMatch(/<span|<p/);
     expect(html).not.toContain('href="/login"');
     expect(html).not.toContain("로그인 없이");
-  });
-
-  it("has no badge above the headline (the footer keeps the unofficial-service note)", () => {
-    // only the two decorative background layers come before the headline
-    expect(html.slice(0, html.indexOf("<h1"))).not.toMatch(/<span|<p\b/);
     expect(html).not.toContain("비공식");
     expect(ko["footer.disclaimer"]).toContain("공식 서비스가 아닌");
-  });
-
-  it("starts its glow right under the header: cancels <main>'s top padding, full width on phones", () => {
-    expect(html).toMatch(/<section class="[^"]*-mt-6[^"]*md:-mt-10/);
-    expect(html).toMatch(/<section class="[^"]*-mx-4[^"]*md:-mx-6/);
   });
 });

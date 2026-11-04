@@ -115,7 +115,7 @@ html[data-privacy-notice="closed"] [data-privacy-notice-bar] {
    - wide-board: >= 1280px on a board page -- the page shell widens. */
 @custom-variant board-tile {
   @media (width < 40rem) {
-    :root[data-board-view="grid"] & {
+    :root[data-board-view="grid"] &:not(:where([data-force-list] *)) {
       @slot;
     }
   }
@@ -128,6 +128,11 @@ html[data-privacy-notice="closed"] [data-privacy-notice-bar] {
   }
 }
 @custom-variant board-row {
+  /* [data-force-list]: a short list on the home page is always rows, even
+     for a phone that chose 격자형 for the boards. */
+  :where([data-force-list]) & {
+    @slot;
+  }
   @media (width >= 40rem) {
     @slot;
   }

@@ -16,7 +16,7 @@ describe("board results grid", () => {
     expect(BOARD_RESULTS_GRID_CLASS).toMatch(/(^| )grid-cols-2( |$)/);
     expect(BOARD_RESULTS_GRID_CLASS).toContain("board-list:grid-cols-1");
     expect(BOARD_RESULTS_GRID_CLASS).toContain("sm:grid-cols-2");
-    expect(BOARD_RESULTS_GRID_CLASS).toContain("xl:grid-cols-3");
+    expect(BOARD_RESULTS_GRID_CLASS).not.toContain("xl:grid-cols-3"); // Soft Card: divider rows, two columns at most
     expect(BOARD_RESULTS_GRID_CLASS).not.toContain("grid-cols-4");
     // rows of equal-height cards at every width (grid default: stretch)
     expect(BOARD_RESULTS_GRID_CLASS).not.toContain("items-start");

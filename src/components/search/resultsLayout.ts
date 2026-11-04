@@ -8,4 +8,4 @@ export const SEARCH_RESULTS_GRID_CLASS = "grid grid-cols-2 gap-3 sm:grid-cols-3 
 // photo or not -- with no holes between rows, and the reading order is
 // the sort order (no masonry / CSS columns).
 export const BOARD_RESULTS_GRID_CLASS =
-  "grid grid-cols-2 gap-2.5 board-list:grid-cols-1 sm:grid-cols-2 sm:gap-3 xl:grid-cols-3 xl:gap-4";
+  "grid grid-cols-2 gap-2.5 board-list:grid-cols-1 board-list:gap-0 sm:grid-cols-2 sm:gap-x-10 sm:gap-y-0";

@@ -654,11 +654,11 @@ export const mn: Dictionary = {
   "form.retrying": "Дахин оролдож байна...",
   "form.goToEdit": "Нийтлэл засах хуудас руу очих",
 
-  "landing.searchHeadline": "Гээсэн эд зүйлээ\nэндээс хайгаарай.",
+  "landing.searchHeadline": "Гээсэн эд зүйлээ\nдахин олоорой.",
   "landing.registerLost": "Гээсэн эд зүйлээ бүртгэх",
   "landing.registerFound": "Олсон эд зүйлээ бүртгэх",
   "landing.searchCta": "Гээсэн зүйлээ хайх",
-  "landing.subtitle": "Эд зүйлээ тайлбарлах эсвэл зураг нэмбэл\nтөстэй олдсон эд зүйлсийг харуулна.",
+  "home.quick.found.desc": "Олсон хүмүүсийн зар", "home.quick.lost.desc": "Гээсэн хүмүүсийн зар", "home.quick.registerLost.desc": "Би эд зүйлээ хайж байна", "home.quick.registerFound.desc": "Эзэнд нь олоход тусална уу", "landing.subtitle": "МЖУ-ийн гээгдсэн болон олдсон эд зүйлсийг нэг дор хайж, холбогдож, буцаан аваарай.",
   "landing.features.title": "Үндсэн боломжууд",
   "landing.features.subtitle": "Гээгдсэн эд хайхаас эхлээд чат хүртэл — хэрэгтэй бүх зүйл бий.",
   "landing.feature.register.title": "Гээгдсэн, олдсон эд бүртгэх",

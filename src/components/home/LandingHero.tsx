@@ -1,5 +1,7 @@
 import { ScrollReveal } from "@/components/ui/ScrollReveal";
 import { Hero } from "./landing/Hero";
+import { QuickActions } from "./QuickActions";
+import { CategoryShortcuts } from "./CategoryShortcuts";
 import { LandingStats } from "./landing/LandingStats";
 import { FeatureGrid } from "./landing/FeatureGrid";
 import { AiSearchShowcase } from "./landing/AiSearchShowcase";
@@ -25,12 +27,16 @@ import { RecentPostsSections } from "./RecentPostsSections";
 export function LandingHero() {
   return (
     <div className="flex flex-col">
-      <Hero />
+      <div className="flex flex-col gap-6 md:gap-8">
+        <Hero />
+        <QuickActions />
+        <CategoryShortcuts />
+      </div>
 
       {/* the real newest posts, the same rows a signed-in member sees; the
           registration counts follow them (모바일 홈 밀도 개선: posts before
           numbers) */}
-      <div className="flex flex-col gap-10 pt-4 pb-4 md:pt-8">
+      <div className="flex flex-col gap-10 pt-8 pb-4">
         <RecentPostsSections />
         <LandingStats />
       </div>

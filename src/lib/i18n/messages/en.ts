@@ -654,11 +654,11 @@ export const en: Dictionary = {
   "form.retrying": "Retrying...",
   "form.goToEdit": "Go to the edit page",
 
-  "landing.searchHeadline": "Lost something?\nLook for it here.",
+  "landing.searchHeadline": "Lost something?\nFind it again.",
   "landing.registerLost": "Post a lost item",
   "landing.registerFound": "Post a found item",
   "landing.searchCta": "Find a lost item",
-  "landing.subtitle": "Describe the item or add a photo\nto see similar found items.",
+  "home.quick.found.desc": "Posts from people who found items", "home.quick.lost.desc": "Posts from people who lost items", "home.quick.registerLost.desc": "I'm looking for my item", "home.quick.registerFound.desc": "Help the owner find it", "landing.subtitle": "Search MJU lost and found items in one place, get in touch, and get it back.",
   "landing.features.title": "Key features",
   "landing.features.subtitle": "From finding a lost item to chatting — everything you need is here.",
   "landing.feature.register.title": "Post lost and found items",

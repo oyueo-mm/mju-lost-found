@@ -652,11 +652,11 @@ export const vi: Dictionary = {
   "form.retrying": "Đang thử lại...",
   "form.goToEdit": "Đến trang sửa bài đăng",
 
-  "landing.searchHeadline": "Mất đồ?\nHãy tìm ở đây.",
+  "landing.searchHeadline": "Đồ thất lạc,\ntìm lại được.",
   "landing.registerLost": "Đăng đồ thất lạc",
   "landing.registerFound": "Đăng đồ nhặt được",
   "landing.searchCta": "Tìm đồ bị mất",
-  "landing.subtitle": "Mô tả món đồ hoặc thêm ảnh,\nđể xem đồ nhặt được tương tự.",
+  "home.quick.found.desc": "Bài đăng của người nhặt được", "home.quick.lost.desc": "Bài đăng của người mất đồ", "home.quick.registerLost.desc": "Tôi đang tìm đồ của mình", "home.quick.registerFound.desc": "Giúp chủ nhân tìm lại", "landing.subtitle": "Tìm đồ thất lạc và đồ nhặt được của MJU ở một nơi, liên hệ và nhận lại đồ.",
   "landing.features.title": "Tính năng chính",
   "landing.features.subtitle": "Từ tìm đồ thất lạc đến trò chuyện — mọi thứ bạn cần đều có ở đây.",
   "landing.feature.register.title": "Đăng đồ thất lạc và đồ nhặt được",

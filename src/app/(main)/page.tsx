@@ -1,5 +1,5 @@
 import { getCurrentUser } from "@/lib/auth/session";
-import { ScrollReveal } from "@/components/ui/ScrollReveal";
+import { QuickActions } from "@/components/home/QuickActions";
 import { CategoryShortcuts } from "@/components/home/CategoryShortcuts";
 import { LandingHero } from "@/components/home/LandingHero";
 import { Hero } from "@/components/home/landing/Hero";
@@ -32,23 +32,17 @@ export default async function Home() {
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-6 md:gap-8">
       <Hero compact />
+      <QuickActions />
 
-      {/* Each section below fades up the first time it's scrolled to
-          (ScrollReveal -- no-op for content already on screen and for
-          prefers-reduced-motion). 모바일 홈 밀도 개선: real posts first, then
-          the category shortcuts, the service's counts last. */}
-      <div className="flex flex-col gap-10 pt-4 md:pt-8">
-        <RecentPostsSections />
+      <section className="flex flex-col gap-3">
+        <h2 className="text-base font-semibold text-foreground md:text-lg">{t("home.categories.title")}</h2>
+        <CategoryShortcuts />
+      </section>
 
-        <ScrollReveal className="flex flex-col gap-4 text-center">
-          <h2 className="text-lg font-semibold text-foreground">{t("home.categories.title")}</h2>
-          <CategoryShortcuts />
-        </ScrollReveal>
-
-        <LandingStats />
-      </div>
+      <RecentPostsSections />
+      <LandingStats />
     </div>
   );
 }

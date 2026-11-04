@@ -93,12 +93,13 @@ describe("PostCard layout (게시판 리디자인)", () => {
     expect(markup).not.toContain("3.webp");
   });
 
-  it("on the board: 4:3 phone grid photo, square list-row thumbnail (128px from 1280px), whole photo until it is known to fit", () => {
+  it("on the board: 4:3 phone grid photo, square list-row thumbnail on the right (96px from 640px), whole photo until it is known to fit", () => {
     const markup = renderCard({ ...basePost, imageUrl: "https://example.com/item.webp" }, { variant: "board" });
 
     expect(markup).toContain("aspect-4/3");
-    expect(markup).toContain("board-row:size-20");
-    expect(markup).toContain("board-row:xl:size-32");
+    expect(markup).toContain("board-row:size-[4.5rem]");
+    expect(markup).toContain("board-row:order-last");
+    expect(markup).toContain("board-row:sm:size-24");
     // before the photo's shape is known: shown whole in both layouts
     expect(markup).toContain("object-contain board-row:object-contain");
   });
@@ -151,7 +152,7 @@ describe("PostCard board variant", () => {
     expect(markup).toContain("board-tile:p-2.5");
     expect(markup).toContain("board-row:flex-row");
     // a no-photo list row gets a category tile; the grid/desktop card does not
-    expect(markup).toContain("hidden board-row:flex");
+    expect(markup).toContain("hidden board-row:order-last board-row:flex");
   });
 });
 

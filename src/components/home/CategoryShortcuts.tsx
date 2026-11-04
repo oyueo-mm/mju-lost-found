@@ -65,64 +65,30 @@ export async function CategoryShortcuts() {
   const t = await getTranslator();
 
   return (
-    // 카테고리 아이콘 UI 개선 Phase: 칸 자체는 예전과 같은 9칸 grid
-    // (모바일 3열 / sm 5열 / md 9열)로 정보 구조와 사용성을 그대로
-    // 유지한다. 달라진 건 칸 "안"이다:
-    // - rounded-card(0.875rem)에서 rounded-lg로 낮췄다 -- 한 줄에 9개가
-    //   붙어 서는 작은 칸에서 큰 라운드는 알약처럼 보여 "탐색 목록"
-    //   보다 "장식 버튼"처럼 읽힌다.
-    // - 가독성 개선 Phase("너무 하얘 / 테두리 / 직관적으로"): 배경을
-    //   bg-card에서 bg-muted/60으로 바꿨다. 라이트 모드에서 --card와
-    //   --background가 똑같이 #ffffff라, 흰 페이지 위에 흰 카드가 얹혀
-    //   #e4e4e7 테두리 한 줄만으로 영역을 구분해야 했던 것이 "너무 하얘
-    //   보이고 테두리가 없어 보이는" 실제 원인이었다. --muted(#f4f5f7)를
-    //   옅게 깔면 페이지와 칸이 면(surface)으로 구분되고, 그제야 같은
-    //   테두리도 눈에 들어온다. 새 색을 만들지 않고 기존 --muted를
-    //   쓴 것이라 다크 모드(#1c1f27 위 #0b0d12 배경)에서도 그대로
-    //   성립한다.
-    // - hover는 테두리와 배경을 함께 primary 쪽으로 올린다
-    //   (border-primary/40 + bg-primary-muted). "누를 수 있는 칸"이라는
-    //   신호를 색 하나가 아니라 면+선+아이콘 세 가지가 같이 낸다.
-    //   shadow/gradient는 쓰지 않는다.
-    // - 아이콘 9개는 전부 하나의 primary 색 체계를 공유한다. 카테고리마다
-    //   다른 색(빨강/노랑/초록 등)을 주지 않는 이유는 9칸이 한 줄에 나란히
-    //   서는 자리라 색이 갈리는 순간 통일감과 대칭성이 먼저 깨지기
-    //   때문이다 -- 색은 여기서 "분류"를 뜻하지 않는다(분류는 이미
-    //   아이콘 모양과 이름이 말하고 있다).
-    //   평상시 text-primary/70, hover에서 text-primary. 새 색이나 새
-    //   디자인 토큰을 만들지 않고 기존 --primary 하나에 불투명도만
-    //   달리한 것이라, 라이트/다크 각각의 --primary 값을 그대로 따라간다
-    //   (이 저장소가 이미 text-muted-foreground/70, border-primary/30
-    //   등으로 쓰고 있는 방식과 같다).
-    //   --primary-muted를 쓰지 않은 이유: 그 토큰은 배경 틴트용(라이트
-    //   #eaf1ff)이라 카드 배경 위 선(stroke) 색으로 쓰면 거의 보이지
-    //   않는다.
-    // - 카테고리명은 text-foreground 그대로 둔다 -- 아이콘(primary/70)
-    //   보다 대비가 높아 여전히 이름이 먼저 읽힌다.
-    // 모바일 홈 밀도 개선: phones and small tablets show the first
-    // PHONE_SHORTCUTS categories of the fixed order (2 rows of 4 with 전체
-    // 보기); from md every category is shown (2 rows of 7).
-    <div className="grid grid-cols-4 gap-2 md:grid-cols-7">
-      {CATEGORY_CODES.map((categoryCode, index) => {
+    // Soft Card: small chips, not tiles. One horizontally scrollable row on
+    // phones (the whole fixed order, then 전체 보기) and a wrapped row from
+    // md, so the categories stay one tap away without taking two screens.
+    <div className="scroll-rail -mx-4 flex gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:overflow-visible md:px-0">
+      {CATEGORY_CODES.map((categoryCode) => {
         // URL에는 언어와 무관한 code가 들어가고, 버튼 글자만 현재 언어로 바뀐다.
         const Icon = CATEGORY_ICONS[categoryCode] ?? GridIcon;
         return (
           <Link
             key={categoryCode}
             href={categorySearchHref(categoryCode)}
-            className={`group ${index >= PHONE_SHORTCUTS ? "hidden md:flex" : "flex"} min-h-11 flex-col items-center gap-1.5 rounded-lg border border-border bg-muted/60 px-1 py-2.5 text-center transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:border-primary/40 hover:bg-primary-muted hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-safe:md:hover:-translate-y-1 motion-reduce:transition-none`}
+            className="group flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3.5 text-sm font-medium break-keep whitespace-nowrap text-foreground transition-colors hover:border-primary/40 hover:bg-primary-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
-            <Icon className="size-5 text-primary/70 transition-colors group-hover:text-primary" />
-            <span className="text-xs font-medium break-keep text-foreground">{t(taxonomyCategoryLabelKey(categoryCode))}</span>
+            <Icon aria-hidden="true" className="size-4 text-muted-foreground transition-colors group-hover:text-primary" />
+            {t(taxonomyCategoryLabelKey(categoryCode))}
           </Link>
         );
       })}
       <Link
         href={`/search?${new URLSearchParams(CATEGORY_SEARCH_PARAMS).toString()}`}
-        className="flex min-h-11 flex-col items-center gap-1.5 rounded-lg border border-dashed border-border px-1 py-2.5 text-center hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 md:hidden"
+        className="flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border border-dashed border-border px-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground hover:border-primary/40 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       >
-        <GridIcon className="size-5 text-primary/70" />
-        <span className="text-xs font-medium text-foreground">{t("home.categories.all")}</span>
+        <GridIcon aria-hidden="true" className="size-4" />
+        {t("home.categories.all")}
       </Link>
     </div>
   );

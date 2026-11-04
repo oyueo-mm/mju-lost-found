@@ -94,7 +94,7 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
   const hasPhoto = Boolean(post.imageUrl);
   const icon = (className: string) => createElement(categoryIconFor(post), { "aria-hidden": true, className });
   const sizes = board
-    ? "(min-width: 1280px) 128px, (min-width: 640px) 112px, 50vw"
+    ? "(min-width: 640px) 96px, 50vw"
     : "(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw";
   // Fill (cover) the media area when that crops little of the photo, show
   // it whole (contain, over a blurred copy) otherwise; contain until the
@@ -110,23 +110,28 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
   // `board-tile:` = phone 격자형 card; unprefixed = the desktop card.
   const c = board
     ? {
-        root: "flex-col motion-safe:hover:-translate-y-0.5 board-row:flex-row board-row:gap-3 board-row:p-3 board-row:hover:translate-y-0",
+        // Soft Card list: a row is text on the left, photo on the right
+        // (`order-last`; the DOM keeps the photo first so the card variants
+        // stay unchanged), separated from the next row by a hairline.
+        root: "flex-col motion-safe:hover:-translate-y-0.5 board-row:flex-row board-row:gap-4 board-row:rounded-none board-row:border-0 board-row:border-b board-row:bg-transparent board-row:px-1 board-row:py-4 board-row:hover:translate-y-0 board-row:hover:border-border board-row:hover:bg-muted/50 board-row:hover:shadow-none",
         media:
-          "aspect-4/3 w-full board-row:size-20 board-row:shrink-0 board-row:rounded-lg board-row:min-[375px]:size-24 board-row:sm:size-28 board-row:xl:size-32",
+          "aspect-4/3 w-full board-row:order-last board-row:size-[4.5rem] board-row:shrink-0 board-row:rounded-xl board-row:min-[375px]:size-20 board-row:sm:size-24",
         backdrop: `${cardCover ? "hidden" : ""} ${rowCover ? "board-row:hidden" : "board-row:block"}`,
         photo: `${cardCover ? "object-cover" : "object-contain"} ${rowCover ? "board-row:object-cover" : "board-row:object-contain"}`,
         overlay: "inline-flex board-tile:top-1.5 board-tile:left-1.5 board-row:hidden",
-        rowTile: "hidden board-row:flex",
+        rowTile: "hidden board-row:order-last board-row:flex",
         lineIcon: "flex board-row:hidden",
         lineStatus: hasPhoto ? "hidden board-row:inline-flex" : "",
-        body: "gap-1 p-4 board-tile:gap-0.5 board-tile:p-2.5 board-row:gap-0.5 board-row:p-0 board-row:py-0.5",
+        body: "gap-1 p-4 board-tile:gap-0.5 board-tile:p-2.5 board-row:gap-1 board-row:p-0",
         categoryText: "text-xs board-tile:text-[11px]",
-        title: `text-[15px] board-tile:text-sm ${hasPhoto ? "min-h-[2lh] board-tile:min-h-0 board-row:min-h-0" : ""}`,
+        title: `text-[15px] board-tile:text-sm board-row:text-base ${hasPhoto ? "min-h-[2lh] board-tile:min-h-0 board-row:min-h-0" : ""}`,
         // Phone grid: the description takes whatever height the row leaves
         // (at least 3 lines, without making the row taller), fading out if
         // it is cut -- no empty block above the location next to a photo card.
-        desc: "line-clamp-3 text-sm leading-relaxed board-tile:line-clamp-[12] board-tile:min-h-[3lh] board-tile:flex-1 board-tile:basis-0 board-tile:text-xs board-tile:leading-snug board-tile:[mask-image:linear-gradient(to_bottom,#000_calc(100%-1lh),transparent)] board-row:line-clamp-1 board-row:text-xs board-row:sm:line-clamp-2",
-        meta: "gap-x-1.5 pt-1.5 text-xs board-tile:flex-wrap board-tile:gap-y-0.5 board-tile:pt-1 board-tile:text-[11px] board-row:pt-1",
+        desc: hasPhoto
+          ? "hidden text-sm board-row:line-clamp-2 board-row:text-[13px] board-row:leading-snug"
+          : "line-clamp-3 text-sm leading-relaxed board-tile:line-clamp-[12] board-tile:min-h-[3lh] board-tile:flex-1 board-tile:basis-0 board-tile:text-xs board-tile:leading-snug board-tile:[mask-image:linear-gradient(to_bottom,#000_calc(100%-1lh),transparent)] board-row:line-clamp-2 board-row:text-[13px] board-row:leading-snug",
+        meta: "gap-x-1.5 pt-1.5 text-xs board-tile:flex-wrap board-tile:gap-y-0.5 board-tile:pt-1 board-tile:text-[11px] board-row:pt-0.5",
         location: "board-tile:basis-full",
         separator: "board-tile:hidden",
       }
@@ -153,7 +158,7 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
     // small hover lift together.
     <div
       {...(!hasPhoto && { "data-no-photo": "" })}
-      className={`group relative flex min-w-0 overflow-hidden rounded-card border border-border bg-card transition duration-150 hover:border-primary/40 hover:shadow-md ${c.root}`}
+      className={`group relative flex min-w-0 overflow-hidden rounded-card border border-border bg-card transition duration-150 hover:border-primary/40 hover:shadow-sm ${c.root}`}
     >
       {post.imageUrl ? (
         <div className={`relative overflow-hidden bg-muted ${c.media}`}>
@@ -195,7 +200,7 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
         board && (
           // List row only: the category tile where the thumbnail would be.
           <div
-            className={`size-20 shrink-0 items-center justify-center rounded-lg bg-primary-muted/70 min-[375px]:size-24 sm:size-28 xl:size-32 ${c.rowTile}`}
+            className={`size-[4.5rem] shrink-0 items-center justify-center rounded-xl bg-muted min-[375px]:size-20 sm:size-24 ${c.rowTile}`}
           >
             <span className="flex size-10 items-center justify-center rounded-full bg-card text-primary shadow-sm">{icon("size-5")}</span>
           </div>
@@ -223,7 +228,7 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
           {showStatus && c.lineStatus !== null && <StatusBadge status={post.status} compact className={c.lineStatus} />}
         </div>
         <h3 className={`line-clamp-2 leading-snug font-semibold text-foreground [overflow-wrap:anywhere] ${c.title}`}>{post.title}</h3>
-        {!hasPhoto && description && <p className={`text-muted-foreground [overflow-wrap:anywhere] ${c.desc}`}>{description}</p>}
+        {description && (!hasPhoto || board) && <p className={`text-muted-foreground [overflow-wrap:anywhere] ${c.desc}`}>{description}</p>}
         {/* Phase 12-8 §2/§3: an organization post names only the
             organization, never the real author. */}
         {post.organizationId != null && (

@@ -649,11 +649,11 @@ export const zh: Dictionary = {
   "form.retrying": "正在重试…",
   "form.goToEdit": "前往帖子编辑页面",
 
-  "landing.searchHeadline": "丢了东西？\n来这里找找看。",
+  "landing.searchHeadline": "丢失的物品，\n让它失而复得。",
   "landing.registerLost": "登记失物",
   "landing.registerFound": "登记拾获物品",
   "landing.searchCta": "寻找丢失物品",
-  "landing.subtitle": "描述物品或上传照片，\n即可查看相似的拾获物品。",
+  "home.quick.found.desc": "查看拾获者发布的信息", "home.quick.lost.desc": "查看失主发布的信息", "home.quick.registerLost.desc": "我在找我的物品", "home.quick.registerFound.desc": "帮失主找到它", "landing.subtitle": "在一个地方搜索明知大的失物与拾获物品，取得联系并取回。",
   "landing.features.title": "核心功能",
   "landing.features.subtitle": "从寻找失物到聊天联系，需要的功能一应俱全。",
   "landing.feature.register.title": "登记失物与招领",
