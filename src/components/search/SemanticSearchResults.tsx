@@ -39,7 +39,7 @@ export function SemanticSearchResults({ params, basePath, board = false }: {
         </div>
       ) : (
         <div className={board ? BOARD_RESULTS_GRID_CLASS : SEARCH_RESULTS_GRID_CLASS}>
-          {result.items.map((post) => <PostCard key={`${post.type}-${post.id}`} post={post} variant={board ? "board" : "default"} />)}
+          {result.items.map((post) => <PostCard key={`${post.type}-${post.id}`} post={post} variant={board ? "board" : "list"} />)}
         </div>
       )}
       <Pagination basePath={basePath} currentSearchParams={params} page={result.page} totalPages={result.totalPages} />

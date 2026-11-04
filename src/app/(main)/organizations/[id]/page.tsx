@@ -6,6 +6,7 @@ import { listRecentPostsByOrganization } from "@/lib/posts/service";
 import { LinkButton } from "@/components/ui/Button";
 import { ShieldIcon, UserIcon } from "@/components/icons";
 import { OrganizationJoinControls } from "@/components/organization/OrganizationJoinControls";
+import { SEARCH_RESULTS_GRID_CLASS } from "@/components/search/resultsLayout";
 import { PostCard } from "@/components/post/PostCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getLocale } from "@/lib/i18n/server";
@@ -130,9 +131,9 @@ export default async function OrganizationProfilePage({ params }: { params: Prom
         {recentPosts.length === 0 ? (
           <EmptyState title="아직 이 단체 명의로 작성된 게시글이 없습니다" />
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          <div className={SEARCH_RESULTS_GRID_CLASS}>
             {recentPosts.map((post) => (
-              <PostCard key={`${post.type}-${post.id}`} post={post} />
+              <PostCard key={`${post.type}-${post.id}`} post={post} variant="list" />
             ))}
           </div>
         )}

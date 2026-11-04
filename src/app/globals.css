@@ -130,7 +130,8 @@ html[data-privacy-notice="closed"] [data-privacy-notice-bar] {
 @custom-variant board-row {
   /* [data-force-list]: a short list on the home page is always rows, even
      for a phone that chose 격자형 for the boards. */
-  :where([data-force-list]) & {
+  :where([data-force-list]) &,
+  &:where([data-force-list]) {
     @slot;
   }
   @media (width >= 40rem) {

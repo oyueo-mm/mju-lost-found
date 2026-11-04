@@ -404,7 +404,7 @@ export function AISearchPanel({
                   search-calibration-2026-09-29.json). The ranking itself --
                   and `post.score` in the API response -- are unchanged. */}
               {results.map((post) => (
-                <PostCard key={`${post.type}-${post.id}`} post={post} scoreDisplay="hidden" variant={cardVariant} />
+                <PostCard key={`${post.type}-${post.id}`} post={post} scoreDisplay="hidden" variant={cardVariant === "board" ? "board" : "list"} />
               ))}
             </div>
           )}

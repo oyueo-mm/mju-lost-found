@@ -1,4 +1,7 @@
-export const SEARCH_RESULTS_GRID_CLASS = "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-4";
+// Soft Card: /search and every other list that mixes 분실물 and 습득물 --
+// one column of hairline-separated rows (PostCard variant="list") on a
+// phone, two from sm.
+export const SEARCH_RESULTS_GRID_CLASS = "grid grid-cols-1 sm:grid-cols-2 sm:gap-x-10";
 
 // 게시판 리디자인 Phase: /lost and /found (and the AI 검색 results shown
 // there). A phone shows one column of list rows (목록형, the default) or a

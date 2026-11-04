@@ -60,7 +60,10 @@ type PostCardProps = {
   //   same height, with no gaps between rows.
   // "default" (every other list: /search, profile, home rails, AI 추천)
   // stays a vertical card and keeps the type label and status.
-  variant?: "default" | "board";
+  // "list" (Soft Card): the same text-left / photo-right row as a board at
+  // every width, for lists that mix 분실물 and 습득물 (/search, a profile,
+  // 내 게시글) -- so it keeps the type label and the status.
+  variant?: "default" | "board" | "list";
 };
 
 // 게시판 리디자인 Phase: one skeleton for every post, photo or not --
@@ -87,8 +90,9 @@ type PostCardProps = {
 export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", variant = "default" }: PostCardProps) {
   const { locale, t } = useI18n();
   const resolvedScoreLabel = scoreLabel ?? t("post.score.search");
-  const board = variant === "board";
-  const showStatus = !board || !isInProgress(post);
+  const list = variant === "list";
+  const board = variant === "board" || list;
+  const showStatus = !board || list || !isInProgress(post);
   const description = post.description.trim();
   const category = postCategoryLabel(post, t);
   const hasPhoto = Boolean(post.imageUrl);
@@ -158,6 +162,7 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
     // small hover lift together.
     <div
       {...(!hasPhoto && { "data-no-photo": "" })}
+      {...(list && { "data-force-list": "" })}
       className={`group relative flex min-w-0 overflow-hidden rounded-card border border-border bg-card transition duration-150 hover:border-primary/40 hover:shadow-sm ${c.root}`}
     >
       {post.imageUrl ? (
@@ -217,7 +222,7 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
           <p className={`min-w-0 flex-1 truncate font-medium text-muted-foreground ${c.categoryText}`} data-post-category>
             {/* Phase G-2: lists that mix 분실물 and 습득물 (/search, a
                 profile) still say which board each card belongs to. */}
-            {!board && (
+            {(!board || list) && (
               <>
                 <span className="text-primary">{t(postTypeLabelKey(post.type))}</span>
                 <span aria-hidden="true"> · </span>

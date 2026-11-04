@@ -6,6 +6,7 @@ import { listPublicThankNotes } from "@/lib/thanks/service";
 import { listPostsByUser } from "@/lib/posts/service";
 import { DEFAULT_LIMIT, DEFAULT_PAGE } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
+import { SEARCH_RESULTS_GRID_CLASS } from "@/components/search/resultsLayout";
 import { PostCard } from "@/components/post/PostCard";
 import { Pagination } from "@/components/search/Pagination";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -162,9 +163,9 @@ export default async function ProfilePage({
           <EmptyState title={t("profile.empty")} />
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            <div className={SEARCH_RESULTS_GRID_CLASS}>
               {posts.items.map((post) => (
-                <PostCard key={`${post.type}-${post.id}`} post={post} />
+                <PostCard key={`${post.type}-${post.id}`} post={post} variant="list" />
               ))}
             </div>
             <Pagination

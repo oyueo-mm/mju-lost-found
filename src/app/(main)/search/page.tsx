@@ -83,7 +83,7 @@ export default async function SearchPage({
         ) : (
           <div className={SEARCH_RESULTS_GRID_CLASS}>
             {results.items.map((post) => (
-              <PostCard key={`${post.type}-${post.id}`} post={post} />
+              <PostCard key={`${post.type}-${post.id}`} post={post} variant="list" />
             ))}
           </div>
         )}

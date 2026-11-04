@@ -13,7 +13,7 @@ export async function Hero({ compact = false }: { compact?: boolean } = {}) {
   const [line1, line2 = ""] = t("landing.searchHeadline").split("\n", 2);
 
   return (
-    <section className="flex flex-col gap-3 rounded-3xl border border-border bg-muted/60 px-4 py-5 md:gap-4 md:px-10 md:py-10">
+    <section className="flex flex-col gap-2.5 rounded-3xl border border-border bg-muted/60 px-4 pt-5 pb-4 md:gap-4 md:px-10 md:py-10">
       <h1 className="text-2xl leading-[1.25] font-extrabold tracking-[-0.03em] break-keep text-foreground sm:text-3xl md:text-[2.5rem] md:leading-[1.2]">
         <span className="block">{line1}</span>
         {line2 && <span className="block">{line2}</span>}

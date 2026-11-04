@@ -1,5 +1,6 @@
 import { requireReadyUser } from "@/lib/auth/session";
 import { listFoundPostsByUser, listLostPostsByUser } from "@/lib/posts/service";
+import { SEARCH_RESULTS_GRID_CLASS } from "@/components/search/resultsLayout";
 import { PostCard } from "@/components/post/PostCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LinkButton } from "@/components/ui/Button";
@@ -47,9 +48,9 @@ export default async function MyPostsPage() {
         {lostPosts.length === 0 ? (
           <EmptyState title="작성한 분실물 게시글이 없어요." />
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className={SEARCH_RESULTS_GRID_CLASS}>
             {lostPosts.map((post) => (
-              <PostCard key={post.id} post={post} />
+              <PostCard key={post.id} post={post} variant="list" />
             ))}
           </div>
         )}
@@ -60,9 +61,9 @@ export default async function MyPostsPage() {
         {foundPosts.length === 0 ? (
           <EmptyState title="작성한 습득물 게시글이 없어요." />
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <div className={SEARCH_RESULTS_GRID_CLASS}>
             {foundPosts.map((post) => (
-              <PostCard key={post.id} post={post} />
+              <PostCard key={post.id} post={post} variant="list" />
             ))}
           </div>
         )}

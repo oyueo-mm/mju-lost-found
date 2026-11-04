@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest";
 import { BOARD_RESULTS_GRID_CLASS, SEARCH_RESULTS_GRID_CLASS } from "./resultsLayout";
 
 describe("search results grid", () => {
-  it("keeps two mobile columns and uses three wider desktop columns", () => {
-    expect(SEARCH_RESULTS_GRID_CLASS).toContain("grid-cols-2");
-    expect(SEARCH_RESULTS_GRID_CLASS).toContain("sm:grid-cols-3");
+  it("is one column of rows on a phone and two from sm (Soft Card list)", () => {
+    expect(SEARCH_RESULTS_GRID_CLASS).toMatch(/(^| )grid-cols-1( |$)/);
+    expect(SEARCH_RESULTS_GRID_CLASS).toContain("sm:grid-cols-2");
+    expect(SEARCH_RESULTS_GRID_CLASS).not.toContain("sm:grid-cols-3");
     expect(SEARCH_RESULTS_GRID_CLASS).not.toContain("items-start");
     expect(SEARCH_RESULTS_GRID_CLASS).not.toContain("lg:grid-cols-4");
   });

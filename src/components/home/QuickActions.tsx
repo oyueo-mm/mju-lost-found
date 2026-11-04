@@ -21,7 +21,7 @@ export async function QuickActions() {
         <Link
           key={href}
           href={href}
-          className={`flex min-h-20 min-w-0 flex-col gap-1 rounded-card border p-3.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary md:p-4 ${
+          className={`flex min-h-16 min-w-0 flex-col gap-0.5 rounded-card border px-3.5 py-3 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary md:p-4 ${
             primary ? "border-primary/15 bg-primary-muted hover:border-primary/40" : "border-border bg-card hover:border-foreground/25"
           }`}
         >
