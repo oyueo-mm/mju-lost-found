@@ -23,15 +23,6 @@ type SimilarPostsSectionProps = {
   // has no matches yet. Every existing caller omits this (defaults to
   // false) and renders exactly as before.
   pending?: boolean;
-  // AI 검색 고도화 Phase: false only for the "분실물/습득물 작성 직후"
-  // auto-recommendation view (PendingRecommendations passes
-  // `!pollForResults`'s own inverse -- see that component) -- this phase's
-  // spec explicitly requires that view to stay pure suggestions with no
-  // numeric score ("AI가 찾아본 비슷한 습득물"), while every other,
-  // *later* visit to the same post detail page shows "AI 유사도 0.xx" on
-  // each card (see PostCard's scoreDisplay). Every existing caller omits
-  // this (defaults to true) -- a plain page revisit is unaffected.
-  showScore?: boolean;
 };
 
 // Phase J-2: was an interactive client widget where the viewer picked a
@@ -49,7 +40,6 @@ export function SimilarPostsSection({
   recommendations,
   loadFailed,
   pending = false,
-  showScore = true,
 }: SimilarPostsSectionProps) {
   const { t } = useI18n();
   const targetType = OPPOSITE_TYPE[sourceType];
@@ -85,19 +75,14 @@ export function SimilarPostsSection({
         // Phase 3-A: the boards' text-left / photo-right rows
         <div className={`${SEARCH_RESULTS_GRID_CLASS} border-t border-border`}>
           {recommendations.map((post) => (
-            // AI 검색 고도화 Phase: shows "AI 유사도 0.xx" (scoreDisplay=
-            // "decimal", see PostCard's own comment on why this is never
-            // ×100 -- it's rankFusion.ts's absolute D3 AI 유사도; AI 검색
-            // results no longer show a score at all, see AISearchPanel),
-            // except on the just-created-post auto-recommendation view
-            // (showScore=false, see this component's own prop comment),
-            // where the badge is hidden entirely instead.
+            // No score badge on any recommendation: the list is already in
+            // similarity order (lib/recommendation), and a number reads as a
+            // promise it is the same item. Ranking itself is unchanged.
             <PostCard
               key={`${post.type}-${post.id}`}
               post={post}
               variant="list"
-              scoreLabel={t("post.score.ai")}
-              scoreDisplay={showScore ? "decimal" : "hidden"}
+              scoreDisplay="hidden"
             />
           ))}
         </div>
