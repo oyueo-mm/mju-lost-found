@@ -81,7 +81,7 @@ export async function sendThankNote(viewerId: number, input: { postType: PostTyp
       });
       // 수신 알림 (in-app; the unique notification key makes it once per note)
       await notifyUser(tx, {
-        data: { userId: ctx.target.receiverId, type: NotificationType.THANK_NOTE, title: "새로운 감사 쪽지가 도착했어요.", content: "물건을 돌려받은 분이 감사 쪽지를 보냈어요.", relatedType: "thank_note", relatedId: note.id },
+        data: { userId: ctx.target.receiverId, type: NotificationType.THANK_NOTE, title: "새로운 감사 후기가 도착했어요.", content: "물건을 돌려받은 분이 감사 후기를 보냈어요.", relatedType: "thank_note", relatedId: note.id },
       });
       return { ok: true } as const;
     });
@@ -112,6 +112,29 @@ export async function listReceivedThankNotes(userId: number): Promise<ReceivedTh
     postTitle: r.chatRoom?.postTitle ?? null,
     senderNickname: r.sender.nickname,
   }));
+}
+
+// Phase 3-B: the 감사 후기 written in one chat room, as each participant
+// sees them -- the viewer's own sent note, and a note the viewer received
+// (not hidden by them). Never another room's, never someone else's; an
+// admin-hidden note is shown nowhere. The sender is not told whether the
+// receiver published it.
+export type RoomThankNote = { id: number; role: "sent" | "received"; body: string; createdAt: Date; published: boolean; personal: boolean };
+export async function thankNotesForRoom(viewerId: number, chatRoomId: number): Promise<RoomThankNote[]> {
+  const rows = await prisma.thankNote.findMany({
+    where: {
+      chatRoomId,
+      adminHiddenAt: null,
+      OR: [{ senderUserId: viewerId }, { receiverUserId: viewerId, hiddenAt: null }],
+    },
+    orderBy: { createdAt: "asc" },
+    take: 10,
+    select: { id: true, body: true, createdAt: true, publishedAt: true, senderUserId: true },
+  });
+  return rows.map((r) => {
+    const sent = r.senderUserId === viewerId;
+    return { id: r.id, role: sent ? "sent" : "received", body: r.body, createdAt: r.createdAt, published: !sent && r.publishedAt !== null, personal: !sent && looksPersonal(r.body) };
+  });
 }
 
 // Only the receiver can publish, unpublish or hide, and only its own notes.

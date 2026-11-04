@@ -12,8 +12,8 @@ import { demoDelay } from "./demoDelay";
 // from 보관 중 to 완료. Each card has its own ScrollReveal and DemoPlayer, so
 // on a phone (cards stacked) each plays as it scrolls in; side by side on a
 // desktop they play one after another (DemoPlayer's one-at-a-time rule). Example data only
-// (no personal details); status labels and the "AI 유사도 0.87" score
-// format are the app's own (PostCard's decimal AI score).
+// (no personal details); status labels are the app's own. No similarity
+// score is shown (none is shown on real recommendations either).
 const CARD_CLASS =
   "flex h-full flex-col gap-4 rounded-card border border-border bg-card p-5 transition hover:border-foreground/30 hover:shadow-md motion-safe:hover:-translate-y-0.5";
 
@@ -59,7 +59,7 @@ export async function AfterPostingShowcase() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {/* AI 추천 매칭: lost post -> connector + score -> similar found post */}
+        {/* 추천 매칭: lost post -> connector -> similar found post */}
         <ScrollReveal replay className="h-full">
           <Card
             title={t("landing.after.match.title")}
@@ -70,14 +70,9 @@ export async function AfterPostingShowcase() {
               <span className={`${typeTag} bg-muted text-muted-foreground`}>{t("post.type.lost")}</span>
               <span className="truncate text-xs text-foreground">{t("landing.after.match.lostTitle")}</span>
             </div>
-            <div className="relative flex h-8 items-center justify-center">
+            {/* the connector only: no similarity score anywhere (Phase 3-B) */}
+            <div className="relative flex h-5 items-center justify-center" aria-hidden="true">
               <span className="demo-draw absolute inset-y-0 left-1/2 w-px origin-top bg-primary" style={demoDelay(650)} />
-              <span
-                className="demo-pop relative rounded-full bg-primary px-2.5 py-0.5 text-[11px] font-medium text-primary-foreground"
-                style={demoDelay(1150)}
-              >
-                {t("post.score.ai")} 0.87
-              </span>
             </div>
             <div className={`demo-rise ${miniPost}`} style={demoDelay(850)}>
               <span className={`${typeTag} bg-primary-muted text-primary`}>{t("post.type.found")}</span>

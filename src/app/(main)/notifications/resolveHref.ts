@@ -60,10 +60,14 @@ export async function resolveHref(
   // (no crash, notification still renders) if the announcement was since
   // deleted -- same graceful-degradation precedent as the "match" case
   // just above.
-  // 감사 쪽지 수신: only for the note's receiver, while it is still visible
+  // 감사 후기 수신: only for the note's receiver, while it is still visible.
+  // Phase 3-B: opens the chat room where it was written (the review card is
+  // there, with its 공개 setting); a note without a room opens /me/thanks.
+  // The chat page re-checks room access as always.
   if (relatedType === "thank_note") {
-    const note = await prisma.thankNote.findUnique({ where: { id: relatedId }, select: { receiverUserId: true, hiddenAt: true, adminHiddenAt: true } });
-    return note && note.receiverUserId === userId && !note.hiddenAt && !note.adminHiddenAt ? "/me/thanks" : null;
+    const note = await prisma.thankNote.findUnique({ where: { id: relatedId }, select: { receiverUserId: true, hiddenAt: true, adminHiddenAt: true, chatRoomId: true } });
+    if (!note || note.receiverUserId !== userId || note.hiddenAt || note.adminHiddenAt) return null;
+    return note.chatRoomId !== null ? `/chat/${note.chatRoomId}` : "/me/thanks";
   }
 
   if (relatedType === "announcement") {

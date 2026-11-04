@@ -105,3 +105,50 @@ describe("publishing", () => {
     expect(notes).toEqual([{ id: 3, body: "고마워요", publishedAt: new Date("2026-11-03T00:00:00Z") }]);
   });
 });
+
+// Phase 3-B: the 감사 후기 shown inside a chat room.
+describe("thankNotesForRoom", () => {
+  it("asks only for this room's notes the viewer sent, or received and kept -- never admin-hidden ones", async () => {
+    db.thankNote.findMany.mockResolvedValue([]);
+    const { thankNotesForRoom } = await import("./service");
+    await thankNotesForRoom(10, 1);
+    expect(db.thankNote.findMany.mock.calls[0][0].where).toEqual({
+      chatRoomId: 1,
+      adminHiddenAt: null,
+      OR: [{ senderUserId: 10 }, { receiverUserId: 10, hiddenAt: null }],
+    });
+  });
+
+  it("marks sent / received; the sender is never told whether the receiver published it", async () => {
+    const at = new Date("2026-11-04T00:00:00Z");
+    db.thankNote.findMany.mockResolvedValue([{ id: 1, body: "감사합니다", createdAt: at, publishedAt: at, senderUserId: 10 }]);
+    const { thankNotesForRoom } = await import("./service");
+    expect(await thankNotesForRoom(10, 1)).toEqual([{ id: 1, role: "sent", body: "감사합니다", createdAt: at, published: false, personal: false }]);
+    expect(await thankNotesForRoom(20, 1)).toEqual([{ id: 1, role: "received", body: "감사합니다", createdAt: at, published: true, personal: false }]);
+  });
+
+  it("flags a received note that looks like it holds contact details (it cannot be published)", async () => {
+    db.thankNote.findMany.mockResolvedValue([{ id: 2, body: "연락 주세요 010-1234-5678", createdAt: new Date(), publishedAt: null, senderUserId: 10 }]);
+    const { thankNotesForRoom } = await import("./service");
+    expect((await thankNotesForRoom(20, 1))[0]).toMatchObject({ role: "received", published: false, personal: true });
+  });
+});
+
+// Several rooms on one post: only the room the return was recorded in may
+// offer the 감사 후기, and only to that return's owner.
+describe("thankComposerForRoom (several rooms on one post)", () => {
+  it("offers the review in the return's room and nowhere else", async () => {
+    const returns = await import("@/lib/posts/returns");
+    const state = (partnerId: number) => ({ postType: "lost" as const, postId: 5, authorId: 10, completed: true, partnerId });
+    const { thankComposerForRoom } = await import("./service");
+    vi.mocked(returns.chatRoomPostState).mockResolvedValue(state(20));
+    // the return (room 1, finder 20) -- viewed from room 1
+    expect(await thankComposerForRoom(10, 1)).toMatchObject({ postType: "lost", postId: 5, receiver: { id: 20 } });
+    // the same owner in another room of the same post (room 2, with user 30)
+    vi.mocked(returns.chatRoomPostState).mockResolvedValue(state(30));
+    expect(await thankComposerForRoom(10, 2)).toBeNull();
+    // the finder may not thank in either room
+    vi.mocked(returns.chatRoomPostState).mockResolvedValue(state(10));
+    expect(await thankComposerForRoom(20, 1)).toBeNull();
+  });
+});

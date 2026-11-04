@@ -107,7 +107,16 @@ export default async function ProfilePage({
         )}
       </section>
 
-      {thankNotes.length > 0 && (
+      {/* 받은 감사 후기: only what its receiver published -- the text and the
+          day, never who sent it. Nothing published: one small line. */}
+      {thankNotes.length === 0 ? (
+        <section className="flex items-center justify-between gap-3 rounded-card border border-border bg-card px-5 py-3.5" aria-labelledby="profile-thanks">
+          <h2 id="profile-thanks" className="text-sm font-semibold text-foreground">
+            {t("thanks.profile.title")}
+          </h2>
+          <p className="text-xs text-muted-foreground">{t("thanks.profile.empty")}</p>
+        </section>
+      ) : (
         <section className="flex flex-col gap-3 rounded-card border border-border bg-card p-5" aria-labelledby="profile-thanks">
           <h2 id="profile-thanks" className="text-sm font-semibold text-foreground">
             {t("thanks.profile.title")}

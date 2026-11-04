@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
@@ -72,12 +72,17 @@ function formatChatDay(date: Date, locale: keyof typeof LOCALE_INTL_TAG): string
 // between the messages by time. Not messages: they never count as anyone
 // writing, as unread, or for a push.
 export type ChatStatusEvent = { id: number; at: string; kind: "completed" | "reopened" };
+// Phase 3-B: other system cards placed in the conversation by time the same
+// way (the 반환 완료 card, sent / received 감사 후기) -- rendered by the page.
+export type ChatTimelineCard = { key: string; at: string; node: ReactNode };
 
+// A system line, never a speech bubble: centered, full width, its own
+// surface and a leading rule so it is not mistaken for a message.
 function StatusLine({ event, label, time }: { event: ChatStatusEvent; label: string; time: string }) {
   return (
     <div role="status" className="my-2 flex justify-center" data-status-event={event.kind}>
-      <span className="rounded-full border border-dashed border-border bg-muted/60 px-3 py-1 text-center text-xs text-muted-foreground">
-        {label} <span className="text-muted-foreground/70">· {time}</span>
+      <span className="max-w-[90%] rounded-lg bg-muted px-3 py-1.5 text-center text-xs break-keep [overflow-wrap:anywhere] text-muted-foreground">
+        {label} <span className="whitespace-nowrap text-muted-foreground/80">· {time}</span>
       </span>
     </div>
   );
@@ -88,20 +93,27 @@ export function ChatThread({
   currentUserId,
   sendBlockedNotice,
   statusEvents = [],
+  timelineCards = [],
   trackPresence = false,
 }: {
   chatRoomId: number;
   currentUserId: number;
   sendBlockedNotice?: ReactNode;
   statusEvents?: ChatStatusEvent[];
+  timelineCards?: ChatTimelineCard[];
   // chat push is configured on this deployment: report the room on screen
   trackPresence?: boolean;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
   const statusLabel = (e: ChatStatusEvent) => (e.kind === "completed" ? t("chat.status.completed") : t("chat.status.reopened"));
-  const statusLine = (e: ChatStatusEvent) => <StatusLine key={`s${e.id}`} event={e} label={statusLabel(e)} time={formatAbsoluteTime(new Date(e.at), locale)} />;
-  const eventsUpTo = (fromMs: number, toMs: number) => statusEvents.filter((e) => { const at = Date.parse(e.at); return at > fromMs && at <= toMs; });
+  // status lines and the page's system cards, in time order
+  const timeline: ChatTimelineCard[] = [
+    ...statusEvents.map((e) => ({ key: `s${e.id}`, at: e.at, node: <StatusLine event={e} label={statusLabel(e)} time={formatAbsoluteTime(new Date(e.at), locale)} /> })),
+    ...timelineCards,
+  ].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+  const statusLine = (item: ChatTimelineCard) => <Fragment key={item.key}>{item.node}</Fragment>;
+  const eventsUpTo = (fromMs: number, toMs: number) => timeline.filter((e) => { const at = Date.parse(e.at); return at > fromMs && at <= toMs; });
   const [messages, setMessages] = useState<MessageItem[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -690,10 +702,10 @@ export function ChatThread({
                   )}
                   {m.content && (
                     <div
-                      className={`rounded-2xl px-4 py-2 text-sm ${
-                        m.isMine
-                          ? "rounded-br-sm bg-primary text-primary-foreground"
-                          : "rounded-bl-sm bg-muted text-foreground"
+                      // Soft Card: mine light blue, theirs light grey -- both
+                      // dark text; long words and line breaks stay inside
+                      className={`rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] text-foreground ${
+                        m.isMine ? "rounded-br-sm bg-primary-muted" : "rounded-bl-sm bg-muted"
                       } ${m.isDeleted ? "italic opacity-70" : ""}`}
                     >
                       {m.content}
@@ -744,7 +756,7 @@ export function ChatThread({
             </div>
           )})
         )}
-        {messages !== null && messages.length === 0 && statusEvents.map(statusLine)}
+        {messages !== null && messages.length === 0 && timeline.map(statusLine)}
         {/* Bottom sentinel -- scrollIntoView({ block: "end" }) targets this
             empty marker rather than the list container itself, so the
             scroll lands exactly past the last message regardless of its

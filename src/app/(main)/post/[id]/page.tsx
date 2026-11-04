@@ -14,7 +14,7 @@ import { can, canAny } from "@/lib/permissions/check";
 import { listCommentsForPost } from "@/lib/comment/service";
 import { getMyOrganizationMemberships, getOrganizationById, getOrganizationRole } from "@/lib/organization/service";
 import { PostManageMenu } from "@/components/post/PostManageMenu";
-import { ThankNoteComposer } from "@/components/thanks/ThankNoteComposer";
+import { ThankReviewDialog } from "@/components/thanks/ThankReviewDialog";
 import { thankComposerFor } from "@/lib/thanks/service";
 import { PostImageGallery } from "@/components/post/PostImageGallery";
 import { ViewTracker } from "@/components/post/ViewTracker";
@@ -490,7 +490,26 @@ export default async function PostDetailPage({
         )}
       </article>
 
-      {thankComposer && <ThankNoteComposer postType={type} postId={post.id} receiverName={thankComposer.receiver?.nickname ?? null} alreadySent={thankComposer.alreadySent} returnId={thankComposer.returnId} />}
+      {/* 감사 후기 (Phase 3-B): the same dialog as the chat room's 반환 완료
+          card, offered only to whom lib/thanks allows; optional. */}
+      {thankComposer &&
+        (thankComposer.alreadySent ? (
+          <p role="status" className="rounded-lg bg-muted/70 px-3.5 py-2.5 text-sm text-muted-foreground">
+            {t("thanks.review.sentDone")}
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/70 px-3.5 py-2.5 text-sm">
+            <span className="break-keep [overflow-wrap:anywhere] text-foreground">{t("thanks.prompt.body")}</span>
+            <ThankReviewDialog
+              postType={type}
+              postId={post.id}
+              receiverName={thankComposer.receiver?.nickname ?? null}
+              postTitle={post.title}
+              postImageUrl={post.imageUrl ?? null}
+              triggerLabel={t("thanks.review.open")}
+            />
+          </div>
+        ))}
 
       {/* 물품 접수·반환 관리: officers only (managementScope / inManagementScope,
           unchanged), apart from the post itself and folded so it never pushes

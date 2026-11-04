@@ -26,7 +26,7 @@ const HIDDEN_MESSAGE_PLACEHOLDER = "[관리자에 의해 숨겨진 메시지입�
 // post's thumbnail -- an already-existing LostPost/FoundPost column, not a
 // schema change; every consumer of PostRef already tolerates new fields
 // (none of them spread/destructure it exhaustively), so this is additive.
-type PostRef = { id: number; userId: number; title: string; imageUrl: string | null };
+type PostRef = { id: number; userId: number; title: string; imageUrl: string | null; status: string };
 
 // Phase J-2: a ChatRoom row used to be one of two shapes (Match-based or
 // direct). The Match domain is gone, so every row is now direct: exactly
@@ -128,10 +128,15 @@ export type ChatRoomPost = {
   type: PostType;
   imageUrl: string | null;
   deleted: boolean;
+  // Phase 3-B: the post is marked done (분실물 찾음 / 습득물 완료)
+  completed: boolean;
 };
 
 export type ChatRoomListItemDTO = ChatRoomDetailDTO & {
   lastMessage: { content: string; createdAt: Date } | null;
+  // messages from others after this user's ChatRead cursor (same rule as
+  // the header badge, countUnreadMessagesForUser)
+  unreadCount: number;
 };
 
 // Phase D-3: the replied-to message's own preview travels with every
@@ -182,7 +187,7 @@ export type MessageDTO = {
   reactions: ReactionSummary[];
 };
 
-const POST_REF_SELECT = { id: true, userId: true, title: true, imageUrl: true } as const;
+const POST_REF_SELECT = { id: true, userId: true, title: true, imageUrl: true, status: true } as const;
 
 // Phase P-6: hiddenByUserId === senderUserId means the sender deleted
 // their own message (see schema.prisma's own comment on Message.hiddenAt)
@@ -288,6 +293,7 @@ function roomPostOf(room: Pick<ChatRoomRow, "directLostPost" | "directFoundPost"
       type: room.directLostPost ? "lost" : "found",
       imageUrl: live.imageUrl,
       deleted: false,
+      completed: room.directLostPost ? room.directLostPost.status === "FOUND" : room.directFoundPost?.status === "COMPLETED",
     };
   }
   return {
@@ -296,6 +302,7 @@ function roomPostOf(room: Pick<ChatRoomRow, "directLostPost" | "directFoundPost"
     type: room.postType === "found" ? "found" : "lost",
     imageUrl: null,
     deleted: true,
+    completed: false,
   };
 }
 
@@ -835,6 +842,7 @@ export async function listChatRoomsForUser(requesterId: number): Promise<ChatRoo
     },
   });
 
+  const unread = await unreadCountsByRoom(requesterId, rooms.map((r) => r.id));
   const items = await Promise.all(
     rooms.map(async (room) => {
       const dto = await resolveDetailDTO(room, requesterId);
@@ -843,7 +851,7 @@ export async function listChatRoomsForUser(requesterId: number): Promise<ChatRoo
       const lastMessage = last
         ? { content: last.hiddenAt ? HIDDEN_MESSAGE_PLACEHOLDER : last.content, createdAt: last.createdAt }
         : null;
-      return { ...dto, lastMessage };
+      return { ...dto, lastMessage, unreadCount: unread.get(room.id) ?? 0 };
     }),
   );
 
@@ -1519,6 +1527,28 @@ export async function getMessage(messageId: number): Promise<{ id: number; chatR
 // ChatRead row yet -- never opened -- correctly treats every message in
 // it as unread via COALESCE(..., 0)) rather than either N+1 per-room
 // queries or a second round trip to fetch every cursor first.
+// Phase 3-B: the chat list's per-room unread badge -- the same rule as
+// countUnreadMessagesForUser below, grouped by room in one query. A failure
+// only drops the badges (never the list).
+async function unreadCountsByRoom(requesterId: number, roomIds: number[]): Promise<Map<number, number>> {
+  if (roomIds.length === 0) return new Map();
+  try {
+    const rows = await prisma.$queryRaw<{ room: number; count: bigint }[]>`
+      SELECT m.chat_room_id AS room, COUNT(*)::bigint AS count
+      FROM "Message" m
+      LEFT JOIN "ChatRead" cr ON cr.chat_room_id = m.chat_room_id AND cr.user_id = ${requesterId}
+      WHERE m.chat_room_id = ANY(${roomIds})
+        AND m.sender_user_id != ${requesterId}
+        AND m.id > COALESCE(cr.last_read_message_id, 0)
+      GROUP BY m.chat_room_id
+    `;
+    return new Map(rows.map((r) => [Number(r.room), Number(r.count)]));
+  } catch (error) {
+    console.error("Failed to count unread messages per room", error);
+    return new Map();
+  }
+}
+
 export async function countUnreadMessagesForUser(requesterId: number): Promise<number> {
   const managedOrgs = await prisma.organizationMember.findMany({
     where: { userId: requesterId, role: { in: [OrganizationRole.LEADER, OrganizationRole.ADMIN] } },

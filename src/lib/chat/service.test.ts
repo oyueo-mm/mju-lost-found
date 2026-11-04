@@ -2365,7 +2365,7 @@ describe("rooms whose post was deleted", () => {
 
     expect(result.kind).toBe("ok");
     if (result.kind === "ok") {
-      expect(result.data.post).toEqual({ id: null, title: "검은 지갑", type: "lost", imageUrl: null, deleted: true });
+      expect(result.data.post).toEqual({ id: null, title: "검은 지갑", type: "lost", imageUrl: null, deleted: true, completed: false });
       expect(result.data.counterpart).toMatchObject({ kind: "user", id: lostOwner });
     }
   });
