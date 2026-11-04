@@ -77,7 +77,8 @@ export function ThankReviewDialog({
       <dialog
         ref={dialogRef}
         aria-labelledby={`${id}-title`}
-        className="m-auto w-[min(26rem,calc(100vw-1.5rem))] rounded-card border border-border bg-card p-0 text-foreground shadow-lg backdrop:bg-black/40"
+        // text-left: the dialog sits inside the centered 반환 완료 card in the DOM
+        className="m-auto w-[min(26rem,calc(100vw-1.5rem))] rounded-card border border-border bg-card p-0 text-left text-foreground shadow-lg backdrop:bg-black/40"
       >
         <form
           className="flex flex-col gap-4 p-5"
