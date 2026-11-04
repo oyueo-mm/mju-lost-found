@@ -37,6 +37,25 @@ export function thankTarget(viewerId: number, ctx: ThankContext): ThankTarget | 
   return { receiverId: r.finderUserId, chatRoomId: r.chatRoomId, returnId: r.id };
 }
 
+// 칭찬 태그 (Phase 3-B): exactly these five, in this order; any number may
+// be picked, none is fine. Stored as these codes (the DB CHECK allows only
+// them); labels live in the dictionaries (thanks.tag.<code>).
+export const THANK_TAGS = ["kind", "quick_reply", "kept_well", "helpful", "kept_promise"] as const;
+export type ThankTag = (typeof THANK_TAGS)[number];
+
+// A 감사 후기 needs the message or at least one tag (an empty review is not
+// sent); the message alone or the tags alone are both fine. Unknown or
+// repeated tags are dropped, the rest kept in THANK_TAGS order.
+export type ThankInputResult = { ok: true; body: string; tags: ThankTag[] } | { ok: false; error: "empty" | "too_long" };
+export function validateThankInput(raw: { body: unknown; tags?: unknown }): ThankInputResult {
+  const body = typeof raw.body === "string" ? raw.body.replace(/\r\n/g, "\n").trim() : "";
+  const picked = Array.isArray(raw.tags) ? raw.tags : [];
+  const tags = THANK_TAGS.filter((t) => picked.includes(t));
+  if (!body && tags.length === 0) return { ok: false, error: "empty" };
+  if ([...body].length > THANK_NOTE_MAX_LENGTH) return { ok: false, error: "too_long" };
+  return { ok: true, body, tags };
+}
+
 export type ThankBodyResult = { ok: true; body: string } | { ok: false; error: "empty" | "too_long" };
 export function validateThankBody(raw: unknown): ThankBodyResult {
   const body = typeof raw === "string" ? raw.replace(/\r\n/g, "\n").trim() : "";

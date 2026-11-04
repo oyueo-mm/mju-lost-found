@@ -57,3 +57,21 @@ describe("looksPersonal (publishing guard)", () => {
     for (const t of ["지갑 찾아주셔서 정말 감사합니다!", "11월 3일에 받았어요, 3층 경비실 덕분이에요", "커피 한 잔 사드리고 싶어요 :)"]) expect(looksPersonal(t), t).toBe(false);
   });
 });
+
+describe("validateThankInput (칭찬 태그)", async () => {
+  const { validateThankInput, THANK_TAGS, THANK_NOTE_MAX_LENGTH } = await import("./eligibility");
+  it("is exactly the five tags, without 정말 감사해요", () => {
+    expect(THANK_TAGS).toEqual(["kind", "quick_reply", "kept_well", "helpful", "kept_promise"]);
+  });
+  it("needs a tag or a non-blank message", () => {
+    expect(validateThankInput({ body: "", tags: [] })).toEqual({ ok: false, error: "empty" });
+    expect(validateThankInput({ body: " \n ", tags: undefined })).toEqual({ ok: false, error: "empty" });
+    expect(validateThankInput({ body: "", tags: ["kind"] })).toEqual({ ok: true, body: "", tags: ["kind"] });
+    expect(validateThankInput({ body: " 고마워요 ", tags: [] })).toEqual({ ok: true, body: "고마워요", tags: [] });
+  });
+  it("any number of tags (all five), unknown ones dropped; the message limit stays", () => {
+    expect(validateThankInput({ body: "x", tags: [...THANK_TAGS, "bogus", 3] })).toEqual({ ok: true, body: "x", tags: [...THANK_TAGS] });
+    expect(validateThankInput({ body: "가".repeat(THANK_NOTE_MAX_LENGTH + 1), tags: ["kind"] })).toEqual({ ok: false, error: "too_long" });
+    expect(validateThankInput({ body: "line1\r\nline2", tags: "kind" })).toEqual({ ok: true, body: "line1\nline2", tags: [] });
+  });
+});

@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { setThankNotePublishedAction } from "@/app/(main)/me/thanks/actions";
 import { useI18n } from "@/lib/i18n/client";
 import type { RoomThankNote } from "@/lib/thanks/service";
+import { ThankTagList } from "./ThankTagList";
 
 // A 감사 후기 in the chat room (Phase 3-B), placed in the conversation by its
 // time. A system card, not a speech bubble.
@@ -46,7 +47,8 @@ export function ThankNoteCard({ note, time }: { note: RoomThankNote; time: strin
           <h3 className="text-xs font-semibold text-primary">{received ? t("thanks.review.receivedTitle") : t("thanks.review.sentTitle")}</h3>
           <time className="shrink-0 text-xs text-muted-foreground">{time}</time>
         </div>
-        <p className="whitespace-pre-line [overflow-wrap:anywhere] text-foreground">{note.body}</p>
+        <ThankTagList tags={note.tags} />
+        {note.body && <p className="whitespace-pre-line [overflow-wrap:anywhere] text-foreground">{note.body}</p>}
         {received ? (
           <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
             <span

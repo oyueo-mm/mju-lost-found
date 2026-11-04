@@ -7,6 +7,7 @@ import { hideThankNoteAction, setThankNotePublishedAction } from "@/app/(main)/m
 import { ReportButton } from "@/components/report/ReportButton";
 import { useI18n } from "@/lib/i18n/client";
 import type { ReceivedThankNote } from "@/lib/thanks/service";
+import { ThankTagList } from "./ThankTagList";
 
 // 받은 감사 쪽지: private by default. Publishing asks once more, since a
 // published note can be read by anyone on the profile (without its sender).
@@ -46,7 +47,8 @@ export function ReceivedThankNotes({ notes, dateLabels }: { notes: ReceivedThank
       <ul className="flex flex-col gap-3">
         {items.map((n) => (
           <li key={n.id} className="flex flex-col gap-2 rounded-card border border-border bg-card p-4 text-sm">
-            <p className="break-words whitespace-pre-line text-foreground">{n.body}</p>
+            <ThankTagList tags={n.tags} />
+            {n.body && <p className="break-words whitespace-pre-line text-foreground">{n.body}</p>}
             <p className="text-xs text-muted-foreground">
               {n.senderNickname ?? t("thanks.unknownName")} · {dateLabels[n.id]} ·{" "}
               <Link href={`/post/${n.postId}?type=${n.postType}`} className="underline-offset-2 hover:underline">

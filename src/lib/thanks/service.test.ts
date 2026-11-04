@@ -33,7 +33,7 @@ beforeEach(() => {
 describe("sendThankNote", () => {
   it("creates the note for the return's owner -> finder, linked to the return, and notifies the receiver in-app", async () => {
     expect(await sendThankNote(10, { postType: "lost", postId: 5, body: " 감사합니다 " })).toEqual({ ok: true });
-    expect(db.thankNote.create).toHaveBeenCalledWith({ data: { postType: "lost", postId: 5, chatRoomId: 1, returnId: 9, senderUserId: 10, receiverUserId: 20, body: "감사합니다" } });
+    expect(db.thankNote.create).toHaveBeenCalledWith({ data: { postType: "lost", postId: 5, chatRoomId: 1, returnId: 9, senderUserId: 10, receiverUserId: 20, body: "감사합니다", tags: [] } });
     expect(db.notification.create).toHaveBeenCalledTimes(1);
     expect(db.notification.create.mock.calls[0][0].data).toMatchObject({ userId: 20, type: "THANK_NOTE", relatedType: "thank_note", relatedId: 77 });
   });
@@ -101,7 +101,7 @@ describe("publishing", () => {
     db.report.findMany.mockResolvedValue([{ targetId: 4 }]);
     const notes = await listPublicThankNotes(20);
     expect(db.thankNote.findMany.mock.calls[0][0].where).toEqual({ receiverUserId: 20, hiddenAt: null, adminHiddenAt: null, publishedAt: { not: null } });
-    expect(Object.keys(db.thankNote.findMany.mock.calls[0][0].select)).toEqual(["id", "body", "publishedAt"]);
+    expect(Object.keys(db.thankNote.findMany.mock.calls[0][0].select)).toEqual(["id", "body", "tags", "publishedAt"]);
     expect(notes).toEqual([{ id: 3, body: "고마워요", publishedAt: new Date("2026-11-03T00:00:00Z") }]);
   });
 });
@@ -150,5 +150,25 @@ describe("thankComposerForRoom (several rooms on one post)", () => {
     // the finder may not thank in either room
     vi.mocked(returns.chatRoomPostState).mockResolvedValue(state(10));
     expect(await thankComposerForRoom(20, 1)).toBeNull();
+  });
+});
+
+// Phase 3-B 칭찬 태그 (needs the tags migration).
+describe("sendThankNote with 칭찬 태그", () => {
+  it("sends tags only, a message only, or both -- never neither", async () => {
+    expect(await sendThankNote(10, { postType: "lost", postId: 5, body: "", tags: ["kind", "quick_reply"] })).toEqual({ ok: true });
+    expect(db.thankNote.create.mock.calls[0][0].data).toMatchObject({ body: "", tags: ["kind", "quick_reply"] });
+    expect(await sendThankNote(10, { postType: "lost", postId: 5, body: "   ", tags: [] })).toEqual({ ok: false, error: "empty" });
+    expect(db.thankNote.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps all five tags, drops unknown or repeated ones, in the fixed order", async () => {
+    await sendThankNote(10, { postType: "lost", postId: 5, body: "", tags: ["kept_promise", "kind", "정말 감사해요", "kind", "helpful", "kept_well", "quick_reply"] });
+    expect(db.thankNote.create.mock.calls[0][0].data.tags).toEqual(["kind", "quick_reply", "kept_well", "helpful", "kept_promise"]);
+  });
+
+  it("the tags never change who may thank whom", async () => {
+    expect(await sendThankNote(20, { postType: "lost", postId: 5, body: "", tags: ["kind"] })).toEqual({ ok: false, error: "not_eligible" });
+    expect(db.thankNote.create).not.toHaveBeenCalled();
   });
 });

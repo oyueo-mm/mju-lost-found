@@ -3,7 +3,7 @@ import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { NotificationType, Prisma, ReportStatus, ReportTargetType } from "@/generated/prisma/client";
 import { notifyUser } from "@/lib/notification/recipients";
 import { chatRoomPostState } from "@/lib/posts/returns";
-import { looksPersonal, THANK_NOTES_PER_DAY, thankTarget, validateThankBody } from "./eligibility";
+import { looksPersonal, THANK_NOTES_PER_DAY, thankTarget, validateThankInput, type ThankTag } from "./eligibility";
 
 // 감사 쪽지 storage and permissions. Every write re-derives who may thank
 // whom from the database (eligibility.ts) -- the client names only the post
@@ -66,8 +66,9 @@ export async function thankComposerForRoom(viewerId: number, chatRoomId: number)
 export type SendThankError = "empty" | "too_long" | "already_sent" | "not_eligible" | "daily_limit";
 export type SendThankResult = { ok: true } | { ok: false; error: SendThankError };
 
-export async function sendThankNote(viewerId: number, input: { postType: PostType; postId: number; body: unknown }): Promise<SendThankResult> {
-  const body = validateThankBody(input.body);
+export async function sendThankNote(viewerId: number, input: { postType: PostType; postId: number; body: unknown; tags?: unknown }): Promise<SendThankResult> {
+  // the message, the 칭찬 태그, or both (never neither)
+  const body = validateThankInput({ body: input.body, tags: input.tags });
   if (!body.ok) return body;
   try {
     return await prisma.$transaction(async (tx) => {
@@ -77,7 +78,7 @@ export async function sendThankNote(viewerId: number, input: { postType: PostTyp
       const today = await tx.thankNote.count({ where: { senderUserId: viewerId, createdAt: { gte: new Date(Date.now() - 24 * 3600_000) } } });
       if (today >= THANK_NOTES_PER_DAY) return { ok: false, error: "daily_limit" } as const;
       const note = await tx.thankNote.create({
-        data: { postType: input.postType, postId: input.postId, chatRoomId: ctx.target.chatRoomId, returnId: ctx.target.returnId, senderUserId: viewerId, receiverUserId: ctx.target.receiverId, body: body.body },
+        data: { postType: input.postType, postId: input.postId, chatRoomId: ctx.target.chatRoomId, returnId: ctx.target.returnId, senderUserId: viewerId, receiverUserId: ctx.target.receiverId, body: body.body, tags: body.tags },
       });
       // 수신 알림 (in-app; the unique notification key makes it once per note)
       await notifyUser(tx, {
@@ -92,18 +93,19 @@ export async function sendThankNote(viewerId: number, input: { postType: PostTyp
   }
 }
 
-export type ReceivedThankNote = { id: number; body: string; createdAt: Date; published: boolean; personal: boolean; postType: PostType; postId: number; postTitle: string | null; senderNickname: string | null };
+export type ReceivedThankNote = { id: number; body: string; tags: ThankTag[]; createdAt: Date; published: boolean; personal: boolean; postType: PostType; postId: number; postTitle: string | null; senderNickname: string | null };
 
 export async function listReceivedThankNotes(userId: number): Promise<ReceivedThankNote[]> {
   const rows = await prisma.thankNote.findMany({
     where: { receiverUserId: userId, hiddenAt: null, adminHiddenAt: null },
     orderBy: { createdAt: "desc" },
     take: 100,
-    select: { id: true, body: true, createdAt: true, publishedAt: true, postType: true, postId: true, sender: { select: { nickname: true } }, chatRoom: { select: { postTitle: true } } },
+    select: { id: true, body: true, tags: true, createdAt: true, publishedAt: true, postType: true, postId: true, sender: { select: { nickname: true } }, chatRoom: { select: { postTitle: true } } },
   });
   return rows.map((r) => ({
     id: r.id,
     body: r.body,
+    tags: r.tags as ThankTag[],
     createdAt: r.createdAt,
     published: r.publishedAt !== null,
     personal: looksPersonal(r.body),
@@ -119,7 +121,7 @@ export async function listReceivedThankNotes(userId: number): Promise<ReceivedTh
 // (not hidden by them). Never another room's, never someone else's; an
 // admin-hidden note is shown nowhere. The sender is not told whether the
 // receiver published it.
-export type RoomThankNote = { id: number; role: "sent" | "received"; body: string; createdAt: Date; published: boolean; personal: boolean };
+export type RoomThankNote = { id: number; role: "sent" | "received"; body: string; tags: ThankTag[]; createdAt: Date; published: boolean; personal: boolean };
 export async function thankNotesForRoom(viewerId: number, chatRoomId: number): Promise<RoomThankNote[]> {
   const rows = await prisma.thankNote.findMany({
     where: {
@@ -129,11 +131,11 @@ export async function thankNotesForRoom(viewerId: number, chatRoomId: number): P
     },
     orderBy: { createdAt: "asc" },
     take: 10,
-    select: { id: true, body: true, createdAt: true, publishedAt: true, senderUserId: true },
+    select: { id: true, body: true, tags: true, createdAt: true, publishedAt: true, senderUserId: true },
   });
   return rows.map((r) => {
     const sent = r.senderUserId === viewerId;
-    return { id: r.id, role: sent ? "sent" : "received", body: r.body, createdAt: r.createdAt, published: !sent && r.publishedAt !== null, personal: !sent && looksPersonal(r.body) };
+    return { id: r.id, role: sent ? "sent" : "received", body: r.body, tags: r.tags as ThankTag[], createdAt: r.createdAt, published: !sent && r.publishedAt !== null, personal: !sent && looksPersonal(r.body) };
   });
 }
 
@@ -157,16 +159,16 @@ export async function hideThankNote(userId: number, noteId: number): Promise<boo
 
 // A profile's published notes: body and day only, never the sender. A note
 // with a pending report is held back until an admin has looked at it.
-export async function listPublicThankNotes(receiverId: number, take = 10): Promise<{ id: number; body: string; publishedAt: Date }[]> {
+export async function listPublicThankNotes(receiverId: number, take = 10): Promise<{ id: number; body: string; tags: ThankTag[]; publishedAt: Date }[]> {
   const rows = await prisma.thankNote.findMany({
     where: { receiverUserId: receiverId, hiddenAt: null, adminHiddenAt: null, publishedAt: { not: null } },
     orderBy: { publishedAt: "desc" },
     take: take + 10,
-    select: { id: true, body: true, publishedAt: true },
+    select: { id: true, body: true, tags: true, publishedAt: true },
   });
   if (!rows.length) return [];
   const reported = new Set(
     (await prisma.report.findMany({ where: { targetType: ReportTargetType.THANK_NOTE, targetId: { in: rows.map((r) => r.id) }, status: ReportStatus.PENDING }, select: { targetId: true } })).map((r) => r.targetId),
   );
-  return rows.filter((r) => !reported.has(r.id)).slice(0, take).map((r) => ({ id: r.id, body: r.body, publishedAt: r.publishedAt! }));
+  return rows.filter((r) => !reported.has(r.id)).slice(0, take).map((r) => ({ id: r.id, body: r.body, tags: r.tags as ThankTag[], publishedAt: r.publishedAt! }));
 }

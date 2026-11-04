@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getPublicProfile } from "@/lib/user/service";
 import { listPublicThankNotes } from "@/lib/thanks/service";
+import { ThankTagList } from "@/components/thanks/ThankTagList";
 import { listPostsByUser } from "@/lib/posts/service";
 import { DEFAULT_LIMIT, DEFAULT_PAGE } from "@/lib/posts/schema";
 import { normalizeSearchParams } from "@/lib/posts/searchParams";
@@ -124,7 +125,8 @@ export default async function ProfilePage({
           <ul className="flex flex-col gap-2">
             {thankNotes.map((n) => (
               <li key={n.id} className="rounded-lg bg-muted/40 px-3.5 py-2.5 text-sm">
-                <p className="break-words whitespace-pre-line text-foreground">{n.body}</p>
+                <ThankTagList tags={n.tags} />
+                {n.body && <p className="mt-1 break-words whitespace-pre-line text-foreground">{n.body}</p>}
                 <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs text-muted-foreground">{t("thanks.profile.from", { date: formatJoinDate(n.publishedAt, t.locale) })}</p>
                   {canReport && (

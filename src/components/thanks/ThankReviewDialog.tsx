@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/Button";
 import { FallbackImage } from "@/components/ui/FallbackImage";
 import { ImageOffIcon } from "@/components/icons";
 import { useI18n } from "@/lib/i18n/client";
-import { THANK_NOTE_MAX_LENGTH, THANK_NOTES_PER_DAY } from "@/lib/thanks/eligibility";
+import { THANK_NOTE_MAX_LENGTH, THANK_NOTES_PER_DAY, THANK_TAGS, type ThankTag } from "@/lib/thanks/eligibility";
 import type { SendThankError } from "@/lib/thanks/service";
 
 // 감사 후기 남기기 (Phase 3-B): a small dialog opened from the chat room's
 // 반환 완료 card (or the post page). It names the item and the receiver --
 // both come from the recorded return, never chosen -- and holds only the
-// message and 후기 보내기. One short line says the receiver may publish it
+// five 칭찬 태그 (any number, toggled), the message and 후기 보내기: a tag or
+// a message is enough, an empty review is not sent. One short line says the receiver may publish it
 // without the sender's name (the sender should know before writing); no
 // other notices. Sending is optional and never undoes the completion.
 // The server re-checks who may thank whom on every send (lib/thanks).
@@ -43,9 +44,11 @@ export function ThankReviewDialog({
   const id = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [body, setBody] = useState("");
+  const [tags, setTags] = useState<ThankTag[]>([]);
+  const toggleTag = (code: ThankTag) => setTags((all) => (all.includes(code) ? all.filter((c) => c !== code) : [...all, code]));
   const [error, setError] = useState<SendThankError | null>(null);
   const [pending, startTransition] = useTransition();
-  const canSend = body.trim().length > 0 && !pending;
+  const canSend = (body.trim().length > 0 || tags.length > 0) && !pending;
 
   const errorText = (e: SendThankError) =>
     e === "empty" ? t("thanks.error.empty")
@@ -84,7 +87,7 @@ export function ThankReviewDialog({
             setError(null);
             startTransition(async () => {
               try {
-                const r = await sendThankNoteAction({ postType, postId, body });
+                const r = await sendThankNoteAction({ postType, postId, body, tags });
                 if (r.ok) {
                   close();
                   onSent?.();
@@ -118,6 +121,29 @@ export function ThankReviewDialog({
               <span className="truncate text-xs text-muted-foreground">{t("thanks.review.to", { name: receiverName ?? t("thanks.unknownName") })}</span>
             </span>
           </div>
+
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-2 text-sm font-medium">{t("thanks.tags.question")}</legend>
+            <div className="flex flex-wrap gap-1.5">
+              {THANK_TAGS.map((code) => {
+                const on = tags.includes(code);
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => toggleTag(code)}
+                    className={`min-h-9 rounded-full border px-3 text-[13px] break-keep transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary ${
+                      on ? "border-primary bg-primary-muted font-medium text-primary" : "border-border bg-card text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {on && <span aria-hidden="true">✓ </span>}
+                    {t(`thanks.tag.${code}`)}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
 
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium">{t("thanks.review.messageLabel")}</span>

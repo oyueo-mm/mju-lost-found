@@ -2140,7 +2140,11 @@ model ThankNote {
   sender         User      @relation("ThankNoteSender", fields: [senderUserId], references: [id], onDelete: Restrict)
   receiverUserId Int       @map("receiver_user_id")
   receiver       User      @relation("ThankNoteReceiver", fields: [receiverUserId], references: [id], onDelete: Restrict)
+  // may be empty when tags are chosen (DB CHECK: text or at least one tag)
   body           String    @db.Text
+  // Phase 3-B 칭찬 태그: any of five fixed codes (lib/thanks/eligibility.ts
+  // THANK_TAGS), any number; '{}' for notes written before tags existed
+  tags           String[]  @default([])
   // the return this note thanks for (null: notes written before returns were
   // recorded -- kept as they are, never re-linked by guessing)
   returnId       Int?        @map("return_id")

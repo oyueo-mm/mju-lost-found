@@ -10,10 +10,10 @@ import { hideThankNote, sendThankNote, setThankNotePublished, type PublishResult
 // (requireUser); the client names only the post or the room and the text --
 // never a sender, a receiver or a return partner.
 
-export async function sendThankNoteAction(input: { postType: string; postId: number; body: string }): Promise<SendThankResult> {
+export async function sendThankNoteAction(input: { postType: string; postId: number; body: string; tags?: string[] }): Promise<SendThankResult> {
   const user = await requireUser();
   if ((input.postType !== "lost" && input.postType !== "found") || !Number.isInteger(input.postId)) return { ok: false, error: "not_eligible" };
-  const result = await sendThankNote(user.id, { postType: input.postType, postId: input.postId, body: input.body });
+  const result = await sendThankNote(user.id, { postType: input.postType, postId: input.postId, body: input.body, tags: input.tags });
   if (result.ok) revalidatePath(`/post/${input.postId}`);
   return result;
 }
