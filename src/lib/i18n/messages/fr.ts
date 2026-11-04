@@ -335,7 +335,6 @@ export const fr: Dictionary = {
   "thanks.error.tooLong": "{max} caractères maximum.",
   "thanks.error.already": "Vous avez déjà envoyé un avis de remerciement pour cette annonce.",
   "thanks.error.notEligible": "Seule la personne qui a récupéré l'objet peut envoyer un avis, à la personne d'une restitution marquée comme terminée dans la discussion.",
-  "thanks.error.daily": "Vous pouvez envoyer jusqu'à {max} avis de remerciement par jour.",
   "thanks.page.title": "Avis de remerciement reçus",
   "thanks.page.intro": "Des mots de personnes qui ont récupéré leur objet. Ils sont privés par défaut ; si vous en publiez un, il apparaît sur votre profil sans l'expéditeur. Ils reposent sur la marque « terminé » de l'annonce : le service n'a pas vérifié la restitution.",
   "thanks.page.loadFailed": "Impossible de charger les mots. Réessayez plus tard.",

@@ -527,7 +527,6 @@ export const zh: Dictionary = {
   "thanks.error.tooLong": "请在{max}字以内填写。",
   "thanks.error.already": "你已经为这个帖子发送过感谢评价。",
   "thanks.error.notEligible": "只有取回物品的人，才能给在聊天中标记完成的归还对象发送评价。",
-  "thanks.error.daily": "感谢评价每天最多可发送 {max} 条。",
   "thanks.page.title": "收到的感谢评价",
   "thanks.page.intro": "取回物品的人发来的留言。默认仅自己可见；公开后会在你的主页显示，但不显示发件人。留言基于帖子的完成标记，服务并未确认实际归还。",
   "thanks.page.loadFailed": "无法加载留言，请稍后再试。",

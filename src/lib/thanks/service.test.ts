@@ -46,12 +46,26 @@ describe("sendThankNote", () => {
     expect(db.thankNote.create).not.toHaveBeenCalled();
   });
 
-  it("refuses a second note and the sixth note of a day", async () => {
+  it("refuses a second note for the same post", async () => {
     db.thankNote.count.mockResolvedValueOnce(1);
     expect(await sendThankNote(10, { postType: "lost", postId: 5, body: "x" })).toEqual({ ok: false, error: "already_sent" });
-    db.thankNote.count.mockResolvedValueOnce(0).mockResolvedValueOnce(5);
-    expect(await sendThankNote(10, { postType: "lost", postId: 5, body: "x" })).toEqual({ ok: false, error: "daily_limit" });
     expect(db.thankNote.create).not.toHaveBeenCalled();
+  });
+
+  // No daily cap: someone who got several items back on one day thanks each
+  // finder. Only "already sent for this post" is counted -- never a per-day total.
+  it("sends a sixth (and later) note on the same day, each for its own return", async () => {
+    for (let postId = 1; postId <= 7; postId++) {
+      db.postReturn.findFirst.mockResolvedValueOnce({ id: 100 + postId, chatRoomId: postId, ownerUserId: 10, finderUserId: 20, revokedAt: null });
+      expect(await sendThankNote(10, { postType: "lost", postId, body: `감사합니다 ${postId}` })).toEqual({ ok: true });
+    }
+    expect(db.thankNote.create).toHaveBeenCalledTimes(7);
+    expect(db.thankNote.create.mock.calls.map((c) => c[0].data.returnId)).toEqual([101, 102, 103, 104, 105, 106, 107]);
+    // the only count asked is "this post, this sender", never a time window
+    for (const [args] of db.thankNote.count.mock.calls) {
+      expect(args.where).toEqual(expect.objectContaining({ senderUserId: 10, postType: "lost" }));
+      expect(args.where).not.toHaveProperty("createdAt");
+    }
   });
 
   it("a parallel double submit hits the unique index and reads as already sent", async () => {

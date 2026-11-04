@@ -15,7 +15,6 @@
 // withdrawn, and the owner has not thanked for this post yet.
 
 export const THANK_NOTE_MAX_LENGTH = 500;
-export const THANK_NOTES_PER_DAY = 5;
 
 export type ThankReturn = { id: number; chatRoomId: number | null; ownerUserId: number; finderUserId: number; revoked: boolean };
 export type ThankContext = {

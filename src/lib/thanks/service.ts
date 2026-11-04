@@ -3,7 +3,7 @@ import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { NotificationType, Prisma, ReportStatus, ReportTargetType } from "@/generated/prisma/client";
 import { notifyUser } from "@/lib/notification/recipients";
 import { chatRoomPostState } from "@/lib/posts/returns";
-import { looksPersonal, THANK_NOTES_PER_DAY, thankTarget, validateThankInput, type ThankTag } from "./eligibility";
+import { looksPersonal, thankTarget, validateThankInput, type ThankTag } from "./eligibility";
 
 // 감사 쪽지 storage and permissions. Every write re-derives who may thank
 // whom from the database (eligibility.ts) -- the client names only the post
@@ -63,7 +63,10 @@ export async function thankComposerForRoom(viewerId: number, chatRoomId: number)
   return c && { ...c, postType: state.postType, postId: state.postId };
 }
 
-export type SendThankError = "empty" | "too_long" | "already_sent" | "not_eligible" | "daily_limit";
+// No daily cap (removed 2026-11-04): every note is tied to its own recorded
+// return, one per post and sender, so someone who got several items back on
+// one day can thank each finder.
+export type SendThankError = "empty" | "too_long" | "already_sent" | "not_eligible";
 export type SendThankResult = { ok: true } | { ok: false; error: SendThankError };
 
 export async function sendThankNote(viewerId: number, input: { postType: PostType; postId: number; body: unknown; tags?: unknown }): Promise<SendThankResult> {
@@ -75,8 +78,6 @@ export async function sendThankNote(viewerId: number, input: { postType: PostTyp
       const ctx = await loadContext(tx, viewerId, input.postType, input.postId);
       if (ctx?.alreadySent) return { ok: false, error: "already_sent" } as const;
       if (!ctx?.target) return { ok: false, error: "not_eligible" } as const;
-      const today = await tx.thankNote.count({ where: { senderUserId: viewerId, createdAt: { gte: new Date(Date.now() - 24 * 3600_000) } } });
-      if (today >= THANK_NOTES_PER_DAY) return { ok: false, error: "daily_limit" } as const;
       const note = await tx.thankNote.create({
         data: { postType: input.postType, postId: input.postId, chatRoomId: ctx.target.chatRoomId, returnId: ctx.target.returnId, senderUserId: viewerId, receiverUserId: ctx.target.receiverId, body: body.body, tags: body.tags },
       });

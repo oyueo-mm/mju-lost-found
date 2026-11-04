@@ -558,7 +558,6 @@ export const ko = {
   "thanks.error.tooLong": "{max}자 이내로 적어 주세요.",
   "thanks.error.already": "이 게시글에는 이미 감사 후기를 보냈어요.",
   "thanks.error.notEligible": "채팅방에서 찾음 완료된 반환의 상대방에게만, 물건을 돌려받은 분이 후기를 보낼 수 있어요.",
-  "thanks.error.daily": "감사 후기는 하루에 최대 {max}개까지 보낼 수 있어요.",
   "thanks.page.title": "받은 감사 후기",
   "thanks.page.intro": "물건을 돌려받은 분이 보낸 후기예요. 기본은 나만 보기이며, 공개하면 보낸 분 없이 내 프로필에 표시돼요. 게시글의 완료 표시를 바탕으로 한 후기라 실제 반환을 서비스가 확인한 것은 아니에요.",
   "thanks.page.loadFailed": "후기를 불러오지 못했어요. 잠시 후 다시 시도해주세요.",

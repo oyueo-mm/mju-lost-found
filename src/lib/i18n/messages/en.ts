@@ -532,7 +532,6 @@ export const en: Dictionary = {
   "thanks.error.tooLong": "Please keep it within {max} characters.",
   "thanks.error.already": "You already sent a thank-you review for this post.",
   "thanks.error.notEligible": "Only the person who got the item back can send a review, to the partner of a return marked done in the chat.",
-  "thanks.error.daily": "You can send up to {max} thank-you reviews a day.",
   "thanks.page.title": "Thank-you reviews received",
   "thanks.page.intro": "Notes from people who got their item back. They are private by default; if you publish one, it appears on your profile without the sender. Notes are based on the post's completion mark — the service has not verified the return.",
   "thanks.page.loadFailed": "Could not load notes. Please try again later.",

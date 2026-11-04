@@ -530,7 +530,6 @@ export const vi: Dictionary = {
   "thanks.error.tooLong": "Vui lòng viết trong {max} ký tự.",
   "thanks.error.already": "Bạn đã gửi lời cảm ơn cho bài này rồi.",
   "thanks.error.notEligible": "Chỉ người đã nhận lại đồ mới có thể gửi lời cảm ơn, cho người trả đồ trong cuộc trò chuyện đã đánh dấu hoàn tất.",
-  "thanks.error.daily": "Bạn có thể gửi tối đa {max} lời cảm ơn mỗi ngày.",
   "thanks.page.title": "Lời cảm ơn đã nhận",
   "thanks.page.intro": "Lời nhắn từ người đã nhận lại đồ. Mặc định chỉ mình bạn xem; nếu công khai, lời nhắn hiện trên trang cá nhân mà không kèm người gửi. Lời nhắn dựa trên đánh dấu hoàn tất của bài đăng — dịch vụ chưa xác nhận việc trả đồ.",
   "thanks.page.loadFailed": "Không tải được lời nhắn. Vui lòng thử lại sau.",

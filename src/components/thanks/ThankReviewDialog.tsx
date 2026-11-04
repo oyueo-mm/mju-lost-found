@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { FallbackImage } from "@/components/ui/FallbackImage";
 import { ImageOffIcon } from "@/components/icons";
 import { useI18n } from "@/lib/i18n/client";
-import { THANK_NOTE_MAX_LENGTH, THANK_NOTES_PER_DAY, THANK_TAGS, type ThankTag } from "@/lib/thanks/eligibility";
+import { THANK_NOTE_MAX_LENGTH, THANK_TAGS, type ThankTag } from "@/lib/thanks/eligibility";
 import type { SendThankError } from "@/lib/thanks/service";
 
 // 감사 후기 남기기 (Phase 3-B): a small dialog opened from the chat room's
@@ -54,7 +54,6 @@ export function ThankReviewDialog({
     e === "empty" ? t("thanks.error.empty")
     : e === "too_long" ? t("thanks.error.tooLong", { max: THANK_NOTE_MAX_LENGTH })
     : e === "already_sent" ? t("thanks.error.already")
-    : e === "daily_limit" ? t("thanks.error.daily", { max: THANK_NOTES_PER_DAY })
     : t("thanks.error.notEligible");
 
   const open = () => {
