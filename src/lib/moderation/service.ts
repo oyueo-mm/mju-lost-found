@@ -122,7 +122,7 @@ export type ReportTargetInfo =
   // comment belongs to (see resolveCommentTarget's own comment on why no
   // separate "does the post still exist" check is needed here).
   | { kind: "comment"; content: string; authorNickname: string | null; createdAt: Date; postType: "lost" | "found"; postId: number; parentId: number | null; tempHidden: boolean }
-  | { kind: "thank_note"; body: string; senderNickname: string | null; receiverNickname: string | null; createdAt: Date; published: boolean; adminHidden: boolean };
+  | { kind: "thank_note"; body: string; tags: string[]; senderNickname: string | null; receiverNickname: string | null; createdAt: Date; published: boolean; adminHidden: boolean };
 
 async function loadTargetInfo(targetType: ReportTargetType, targetId: number): Promise<ReportTargetInfo | null> {
   if (targetType === "post") {
@@ -208,6 +208,7 @@ async function loadTargetInfo(targetType: ReportTargetType, targetId: number): P
     return {
       kind: "thank_note",
       body: note.body,
+      tags: note.tags,
       senderNickname: note.sender.nickname,
       receiverNickname: note.receiver.nickname,
       createdAt: note.createdAt,
