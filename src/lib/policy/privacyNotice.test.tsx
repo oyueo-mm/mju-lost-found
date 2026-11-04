@@ -34,8 +34,8 @@ describe("개인정보처리방침 변경 안내", () => {
     const notice = privacyNotice(PRIVACY_POLICY_EFFECTIVE_DATE)!;
     expect(notice.id).toBe(PRIVACY_POLICY_EFFECTIVE_DATE);
     expect(notice.href).toBe("/policy/privacy#changes");
-    expect(notice.summary).toContain("로그인 시각과 방문");
-    expect(notice.summary).toContain("1년 보관");
+    expect(notice.summary).toContain("감사 후기");
+    expect(notice.summary).toContain("회원탈퇴 시 처리");
   });
 
   it("renders a non-blocking bar: text, link and a close button, no dialog", () => {

@@ -39,6 +39,18 @@ export type PrivacyPolicyRevision = {
 export const PRIVACY_POLICY_REVISIONS: readonly PrivacyPolicyRevision[] = [
   {
     // Preview: set to the actual KST day it reaches Production
+    date: "2026-11-05",
+    summary:
+      "감사 후기(칭찬 태그·감사 메시지, 보낸 사람·받은 사람과 반환 기록의 연결)를 1항에, 전달·받은 분의 선택에 따른 프로필 공개 범위를 2항에, 회원탈퇴 시 처리(받은 후기 삭제, 보낸 후기는 받은 분에게 남되 공개 해제)를 3항에 추가했습니다.",
+    consent: "notice",
+    history: {
+      summary: "감사 후기 처리와 탈퇴 시 처리 안내",
+      before: "감사 후기 처리·공개·탈퇴 시 처리 안내 없음",
+      after: "감사 후기 항목·목적·공개 범위와 탈퇴 시 처리(받은 후기 삭제, 보낸 후기 공개 해제) 명시",
+    },
+  },
+  {
+    // Preview: set to the actual KST day it reaches Production
     date: "2026-10-18",
     summary:
       "관리자 계정의 로그인 시각과 방문(로그인 상태의 이용 구간) 시작·마지막 활동 시각 기록(1년 보관, 화면·검색어·채팅 내용은 기록하지 않음)을 3·7항에 추가했습니다.",

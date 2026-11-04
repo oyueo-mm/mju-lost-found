@@ -21,7 +21,8 @@ vi.mock("@/lib/metrics/record", () => ({ deleteActivityMarks }));
 vi.mock("@/generated/prisma/client", () => ({
   NotificationType: {},
   OrganizationRequestStatus: {},
-  ReportTargetType: { USER: "USER", POST: "POST", COMMENT: "COMMENT", MESSAGE: "MESSAGE" },
+  ReportTargetType: { USER: "USER", POST: "POST", COMMENT: "COMMENT", MESSAGE: "MESSAGE", THANK_NOTE: "THANK_NOTE" },
+  ReportStatus: { PENDING: "PENDING", DISMISSED: "DISMISSED", ACTIONED: "ACTIONED" },
 }));
 
 const { clearPostInTx, withdrawAccount } = await import("./withdrawal");
@@ -123,5 +124,59 @@ describe("withdrawAccount: 이용 일자 기록", () => {
     prisma.$transaction = async (fn: (t: unknown) => unknown) => fn(fakeTx({ id: 8, email: "b@mju.ac.kr", deletedAt: null, withdrawnAt: null }));
     expect(await withdrawAccount(8)).toEqual({ kind: "sole_leader_block", organizationNames: ["단체"] });
     expect(deleteActivityMarks).not.toHaveBeenCalled();
+  });
+});
+
+// Phase 3-B: 감사 후기 on withdrawal.
+describe("withdrawAccount: 감사 후기", () => {
+  function recordingTx(user: Record<string, unknown>, received: number[], reports: unknown[]) {
+    const calls: { model: string; method: string; args: unknown }[] = [];
+    const answer = (model: string, method: string) => {
+      if (model === "thankNote" && method === "findMany") return received.map((id) => ({ id }));
+      if (model === "report" && method === "findMany") return reports;
+      return method === "findMany" ? [] : method === "findUnique" ? (model === "user" ? user : null) : method === "count" ? 0 : { count: 0 };
+    };
+    const tx = new Proxy({} as Record<string, unknown>, {
+      get: (_t, model: string) =>
+        model === "$queryRaw" || model === "$executeRaw"
+          ? async () => []
+          : new Proxy({}, { get: (_m, method: string) => async (args: unknown) => (calls.push({ model, method, args }), answer(model, method)) }),
+    });
+    return { tx, calls };
+  }
+
+  it("deletes the reviews the member received, keeps one still needed as report evidence (hidden, unpublished), and unpublishes the ones they sent", async () => {
+    const user = { id: 7, email: "a@mju.ac.kr", googleId: "g", deletedAt: null, withdrawnAt: null };
+    const { tx, calls } = recordingTx(user, [11, 12], [{ targetType: "THANK_NOTE", targetId: 12, status: "PENDING", processedAt: null, createdAt: new Date() }]);
+    prisma.$transaction = async (fn: (t: unknown) => unknown) => fn(tx);
+    vi.mocked(authUser.soleLeaderOrganizationNames).mockResolvedValue([]);
+    vi.mocked(holdState.pendingReportsAbout).mockResolvedValue([] as never);
+    vi.mocked(holdState.openHoldReasons).mockResolvedValue([]);
+
+    expect(await withdrawAccount(7)).toEqual({ kind: "ok", held: false });
+    const notes = calls.filter((c) => c.model === "thankNote");
+    expect(notes.find((c) => c.method === "findMany")?.args).toEqual({ where: { receiverUserId: 7 }, select: { id: true } });
+    // the report lookup covers the received reviews
+    const reportQuery = calls.find((c) => c.model === "report" && c.method === "findMany")?.args as { where: { OR: unknown[] } };
+    expect(reportQuery.where.OR).toContainEqual({ targetType: "THANK_NOTE", targetId: { in: [11, 12] } });
+    expect(notes.find((c) => c.method === "deleteMany")?.args).toEqual({ where: { id: { in: [11] } } });
+    expect(notes.filter((c) => c.method === "updateMany").map((c) => c.args)).toEqual([
+      { where: { id: { in: [12] } }, data: { publishedAt: null, hiddenAt: expect.any(Date) } },
+      { where: { senderUserId: 7, publishedAt: { not: null } }, data: { publishedAt: null } },
+    ]);
+  });
+
+  it("with nothing received, deletes no review and only unpublishes sent ones", async () => {
+    const user = { id: 7, email: "a@mju.ac.kr", googleId: "g", deletedAt: null, withdrawnAt: null };
+    const { tx, calls } = recordingTx(user, [], []);
+    prisma.$transaction = async (fn: (t: unknown) => unknown) => fn(tx);
+    vi.mocked(authUser.soleLeaderOrganizationNames).mockResolvedValue([]);
+    vi.mocked(holdState.pendingReportsAbout).mockResolvedValue([] as never);
+    vi.mocked(holdState.openHoldReasons).mockResolvedValue([]);
+
+    expect(await withdrawAccount(7)).toEqual({ kind: "ok", held: false });
+    const notes = calls.filter((c) => c.model === "thankNote");
+    expect(notes.some((c) => c.method === "deleteMany")).toBe(false);
+    expect(notes.filter((c) => c.method === "updateMany")).toHaveLength(1);
   });
 });

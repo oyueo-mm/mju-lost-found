@@ -30,7 +30,7 @@ export function ThankNoteCard({ note, time }: { note: RoomThankNote; time: strin
       try {
         const r = await setThankNotePublishedAction(note.id, next);
         if (r.ok) setPublished(next);
-        else setError(r.reason === "personal" ? t("thanks.personalBlockedError") : t("thanks.changeFailed"));
+        else setError(r.reason === "personal" ? t("thanks.personalBlockedError") : r.reason === "sender_withdrawn" ? t("thanks.senderWithdrawn") : t("thanks.changeFailed"));
       } catch {
         setError(t("thanks.changeFailed"));
       }
@@ -57,7 +57,9 @@ export function ThankNoteCard({ note, time }: { note: RoomThankNote; time: strin
             >
               {published ? t("thanks.status.public") : t("thanks.status.private")}
             </span>
-            {note.personal && !published ? (
+            {note.senderWithdrawn && !published ? (
+              <span className="text-xs text-muted-foreground">{t("thanks.senderWithdrawn")}</span>
+            ) : note.personal && !published ? (
               <span className="text-xs text-muted-foreground">{t("thanks.personalBlocked")}</span>
             ) : (
               <button

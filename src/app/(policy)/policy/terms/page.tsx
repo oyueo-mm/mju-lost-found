@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { formatEffectiveDate } from "@/lib/auth/terms";
+import { TERMS_EFFECTIVE_DATE } from "@/lib/policy/termsRevisions";
 
 // Phase 9: written directly from this branch's actual implemented
 // features (see comment/service.ts, chat/service.ts, report/service.ts,
@@ -46,6 +48,7 @@ const SECTIONS: Section[] = [
         <li>AI 기반 의미 검색, 이미지 유사도 검색 및 관련 게시글 추천</li>
         <li>게시글에 대한 댓글·답글 작성</li>
         <li>게시글 작성자 또는 단체와의 1:1 채팅(사진 전송 포함)</li>
+        <li>반환 완료 후 감사 후기 작성·확인 및 프로필 공개</li>
         <li>신고 및 알림</li>
         <li>단체 생성·가입·관리, 단체 명의 게시글·댓글 작성 및 단체 문의</li>
       </ul>
@@ -89,6 +92,13 @@ const SECTIONS: Section[] = [
           서비스는 분실물과 습득물을 연결하는 것을 돕는 플랫폼이며, 게시글·검색·추천 결과만으로
           물건의 실제 소유권이 확정되지는 않습니다. 이용자는 물건을 주고받기 전에 상대방과 물건의
           특징 등을 직접 확인해야 하며, 구체적인 인도 방법은 당사자 간 협의를 통해 정합니다.
+        </p>
+        <p className="mt-2">
+          채팅에서 찾음 완료로 반환이 기록되면, 물건을 돌려받은 이용자는 반환 상대방에게 감사 후기(칭찬 태그·감사 메시지)를
+          보낼 수 있습니다. 감사 후기 작성은 선택사항이며, 반환 기록에 연결된 상대방에게만 보낼 수 있습니다. 받은 이용자는 후기를
+          자신의 프로필에 공개할지 정할 수 있고, 공개한 후기는 언제든 다시 비공개로 바꿀 수 있습니다. 감사 후기에도 이 약관과
+          운영정책이 적용되며, 부적절한 후기는 신고·숨김 처리될 수 있습니다. 완료 표시와 감사 후기는 실제 반환 사실을 서비스가
+          확인했다는 뜻이 아닙니다.
         </p>
         <p className="mt-2">
           서비스에 게시글을 등록하거나 채팅으로 반환을 협의하는 것은 「유실물법」에 따른 경찰관서
@@ -168,6 +178,13 @@ export default function TermsPolicyPage() {
             <div className="text-muted-foreground">{section.body}</div>
           </section>
         ))}
+      </div>
+
+      <div className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+        <p>시행일: {formatEffectiveDate(TERMS_EFFECTIVE_DATE)}</p>
+        <Link href="/policy/terms/history" className="inline-block font-medium text-primary hover:opacity-80">
+          이전 이용약관 및 변경 내역
+        </Link>
       </div>
     </div>
   );

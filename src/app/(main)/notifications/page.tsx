@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { POLICY_REVISION_NOTICE } from "@/lib/policy/revisionNotice";
 
 import { requireReadyUser } from "@/lib/auth/session";
 import {
@@ -68,6 +69,12 @@ export default async function NotificationsPage({
   const items = await Promise.all(
     result.items.map(async (n) => ({
       ...n,
+      // a policy-revision notice reads in the member's language (its stored
+      // text is Korean, like every stored notification)
+      ...(n.relatedType === POLICY_REVISION_NOTICE.relatedType && {
+        title: t("policyNotice.title"),
+        content: t("policyNotice.body", { date: POLICY_REVISION_NOTICE.effectiveDate }),
+      }),
       typeLabel: NOTIFICATION_TYPE_LABELS[n.type] ?? n.type,
       createdAtLabel: formatDate(n.createdAt, locale),
       href: await resolveHref(user.id, n.type, n.relatedType, n.relatedId),

@@ -116,6 +116,8 @@ export async function withdrawAccount(userId: number): Promise<WithdrawAccountRe
       ).map((r) => r.id);
       const commentIds = comments.map((c) => c.id);
       const messageIds = messages.map((m) => m.id);
+      // 감사 후기 this member received (handled below, with the evidence rule)
+      const receivedNoteIds = (await tx.thankNote.findMany({ where: { receiverUserId: userId }, select: { id: true } })).map((n) => n.id);
 
       const postTargetIds = [...lostPosts.map((p) => encodePostTargetId("lost", p.id)), ...foundPosts.map((p) => encodePostTargetId("found", p.id))];
 
@@ -127,6 +129,7 @@ export async function withdrawAccount(userId: number): Promise<WithdrawAccountRe
             { targetType: ReportTargetType.POST, targetId: { in: postTargetIds } },
             { targetType: ReportTargetType.COMMENT, targetId: { in: commentIds } },
             { targetType: ReportTargetType.MESSAGE, targetId: { in: messageIds } },
+            { targetType: ReportTargetType.THANK_NOTE, targetId: { in: receivedNoteIds } },
           ],
         },
         select: { targetType: true, targetId: true, status: true, processedAt: true, createdAt: true },
@@ -233,6 +236,19 @@ export async function withdrawAccount(userId: number): Promise<WithdrawAccountRe
           data: { imagePath: null, ...(m.content.trim() === "" ? { content: WITHDRAWN_IMAGE_TEXT } : {}) },
         });
       }
+
+      // ---- 감사 후기 (Phase 3-B)
+      // Received: deleted with the account -- a withdrawn member has no
+      // profile to show them on, and nobody else needs them. One that a
+      // report still needs as evidence is kept, hidden and unpublished.
+      const keptNoteIds = receivedNoteIds.filter((id) => isEvidence(ReportTargetType.THANK_NOTE, id));
+      const deletedNoteIds = receivedNoteIds.filter((id) => !keptNoteIds.includes(id));
+      if (deletedNoteIds.length > 0) await tx.thankNote.deleteMany({ where: { id: { in: deletedNoteIds } } });
+      if (keptNoteIds.length > 0) await tx.thankNote.updateMany({ where: { id: { in: keptNoteIds } }, data: { publishedAt: null, hiddenAt: now } });
+      // Sent: they stay with the people who received them (their own record of
+      // being thanked; the sender shows as 탈퇴한 사용자), but are no longer
+      // public anywhere and cannot be published again (lib/thanks).
+      await tx.thankNote.updateMany({ where: { senderUserId: userId, publishedAt: { not: null } }, data: { publishedAt: null } });
 
       // ---- everything else that only belongs to this user
       await tx.keywordAlert.deleteMany({ where: { userId } });

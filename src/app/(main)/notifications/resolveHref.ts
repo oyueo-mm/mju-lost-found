@@ -6,6 +6,7 @@ import { getAnnouncement } from "@/lib/announcement/service";
 import { getOrganizationById } from "@/lib/organization/service";
 import { getKeywordAlertMatchForUser } from "@/lib/keywordAlert/service";
 import { prisma } from "@/lib/db/prisma";
+import { POLICY_CHANGES_PATH, POLICY_REVISION_NOTICE } from "@/lib/policy/revisionNotice";
 
 // Resolves a notification's relatedType/relatedId into a link to navigate
 // to, when there's something to link to. Kept out of
@@ -69,6 +70,9 @@ export async function resolveHref(
     if (!note || note.receiverUserId !== userId || note.hiddenAt || note.adminHiddenAt) return null;
     return note.chatRoomId !== null ? `/chat/${note.chatRoomId}` : "/me/thanks";
   }
+
+  // 이용약관·개인정보처리방침 변경 안내: the public summary of the revision
+  if (relatedType === POLICY_REVISION_NOTICE.relatedType) return POLICY_CHANGES_PATH;
 
   if (relatedType === "announcement") {
     const announcement = await getAnnouncement(relatedId);

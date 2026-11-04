@@ -94,14 +94,14 @@ export async function sendThankNote(viewerId: number, input: { postType: PostTyp
   }
 }
 
-export type ReceivedThankNote = { id: number; body: string; tags: ThankTag[]; createdAt: Date; published: boolean; personal: boolean; postType: PostType; postId: number; postTitle: string | null; senderNickname: string | null };
+export type ReceivedThankNote = { id: number; body: string; tags: ThankTag[]; createdAt: Date; published: boolean; personal: boolean; senderWithdrawn: boolean; postType: PostType; postId: number; postTitle: string | null; senderNickname: string | null };
 
 export async function listReceivedThankNotes(userId: number): Promise<ReceivedThankNote[]> {
   const rows = await prisma.thankNote.findMany({
     where: { receiverUserId: userId, hiddenAt: null, adminHiddenAt: null },
     orderBy: { createdAt: "desc" },
     take: 100,
-    select: { id: true, body: true, tags: true, createdAt: true, publishedAt: true, postType: true, postId: true, sender: { select: { nickname: true } }, chatRoom: { select: { postTitle: true } } },
+    select: { id: true, body: true, tags: true, createdAt: true, publishedAt: true, postType: true, postId: true, sender: { select: { nickname: true, withdrawnAt: true } }, chatRoom: { select: { postTitle: true } } },
   });
   return rows.map((r) => ({
     id: r.id,
@@ -110,6 +110,7 @@ export async function listReceivedThankNotes(userId: number): Promise<ReceivedTh
     createdAt: r.createdAt,
     published: r.publishedAt !== null,
     personal: looksPersonal(r.body),
+    senderWithdrawn: r.sender.withdrawnAt !== null,
     postType: r.postType as PostType,
     postId: r.postId,
     postTitle: r.chatRoom?.postTitle ?? null,
@@ -122,7 +123,7 @@ export async function listReceivedThankNotes(userId: number): Promise<ReceivedTh
 // (not hidden by them). Never another room's, never someone else's; an
 // admin-hidden note is shown nowhere. The sender is not told whether the
 // receiver published it.
-export type RoomThankNote = { id: number; role: "sent" | "received"; body: string; tags: ThankTag[]; createdAt: Date; published: boolean; personal: boolean };
+export type RoomThankNote = { id: number; role: "sent" | "received"; body: string; tags: ThankTag[]; createdAt: Date; published: boolean; personal: boolean; senderWithdrawn: boolean };
 export async function thankNotesForRoom(viewerId: number, chatRoomId: number): Promise<RoomThankNote[]> {
   const rows = await prisma.thankNote.findMany({
     where: {
@@ -132,22 +133,25 @@ export async function thankNotesForRoom(viewerId: number, chatRoomId: number): P
     },
     orderBy: { createdAt: "asc" },
     take: 10,
-    select: { id: true, body: true, tags: true, createdAt: true, publishedAt: true, senderUserId: true },
+    select: { id: true, body: true, tags: true, createdAt: true, publishedAt: true, senderUserId: true, sender: { select: { withdrawnAt: true } } },
   });
   return rows.map((r) => {
     const sent = r.senderUserId === viewerId;
-    return { id: r.id, role: sent ? "sent" : "received", body: r.body, tags: r.tags as ThankTag[], createdAt: r.createdAt, published: !sent && r.publishedAt !== null, personal: !sent && looksPersonal(r.body) };
+    return { id: r.id, role: sent ? "sent" : "received", body: r.body, tags: r.tags as ThankTag[], createdAt: r.createdAt, published: !sent && r.publishedAt !== null, personal: !sent && looksPersonal(r.body), senderWithdrawn: !sent && r.sender.withdrawnAt !== null };
   });
 }
 
 // Only the receiver can publish, unpublish or hide, and only its own notes.
 // A note that looks like it holds contact / ID details is never published.
-export type PublishResult = { ok: true } | { ok: false; reason: "not_found" | "personal" };
+// A note whose sender withdrew stays readable by its receiver but is never
+// published again (withdrawal unpublishes it).
+export type PublishResult = { ok: true } | { ok: false; reason: "not_found" | "personal" | "sender_withdrawn" };
 export async function setThankNotePublished(userId: number, noteId: number, published: boolean): Promise<PublishResult> {
   const mine = { id: noteId, receiverUserId: userId, hiddenAt: null, adminHiddenAt: null };
   if (published) {
-    const note = await prisma.thankNote.findFirst({ where: mine, select: { body: true } });
+    const note = await prisma.thankNote.findFirst({ where: mine, select: { body: true, sender: { select: { withdrawnAt: true } } } });
     if (!note) return { ok: false, reason: "not_found" };
+    if (note.sender.withdrawnAt) return { ok: false, reason: "sender_withdrawn" };
     if (looksPersonal(note.body)) return { ok: false, reason: "personal" };
   }
   const r = await prisma.thankNote.updateMany({ where: mine, data: { publishedAt: published ? new Date() : null } });
@@ -162,7 +166,7 @@ export async function hideThankNote(userId: number, noteId: number): Promise<boo
 // with a pending report is held back until an admin has looked at it.
 export async function listPublicThankNotes(receiverId: number, take = 10): Promise<{ id: number; body: string; tags: ThankTag[]; publishedAt: Date }[]> {
   const rows = await prisma.thankNote.findMany({
-    where: { receiverUserId: receiverId, hiddenAt: null, adminHiddenAt: null, publishedAt: { not: null } },
+    where: { receiverUserId: receiverId, hiddenAt: null, adminHiddenAt: null, publishedAt: { not: null }, sender: { withdrawnAt: null } },
     orderBy: { publishedAt: "desc" },
     take: take + 10,
     select: { id: true, body: true, tags: true, publishedAt: true },

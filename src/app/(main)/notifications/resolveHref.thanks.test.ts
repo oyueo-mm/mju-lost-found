@@ -36,3 +36,9 @@ describe("감사 후기 알림 링크", () => {
     expect(await thanks(20)).toBeNull();
   });
 });
+
+describe("약관·방침 변경 안내 링크", () => {
+  it("opens the changes page for anyone who got the notice", async () => {
+    expect(await resolveHref(5, "announcement", "policy_revision", 20261105)).toBe("/policy/changes");
+  });
+});

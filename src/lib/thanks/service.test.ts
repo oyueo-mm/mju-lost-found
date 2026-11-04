@@ -90,7 +90,7 @@ describe("thankComposerFor", () => {
 
 describe("publishing", () => {
   it("only the receiver's own, visible note can be published / hidden", async () => {
-    db.thankNote.findFirst.mockResolvedValue({ body: "고마워요" });
+    db.thankNote.findFirst.mockResolvedValue({ body: "고마워요", sender: { withdrawnAt: null } });
     db.thankNote.updateMany.mockResolvedValue({ count: 1 });
     expect(await setThankNotePublished(20, 3, true)).toEqual({ ok: true });
     expect(db.thankNote.findFirst.mock.calls[0][0].where).toEqual({ id: 3, receiverUserId: 20, hiddenAt: null, adminHiddenAt: null });
@@ -102,7 +102,7 @@ describe("publishing", () => {
   });
 
   it("a note that looks like it holds contact details is never published", async () => {
-    db.thankNote.findFirst.mockResolvedValue({ body: "감사해요! 010-1234-5678로 연락주세요" });
+    db.thankNote.findFirst.mockResolvedValue({ body: "감사해요! 010-1234-5678로 연락주세요", sender: { withdrawnAt: null } });
     expect(await setThankNotePublished(20, 3, true)).toEqual({ ok: false, reason: "personal" });
     expect(db.thankNote.updateMany).not.toHaveBeenCalled();
   });
@@ -114,7 +114,7 @@ describe("publishing", () => {
     ]);
     db.report.findMany.mockResolvedValue([{ targetId: 4 }]);
     const notes = await listPublicThankNotes(20);
-    expect(db.thankNote.findMany.mock.calls[0][0].where).toEqual({ receiverUserId: 20, hiddenAt: null, adminHiddenAt: null, publishedAt: { not: null } });
+    expect(db.thankNote.findMany.mock.calls[0][0].where).toEqual({ receiverUserId: 20, hiddenAt: null, adminHiddenAt: null, publishedAt: { not: null }, sender: { withdrawnAt: null } });
     expect(Object.keys(db.thankNote.findMany.mock.calls[0][0].select)).toEqual(["id", "body", "tags", "publishedAt"]);
     expect(notes).toEqual([{ id: 3, body: "고마워요", publishedAt: new Date("2026-11-03T00:00:00Z") }]);
   });
@@ -135,14 +135,14 @@ describe("thankNotesForRoom", () => {
 
   it("marks sent / received; the sender is never told whether the receiver published it", async () => {
     const at = new Date("2026-11-04T00:00:00Z");
-    db.thankNote.findMany.mockResolvedValue([{ id: 1, body: "감사합니다", createdAt: at, publishedAt: at, senderUserId: 10 }]);
+    db.thankNote.findMany.mockResolvedValue([{ id: 1, body: "감사합니다", createdAt: at, publishedAt: at, senderUserId: 10, sender: { withdrawnAt: null } }]);
     const { thankNotesForRoom } = await import("./service");
-    expect(await thankNotesForRoom(10, 1)).toEqual([{ id: 1, role: "sent", body: "감사합니다", createdAt: at, published: false, personal: false }]);
-    expect(await thankNotesForRoom(20, 1)).toEqual([{ id: 1, role: "received", body: "감사합니다", createdAt: at, published: true, personal: false }]);
+    expect(await thankNotesForRoom(10, 1)).toEqual([{ id: 1, role: "sent", body: "감사합니다", createdAt: at, published: false, personal: false, senderWithdrawn: false }]);
+    expect(await thankNotesForRoom(20, 1)).toEqual([{ id: 1, role: "received", body: "감사합니다", createdAt: at, published: true, personal: false, senderWithdrawn: false }]);
   });
 
   it("flags a received note that looks like it holds contact details (it cannot be published)", async () => {
-    db.thankNote.findMany.mockResolvedValue([{ id: 2, body: "연락 주세요 010-1234-5678", createdAt: new Date(), publishedAt: null, senderUserId: 10 }]);
+    db.thankNote.findMany.mockResolvedValue([{ id: 2, body: "연락 주세요 010-1234-5678", createdAt: new Date(), publishedAt: null, senderUserId: 10, sender: { withdrawnAt: null } }]);
     const { thankNotesForRoom } = await import("./service");
     expect((await thankNotesForRoom(20, 1))[0]).toMatchObject({ role: "received", published: false, personal: true });
   });
@@ -184,5 +184,26 @@ describe("sendThankNote with 칭찬 태그", () => {
   it("the tags never change who may thank whom", async () => {
     expect(await sendThankNote(20, { postType: "lost", postId: 5, body: "", tags: ["kind"] })).toEqual({ ok: false, error: "not_eligible" });
     expect(db.thankNote.create).not.toHaveBeenCalled();
+  });
+});
+
+// Phase 3-B withdrawal rule: a withdrawn sender's note is never published again.
+describe("a note whose sender withdrew", () => {
+  it("cannot be published, and never appears on a public profile", async () => {
+    db.thankNote.findFirst.mockResolvedValue({ body: "고마워요", sender: { withdrawnAt: new Date() } });
+    expect(await setThankNotePublished(20, 1, true)).toEqual({ ok: false, reason: "sender_withdrawn" });
+    expect(db.thankNote.updateMany).not.toHaveBeenCalled();
+    // unpublishing stays possible
+    db.thankNote.updateMany.mockResolvedValue({ count: 1 });
+    expect(await setThankNotePublished(20, 1, false)).toEqual({ ok: true });
+    db.thankNote.findMany.mockResolvedValue([]);
+    await listPublicThankNotes(20);
+    expect(db.thankNote.findMany.mock.calls.at(-1)![0].where.sender).toEqual({ withdrawnAt: null });
+  });
+
+  it("is marked for its receiver so the publish control is not offered", async () => {
+    const { thankNotesForRoom } = await import("./service");
+    db.thankNote.findMany.mockResolvedValue([{ id: 3, body: "감사", tags: [], createdAt: new Date(), publishedAt: null, senderUserId: 10, sender: { withdrawnAt: new Date() } }]);
+    expect((await thankNotesForRoom(20, 1))[0]).toMatchObject({ role: "received", senderWithdrawn: true, published: false });
   });
 });

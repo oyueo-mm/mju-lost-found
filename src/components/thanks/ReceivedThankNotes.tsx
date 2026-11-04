@@ -25,7 +25,7 @@ export function ReceivedThankNotes({ notes, dateLabels }: { notes: ReceivedThank
     startTransition(async () => {
       const r = await setThankNotePublishedAction(n.id, published);
       if (r.ok) setItems((all) => all.map((x) => (x.id === n.id ? { ...x, published } : x)));
-      else setError(r.reason === "personal" ? t("thanks.personalBlockedError") : t("thanks.changeFailed"));
+      else setError(r.reason === "personal" ? t("thanks.personalBlockedError") : r.reason === "sender_withdrawn" ? t("thanks.senderWithdrawn") : t("thanks.changeFailed"));
     });
   };
   const hide = (n: ReceivedThankNote) => {
@@ -59,7 +59,9 @@ export function ReceivedThankNotes({ notes, dateLabels }: { notes: ReceivedThank
               <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${n.published ? "bg-primary-muted text-primary" : "bg-muted text-muted-foreground"}`}>
                 {n.published ? t("thanks.status.public") : t("thanks.status.private")}
               </span>
-              {n.personal && !n.published ? (
+              {n.senderWithdrawn && !n.published ? (
+                <span className="text-xs text-muted-foreground">{t("thanks.senderWithdrawn")}</span>
+              ) : n.personal && !n.published ? (
                 <span className="text-xs text-muted-foreground">{t("thanks.personalBlocked")}</span>
               ) : (
                 <button
