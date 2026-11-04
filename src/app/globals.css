@@ -22,20 +22,20 @@
   color-scheme: light;
 
   --background: #ffffff;
-  --foreground: #18181b;
+  --foreground: #171717;
   --card: #ffffff;
-  --card-foreground: #18181b;
-  --muted: #f4f5f7;
+  --card-foreground: #171717;
+  --muted: #f6f8fa;
   --muted-foreground: #6b7280;
-  --border: #e4e4e7;
-  --ring: #006ec7;
+  --border: #e5e7eb;
+  --ring: #2867df;
 
-  /* Primary: a confident blue -- trustworthy/"campus official" without
-     reading as a government-site navy. Used for the brand mark, primary
-     CTAs, active nav state, and links. */
-  --primary: #006ec7;
+  /* Primary: Soft Card redesign -- one restrained blue (4.9:1 on white),
+     used only for primary actions, the active nav/tab/filter, links and
+     focus. Body text and headings stay near-black. */
+  --primary: #2867df;
   --primary-foreground: #ffffff;
-  --primary-muted: #eaf1ff;
+  --primary-muted: #edf3ff;
 
   /* Semantic status colors -- exactly three, matching the only three
      states this app's UI actually needs to distinguish: an in-progress
@@ -71,7 +71,12 @@
   --chart-7: #008300;
   --chart-8: #6250d6;
 
-  --radius: 0.875rem;
+  --radius: 1rem;
+
+  /* Soft Card: the one elevation. Cards rest on a hairline border; the
+     shadow only appears on hover/raised surfaces (menus, modals). */
+  --shadow-soft: 0 1px 2px rgb(23 23 23 / 0.04);
+  --shadow-raised: 0 4px 16px rgb(23 23 23 / 0.08);
 }
 
 /* 운영 통계 charts: 미측정 bands and 부분 측정 bars wear a 45° hatch so
@@ -170,6 +175,8 @@ html[data-privacy-notice="closed"] [data-privacy-notice-bar] {
   --color-chart-7: var(--chart-7);
   --color-chart-8: var(--chart-8);
   --radius-card: var(--radius);
+  --shadow-soft: var(--shadow-soft);
+  --shadow-raised: var(--shadow-raised);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
