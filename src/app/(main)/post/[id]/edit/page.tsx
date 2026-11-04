@@ -6,6 +6,7 @@ import { postTypeSchema } from "@/lib/posts/schema";
 import { postEventDateTime } from "@/lib/posts/eventDate";
 import { getMyOrganizationMemberships } from "@/lib/organization/service";
 import { PostForm } from "@/components/post/PostForm";
+import { listCustodyInstitutions } from "@/lib/posts/custodyInstitutions";
 
 
 export default async function EditPostPage({
@@ -46,17 +47,22 @@ export default async function EditPostPage({
   // Phase 12-7 §4: same server-fetched-membership convention as
   // lost/new, found/new page.tsx -- now also needed in edit mode, since
   // 게시 주체 is editable here too.
-  const myOrganizations = (await getMyOrganizationMemberships(user.id)).filter((m) => m.organizationStatus === "active");
+  const [memberships, custodyInstitutions] = await Promise.all([
+    getMyOrganizationMemberships(user.id),
+    type === "found" ? listCustodyInstitutions() : Promise.resolve([]),
+  ]);
+  const myOrganizations = memberships.filter((m) => m.organizationStatus === "active");
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+      <h1 className="text-xl font-bold text-foreground md:text-2xl">
         {type === "lost" ? "분실물 수정" : "습득물 수정"}
       </h1>
       <PostForm
         type={type}
         postId={post.id}
         myOrganizations={myOrganizations}
+        custodyInstitutions={custodyInstitutions}
         initialValues={{
           title: post.title,
           description: post.description,

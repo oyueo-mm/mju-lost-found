@@ -18,7 +18,7 @@ export default async function NewLostPostPage({ searchParams }: { searchParams: 
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">분실물 등록</h1>
+      <h1 className="text-xl font-bold text-foreground md:text-2xl">분실물 등록</h1>
       <PostForm type="lost" myOrganizations={myOrganizations} defaults={defaults} draftOwnerId={user.id} />
     </div>
   );

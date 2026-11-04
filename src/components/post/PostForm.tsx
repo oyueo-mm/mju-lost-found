@@ -1,6 +1,6 @@
 "use client";
-import { CustodyFields } from "./CustodyFields";
-import { custodyInputSchema, type CustodyInput } from "@/lib/posts/custodySchema";
+import { CustodyFields, type CustodyInstitution } from "./CustodyFields";
+import { custodyInputOf, custodyInputSchema, type CustodyInput } from "@/lib/posts/custodySchema";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
@@ -104,6 +104,9 @@ type PostFormProps = {
   // are kept per account and board (see posts/postDraft.ts). Edit mode never
   // has one.
   draftOwnerId?: number | null;
+  // 보관 상태 > 기관에 맡김: registered 관리 기관 (name + campus), fetched
+  // server-side on the found pages -- suggestions only.
+  custodyInstitutions?: readonly CustodyInstitution[];
 };
 
 const DATE_FIELD = { lost: "lostDate", found: "foundDate" } as const;
@@ -182,11 +185,14 @@ function KnownToggle({
   );
 }
 
-export function PostForm({ type, postId, initialValues, myOrganizations = [], defaults = null, draftOwnerId = null }: PostFormProps) {
+export function PostForm({ type, postId, initialValues, myOrganizations = [], defaults = null, draftOwnerId = null, custodyInstitutions = [] }: PostFormProps) {
   // null: not answered yet -- a new found post must pick one (no default is
   // assumed); an older post without custody info keeps none until changed.
-  const initialCustody: CustodyInput | null = initialValues?.custody ? { state: initialValues.custody.state, place: initialValues.custody.place } : null;
+  const initialCustody: CustodyInput | null = initialValues?.custody ? custodyInputOf(initialValues.custody) : null;
   const [custody, setCustody] = useState<CustodyInput | null>(initialCustody);
+  // 기타 chosen but left empty: asked for on submit, next to its field.
+  const [custodyError, setCustodyError] = useState<string | null>(null);
+  const custodyNoteRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
   const { t } = useI18n();
   const [error, setError] = useState<string | null>(null);
@@ -625,6 +631,13 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
       await handleRetryImage();
       return;
     }
+    // 보관 상태 is optional, but a chosen 기타 needs its text (or unselecting).
+    if (type === "found" && custody?.state === "OTHER" && !custody.note?.trim()) {
+      setCustodyError(t("form.custody.otherRequired"));
+      custodyNoteRef.current?.focus();
+      return;
+    }
+    setCustodyError(null);
     submittingRef.current = true;
     setError(null);
     setPending(true);
@@ -648,7 +661,13 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
 
     const body = {
       type,
-      ...(type === "found" && custody && (!isEdit || JSON.stringify(custody) !== JSON.stringify(initialCustody)) && { custody }),
+      // 보관 상태: sent on create only when chosen; on edit only when changed --
+      // null when the finder cleared what the post had. Untouched, an older
+      // post's custody (PLANNED etc.) is left exactly as stored.
+      ...(type === "found" &&
+        (isEdit
+          ? JSON.stringify(custody) !== JSON.stringify(initialCustody) && { custody }
+          : custody && { custody })),
       ...fieldIfChanged(isEdit, "title", title, initialValues?.title),
       ...fieldIfChanged(isEdit, "description", description, initialValues?.description),
       // 카테고리 대분류-소분류: categoryCode/subcategory only; the server
@@ -904,7 +923,9 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
               {t("form.campus")}
               <RequiredMark />
             </span>
-            <div className="flex gap-1.5" role="group" aria-label={t("form.campusSelect")}>
+            {/* wraps: a long campus name (fr "Campus des sciences naturelles")
+                must never run past a 320px screen */}
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("form.campusSelect")}>
               {CAMPUSES.map((c) => {
                 const key = campusLabelKey(c);
                 return (
@@ -916,7 +937,7 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
                     aria-pressed={campus === c}
                     disabled={fieldsLocked}
                     onClick={() => setCampus(c)}
-                    className="h-8 px-3 text-xs"
+                    className="h-auto min-h-9 max-w-full px-3 py-1.5 text-xs leading-tight whitespace-normal"
                   >
                     {key ? t(key) : c}
                   </Button>
@@ -925,6 +946,12 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Phase 3-A: 장소 -> 날짜·시간 -> (습득물) 보관 상태, in the order a finder
+          remembers them. */}
+      <section className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
+        <h2 className="text-sm font-semibold text-foreground">{t(type === "found" ? "form.section.placeTime.found" : "form.section.placeTime.lost")}</h2>
 
         <div className="flex flex-col gap-2 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1010,8 +1037,6 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
           </div>
         </div>
 
-        {type === "found" && <><CustodyFields value={custody} onChange={setCustody} campus={campus} required={postId === undefined} disabled={fieldsLocked || Boolean(initialValues?.custody?.confirmedAt)} />{initialValues?.custody?.confirmedAt && <p className="text-xs text-muted-foreground">기관에서 접수한 물품의 보관 정보 변경은 담당 기관에 요청해주세요.</p>}</>}
-
         <div className="flex flex-col gap-2 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="font-medium text-foreground">
@@ -1055,6 +1080,24 @@ export function PostForm({ type, postId, initialValues, myOrganizations = [], de
           </div>
         </div>
       </section>
+
+      {type === "found" && (
+        <section className="flex flex-col gap-2 rounded-card border border-border bg-card p-5">
+          <CustodyFields
+            value={custody}
+            onChange={(next) => {
+              setCustody(next);
+              if (custodyError) setCustodyError(null);
+            }}
+            campus={campus}
+            institutions={custodyInstitutions}
+            disabled={fieldsLocked || Boolean(initialValues?.custody?.confirmedAt)}
+            error={custodyError}
+            noteRef={custodyNoteRef}
+          />
+          {initialValues?.custody?.confirmedAt && <p className="text-xs text-muted-foreground">{t("form.custody.locked")}</p>}
+        </section>
+      )}
 
       <section className="flex flex-col gap-4 rounded-card border border-border bg-card p-5">
         <h2 className="text-sm font-semibold text-foreground">

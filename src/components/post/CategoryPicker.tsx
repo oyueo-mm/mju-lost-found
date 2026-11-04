@@ -9,7 +9,7 @@ import { CATEGORY_CODES, isCategoryCode, isSubcategoryCode, parentCategoryOf, su
 import { shouldShowSuggestion, suggestionKey, type CategoryFormValue } from "./categoryFormState";
 
 const FIELD_CLASS =
-  "rounded-lg border border-border bg-transparent px-3 py-2.5 text-sm text-foreground disabled:opacity-60";
+  "w-full min-w-0 rounded-lg border border-border bg-transparent px-3 py-2.5 text-sm text-foreground disabled:opacity-60";
 
 type CategoryPickerProps = {
   value: CategoryFormValue;
@@ -38,7 +38,7 @@ export function CategoryPicker({ value, onChange, required, legacyUnmapped, titl
   return (
     <div className="flex flex-col gap-3 text-sm">
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1.5">
+        <label className="flex min-w-0 flex-col gap-1.5">
           <span className="font-medium text-foreground">
             {t("form.category")}
             {required && (
@@ -71,7 +71,7 @@ export function CategoryPicker({ value, onChange, required, legacyUnmapped, titl
         </label>
 
         {value.categoryCode !== null && (
-          <label className="flex flex-col gap-1.5">
+          <label className="flex min-w-0 flex-col gap-1.5">
             <span className="font-medium text-foreground">
               {t("form.subcategory")} <span className="font-normal text-muted-foreground">{t("form.subcategoryOptional")}</span>
             </span>
