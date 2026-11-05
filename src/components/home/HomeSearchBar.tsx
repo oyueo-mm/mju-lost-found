@@ -94,6 +94,7 @@ export function HomeSearchBar({ variant = "home" }: { variant?: "home" | "landin
         locale === "fr" ? "!gap-2 sm:!gap-3 [&>div]:gap-1.5 sm:[&>div]:gap-2" : ""
       } ${landing ? LANDING_CONTROLS : ""}`}
       hideHint={landing}
+      hideResultNotice
       animatedPlaceholders={animatedPlaceholders}
       mobileAnimatedPlaceholders={mobileAnimatedPlaceholders}
     />
