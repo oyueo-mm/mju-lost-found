@@ -283,8 +283,6 @@ export const vi: Dictionary = {
   "aiSearch.previewAlt": "Xem trước ảnh dùng để tìm kiếm",
   "aiSearch.typeConflict": "Tìm kèm ảnh chỉ dùng được khi đã chọn mục đồ thất lạc hoặc đồ nhặt được.",
   "aiSearch.failed": "Tìm kiếm thất bại. Vui lòng thử lại.",
-  "aiSearch.resultNotice":
-    "Đây là những món đồ nhặt được tương tự do AI tìm thấy. Món đồ càng ở trên thì càng giống món đồ bạn đang tìm.",
   "aiSearch.empty.title": "Không tìm thấy bài đăng nào tương tự.",
   "aiSearch.empty.description": "Hãy thử từ khoá hoặc ảnh khác.",
 

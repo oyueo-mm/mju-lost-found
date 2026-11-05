@@ -46,7 +46,8 @@ type AISearchPanelProps = {
   // "board" on /lost and /found (see PostCard's `variant`).
   belowInput?: ReactNode;
   cardVariant?: "default" | "board";
-  // Shown at the top of the results (the boards' 목록형/격자형 switch).
+  // Shown at the top of the results on phones only (the boards' 목록형/격자형
+  // switch, itself sm:hidden), so wider screens get no empty row.
   resultsAccessory?: ReactNode;
   animatedPlaceholders?: readonly string[];
   mobileAnimatedPlaceholders?: readonly string[];
@@ -57,9 +58,6 @@ type AISearchPanelProps = {
   // The signed-out landing hero states what the search does right above
   // it, so its "describe the item" hint would repeat it (that page only).
   hideHint?: boolean;
-  // The home's search results start with the cards, no "AI가 찾은 비슷한
-  // 습득물이에요" notice above them (home only; the boards keep it).
-  hideResultNotice?: boolean;
 };
 
 const QUICK_SEARCH_CLASS =
@@ -92,7 +90,6 @@ export function AISearchPanel({
   mobileAnimatedPlaceholders,
   extraQuery,
   hideHint = false,
-  hideResultNotice = false,
 }: AISearchPanelProps) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
@@ -384,13 +381,8 @@ export function AISearchPanel({
 
       {results !== null && (
         <div className="flex flex-col gap-3">
-          {results.length > 0 && (!hideResultNotice || resultsAccessory) && (
-            <div className="flex items-center gap-2">
-              {!hideResultNotice && (
-                <p className="min-w-0 flex-1 rounded-lg bg-primary-muted px-3 py-2 text-xs text-primary">
-                  {t("aiSearch.resultNotice")}
-                </p>
-              )}
+          {results.length > 0 && resultsAccessory && (
+            <div className="flex items-center justify-end gap-2 sm:hidden">
               {resultsAccessory}
             </div>
           )}

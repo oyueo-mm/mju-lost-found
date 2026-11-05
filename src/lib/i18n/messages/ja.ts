@@ -52,7 +52,6 @@ export const ja: Dictionary = {
   "aiSearch.empty.title": "似ている投稿が見つかりません。",
   "aiSearch.empty.description": "別の検索語や写真でお試しください。",
   "aiSearch.hint": "品物の特徴を文章で説明するか、写真をアップロードして検索してみてください。",
-  "aiSearch.resultNotice": "AIが見つけた似ている拾得物です。上にあるものほど、お探しの品物に近いことを示します。",
   "chat.title": "チャット",
   "chat.empty.title": "チャットはまだありません。",
   "chat.noMessages": "メッセージはまだありません。",

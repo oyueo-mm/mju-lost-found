@@ -282,8 +282,6 @@ export const zh: Dictionary = {
   "aiSearch.previewAlt": "用于搜索的图片预览",
   "aiSearch.typeConflict": "带照片的搜索仅在选择失物或招领版块后才能使用。",
   "aiSearch.failed": "搜索失败，请重试。",
-  "aiSearch.resultNotice":
-    "这些是 AI 找到的相似招领物品。排名越靠前，与您寻找的物品越接近。",
   "aiSearch.empty.title": "没有找到相似的帖子。",
   "aiSearch.empty.description": "请换个搜索词或照片再试试。",
 
