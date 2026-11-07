@@ -187,10 +187,38 @@ Supabase Free에는 **자동 백업이 없다.** 백업은 운영자가 직접 �
 - 개별 데이터 정리가 꼭 필요하면: 백업 → 대상 행을 ID로 한정 → 트랜잭션 안에서 삭제 → 결과 확인 순서로 한다.
   실제 사용자의 데이터가 섞여 있지 않은지 먼저 확인한다.
 - DB 행을 지우면 Storage(`post-images`) 파일도 함께 정리해야 한다(고아 파일 방지). 반대로 DB가 참조 중인 파일은 지우지 않는다.
-- 앱이 게시글 사진을 지우면 Vercel 이미지 변환 캐시(31일 보관)도 함께 지운다(`lib/images/imageCache.ts`, 3회 시도).
-  끝내 실패하면 함수 로그에 `Image cache purge failed ... purged by hand: <URL>`이 남는다. 그 URL마다
-  `npx vercel cache dangerously-delete --srcimg "<URL>"`로 지운다. 스크립트나 Supabase 대시보드에서 직접 지운 사진은 변환 캐시가
-  자동으로 지워지지 않으므로 같은 명령을 실행한다. `/_next/image` 요청으로 확인하지 않는다(요청 자체가 변환량에 포함될 수 있다).
+- **삭제한 사진의 변환 캐시** (아래 9-1).
+
+### 9-1. 삭제한 사진이 이미지 변환 캐시에 남는 위험
+
+- **위험:** 사진 원본을 Storage에서 지워도, Vercel이 만든 변환본(`/_next/image?url=...&w=...`)은 따로 캐시된다(최대 31일,
+  `next.config.ts` `minimumCacheTTL`). 캐시를 지우지 못하면 그 주소를 아는 사람(전에 화면을 연 사람 등)은 그동안 계속 볼 수 있다.
+  개인정보가 찍힌 사진을 지운 경우가 가장 문제다.
+- **앱이 하는 일:** 게시글 사진을 지우는 모든 경로(사진 삭제·교체, 게시글 삭제, 보유기간 정리, 고아 파일 정리)는
+  `deletePostImagePaths()`를 거치고, 거기서 변환 캐시를 **삭제**한다(`dangerouslyDeleteBySrcImage`, 무효화가 아니라 삭제:
+  다음 요청은 이미 지워진 원본을 다시 가져오려다 실패한다). 3회까지 다시 시도한다.
+- **함수 로그로 보는 결과** (Vercel 대시보드 → Logs, 또는 `npx vercel logs <배포 URL>`; 최근 약 50행만 보인다):
+
+  | 로그 | 뜻 | 할 일 |
+  |---|---|---|
+  | `Image cache purge requested for N image(s)` | Vercel이 삭제 요청을 받아들였다(실제 삭제 여부는 아래 검증으로만 확인) | 없음 |
+  | `Image cache purge failed ... purged by hand: <URL> ...` | 3회 모두 실패(429 등) | 아래 수동 삭제 |
+  | `Image cache purge unavailable in this function ... <URL> ...` | 이 배포의 함수에 캐시 삭제 기능이 없다 | 아래 수동 삭제, 그리고 원인 확인 |
+  | 매일 cron 로그 `retention run {... "imageCachePurge":"available"}` | 이 배포가 캐시를 지울 수 있다(아무것도 지우지 않는 확인) | `"unavailable"`이면 위와 같이 원인 확인 |
+
+- **수동 삭제:** 로그에 나온 URL마다
+  `MSYS_NO_PATHCONV=1 npx vercel cache dangerously-delete --srcimg "<URL>"` (Hobby에서 동작 확인, 2026-10-20).
+  URL은 앱이 `src`로 쓴 Storage 공개 URL 그대로여야 한다. 스크립트나 Supabase 대시보드에서 직접 지운 사진은 앱이 캐시를 지우지
+  않으므로 같은 명령을 실행한다.
+- **실제로 지워졌는지 확인하는 방법** (변환 몇 회를 쓴다; 월 한도가 남아 있을 때만, Production 데이터는 쓰지 않는다):
+  1. `npx vercel deploy --build-env PREVIEW_IMAGE_OPTIMIZATION=on`으로 최적화를 켠 Preview를 만든다.
+  2. 그 Preview에 로그인해 테스트 게시글에 사진을 올리고 화면에서 한 번 연다.
+  3. 브라우저 개발자 도구에서 그 사진의 `/_next/image?...` 주소를 복사해
+     `MSYS_NO_PATHCONV=1 npx vercel curl "<배포 URL>/_next/image?..." -- -sI`로 `x-vercel-cache: HIT`를 확인한다.
+  4. 게시글(또는 사진)을 지우고 함수 로그에서 `Image cache purge requested`를 확인한다.
+  5. 같은 주소를 다시 요청한다: 200 `HIT`이 아니면(원본을 다시 가져오려다 오류) 실제로 지워진 것이다.
+  6. 테스트 게시글과 그 Preview 배포를 정리한다.
+- 확인용으로 Production에서 `/_next/image`를 요청하지 않는다(요청이 변환량에 포함될 수 있다).
 - `_prisma_migrations`, `AppSettings`, schema·extension(pgvector)·인덱스는 삭제 대상이 아니다.
 - Preview DB를 정리할 때도 같은 원칙을 따른다(테스트로 만든 행만 ID로 한정해 삭제).
 

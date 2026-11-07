@@ -37,9 +37,14 @@ describe("GET /api/admin/settings (retention cron)", () => {
 
   it("runs the clean-up for Vercel Cron's bearer secret", async () => {
     vi.stubEnv("CRON_SECRET", "s3cret-value");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const res = await call("Bearer s3cret-value");
     expect(res.status).toBe(200);
     expect(runRetention).toHaveBeenCalledTimes(1);
+    // whether this deployment can purge the image cache (no request context
+    // outside Vercel)
+    expect(String(log.mock.calls.find((c) => c[0] === "retention run")?.[1])).toContain('"imageCachePurge":"unavailable"');
+    log.mockRestore();
   });
 });
 
