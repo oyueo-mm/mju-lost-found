@@ -93,21 +93,32 @@ const nextConfig: NextConfig = {
     "/api/posts/\\[id\\]!(/**)": ["./models/**"],
   },
   images: {
-    // 운영 비용 (Hobby: 5,000 image transformations a month): fewer width
-    // buckets, so phones of slightly different sizes share one cached
-    // variant instead of each triggering their own transformation. Covers
-    // every size this app asks for (cards 50vw/33vw/25vw, gallery up to
-    // 768px, 64px thumbnails) at 1x-3x pixel density. Defaults were
-    // [640, 750, 828, 1080, 1200, 1920, 2048, 3840] / [32 ... 384].
-    deviceSizes: [640, 828, 1080, 1920],
+    // 운영 비용 (Hobby: 5,000 image transformations a month): every width
+    // is one more transformation per photo, so four in all (was eight):
+    // - 128 / 256: chat and gallery thumbnails (40-64px) and list-row
+    //   thumbnails (80-96px) at 1x-3x;
+    // - 640: phone grid cards, the photo manager, 1x detail photo;
+    // - 1080: the detail photo at 2x-3x (uploads are at most 1920px).
+    // Defaults were [640, 750, 828, 1080, 1200, 1920, 2048, 3840] /
+    // [32 ... 384].
+    deviceSizes: [640, 1080],
+    imageSizes: [128, 256],
     // 운영 비용: post photos are never changed in place (a new photo gets a
     // new UUID path) and Storage sends no max-age, so this TTL alone decides
     // how often a cached transformation is revalidated -- and every
-    // revalidation is billed as a transformation. 24 hours instead of the
-    // default 4. A deleted photo's cached copies are purged at deletion
-    // (lib/images/imageCache.ts), so a longer TTL does not keep it online.
-    minimumCacheTTL: 86400,
-    imageSizes: [64, 128, 256, 384],
+    // revalidation is billed as a transformation. 31 days (was 24 hours,
+    // default 4). A deleted photo's cached copies are purged at deletion
+    // (lib/images/imageCache.ts, retried; a purge that still fails is
+    // logged with the paths to purge by hand -- docs/operations.md).
+    minimumCacheTTL: 2678400,
+    // Preview runs on a copy of the data (AI-eval seed photos, Production
+    // photo URLs) and is opened mostly by checks at many screen sizes:
+    // there the photos are shown as stored, never through /_next/image, so
+    // Preview uses none of the month's transformations. Production and local
+    // builds keep optimization. PREVIEW_IMAGE_OPTIMIZATION=on (a build env of
+    // one Preview deployment) turns it back on to check the optimized path
+    // there.
+    unoptimized: process.env.VERCEL_ENV === "preview" && process.env.PREVIEW_IMAGE_OPTIMIZATION !== "on",
     remotePatterns: [
       // Scoped to Vercel Blob's own domain suffix only -- not a blanket
       // `domains`/wildcard-everything allowance. Kept even after Phase 4's

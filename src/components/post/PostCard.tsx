@@ -2,6 +2,7 @@
 
 import { createElement, useState } from "react";
 import { FallbackImage } from "@/components/ui/FallbackImage";
+import { useBoardView } from "@/components/search/BoardViewToggle";
 import Link from "next/link";
 
 import type { PostDTO } from "@/lib/posts/service";
@@ -64,7 +65,20 @@ type PostCardProps = {
   // every width, for lists that mix 분실물 and 습득물 (/search, a profile,
   // 내 게시글) -- so it keeps the type label and the status.
   variant?: "default" | "board" | "list";
+  // A board card inside a [data-force-list] list (the home page), shown as
+  // a list row at every width -- only the photo's requested size uses it.
+  alwaysRow?: boolean;
 };
+
+// 사진 요청 크기 (next.config.ts images): the photo's real display width,
+// so the browser asks /_next/image for the smallest width that is sharp
+// enough. A list-row thumbnail is 72-80px on a phone and 96px from 640px
+// (-> 128 / 256); a phone grid card is half the screen minus the page
+// gutters and the grid gap (-> 640). Written as calc() on purpose: next/
+// image leaves out every width below `deviceSizes[0] x the smallest "NNvw"`
+// it finds in `sizes`, which would drop 128 / 256 for the thumbnails.
+const ROW_PHOTO_SIZES = "(min-width: 640px) 96px, 80px";
+const TILE_PHOTO_SIZES = "(min-width: 640px) 96px, calc(50vw - 21px)";
 
 // 게시판 리디자인 Phase: one skeleton for every post, photo or not --
 // category, title, location | date, with the photo (when there is one)
@@ -87,8 +101,11 @@ type PostCardProps = {
 // inside it would nest an <a> in an <a>. The post link is an absolutely
 // positioned `inset-0` overlay painted last, and the organization link
 // gets `relative z-10` to stay clickable above it.
-export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", variant = "default" }: PostCardProps) {
+export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", variant = "default", alwaysRow = false }: PostCardProps) {
   const { locale, t } = useI18n();
+  // Only a phone in 격자형 shows board cards as grid cards; the server and
+  // hydration render 목록형 sizes, and a saved 격자형 switches after that.
+  const boardView = useBoardView();
   const resolvedScoreLabel = scoreLabel ?? t("post.score.search");
   const list = variant === "list";
   const board = variant === "board" || list;
@@ -98,7 +115,9 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
   const hasPhoto = Boolean(post.imageUrl);
   const icon = (className: string) => createElement(categoryIconFor(post), { "aria-hidden": true, className });
   const sizes = board
-    ? "(min-width: 640px) 96px, 50vw"
+    ? !list && !alwaysRow && boardView === "grid"
+      ? TILE_PHOTO_SIZES
+      : ROW_PHOTO_SIZES
     : "(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw";
   // Fill (cover) the media area when that crops little of the photo, show
   // it whole (contain, over a blurred copy) otherwise; contain until the

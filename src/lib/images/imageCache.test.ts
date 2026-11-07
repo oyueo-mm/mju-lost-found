@@ -31,13 +31,20 @@ describe("이미지 캐시 제거", () => {
     expect(dangerouslyDeleteBySrcImage).toHaveBeenCalledTimes(1);
   });
 
-  it("never throws: a failure is logged without the URL", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  it("retries a transient failure", async () => {
     dangerouslyDeleteBySrcImage.mockRejectedValueOnce(Object.assign(new Error("Too Many Requests"), { status: 429 }));
-    expect(await purgeOptimizedImages([URL_A], { VERCEL: "1" })).toBe("failed");
+    expect(await purgeOptimizedImages([URL_A], { VERCEL: "1" }, { baseDelayMs: 0 })).toBe("purged");
+    expect(dangerouslyDeleteBySrcImage).toHaveBeenCalledTimes(2);
+  });
+
+  it("never throws: a failure that outlasts the retries is logged with the URLs to purge by hand", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    dangerouslyDeleteBySrcImage.mockRejectedValue(Object.assign(new Error("Too Many Requests"), { status: 429 }));
+    expect(await purgeOptimizedImages([URL_A], { VERCEL: "1" }, { baseDelayMs: 0 })).toBe("failed");
+    expect(dangerouslyDeleteBySrcImage).toHaveBeenCalledTimes(3);
     expect(error).toHaveBeenCalledTimes(1);
     expect(String(error.mock.calls[0][0])).toContain("status 429");
-    expect(String(error.mock.calls[0][0])).not.toContain("post-images");
+    expect(String(error.mock.calls[0][0])).toContain(URL_A);
     error.mockRestore();
   });
 
@@ -54,7 +61,7 @@ describe("이미지 캐시 제거", () => {
       expect(dangerouslyDeleteBySrcImage).toHaveBeenCalledTimes(2);
       // a purge failure does not change the deletion's own result
       remove.mockResolvedValueOnce({ error: null });
-      dangerouslyDeleteBySrcImage.mockRejectedValueOnce(new Error("x"));
+      dangerouslyDeleteBySrcImage.mockRejectedValue(new Error("x"));
       expect(await deletePostImagePaths(["posts/lost/1/a.webp"])).toBe(true);
       error.mockRestore();
     } finally {

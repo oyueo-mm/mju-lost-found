@@ -187,6 +187,10 @@ Supabase Free에는 **자동 백업이 없다.** 백업은 운영자가 직접 �
 - 개별 데이터 정리가 꼭 필요하면: 백업 → 대상 행을 ID로 한정 → 트랜잭션 안에서 삭제 → 결과 확인 순서로 한다.
   실제 사용자의 데이터가 섞여 있지 않은지 먼저 확인한다.
 - DB 행을 지우면 Storage(`post-images`) 파일도 함께 정리해야 한다(고아 파일 방지). 반대로 DB가 참조 중인 파일은 지우지 않는다.
+- 앱이 게시글 사진을 지우면 Vercel 이미지 변환 캐시(31일 보관)도 함께 지운다(`lib/images/imageCache.ts`, 3회 시도).
+  끝내 실패하면 함수 로그에 `Image cache purge failed ... purged by hand: <URL>`이 남는다. 그 URL마다
+  `npx vercel cache dangerously-delete --srcimg "<URL>"`로 지운다. 스크립트나 Supabase 대시보드에서 직접 지운 사진은 변환 캐시가
+  자동으로 지워지지 않으므로 같은 명령을 실행한다. `/_next/image` 요청으로 확인하지 않는다(요청 자체가 변환량에 포함될 수 있다).
 - `_prisma_migrations`, `AppSettings`, schema·extension(pgvector)·인덱스는 삭제 대상이 아니다.
 - Preview DB를 정리할 때도 같은 원칙을 따른다(테스트로 만든 행만 ID로 한정해 삭제).
 
@@ -249,7 +253,7 @@ MJU Find의 이용약관, 운영정책과 게시글 작성 화면의 안내 문�
 |---|---|---|---|
 | Vercel 함수 호출 | 월 100만 | 대시보드 확인 | 페이지 조회·prefetch |
 | Vercel Active CPU | 월 4시간 | 대시보드 확인 | 페이지 렌더링, AI 추론 |
-| Vercel 이미지 변환 | 월 5,000 | 대시보드 확인 | 새 사진 × 화면 크기, 캐시 만료(기본 4시간) |
+| Vercel 이미지 변환 | 월 5,000 | 2026-11 초과(5,018) | 새 사진 × 너비 4종(128/256/640/1080), 캐시 31일. Preview는 변환 안 함 |
 | Vercel 함수 수 | 배포당 12개에 걸린 이력(next.config.ts 주석) | 한도 근접 | 새 API 라우트·라우트별 설정 대신 서버 액션·기존 라우트 사용 |
 | Supabase DB | 500MB | 16MB | 게시글·임베딩·채팅 누적 |
 | Supabase Storage | 1GB | 13MB(사진 84장, 장당 약 160KB) | **사진 약 6,000장** |
@@ -264,8 +268,11 @@ MJU Find의 이용약관, 운영정책과 게시글 작성 화면의 안내 문�
   관측 지표가 필요할 때, 또는 광고·후원 등 상업적 성격이 생길 때(Hobby는 비상업 개인 용도만 허용).
 - Supabase Pro(월 $25부터): Storage 70%(약 700MB) 또는 DB 70%(350MB)에 닿을 때, 자동 일일 백업이 필요할 때, 일시정지를
   피해야 할 때. 사진 용량이 가장 먼저 닿을 가능성이 크다.
-- 비용 없이 먼저 할 일: 이미지 변환 캐시 기간 결정(4시간 → 7일 등, 삭제된 사진이 변환 캐시에 남는 기간과의 균형), 업로드 시
-  목록용 작은 사진 생성 검토, 반환 완료 후 오래된 사진 보관 기준 결정, 쓰지 않는 `imageEmbeddingDino` 컬럼·인덱스 제거.
+- 이미지 변환(2026-11): 너비 8종 → 4종, 캐시 24시간 → 31일, Preview 최적화 끔(`next.config.ts` images). Preview에서 변환 경로를
+  확인해야 할 때만 그 배포에 build env `PREVIEW_IMAGE_OPTIMIZATION=on`을 준다
+  (`npx vercel deploy --build-env PREVIEW_IMAGE_OPTIMIZATION=on`, 이 배포는 변환량을 쓴다). 평소 확인은 로컬 `next build && next start`
+  (최적화가 켜져 있고 로컬에서 변환하므로 Vercel 변환량을 쓰지 않는다).
+- 비용 없이 먼저 할 일: 그래도 월 50%를 넘으면 업로드 시 목록용 작은 사진 생성 검토, 반환 완료 후 오래된 사진 보관 기준 결정, 쓰지 않는 `imageEmbeddingDino` 컬럼·인덱스 제거.
 
 ## 14. 장애 체크리스트
 

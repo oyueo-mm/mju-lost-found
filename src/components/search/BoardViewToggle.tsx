@@ -16,6 +16,12 @@ function subscribe(onChange: () => void) {
   };
 }
 
+// The phone board view as a React value: 목록형 (the default) when
+// rendering on the server and during hydration, then the saved choice.
+export function useBoardView(): BoardView {
+  return useSyncExternalStore(subscribe, readBoardView, () => DEFAULT_BOARD_VIEW);
+}
+
 const OPTIONS: { value: BoardView; labelKey: TranslationKey; Icon: typeof GridIcon }[] = [
   { value: "grid", labelKey: "board.view.grid", Icon: GridIcon },
   { value: "list", labelKey: "board.view.list", Icon: ListIcon },
@@ -27,7 +33,7 @@ const OPTIONS: { value: BoardView; labelKey: TranslationKey; Icon: typeof GridIc
 // search, filters, sort and page all stay exactly as they are.
 export function BoardViewToggle({ className = "" }: { className?: string }) {
   const { t } = useI18n();
-  const view = useSyncExternalStore(subscribe, readBoardView, () => DEFAULT_BOARD_VIEW);
+  const view = useBoardView();
 
   return (
     <div role="radiogroup" aria-label={t("board.view.label")} className={`inline-flex shrink-0 rounded-full bg-muted p-0.5 sm:hidden ${className}`}>

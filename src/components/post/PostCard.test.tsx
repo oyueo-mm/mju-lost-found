@@ -1,10 +1,15 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "@/lib/i18n/client";
 import { ko } from "@/lib/i18n/messages/ko";
 import type { PostDTO } from "@/lib/posts/service";
 import { PostCard } from "./PostCard";
+
+// The saved phone board view (목록형 / 격자형); the real hook reads it in the
+// browser only.
+const boardView = vi.hoisted(() => ({ current: "list" as "list" | "grid" }));
+vi.mock("@/components/search/BoardViewToggle", () => ({ useBoardView: () => boardView.current }));
 
 const basePost: PostDTO = {
   id: 1,
@@ -153,6 +158,28 @@ describe("PostCard board variant", () => {
     expect(markup).toContain("board-row:flex-row");
     // a no-photo list row gets a category tile; the grid/desktop card does not
     expect(markup).toContain("hidden board-row:order-last board-row:flex");
+  });
+});
+
+describe("PostCard photo size (Vercel 이미지 변환량)", () => {
+  const photo = { ...basePost, imageUrl: "https://example.com/item.webp" };
+  const sizesOf = (markup: string) => [...new Set([...markup.matchAll(/sizes="([^"]*)"/g)].map((m) => m[1]))];
+
+  it("asks for a list-row thumbnail's size (80px, 96px from 640px) wherever the card is a row", () => {
+    for (const props of [{ variant: "board" }, { variant: "list" }, { variant: "board", alwaysRow: true }] as const) {
+      expect(sizesOf(renderCard(photo, props))).toEqual(["(min-width: 640px) 96px, 80px"]);
+    }
+  });
+
+  it("asks for half the screen only for a phone grid card, never in an always-row list", () => {
+    boardView.current = "grid";
+    try {
+      expect(sizesOf(renderCard(photo, { variant: "board" }))).toEqual(["(min-width: 640px) 96px, calc(50vw - 21px)"]);
+      expect(sizesOf(renderCard(photo, { variant: "board", alwaysRow: true }))).toEqual(["(min-width: 640px) 96px, 80px"]);
+      expect(sizesOf(renderCard(photo, { variant: "list" }))).toEqual(["(min-width: 640px) 96px, 80px"]);
+    } finally {
+      boardView.current = "list";
+    }
   });
 });
 

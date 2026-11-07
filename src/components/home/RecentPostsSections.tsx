@@ -47,7 +47,7 @@ export async function RecentPostsSections() {
           ) : (
             <div className="mt-2 flex flex-col border-t border-border">
               {b.posts.map((post) => (
-                <PostCard key={post.id} post={post} variant="board" />
+                <PostCard key={post.id} post={post} variant="board" alwaysRow />
               ))}
             </div>
           )}
