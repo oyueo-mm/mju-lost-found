@@ -161,6 +161,42 @@ describe("PostCard board variant", () => {
   });
 });
 
+describe("PostCard full-width text without a photo", () => {
+  it.each(["lost", "found"] as const)("removes the empty media and category icon from %s board/search cards", (type) => {
+    for (const variant of ["board", "list"] as const) {
+      const post = { ...basePost, type, status: type === "lost" ? "찾는 중" : "보관 중" } as PostDTO;
+      const markup = renderCard(post, { variant, hideEmptyThumbnail: true });
+
+      expect(markup).not.toContain("<img");
+      expect(markup).not.toContain("aspect-4/3");
+      expect(markup).not.toContain("size-[4.5rem]");
+      expect(markup).not.toContain("bg-primary-muted text-primary");
+      expect(markup).toContain(post.title);
+      expect(markup).toContain(post.description);
+      expect(markup).toContain(post.location!);
+      expect(markup).toMatch(/dateTime="2026-09-01T00:00:00.000Z"/i);
+      expect(markup).toContain(`href="/post/1?type=${type}"`);
+      expect(markup).toContain(`aria-label="${post.title}"`);
+    }
+  });
+
+  it("leaves attached photos, image loading and thumbnail layout identical", () => {
+    const post = { ...basePost, imageUrl: "https://example.com/item.webp" };
+    for (const variant of ["board", "list"] as const) {
+      expect(renderCard(post, { variant, hideEmptyThumbnail: true })).toBe(renderCard(post, { variant }));
+    }
+  });
+
+  it("preserves title/description clamps and safe wrapping with expanded text", () => {
+    const text = "LongUnbrokenText".repeat(80);
+    const markup = renderCard({ ...basePost, title: text, description: text, imageUrl: "" }, { variant: "board", hideEmptyThumbnail: true });
+    expect(markup).toContain("line-clamp-2 leading-snug");
+    expect(markup).toContain("board-row:line-clamp-2");
+    expect(markup).toContain("[overflow-wrap:anywhere]");
+    expect(markup).not.toContain("size-[4.5rem]");
+  });
+});
+
 describe("PostCard photo size (Vercel 이미지 변환량)", () => {
   const photo = { ...basePost, imageUrl: "https://example.com/item.webp" };
   const sizesOf = (markup: string) => [...new Set([...markup.matchAll(/sizes="([^"]*)"/g)].map((m) => m[1]))];

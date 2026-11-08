@@ -68,6 +68,9 @@ type PostCardProps = {
   // A board card inside a [data-force-list] list (the home page), shown as
   // a list row at every width -- only the photo's requested size uses it.
   alwaysRow?: boolean;
+  // Boards and search results use full-width text when no photo is attached.
+  // Opt in so detail recommendations and admin lists keep their layout.
+  hideEmptyThumbnail?: boolean;
 };
 
 // 사진 요청 크기 (next.config.ts images): the photo's real display width,
@@ -101,7 +104,7 @@ const TILE_PHOTO_SIZES = "(min-width: 640px) 96px, calc(50vw - 21px)";
 // inside it would nest an <a> in an <a>. The post link is an absolutely
 // positioned `inset-0` overlay painted last, and the organization link
 // gets `relative z-10` to stay clickable above it.
-export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", variant = "default", alwaysRow = false }: PostCardProps) {
+export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", variant = "default", alwaysRow = false, hideEmptyThumbnail = false }: PostCardProps) {
   const { locale, t } = useI18n();
   // Only a phone in 격자형 shows board cards as grid cards; the server and
   // hydration render 목록형 sizes, and a saved 격자형 switches after that.
@@ -221,7 +224,7 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
           )}
         </div>
       ) : (
-        board && (
+        board && !hideEmptyThumbnail && (
           // List row only: the category tile where the thumbnail would be.
           <div
             className={`size-[4.5rem] shrink-0 items-center justify-center rounded-xl bg-muted min-[375px]:size-20 sm:size-24 ${c.rowTile}`}
@@ -233,7 +236,7 @@ export function PostCard({ post, scoreLabel, scoreDisplay = "percentage", varian
 
       <div className={`flex min-w-0 flex-1 flex-col ${c.body}`}>
         <div className="flex min-w-0 items-center gap-2">
-          {!hasPhoto && (
+          {!hasPhoto && !hideEmptyThumbnail && (
             <span className={`size-7 shrink-0 items-center justify-center rounded-lg bg-primary-muted text-primary ${c.lineIcon}`}>
               {icon("size-4")}
             </span>
