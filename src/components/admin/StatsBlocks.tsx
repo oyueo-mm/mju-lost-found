@@ -6,9 +6,9 @@ import { ChevronRightIcon } from "@/components/icons";
 // Layout pieces shared by both tabs of /admin/stats (운영 통계, 사용자 통계)
 // so their cards, sections and notes look the same.
 
-export function Section({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
+export function Section({ id, title, description, children }: { id?: string; title: string; description?: ReactNode; children: ReactNode }) {
   return (
-    <section className="flex flex-col gap-5 rounded-card border border-border bg-card p-4 md:p-5">
+    <section id={id} data-stats-section={id ? title : undefined} tabIndex={id ? -1 : undefined} className="flex flex-col gap-5 rounded-card border border-border bg-card p-4 md:p-5">
       <div className="flex flex-col gap-1">
         <h2 className="text-base font-semibold text-foreground">{title}</h2>
         {description && <div className="text-xs leading-relaxed text-muted-foreground">{description}</div>}

@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+/* Section anchors clear both the site header and the compact mobile TOC. */
+[data-stats-navigation] [data-stats-section] {
+  scroll-margin-top: calc(var(--header-height) + 4rem);
+}
+[data-stats-navigation] [data-stats-section]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+@media (width >= 80rem) {
+  [data-stats-navigation] [data-stats-section] {
+    scroll-margin-top: calc(var(--header-height) + 1rem);
+  }
+}
+
 /* Phase 17 design system: a small, deliberately short list of semantic
    tokens (never raw zinc-NNN scattered through every component) so every
    page shares one visual language. Light palette lives on bare :root;

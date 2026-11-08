@@ -84,7 +84,7 @@ export function UserStatsView({ report }: { report: UserReport }) {
         </More>
       </div>
 
-      <section className="flex flex-col gap-2" aria-labelledby="user-core">
+      <section id="user-overview" data-stats-section="핵심 지표" tabIndex={-1} className="flex flex-col gap-2" aria-labelledby="user-core">
         <h2 id="user-core" className="text-base font-semibold text-foreground">
           핵심 지표
         </h2>
@@ -108,7 +108,7 @@ export function UserStatsView({ report }: { report: UserReport }) {
         </div>
       </section>
 
-      <Section title="회원가입" description={`가입 기준: 계정이 만들어진 시각(KST) · ${UNIT_TEXT[range.unit]} 집계`}>
+      <Section id="user-signups" title="회원가입" description={`가입 기준: 계정이 만들어진 시각(KST) · ${UNIT_TEXT[range.unit]} 집계`}>
         {trend && (
           <div className="grid gap-5 md:grid-cols-2">
             <StackedBarChart
@@ -157,7 +157,7 @@ export function UserStatsView({ report }: { report: UserReport }) {
       </Section>
 
       <Section
-        title="로그인 회원 활동"
+        id="user-activity" title="로그인 회원 활동"
         description={`활동: 그날 로그인 상태로 사이트를 이용한 회원(하루 한 번) · ${activity.since}부터 집계 · 관리자 제외 · 탈퇴한 회원의 기록은 삭제되어 지난 기간 수치도 줄어들 수 있음`}
       >
         {activity.coverage === "none" ? (
@@ -266,7 +266,7 @@ export function UserStatsView({ report }: { report: UserReport }) {
         </div>
       </Section>
 
-      <Section title="회원 참여" description="기간 안의 실제 기록을 회원 단위로 대조한 수(합계로 비율을 추정하지 않음) · 관리자 제외">
+      <Section id="user-participation" title="회원 참여" description="기간 안의 실제 기록을 회원 단위로 대조한 수(합계로 비율을 추정하지 않음) · 관리자 제외">
         <div className="grid gap-5 md:grid-cols-2">
           <div className="flex flex-col gap-2">
             <h3 className="text-xs font-semibold text-foreground">기간 참여 회원</h3>

@@ -605,7 +605,7 @@ export function DevStatsView({ dash, options, today, selectionNotice }: { dash: 
       </div>
 
       <Section
-        title="현재 버전"
+        id="dev-version" title="현재 버전"
         description="실제 서비스(mju-find.vercel.app)에 반영된 Production 버전과 고정 Preview URL의 버전입니다. Preview는 출시가 아닙니다."
       >
         <div className="grid gap-3 md:grid-cols-2">
@@ -634,7 +634,7 @@ export function DevStatsView({ dash, options, today, selectionNotice }: { dash: 
       </Section>
 
       <Section
-        title="커밋·배포 추이"
+        id="dev-trend" title="커밋·배포 추이"
         description={
           <>
             <p>기간 안의 커밋 수(개발자별)와 배포 횟수를 {UNIT_TEXT[report.unit]}로 보여 줍니다.</p>
@@ -690,11 +690,11 @@ export function DevStatsView({ dash, options, today, selectionNotice }: { dash: 
         </div>
       </Section>
 
-      <Section title="개발 활동 히트맵" description="하루 단위 커밋 수입니다. 색이 진할수록 커밋이 많은 날이며, 고른 기간(최소 12주, 최대 1년)을 보여 줍니다.">
+      <Section id="dev-heatmap" title="개발 활동 히트맵" description="하루 단위 커밋 수입니다. 색이 진할수록 커밋이 많은 날이며, 고른 기간(최소 12주, 최대 1년)을 보여 줍니다.">
         <CommitHeatmap report={report} />
       </Section>
 
-      <Section title="개발자별 활동" description="고른 기간의 개발자별 커밋 기록입니다. 최근에 활동한 순서로 보여 주며, 순위나 기여도 평가가 아닙니다.">
+      <Section id="dev-authors" title="개발자별 활동" description="고른 기간의 개발자별 커밋 기록입니다. 최근에 활동한 순서로 보여 주며, 순위나 기여도 평가가 아닙니다.">
         <div className="relative overflow-x-auto">
           <table className="w-full min-w-[40rem] text-right text-xs tabular-nums">
             <caption className="sr-only">개발자별 커밋 기록</caption>
@@ -735,7 +735,7 @@ export function DevStatsView({ dash, options, today, selectionNotice }: { dash: 
       </Section>
 
       <Section
-        title="배포별 변경 내역"
+        id="dev-changes" title="배포별 변경 내역"
         description="기간 안의 Production 출시(빌드가 끝난 Production 배포)마다, 기록된 직전 출시와 비교한 커밋입니다. 포함 여부는 Git 커밋 관계로만 판단하며, 기록 전 출시와 GitHub에 없는 커밋은 확인 불가로 둡니다."
       >
         {releasesInPeriod.length === 0 ? (
@@ -752,7 +752,7 @@ export function DevStatsView({ dash, options, today, selectionNotice }: { dash: 
       </Section>
 
       <Section
-        title="개발·배포 타임라인"
+        id="dev-history" title="개발·배포 타임라인"
         description={
           <p>
             {periodText}의 커밋(작성 시각)과 배포(Vercel 생성 시각)를 함께 보여 줍니다. 커밋마다 처음 포함된 Production 출시와 Preview 배포를 Git 관계로 찾아

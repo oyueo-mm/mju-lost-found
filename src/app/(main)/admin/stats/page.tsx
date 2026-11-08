@@ -1,3 +1,4 @@
+import { StatsSectionNavigation } from "@/components/admin/StatsSectionNavigation";
 import { AdminRoleFilters } from "@/components/admin/AdminRoleFilters";
 import { prisma } from "@/lib/db/prisma";
 import { AdminOperations } from "@/components/admin/AdminOperations";
@@ -244,7 +245,7 @@ export default async function AdminStatsPage({
           <span>{notice}</span>
         </p>
       )}
-      <nav className="flex gap-1 border-b border-border" aria-label="통계 종류">
+      <nav className="flex flex-wrap gap-1 border-b border-border" aria-label="통계 종류">
         {tabAccess.ops && (
           <Link href={`/admin/stats?${periodQuery}`} aria-current={tab === "ops" ? "page" : undefined} className={tabClass(tab === "ops")}>
             일반 사용자 운영 통계
@@ -336,7 +337,7 @@ export default async function AdminStatsPage({
     const [institutions, accounts] = await Promise.all([prisma.organization.findMany({ where: { managementCampus: { not: null } }, select: { id: true, name: true, managementCampus: true } }), prisma.user.findMany({ where: { OR: [{ isAdmin: true }, { adminPermissions: { some: {} } }, { id: { in: activity.admins?.map((a) => a.id) ?? [] } }] }, select: { id: true, nickname: true } })]);
     const composition = await summarizePermissionComposition();
     return (
-      <div className="flex flex-col gap-6">
+      <StatsSectionNavigation key={tab}>
         {header}
         <p className="rounded-card border border-border bg-card p-3 text-xs text-muted-foreground">
           현재 권한 구성: 전체 관리자 {composition.admins}명 · {composition.rows.map((r) => `${r.label} ${r.count}명`).join(" · ")} (프리셋은 고정 역할이 아니라 현재 보유한 권한 조합으로 분류합니다)
@@ -344,7 +345,7 @@ export default async function AdminStatsPage({
         <AdminRoleFilters filter={actorFilter} from={period.range.from} to={addDays(period.range.until, -1)} institutions={institutions} accounts={accounts} />
         <AdminOperations report={operations} label={period.label} all={all} />
         <AdminActivityView report={activity} viewer={admin.id} all={all} options={options} />
-      </div>
+      </StatsSectionNavigation>
     );
   }
 
@@ -375,20 +376,20 @@ export default async function AdminStatsPage({
     const self = process.env.VERCEL_ENV === "preview" && deploymentId ? { id: deploymentId, viaAlias: host === PREVIEW_ALIAS } : null;
     const dash = await loadDevDashboard({ selection: options.selection, unit: options.unit, author: options.author, today }, self);
     return (
-      <div className="flex flex-col gap-6">
+      <StatsSectionNavigation key={tab}>
         {header}
         <DevStatsView dash={dash} options={options} today={today} selectionNotice={parsed.notice} />
-      </div>
+      </StatsSectionNavigation>
     );
   }
 
   if (tab === "users") {
     const users = await loadUserReport(period.range);
     return (
-      <div className="flex flex-col gap-6">
+      <StatsSectionNavigation key={tab}>
         {header}
         <UserStatsView report={users} />
-      </div>
+      </StatsSectionNavigation>
     );
   }
 
@@ -438,7 +439,7 @@ export default async function AdminStatsPage({
   const inProgress = report.range.until > report.today;
 
   return (
-    <div className="flex flex-col gap-6">
+    <StatsSectionNavigation key={tab}>
       <div className="flex flex-col gap-3">
         {header}
         {hasUnmeasured && (
@@ -454,7 +455,7 @@ export default async function AdminStatsPage({
       </div>
 
       {/* 핵심 지표 */}
-      <section className="flex flex-col gap-2" aria-labelledby="stats-core">
+      <section id="stats-overview" data-stats-section="핵심 지표" tabIndex={-1} className="flex flex-col gap-2" aria-labelledby="stats-core">
         <h2 id="stats-core" className="text-base font-semibold text-foreground">
           핵심 지표 <span className="text-xs font-normal text-muted-foreground">표시 기간 합계</span>
         </h2>
@@ -484,7 +485,7 @@ export default async function AdminStatsPage({
       </section>
 
       <Section
-        title="방문 분석"
+        id="stats-visits" title="방문 분석"
         description={
           <>
             <p>
@@ -668,7 +669,7 @@ export default async function AdminStatsPage({
         </div>
       </Section>
 
-      <div id="day-visits" className="scroll-mt-20">
+      <div id="day-visits" data-stats-section="날짜별 방문 분석" tabIndex={-1}>
         <DayVisitsSection
           controls={
             <div className="flex flex-col gap-2">
@@ -688,7 +689,7 @@ export default async function AdminStatsPage({
         </DayVisitsSection>
       </div>
 
-      <div id="hourly" className="scroll-mt-20">
+      <div id="hourly" data-stats-section="시간대 분석" tabIndex={-1}>
         <HourlyStatsView
           cells={hourlyCells}
           metric={metric}
@@ -699,7 +700,7 @@ export default async function AdminStatsPage({
       </div>
 
       <Section
-        title="방문 시간·이탈 분석"
+        id="stats-flow" title="방문 시간·이탈 분석"
         description={
           <>
             <p>
@@ -922,7 +923,7 @@ export default async function AdminStatsPage({
         )}
       </Section>
 
-      <Section title="서비스 이용" description="게시글 등록·검색·AI 추천·채팅·완료 처리의 표시 기간 합계입니다.">
+      <Section id="stats-service" title="서비스 이용" description="게시글 등록·검색·AI 추천·채팅·완료 처리의 표시 기간 합계입니다.">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           <StatCard label="분실물 등록" value={totals.lost} />
           <StatCard label="습득물 등록" value={totals.found} />
@@ -1000,7 +1001,7 @@ export default async function AdminStatsPage({
       />
 
       <Section
-        title="서버 상태"
+        id="stats-server" title="서버 상태"
         description={
           <>
             <p>조회 기간의 API 응답 시간·오류율과 AI 추론·DB 지연, 현재 저장 용량입니다.</p>
@@ -1051,7 +1052,7 @@ export default async function AdminStatsPage({
         </More>
       </Section>
 
-      <Section title="상세 데이터" description="기간별 수치 표입니다. 그래프와 같은 값이며, 내보내기 파일에도 같은 값이 들어갑니다.">
+      <Section id="stats-details" title="상세 데이터" description="기간별 수치 표입니다. 그래프와 같은 값이며, 내보내기 파일에도 같은 값이 들어갑니다.">
         <More label="기간별 서비스 이용 표 펼치기">
           <SeriesTable report={report} columns={METRICS.map((m) => ({ label: m.label, values: core[m.key] }))} />
         </More>
@@ -1090,6 +1091,6 @@ export default async function AdminStatsPage({
           )}
         </More>
       </Section>
-    </div>
+    </StatsSectionNavigation>
   );
 }

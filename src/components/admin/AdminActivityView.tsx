@@ -366,7 +366,7 @@ function DailySection({ ctx, rows }: { ctx: Ctx; rows: AdminActivityRow[] }) {
   const tasksPerCategory = slice(report.dailyTasks);
   return (
     <Section
-      title="일별 활동"
+      id="admin-daily" title="일별 활동"
       description={`최근 ${options.period}일, 한국 시간. 칸을 누르면 그날의 타임라인으로 이동합니다. 숫자는 칸 안과 마우스를 올렸을 때 보입니다.`}
     >
       {!one && (
@@ -428,7 +428,7 @@ function HourSection({ ctx, rows }: { ctx: Ctx; rows: AdminActivityRow[] }) {
   const status = (n: number) => Array.from({ length: n }, () => (unmeasured ? "none" : view.presenceDays < options.period ? "partial" : "full") as "none" | "partial" | "full");
   return (
     <Section
-      title="시간대별 방문·로그인"
+      id="admin-hours" title="시간대별 방문·로그인"
       description={`최근 ${options.period}일, 한국 시간. 방문은 시작한 시각에 한 번만 셉니다(${ADMIN_VISIT_GAP_MINUTES}분 이상 쉬면 새 방문). 관리 작업을 한 시각과는 다른 지표입니다.`}
     >
       <Segmented
@@ -629,7 +629,7 @@ function Timeline({ ctx }: { ctx: Ctx }) {
     .filter(Boolean)
     .join(" · ");
   return (
-    <section id="timeline" className="flex scroll-mt-20 flex-col gap-4 rounded-card border border-border bg-card p-4 md:p-5">
+    <section data-stats-section="활동 타임라인" tabIndex={-1} id="timeline" className="flex scroll-mt-20 flex-col gap-4 rounded-card border border-border bg-card p-4 md:p-5">
       <div className="flex flex-col gap-1">
         <h2 className="text-base font-semibold text-foreground">활동 타임라인</h2>
         <p className="text-xs leading-relaxed text-muted-foreground">
@@ -779,6 +779,7 @@ export function AdminActivityView({ report, viewer, all, options }: { report: Ad
       <FilterBar ctx={ctx} />
 
       <Section
+        id="admin-summary"
         title={one ? (one.id === viewer ? "내 활동 요약" : `${one.nickname} 활동 요약`) : "전체 관리자 요약"}
         description={
           <More label="각 항목의 기준">
@@ -805,7 +806,7 @@ export function AdminActivityView({ report, viewer, all, options }: { report: Ad
       </Section>
 
       {all && admin === null && report.admins.length > 1 && (
-        <Section title="관리자별 비교" description={`최근 ${ctx.options.period}일. 관리 작업(업무)과 방문·로그인(접속)은 서로 다른 지표라 따로 비교합니다.`}>
+        <Section id="admin-comparison" title="관리자별 비교" description={`최근 ${ctx.options.period}일. 관리 작업(업무)과 방문·로그인(접속)은 서로 다른 지표라 따로 비교합니다.`}>
           <Comparison ctx={ctx} figures={figures} />
         </Section>
       )}

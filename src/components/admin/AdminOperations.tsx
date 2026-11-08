@@ -2,7 +2,7 @@ import type { loadAdminOperations } from "@/lib/metrics/operations";
 
 export function AdminOperations({ report, label, all }: { report: Awaited<ReturnType<typeof loadAdminOperations>>; label: string; all: boolean }) {
   const total = (metric: string) => report.daily.filter((r) => r.metric === metric).reduce((n, r) => n + r.n, 0);
-  return <section className="space-y-4 rounded-card border border-border bg-card p-4">
+  return <section id="admin-service" data-stats-section="관리자 서비스 이용" tabIndex={-1} className="space-y-4 rounded-card border border-border bg-card p-4">
     <h2 className="font-semibold">관리자 서비스 이용 · {label}</h2>
     <p className="text-xs text-muted-foreground">관리 권한을 하나라도 가진 계정(전체 관리자·세부 권한 보유자)의 활동입니다. 여러 권한을 가져도 한 번만 집계합니다. 세부 역할 수집 시작: {report.since ?? "미측정"}. 이전 관리 활동은 역할을 추정하지 않습니다. 계정별 방문·검색은 수집하지 않으며 담당자 선택 시 처리 실적과 등록만 표시합니다.</p>
     <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">

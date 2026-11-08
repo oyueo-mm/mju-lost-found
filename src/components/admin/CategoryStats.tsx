@@ -86,7 +86,7 @@ export function CategoryStats({
   const whoText = scope === "all" ? "관리자·일반 사용자" : CATEGORY_SCOPE_LABELS[scope];
 
   return (
-    <div id={CATEGORY_ANCHOR} className="scroll-mt-20">
+    <div id={CATEGORY_ANCHOR} data-stats-section="카테고리별 현황" tabIndex={-1}>
     <Section
       title="카테고리별 현황"
       description={
