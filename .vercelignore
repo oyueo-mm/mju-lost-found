@@ -15,3 +15,13 @@
 
 # Local Claude Code settings -- not part of the app.
 .claude
+
+# Local QA servers, fixtures, snapshots and generated browser artifacts.
+.vercel
+.next
+scripts/preview-select.mjs
+scripts/preview-unified-search.mjs
+scripts/search-preview-build.mjs
+scripts/compare-unified-search.mjs
+scripts/fixtures
+docs/UNIFIED_SEARCH_COMPARISON.json
