@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useContext, type MouseEvent } from "react";
+import { SearchNavigationContext } from "./SearchNavigationContext";
 
 import { useI18n } from "@/lib/i18n/client";
 
@@ -17,6 +19,12 @@ type PaginationProps = {
 // results. Page links continue to preserve the URL's filters.
 export function Pagination({ basePath, currentSearchParams, page, totalPages }: PaginationProps) {
   const { t } = useI18n();
+  const local = useContext(SearchNavigationContext);
+  function navigate(event: MouseEvent<HTMLAnchorElement>) {
+    if (!local || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    local.push(event.currentTarget.href);
+  }
   if (totalPages <= 1) return null;
 
   function hrefFor(targetPage: number): string {
@@ -53,7 +61,7 @@ export function Pagination({ basePath, currentSearchParams, page, totalPages }: 
               {item}
             </span>
           ) : (
-            <Link key={item} href={hrefFor(item)} className={`rounded-lg ${itemPx} py-1.5 text-foreground hover:bg-muted`}>
+            <Link key={item} href={hrefFor(item)} onClick={navigate} className={`rounded-lg ${itemPx} py-1.5 text-foreground hover:bg-muted`}>
               {item}
             </Link>
           ),
@@ -65,7 +73,7 @@ export function Pagination({ basePath, currentSearchParams, page, totalPages }: 
   return (
     <nav className="flex items-center justify-center gap-1 text-sm sm:gap-2">
       {page > 1 ? (
-        <Link href={hrefFor(page - 1)} className="whitespace-nowrap rounded-lg px-2 py-1.5 text-foreground hover:bg-muted sm:px-3">
+        <Link href={hrefFor(page - 1)} onClick={navigate} className="whitespace-nowrap rounded-lg px-2 py-1.5 text-foreground hover:bg-muted sm:px-3">
           {t("search.pagination.prev")}
         </Link>
       ) : (
@@ -76,7 +84,7 @@ export function Pagination({ basePath, currentSearchParams, page, totalPages }: 
       {pageList(1, "flex items-center gap-0.5 sm:hidden", "px-2", "px-0.5")}
 
       {page < totalPages ? (
-        <Link href={hrefFor(page + 1)} className="whitespace-nowrap rounded-lg px-2 py-1.5 text-foreground hover:bg-muted sm:px-3">
+        <Link href={hrefFor(page + 1)} onClick={navigate} className="whitespace-nowrap rounded-lg px-2 py-1.5 text-foreground hover:bg-muted sm:px-3">
           {t("search.pagination.next")}
         </Link>
       ) : (

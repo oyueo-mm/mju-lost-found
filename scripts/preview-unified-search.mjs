@@ -10,6 +10,7 @@ import { loadSearchPreviewBackend } from "./search-preview-build.mjs";
 
 const root = process.cwd();
 const backend = await loadSearchPreviewBackend();
+const homeRecommendations = (await backend.searchPosts({ type: "found", page: 1, limit: 6 })).items;
 const output = ".vercel/unified-search-preview";
 mkdirSync(output, { recursive: true });
 const cssTree = postcss.parse(readdirSync(".next/static/chunks").filter((file) => file.endsWith(".css")).map((file) => readFileSync(`.next/static/chunks/${file}`, "utf8")).join("\n"));
@@ -63,5 +64,5 @@ createServer(async (request, response) => {
   if (url.pathname === "/preview-photo.jpg" || url.pathname === "/_next/image") { response.setHeader("Content-Type", "image/jpeg"); response.end(readFileSync("docs/ai-eval-seed/query-images/Q01.jpg")); return; }
   if (url.pathname.startsWith("/post/")) { response.setHeader("Content-Type", "text/html; charset=utf-8"); response.end("<p>로컬 평가용 상세 링크입니다. 실제 게시글 페이지를 호출하지 않습니다.</p>"); return; }
   response.setHeader("Content-Type", "text/html; charset=utf-8");
-  response.end(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MJU Find 통합 검색 로컬 검증</title><style>${css}</style><div id="root"></div><script src="/client.js"></script></html>`);
+  response.end(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MJU Find 통합 검색 로컬 검증</title><style>${css}</style><div id="root"></div><script id="home-preview-posts" type="application/json">${JSON.stringify(homeRecommendations).replace(/</g, "\\u003c")}</script><script src="/client.js"></script></html>`);
 }).listen(4210, "127.0.0.1", () => console.log("Unified search preview: http://127.0.0.1:4210/search (no DB writes)"));

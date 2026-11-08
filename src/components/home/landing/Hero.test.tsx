@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { createTranslator } from "@/lib/i18n/translate";
@@ -7,6 +8,8 @@ import { ko } from "@/lib/i18n/messages/ko";
 vi.mock("@/lib/i18n/server", () => ({ getTranslator: vi.fn(async () => createTranslator("ko", ko)) }));
 // the real search panel (client); stood in for by a marker
 vi.mock("@/components/home/HomeSearchBar", () => ({ HomeSearchBar: ({ variant }: { variant?: string }) => <form data-testid="home-search" data-variant={variant} /> }));
+vi.mock("../HomeSearch", () => ({ HomeSearchProvider: ({ children }: { children: ReactNode }) => children, HomeSearchResults: ({ children }: { children: ReactNode }) => children }));
+vi.mock("../HomeHeroRecommendations", () => ({ HomeHeroRecommendations: () => <div data-home-recommendations /> }));
 
 const { Hero } = await import("./Hero");
 const html = renderToStaticMarkup(await Hero());

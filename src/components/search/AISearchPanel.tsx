@@ -59,6 +59,9 @@ type AISearchPanelProps = {
   // The signed-out landing hero states what the search does right above
   // it, so its "describe the item" hint would repeat it (that page only).
   hideHint?: boolean;
+  onInlineSearch?: (input: { query: string; image: File | null }) => void;
+  onDraftChange?: (input: { query: string; image: File | null }) => void;
+  onClearSearch?: () => void;
 };
 
 const QUICK_SEARCH_CLASS =
@@ -91,6 +94,9 @@ export function AISearchPanel({
   mobileAnimatedPlaceholders,
   extraQuery,
   hideHint = false,
+  onInlineSearch,
+  onDraftChange,
+  onClearSearch,
 }: AISearchPanelProps) {
   const router = useRouter();
   const { t } = useI18n();
@@ -186,6 +192,7 @@ export function AISearchPanel({
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPreviewUrl(null);
       setFile(null);
+      onDraftChange?.({ query, image: null });
       return;
     }
 
@@ -200,6 +207,7 @@ export function AISearchPanel({
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(URL.createObjectURL(selected));
     setFile(selected);
+    onDraftChange?.({ query, image: selected });
   }
 
   function handleRemoveImage() {
@@ -208,6 +216,7 @@ export function AISearchPanel({
     setFile(null);
     if (inputRef.current) inputRef.current.value = "";
     setResults(null);
+    onDraftChange?.({ query, image: null });
   }
 
   const trimmedQuery = query.trim();
@@ -224,6 +233,11 @@ export function AISearchPanel({
       hasImageTypeConflict
     ) return;
 
+    if (onInlineSearch) {
+      setQuery(submittedQuery);
+      onInlineSearch({ query: submittedQuery, image: file });
+      return;
+    }
     requestInFlightRef.current = true;
 
     // Text queries use the same URL-backed unified results as the boards.
@@ -334,12 +348,15 @@ export function AISearchPanel({
           onChange={(event) => {
             setQuery(event.target.value);
             setResults(null);
+            onDraftChange?.({ query: event.target.value, image: file });
           }}
           placeholder={animatedPlaceholders && !reducedMotion && !query ? animatedPlaceholderText : placeholder ?? t("aiSearch.placeholder")}
           maxLength={MAX_SEARCH_QUERY_LENGTH}
           disabled={pending}
           className="w-full min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
         />
+
+        {onClearSearch && (query || file) && <button type="button" onClick={onClearSearch} aria-label={t("search.resetFilters")} className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary"><XIcon aria-hidden="true" className="size-4" /></button>}
 
         <button
           type="submit"

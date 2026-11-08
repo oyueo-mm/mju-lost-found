@@ -6,28 +6,28 @@ import { I18nProvider } from "@/lib/i18n/client";
 import { ko } from "@/lib/i18n/messages/ko";
 import { resolveAiSearchQuery } from "@/components/search/AISearchPanel";
 import { HOME_POPULAR_SEARCHES, HomeSearchBar } from "./HomeSearchBar";
+import { HomeSearchProvider, HomeSearchResults } from "./HomeSearch";
 
 function renderHomeSearch(): string {
   return renderToStaticMarkup(
     <I18nProvider locale="ko" messages={ko}>
-      <HomeSearchBar />
+      <HomeSearchProvider><HomeSearchBar /><HomeSearchResults><p>기존 추천 게시글</p></HomeSearchResults></HomeSearchProvider>
     </I18nProvider>,
   );
 }
 
 describe("HomeSearchBar popular searches", () => {
-  it("renders the localized label and every chip as a link to 키워드 검색 for that word", () => {
+  it("renders popular keywords as inline search buttons and preserves the initial home slot", () => {
     const markup = renderHomeSearch();
 
     expect(markup).toContain("인기 검색어");
     for (const keyword of HOME_POPULAR_SEARCHES) {
-      const href = `/search?mode=unified&amp;q=${encodeURIComponent(keyword)}`;
-      expect(markup).toContain(`href="${href}"`);
-      // no AI-search chip button any more
-      expect(markup).not.toContain(`value="${keyword}"`);
+      expect(markup).toContain(`value="${keyword}"`);
+      expect(markup).not.toContain("href=\"/search");
     }
-    expect(markup).toContain(">버즈</a>");
-    expect(markup).toContain(">에어팟</a>");
+    expect(markup).toContain(">버즈</button>");
+    expect(markup).toContain(">에어팟</button>");
+    expect(markup).toContain("기존 추천 게시글");
     expect(markup).not.toContain("무선 이어폰");
   });
 

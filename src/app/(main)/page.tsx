@@ -22,9 +22,7 @@ import { getTranslator } from "@/lib/i18n/server";
 // signed out before the landing story (LandingHero: features and the demos
 // of posting, AI search, matching).
 //
-// The search itself is unchanged: AI search over found posts
-// (HomeSearchBar); the mode toggle and board choice stay on /search,
-// /lost and /found.
+// Search only replaces the list inside Hero; everything below stays mounted.
 export default async function Home() {
   const [user, t] = await Promise.all([getCurrentUser(), getTranslator()]);
   if (!user) {

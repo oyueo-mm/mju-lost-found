@@ -4,31 +4,35 @@ import { useContext, useEffect, useState } from "react";
 import { PostCard } from "@/components/post/PostCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useI18n } from "@/lib/i18n/client";
-import { fetchPostsFromApi, type ApiPagedResult } from "@/lib/posts/searchApiClient";
+import { fetchPostsFromApi, fetchImagePosts, type ApiPagedResult } from "@/lib/posts/searchApiClient";
 import { Lost112Notice } from "./Lost112Notice";
 import { Pagination } from "./Pagination";
 import { BOARD_RESULTS_GRID_CLASS, SEARCH_RESULTS_GRID_CLASS } from "./resultsLayout";
 import { SearchResultsToolbarContext } from "./SearchResultsToolbarContext";
 
-export function SemanticSearchResults({ params, basePath, board = false }: {
+export function SemanticSearchResults({ params, basePath, board = false, image }: {
   params: Record<string, string>;
   basePath: string;
   board?: boolean;
+  image?: File;
 }) {
   const { t } = useI18n();
   const renderToolbar = useContext(SearchResultsToolbarContext);
   const query = new URLSearchParams(params).toString();
-  const [state, setState] = useState<{ query: string; result?: ApiPagedResult; error?: boolean }>();
+  const [state, setState] = useState<{ query: string; image?: File; result?: ApiPagedResult; error?: boolean }>();
   useEffect(() => {
     const controller = new AbortController();
-    fetchPostsFromApi(Object.fromEntries(new URLSearchParams(query)), controller.signal).then(
-      (result) => { if (!controller.signal.aborted) setState({ query, result }); },
-      () => { if (!controller.signal.aborted) setState({ query, error: true }); },
+    const request = image
+      ? fetchImagePosts(new URLSearchParams(query), image, controller.signal)
+      : fetchPostsFromApi(Object.fromEntries(new URLSearchParams(query)), controller.signal);
+    request.then(
+      (result) => { if (!controller.signal.aborted) setState({ query, image, result }); },
+      () => { if (!controller.signal.aborted) setState({ query, image, error: true }); },
     );
     return () => controller.abort();
-  }, [query]);
+  }, [query, image]);
 
-  if (state?.query !== query) return <>{renderToolbar?.()}<p role="status">{t("common.loading")}</p></>;
+  if (state?.query !== query || state.image !== image) return <>{renderToolbar?.()}<p role="status">{t("common.loading")}</p></>;
   if (state.error) return <>{renderToolbar?.()}<p role="alert" className="rounded-card bg-destructive-muted p-10 text-center text-sm text-destructive">{t("search.error")}</p></>;
   const result = state.result!;
   return (
