@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
+
 import { Button } from "@/components/ui/Button";
 import { useI18n } from "@/lib/i18n/client";
 
@@ -79,7 +81,7 @@ export function PostAsSelector({
       {mode === "organization" && (
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-muted-foreground">{t("postAs.representative")}</span>
-          <select
+          <Select
             value={value ?? options[0].organizationId}
             onChange={(e) => onChange(Number(e.target.value))}
             disabled={disabled}
@@ -90,7 +92,7 @@ export function PostAsSelector({
                 {org.organizationName}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       )}
     </div>

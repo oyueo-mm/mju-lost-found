@@ -1,4 +1,6 @@
 "use client";
+
+import { Select } from "@/components/ui/Select";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { saveInstitutionAction } from "@/app/(main)/admin/users/permissionActions";
@@ -20,10 +22,10 @@ export function InstitutionRegisterForm({ organizations }: { organizations: { id
           setMessage("error" in result ? result.error ?? "" : "관리 기관을 저장했습니다."); router.refresh();
         } catch { setMessage("저장하지 못했습니다. 다시 시도해주세요."); } finally { setPending(false); }
       }}>
-        <label className="text-sm">기존 단체 사용 (선택)<select name="existing" className={field}><option value="">새 관리 기관 등록</option>{organizations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
+        <label className="text-sm">기존 단체 사용 (선택)<Select name="existing" className={field}><option value="">새 관리 기관 등록</option>{organizations.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</Select></label>
         <label className="text-sm">기관명<input name="name" required maxLength={100} className={field} placeholder="예: 본관 경비실" /></label>
         <label className="text-sm">기관 유형<input name="type" required maxLength={100} className={field} placeholder="예: 경비실" /></label>
-        <label className="text-sm">캠퍼스<select name="campus" className={field}>{["인문캠퍼스", "자연캠퍼스", "양쪽"].map((c) => <option key={c}>{c}</option>)}</select></label>
+        <label className="text-sm">캠퍼스<Select name="campus" className={field}>{["인문캠퍼스", "자연캠퍼스", "양쪽"].map((c) => <option key={c}>{c}</option>)}</Select></label>
         <Button size="sm" disabled={pending} className="self-start">관리 기관 저장</Button>
         <p role="status" className="text-xs">{message}</p>
       </form>

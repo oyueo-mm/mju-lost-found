@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -192,7 +194,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted, allowTe
 
       <label className="flex flex-col gap-1.5">
         <span className="text-xs font-medium text-muted-foreground">처리 상태 선택</span>
-        <select
+        <Select
           value={decision}
           onChange={(e) => setDecision(e.target.value as "dismiss" | "action")}
           className={FIELD_CLASS}
@@ -201,7 +203,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted, allowTe
           <option value="action" disabled={targetDeleted || actionChoices.length === 0}>
             조치 완료
           </option>
-        </select>
+        </Select>
       </label>
 
       {decision === "action" && (
@@ -209,7 +211,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted, allowTe
           {actionChoices.length > 1 ? (
             <label className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-destructive">조치 선택</span>
-              <select
+              <Select
                 value={actionType}
                 onChange={(e) => setActionType(e.target.value as ModerationActionTypeValue)}
                 className={FIELD_CLASS}
@@ -219,7 +221,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted, allowTe
                     {MODERATION_ACTION_TYPE_LABELS[a]}
                   </option>
                 ))}
-              </select>
+              </Select>
               {(actionType === "temp_hide_post" || actionType === "temp_hide_comment") && (
                 <span className="text-xs text-muted-foreground">
                   임시 숨김: 삭제하지 않고 작성자와 관리자에게만 보이게 합니다. 작성자에게 알림이 가며, 검토 후 처리 결과에서 해제할 수 있습니다.
@@ -291,7 +293,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted, allowTe
                   추천 사유
                   <span className="text-destructive"> *</span>
                 </span>
-                <select
+                <Select
                   value={actionReasonCategory}
                   onChange={(e) => setActionReasonCategory(e.target.value)}
                   className={`${FIELD_CLASS} bg-card`}
@@ -301,7 +303,7 @@ export function ReportProcessForm({ reportId, targetType, targetDeleted, allowTe
                       {c}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="flex flex-col gap-1.5">
                 <span className="text-xs font-medium text-muted-foreground">

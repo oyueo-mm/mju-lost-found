@@ -1,3 +1,4 @@
+import { Select } from "@/components/ui/Select";
 import Link from "next/link";
 import { PERMISSION_INFO, type GrantablePermissionKey } from "@/lib/permissions/definitions";
 import type { ReactNode } from "react";
@@ -575,25 +576,25 @@ function TimelineFilterForm({ ctx }: { ctx: Ctx }) {
       <input type="hidden" name="dm" value={options.dayMetric} />
       <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
         날짜
-        <select name="day" defaultValue={filter.day ?? ""} className={select}>
+        <Select name="day" defaultValue={filter.day ?? ""} className={select}>
           <option value="">최근 {options.period}일 전체</option>
           {[...view.days].reverse().map((d) => (
             <option key={d} value={d}>
               {d} ({WEEKDAY_OF(d)})
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
         종류
-        <select name="k" defaultValue={filter.kind ?? ""} className={select}>
+        <Select name="k" defaultValue={filter.kind ?? ""} className={select}>
           <option value="">전체</option>
           {TIMELINE_KINDS.map((k) => (
             <option key={k.key} value={k.key}>
               {k.label}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <button type="submit" className="h-9 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
         적용
@@ -716,14 +717,14 @@ function FilterBar({ ctx }: { ctx: Ctx }) {
           <input type="hidden" name="dm" value={options.dayMetric} />
           <label className="flex flex-col gap-1 text-[11px] text-muted-foreground">
             관리자
-            <select name="a" defaultValue={ctx.admin ?? ""} className={select}>
+            <Select name="a" defaultValue={ctx.admin ?? ""} className={select}>
               <option value="">전체 관리자 비교</option>
               {report.admins.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.nickname} (#{a.id})
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <button type="submit" className="h-9 rounded-lg border border-border px-3 text-xs font-medium text-foreground hover:bg-muted">
             보기

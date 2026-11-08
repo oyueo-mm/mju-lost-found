@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
+
 import { useEffect, useState } from "react";
 
 import { buildUtmLink, QR_OPTIONS, QR_PNG_SIZE, qrFileName, qrPngScale, UTM_LINK_PAGES } from "@/lib/metrics/utmLink";
@@ -114,13 +116,13 @@ export function UtmLinkBuilder() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label className="flex flex-col gap-1">
           연결할 화면
-          <select className={field} value={path} onChange={(e) => setPath(e.target.value)}>
+          <Select className={field} value={path} onChange={(e) => setPath(e.target.value)}>
             {UTM_LINK_PAGES.map((p) => (
               <option key={p.path} value={p.path}>
                 {p.label}
               </option>
             ))}
-          </select>
+          </Select>
           <span className={help}>링크나 QR 코드로 접속했을 때 처음 표시할 화면입니다.</span>
         </label>
         <label className="flex flex-col gap-1">

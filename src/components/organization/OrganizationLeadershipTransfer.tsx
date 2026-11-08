@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -54,7 +56,7 @@ export function OrganizationLeadershipTransfer({
     <div className="flex flex-col gap-2">
       <p className="text-xs text-muted-foreground">위임 후 본인은 일반 관리자가 되고, 선택한 구성원이 새 대표 관리자가 됩니다.</p>
       <div className="flex flex-wrap items-center gap-2">
-        <select
+        <Select
           value={targetUserId}
           onChange={(e) => setTargetUserId(Number(e.target.value))}
           disabled={pending}
@@ -65,7 +67,7 @@ export function OrganizationLeadershipTransfer({
               {c.user.nickname ?? `사용자 #${c.user.id}`}
             </option>
           ))}
-        </select>
+        </Select>
         <Button variant="destructive" size="sm" disabled={pending} onClick={handleTransfer}>
         {pending ? t("organization.processing") : t("organization.transferLeadership")}
         </Button>

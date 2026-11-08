@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
+
 import { useI18n } from "@/lib/i18n/client";
 import { taxonomyCategoryLabelKey, taxonomySubcategoryLabelKey } from "@/lib/i18n/labels";
 import { CATEGORY_CODES, isCategoryCode, isSubcategoryCode, parentCategoryOf, subcategoriesOf } from "@/lib/posts/categoryTaxonomy";
@@ -22,7 +24,7 @@ export function CategoryFilterSelects({ value, onChange, selectClassName, emptyL
   const { t } = useI18n();
   return (
     <>
-      <select
+      <Select
         aria-label={t("search.filter.category")}
         value={value.categoryCode ?? (value.legacyCategory ? `legacy:${value.legacyCategory}` : "")}
         onChange={(event) => {
@@ -38,10 +40,10 @@ export function CategoryFilterSelects({ value, onChange, selectClassName, emptyL
             {t(taxonomyCategoryLabelKey(code))}
           </option>
         ))}
-      </select>
+      </Select>
 
       {value.categoryCode && (
-        <select
+        <Select
           aria-label={t("search.filter.subcategory")}
           value={value.subcategory ?? ""}
           onChange={(event) => {
@@ -57,7 +59,7 @@ export function CategoryFilterSelects({ value, onChange, selectClassName, emptyL
               {t(taxonomySubcategoryLabelKey(code))}
             </option>
           ))}
-        </select>
+        </Select>
       )}
     </>
   );

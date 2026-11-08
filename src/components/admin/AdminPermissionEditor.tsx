@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
+
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -126,10 +128,10 @@ export function AdminPermissionEditor({ userId, label, current, organizationId, 
             <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
               <p className="text-xs text-muted-foreground">물품 권한은 담당 기관의 물품에만 적용돼요. 기관을 정하지 않으면 물품을 처리할 수 없습니다.</p>
               <label className="flex flex-col gap-1">담당 기관
-                <select className={field} value={org} onChange={(e) => { setOrg(e.target.value); setConfirmed(false); }} required>
+                <Select className={field} value={org} onChange={(e) => { setOrg(e.target.value); setConfirmed(false); }} required>
                   <option value="">기관 선택</option>
                   {institutions.map((i) => <option key={i.id} value={i.id}>{i.managementCampus} · {i.name}</option>)}
-                </select>
+                </Select>
               </label>
               <label className="flex flex-col gap-1">담당 시설 (선택)
                 <input className={field} maxLength={200} value={place} onChange={(e) => setPlace(e.target.value)} placeholder="예: 국제관 1층" />

@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
+
 import { useState, useTransition } from "react";
 
 import { exportStatsAction } from "@/app/(main)/admin/stats/actions";
@@ -85,13 +87,13 @@ export function StatsExportPanel({
       {format === "csv" && (
         <label className="flex max-w-xs flex-col gap-1">
           CSV 데이터 (파일 1개에 1종류)
-          <select className={field} value={dataset} onChange={(e) => setDataset(e.target.value)}>
+          <Select className={field} value={dataset} onChange={(e) => setDataset(e.target.value)}>
             {datasets.map((d) => (
               <option key={d.key} value={d.key}>
                 {d.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       )}
       <p className="leading-relaxed">

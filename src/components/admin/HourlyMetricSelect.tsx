@@ -1,9 +1,9 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
+
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
-
-import { ChevronDownIcon } from "@/components/icons";
 
 // 시간대 분석 지표: one dropdown (six metrics and 전체 지표 보기). A choice
 // replaces `m` in the URL and keeps the days and the period; the charts and
@@ -22,7 +22,7 @@ export function HourlyMetricSelect({ value, options }: { value: string; options:
     <label className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
       <span className="shrink-0 font-medium">지표</span>
       <span className="relative min-w-0">
-        <select
+        <Select
           value={value}
           onChange={(e) => change(e.target.value)}
           aria-busy={pending}
@@ -33,8 +33,7 @@ export function HourlyMetricSelect({ value, options }: { value: string; options:
               {o.label}
             </option>
           ))}
-        </select>
-        <ChevronDownIcon className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+        </Select>
       </span>
       {pending && <span className="shrink-0 text-primary">갱신 중…</span>}
     </label>

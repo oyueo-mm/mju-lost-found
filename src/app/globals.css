@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "../components/ui/select.css";
 
 /* Section anchors clear both the site header and the compact mobile TOC. */
 [data-stats-navigation] [data-stats-section] {

@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -61,13 +63,13 @@ export function ExternalAccessForm() {
         </label>
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-foreground">캠퍼스</span>
-          <select value={campus} onChange={(e) => setCampus(e.target.value)} disabled={pending} className={INPUT_CLASS}>
+          <Select value={campus} onChange={(e) => setCampus(e.target.value)} disabled={pending} className={INPUT_CLASS}>
             {EXTERNAL_ACCESS_CAMPUSES.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </div>
       {error && (

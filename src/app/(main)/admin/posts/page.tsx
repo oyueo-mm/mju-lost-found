@@ -1,3 +1,4 @@
+import { Select } from "@/components/ui/Select";
 import Link from "next/link";
 
 import { requireAnyPermission } from "@/lib/auth/session";
@@ -89,7 +90,7 @@ export default async function AdminPostsPage({
           placeholder="작성자 닉네임 검색"
           className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
         />
-        <select
+        <Select
           name="category"
           defaultValue={category ?? ""}
           className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground"
@@ -100,7 +101,7 @@ export default async function AdminPostsPage({
               {c}
             </option>
           ))}
-        </select>
+        </Select>
         <button
           type="submit"
           className="rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-foreground/30"

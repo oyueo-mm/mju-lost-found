@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -244,7 +246,7 @@ export function UserActionButtons({ user, isSelf, canSanction = true, canManageA
             <span>
               추천 사유<span className="text-destructive"> *</span>
             </span>
-            <select
+            <Select
               value={reasonCategory}
               onChange={(e) => setReasonCategory(e.target.value)}
               className="rounded border border-border bg-card px-1.5 py-1"
@@ -254,7 +256,7 @@ export function UserActionButtons({ user, isSelf, canSanction = true, canManageA
                   {c}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="flex flex-col gap-1 text-foreground">
             <span>

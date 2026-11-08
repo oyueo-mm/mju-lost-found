@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
+
 import { useMemo, useState } from "react";
 
 // API 응답 시간·오류율 (/admin/stats): the server hands over the period's
@@ -60,24 +62,24 @@ export function ApiStatsTable({ rows, empty }: { rows: ApiStatRow[]; empty: stri
         </label>
         <label className="flex flex-col gap-1">
           HTTP 메서드
-          <select className={field} value={method} onChange={(e) => setMethod(e.target.value)}>
+          <Select className={field} value={method} onChange={(e) => setMethod(e.target.value)}>
             <option value="all">전체</option>
             {methods.map((m) => (
               <option key={m} value={m}>
                 {m}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="flex flex-col gap-1">
           정렬 (높은 순)
-          <select className={field} value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+          <Select className={field} value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
             {SORTS.map((s) => (
               <option key={s.key} value={s.key}>
                 {s.label}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="flex items-center gap-2 self-end py-2 text-foreground sm:col-span-2 lg:col-span-1">
           <input type="checkbox" checked={errorsOnly} onChange={(e) => setErrorsOnly(e.target.checked)} />

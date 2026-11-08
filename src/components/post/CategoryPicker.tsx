@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
+
 import { useState } from "react";
 
 import { useI18n } from "@/lib/i18n/client";
@@ -48,7 +50,7 @@ export function CategoryPicker({ value, onChange, required, legacyUnmapped, titl
               </span>
             )}
           </span>
-          <select
+          <Select
             name="categoryCode"
             required={required}
             value={value.categoryCode ?? ""}
@@ -67,7 +69,7 @@ export function CategoryPicker({ value, onChange, required, legacyUnmapped, titl
                 {t(taxonomyCategoryLabelKey(code))}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
 
         {value.categoryCode !== null && (
@@ -75,7 +77,7 @@ export function CategoryPicker({ value, onChange, required, legacyUnmapped, titl
             <span className="font-medium text-foreground">
               {t("form.subcategory")} <span className="font-normal text-muted-foreground">{t("form.subcategoryOptional")}</span>
             </span>
-            <select
+            <Select
               name="subcategory"
               value={value.subcategory ?? ""}
               onChange={(event) => {
@@ -92,7 +94,7 @@ export function CategoryPicker({ value, onChange, required, legacyUnmapped, titl
                   {t(taxonomySubcategoryLabelKey(code))}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
       </div>

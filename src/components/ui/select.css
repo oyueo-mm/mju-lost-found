@@ -1,0 +1,209 @@
+/* Shared select surface. The native HTML control owns focus, values,
+   keyboard/typeahead, validity, light-dismiss and form submission. */
+select.mju-select {
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%236b7280' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
+  appearance: none;
+  box-sizing: border-box;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  min-block-size: 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.5rem 2.25rem 0.5rem 0.75rem;
+  background-color: var(--card);
+  background-image: var(--select-arrow);
+  background-position: right 0.75rem center;
+  background-repeat: no-repeat;
+  background-size: 1rem;
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+select.mju-select:enabled:hover {
+  border-color: var(--muted-foreground);
+}
+
+select.mju-select:focus-visible {
+  border-color: var(--primary);
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+select.mju-select:focus,
+select.mju-select:open {
+  border-color: var(--primary);
+}
+
+/* Keep the filter chips' existing "filter applied" indication. */
+select.mju-select[class~="bg-primary-muted"] {
+  border-color: var(--primary);
+  background-color: var(--primary-muted);
+  color: var(--primary);
+}
+
+select.mju-select:disabled {
+  background-color: var(--muted);
+  color: var(--muted-foreground);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+select.mju-select[aria-invalid="true"],
+select.mju-select:user-invalid {
+  border-color: var(--destructive);
+}
+
+/* Multi-selects and visible listboxes keep their platform interaction. */
+select.mju-select[multiple],
+select.mju-select[size]:not([size="1"]) {
+  appearance: auto;
+  min-block-size: auto;
+  padding: 0.5rem;
+  background-image: none;
+  white-space: normal;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  select.mju-select {
+    transition: border-color 120ms ease;
+  }
+}
+
+/* Progressive enhancement: keep OS pickers for touch/coarse-pointer users.
+   Plain option markup also works without JS and in unsupported browsers. */
+@supports (appearance: base-select) {
+  @media (hover: hover) and (pointer: fine) and (forced-colors: none) {
+    select.mju-select:not([multiple]):not([data-native-select]):is(:not([size]), [size="1"]),
+    select.mju-select:not([multiple]):not([data-native-select]):is(:not([size]), [size="1"])::picker(select) {
+      appearance: base-select;
+    }
+
+    select.mju-select:not([multiple]):not([data-native-select]):is(:not([size]), [size="1"]) {
+      position: relative;
+      display: block;
+      overflow: hidden;
+      padding-inline-end: 2.75rem;
+      background-color: var(--select-surface, var(--card));
+      background-image: none;
+    }
+
+    /* Resolve the applied tint against the card once. Inheriting a
+       translucent primary-muted background on the icon painted it twice. */
+    select.mju-select[class~="bg-primary-muted"] {
+      --select-surface: color-mix(in srgb, var(--card) 94%, var(--primary));
+      border-color: color-mix(in srgb, var(--border) 70%, var(--primary));
+    }
+
+    select.mju-select:disabled {
+      --select-surface: var(--muted);
+    }
+
+    select.mju-select[class~="bg-primary-muted"]:focus,
+    select.mju-select[class~="bg-primary-muted"]:open {
+      border-color: var(--primary);
+    }
+
+    select.mju-select::picker-icon {
+      content: "";
+      position: absolute;
+      inset-block-start: 50%;
+      inset-inline-end: 0;
+      z-index: 1;
+      /* Cover the reserved padding so a clipped long label cannot paint
+         beside or underneath the arrow in the browser's internal button. */
+      inline-size: 2.5rem;
+      block-size: 1.5rem;
+      margin-inline-start: 0;
+      translate: 0 -50%;
+      color: var(--muted-foreground);
+      background-color: var(--select-surface, var(--card));
+      background-image: var(--select-arrow);
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: 1rem;
+    }
+
+    select.mju-select:open::picker-icon {
+      rotate: 180deg;
+    }
+
+    select.mju-select::picker(select) {
+      box-sizing: border-box;
+      inline-size: max-content;
+      min-inline-size: anchor-size(self-inline);
+      max-inline-size: calc(100dvw - 1rem);
+      max-block-size: min(20rem, 50dvh);
+      margin-block: 0.375rem;
+      padding: 0.25rem;
+      overflow: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      background: var(--card);
+      color: var(--foreground);
+      box-shadow: none;
+      font-family: inherit;
+      font-size: 0.875rem;
+      line-height: 1.5;
+      /* Preserve native anchor placement and try the roomiest side. */
+      position-try-order: most-block-size;
+    }
+
+    select.mju-select option {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      min-block-size: 2.5rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.375rem;
+      background: var(--card);
+      color: var(--foreground);
+      font-size: 0.875rem;
+      font-weight: 400;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    select.mju-select option:enabled:hover,
+    select.mju-select option:focus-visible {
+      background: var(--muted);
+      outline: 2px solid var(--primary);
+      outline-offset: -2px;
+    }
+
+    select.mju-select option:checked {
+      background: var(--primary-muted);
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    select.mju-select option::checkmark {
+      color: var(--primary);
+    }
+
+    select.mju-select option:disabled,
+    select.mju-select optgroup:disabled option {
+      color: var(--muted-foreground);
+      opacity: 0.6;
+    }
+
+    select.mju-select optgroup {
+      color: var(--muted-foreground);
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+  }
+}
+
+@media (forced-colors: active) {
+  select.mju-select {
+    appearance: auto;
+    background-image: none;
+  }
+}

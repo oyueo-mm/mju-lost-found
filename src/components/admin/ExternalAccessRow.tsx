@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
+
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -88,13 +90,13 @@ export function ExternalAccessRow({ grant }: { grant: ExternalAccessRowData }) {
         <div className="grid gap-2 sm:grid-cols-3">
           <input aria-label="이름 또는 설명" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} disabled={pending} className={INPUT_CLASS} />
           <input aria-label="소속/역할" value={affiliation} onChange={(e) => setAffiliation(e.target.value)} maxLength={100} disabled={pending} className={INPUT_CLASS} />
-          <select aria-label="캠퍼스" value={campus} onChange={(e) => setCampus(e.target.value)} disabled={pending} className={INPUT_CLASS}>
+          <Select aria-label="캠퍼스" value={campus} onChange={(e) => setCampus(e.target.value)} disabled={pending} className={INPUT_CLASS}>
             {EXTERNAL_ACCESS_CAMPUSES.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       )}
 

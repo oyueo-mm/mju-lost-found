@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
+
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -233,7 +235,7 @@ export function ReportButton({
             {error && <p className="text-destructive">{error}</p>}
             <label className="flex flex-col gap-1">
               <span className="text-xs text-muted-foreground">{t("report.reason")}</span>
-              <select
+              <Select
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 className="w-full min-w-0 rounded-lg border border-border bg-transparent px-2 py-1.5 text-foreground"
@@ -243,7 +245,7 @@ export function ReportButton({
                     {reportReasonLabelKey(r) ? t(reportReasonLabelKey(r)!) : r}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-xs text-muted-foreground">{t("report.detail")}</span>

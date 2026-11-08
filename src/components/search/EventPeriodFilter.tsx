@@ -1,5 +1,7 @@
 "use client";
 
+import { Select } from "@/components/ui/Select";
+
 import { useId } from "react";
 
 import { useI18n } from "@/lib/i18n/client";
@@ -62,7 +64,7 @@ export function EventPeriodFilter({
       <label htmlFor={`${id}-period`} className={size === "sm" ? "text-xs text-muted-foreground" : "sr-only"}>
         {t(PERIOD_LABEL_KEY[boardType])}
       </label>
-      <select
+      <Select
         id={`${id}-period`}
         aria-label={t(PERIOD_LABEL_KEY[boardType])}
         value={value.period}
@@ -83,7 +85,7 @@ export function EventPeriodFilter({
             {size === "sm" ? t(PERIOD_OPTION_KEY[p]) : `${t(PERIOD_LABEL_KEY[boardType])}: ${t(PERIOD_OPTION_KEY[p])}`}
           </option>
         ))}
-      </select>
+      </Select>
 
       {/* No min/max on the date inputs: they made the browser show its own
           validation bubble on submit on top of the inline message below
