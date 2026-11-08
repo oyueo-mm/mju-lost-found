@@ -43,7 +43,7 @@ export function withSearchMode(search: string, mode: SearchUiMode, defaultMode: 
 // URL the page's own keyword form produces. Used by the home's "잃어버린
 // 물건 찾기" buttons and popular searches.
 export function keywordSearchHref(q?: string): string {
-  const params = new URLSearchParams({ [SEARCH_MODE_PARAM]: "keyword" });
+  const params = new URLSearchParams({ mode: "unified" });
   const words = q?.trim();
   if (words) params.set("q", words);
   return `/search?${params.toString()}`;

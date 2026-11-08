@@ -8,6 +8,9 @@ const requireUserForApi = vi.fn();
 const requireIdentityForApi = vi.fn();
 const searchPosts = vi.fn();
 const searchPostsAI = vi.fn();
+const searchUnifiedPosts = vi.fn();
+vi.mock("@/lib/posts/unifiedSearch", () => ({ searchUnifiedPosts }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: {} }));
 const createLostPost = vi.fn();
 const createFoundPost = vi.fn();
 
@@ -52,6 +55,36 @@ beforeEach(() => {
 });
 
 describe("GET /api/posts", () => {
+  it("keeps short unified searches out of the inference rate-limit path", async () => {
+    searchUnifiedPosts.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 0, totalPages: 1, search: { strategy: "keyword", limited: false } });
+    const res = await GET(new NextRequest("http://localhost/api/posts?mode=unified&type=found&q=지갑"));
+    expect(res.status).toBe(200);
+    expect(enforceRateLimit).not.toHaveBeenCalled();
+    expect(searchUnifiedPosts).toHaveBeenCalledWith(expect.objectContaining({ mode: "unified", q: "지갑" }), { allowSemantic: expect.any(Function) });
+  });
+  it("degrades a rate-limited description to keywords instead of rejecting the whole search", async () => {
+    searchUnifiedPosts.mockImplementationOnce(async (_input, { allowSemantic }) => {
+      expect(await allowSemantic()).toBe(false);
+      return { items: [], page: 1, limit: 20, total: 0, totalPages: 1, search: { strategy: "keyword-fallback", limited: false } };
+    });
+    enforceRateLimit.mockResolvedValueOnce(jsonError(429, "limited"));
+    const q = "어제 도서관에서 검은색 반지갑을 잃어버렸어요";
+    const res = await GET(new NextRequest(`http://localhost/api/posts?${new URLSearchParams({ mode: "unified", type: "found", q })}`));
+    expect(res.status).toBe(200);
+    expect(enforceRateLimit).toHaveBeenCalledOnce();
+    expect((await res.json()).search.strategy).toBe("keyword-fallback");
+  });
+  it("applies the same AI limiter lazily to a short-query semantic fallback", async () => {
+    searchUnifiedPosts.mockImplementationOnce(async (_input, { allowSemantic }) => {
+      expect(enforceRateLimit).not.toHaveBeenCalled();
+      expect(await allowSemantic()).toBe(true);
+      return { items: [], page: 1, limit: 20, total: 0, totalPages: 1, search: { strategy: "semantic-fallback", limited: false } };
+    });
+    const res = await GET(new NextRequest(`http://localhost/api/posts?${new URLSearchParams({ mode: "unified", type: "found", q: "핑크색 무언가" })}`));
+    expect(res.status).toBe(200);
+    expect(enforceRateLimit).toHaveBeenCalledOnce();
+    expect((await res.json()).search.strategy).toBe("semantic-fallback");
+  });
   it("rejects an unrecognized type", async () => {
     const res = await GET(new NextRequest("http://localhost/api/posts?type=banana"));
     expect(res.status).toBe(400);

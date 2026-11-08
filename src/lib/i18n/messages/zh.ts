@@ -2,6 +2,10 @@ import type { Dictionary } from "../translate";
 
 // 中文(简体). 부분 사전 -- 여기에 없는 키는 한국어로 떨어진다.
 export const zh: Dictionary = {
+  "search.unified.placeholder": "输入物品名称或描述情况",
+  "search.sort.relevance": "相关度",
+  "search.pagination.label": "搜索结果页",
+  "search.unified.limited": "仅显示排名靠前的搜索候选结果。",
   "locale.label": "语言",
   "locale.change": "切换语言",
 

@@ -2,6 +2,10 @@ import type { Dictionary } from "../translate";
 
 // Монгол (кирилл). 부분 사전 -- 여기에 없는 키는 한국어로 떨어진다.
 export const mn: Dictionary = {
+  "search.unified.placeholder": "Эд зүйлийн нэр эсвэл нөхцөл байдлыг оруулна уу",
+  "search.sort.relevance": "Хамаарлаар",
+  "search.pagination.label": "Хайлтын үр дүнгийн хуудас",
+  "search.unified.limited": "Хайлтын дээд эрэмбийн үр дүнг харуулж байна.",
   "locale.label": "Хэл",
   "locale.change": "Хэл солих",
 

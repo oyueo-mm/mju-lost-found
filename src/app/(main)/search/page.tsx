@@ -1,3 +1,4 @@
+import { needsSearchApi } from "@/lib/posts/searchIntent";
 import { SearchFilterBar } from "@/components/search/SearchFilterBar";
 import { Pagination } from "@/components/search/Pagination";
 import { SemanticSearchNotice } from "@/components/search/SemanticSearchNotice";
@@ -29,7 +30,7 @@ export default async function SearchPage({
   // 있으면(사용자가 필터를 바꿨거나 그 상태로 북마크/새로고침한 경우)
   // 그 값이 이 기본값을 덮어쓴다 -- SearchFilterBar's own type state와
   // 정확히 같은 기본값 규칙.
-  const parsed = listQuerySchema.safeParse({ type: "found", ...raw });
+  const parsed = listQuerySchema.safeParse({ mode: "unified", type: "found", ...raw });
   const query = parsed.success
     ? parsed.data
     : { type: "found" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
@@ -43,13 +44,13 @@ export default async function SearchPage({
   // searchPosts directly; semantic mode goes through /api/posts and is
   // counted there), so nothing is counted twice.
   const searchWords = parsed.success ? parsed.data.q?.trim() : undefined;
-  if (mode !== "semantic" && searchWords && (query.page ?? 1) === 1) {
+  if (!needsSearchApi(mode, searchWords) && searchWords && (query.page ?? 1) === 1) {
     recordDaily("search.keyword", [query.type, searchWords, { ...query, q: undefined }]);
   }
 
   let results;
   try {
-    results = mode === "semantic" ? null : await searchPosts(query);
+    results = needsSearchApi(mode, searchWords) ? null : await searchPosts(query);
   } catch (error) {
     console.error("Failed to search posts", error);
     return (
@@ -65,15 +66,11 @@ export default async function SearchPage({
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-foreground">{t("search.title")}</h1>
-      {/* Phase 32: results+pagination passed as children so SearchFilterBar
-          can hide them while its own "이미지로 검색" mode is active
-          (ImageSearchPanel owns the results area then instead) -- see that
-          component's own comment. Harmless for every other mode: rendered
-          exactly as before, just one level deeper in the tree. */}
-      <SearchFilterBar basePath="/search" showTypeFilter imageSearchEnabled defaultMode={mode === "semantic" ? "keyword" : "ai"} resultCount={results?.total}>
+      {/* Text and photo results share this slot, so only one list is shown. */}
+      <SearchFilterBar basePath="/search" showTypeFilter imageSearchEnabled resultCount={results?.total}>
         <SemanticSearchNotice mode={mode} />
         {results === null ? (
-          <SemanticSearchResults params={{ type: "found", ...raw }} basePath="/search" />
+          <SemanticSearchResults params={{ type: "found", ...raw, mode }} basePath="/search" />
         ) : <>
         {results.items.length === 0 ? (
           <div className="flex flex-col gap-4">
@@ -83,7 +80,7 @@ export default async function SearchPage({
         ) : (
           <div className={SEARCH_RESULTS_GRID_CLASS}>
             {results.items.map((post) => (
-              <PostCard key={`${post.type}-${post.id}`} post={post} variant="list" />
+              <PostCard key={`${post.type}-${post.id}`} post={post} variant="list" hideEmptyThumbnail />
             ))}
           </div>
         )}

@@ -69,7 +69,7 @@ export const MOBILE_NAV_LABEL_KEYS = {
   admin: "nav.mobile.admin",
 } as const satisfies Record<NavKey, TranslationKey>;
 
-// Desktop navigation groups the two existing boards and search modes without
+// Desktop navigation exposes a single unified search entry without
 // changing BottomNav's established five-tab layout.
 export const DESKTOP_NAV_ITEMS: NavItem[] = [
   { key: "home", href: "/", labelKey: "nav.home" },
@@ -79,14 +79,6 @@ export const DESKTOP_NAV_ITEMS: NavItem[] = [
     key: "search",
     href: "/search",
     labelKey: "nav.search",
-    // 검색 모드 URL 상태 Phase: the page's UI mode is `searchMode` (see
-    // components/search/searchModeParams.ts), never the API's `mode`.
-    // /search already opens in AI mode and on the 습득물 board by default,
-    // so AI 검색 needs no parameters; 키워드 검색 states its mode explicitly.
-    children: [
-      { href: "/search", labelKey: "nav.searchAi", icon: "search" },
-      { href: "/search?searchMode=keyword", labelKey: "nav.searchKeyword", icon: "search" },
-    ],
   },
   { key: "chat", href: "/chat", labelKey: "nav.chat" },
 ];

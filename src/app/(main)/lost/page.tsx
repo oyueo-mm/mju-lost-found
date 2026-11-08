@@ -1,3 +1,4 @@
+import { needsSearchApi } from "@/lib/posts/searchIntent";
 import { SearchFilterBar } from "@/components/search/SearchFilterBar";
 import { Pagination } from "@/components/search/Pagination";
 import { SemanticSearchNotice } from "@/components/search/SemanticSearchNotice";
@@ -36,7 +37,7 @@ export default async function LostListPage({
   const statusOptions = LOST_STATUSES.map((s) => ({ value: s, label: t(statusLabelKey(s)) }));
   // `type` is always "lost" here regardless of the URL -- this board's
   // identity isn't user-controlled the way it is on /search.
-  const parsed = listQuerySchema.safeParse({ ...parseInput, type: "lost" });
+  const parsed = listQuerySchema.safeParse({ mode: "unified", ...parseInput, type: "lost" });
   const baseQuery = parsed.success ? parsed.data : { type: "lost" as const, page: DEFAULT_PAGE, limit: DEFAULT_LIMIT };
   // Phase 31: no explicit status filter defaults to "찾는 중" (still
   // in-progress) rather than every status ever recorded -- browsing this
@@ -55,14 +56,14 @@ export default async function LostListPage({
   // searchPosts directly; semantic mode goes through /api/posts and is
   // counted there), so nothing is counted twice.
   const searchWords = parsed.success ? parsed.data.q?.trim() : undefined;
-  if (mode !== "semantic" && searchWords && (query.page ?? 1) === 1) {
+  if (!needsSearchApi(mode, searchWords) && searchWords && (query.page ?? 1) === 1) {
     recordDaily("search.keyword", ["lost", searchWords, { ...query, q: undefined }]);
   }
 
   let posts;
   try {
     posts =
-      mode === "semantic"
+      needsSearchApi(mode, searchWords)
         ? null
         : await searchPosts(query);
   } catch (error) {
@@ -93,15 +94,11 @@ export default async function LostListPage({
         defaultStatus={LOST_STATUSES[0]}
         imageSearchEnabled
         fixedType="lost"
-        // 검색 기본 모드 UX 수정 Phase: 게시판에 처음 들어왔을 때는 이미
-        // 서버가 불러온 게시글 목록(children)이 바로 보여야 한다 -- AI
-        // 검색은 여전히 토글로 켤 수 있지만 기본은 키워드다.
-        defaultMode="keyword"
         resultCount={posts?.total}
       >
         <SemanticSearchNotice mode={mode} />
         {posts === null ? (
-          <SemanticSearchResults params={{ ...parseInput, type: "lost" }} basePath="/lost" board />
+          <SemanticSearchResults params={{ ...parseInput, type: "lost", mode, ...(query.status && { status: query.status }) }} basePath="/lost" board />
         ) : <>
         {posts.items.length === 0 ? (
           <div className="flex flex-col gap-4">
@@ -131,7 +128,7 @@ export default async function LostListPage({
         ) : (
           <div className={BOARD_RESULTS_GRID_CLASS}>
             {posts.items.map((post) => (
-              <PostCard key={post.id} post={post} variant="board" />
+              <PostCard key={post.id} post={post} variant="board" hideEmptyThumbnail />
             ))}
           </div>
         )}

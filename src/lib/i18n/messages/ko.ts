@@ -7,6 +7,10 @@
 // 작업에서 한국어 카피를 새로 쓰거나 다듬지 않았다(기존 동작 보존).
 // `{name}` 형태의 자리표시자만 지원한다(translate.ts의 interpolate).
 export const ko = {
+  "search.unified.placeholder": "물건 이름이나 상황을 입력하세요",
+  "search.sort.relevance": "관련도순",
+  "search.pagination.label": "검색 결과 페이지",
+  "search.unified.limited": "상위 검색 후보 내 결과입니다.",
   // ---------- 언어 선택 ----------
   "locale.label": "언어",
   "locale.change": "언어 변경",

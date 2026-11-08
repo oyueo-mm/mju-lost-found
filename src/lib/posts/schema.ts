@@ -59,7 +59,7 @@ export const postListTypeSchema = z.enum(POST_LIST_TYPES);
 
 // 게시판 정렬: views = 조회순 (viewCount), comments = 댓글순 (commentCount,
 // kept by a DB trigger); ties fall back to newest first.
-export const SORT_OPTIONS = ["latest", "oldest", "views", "comments"] as const;
+export const SORT_OPTIONS = ["latest", "oldest", "views", "comments", "relevance"] as const;
 export type SortOption = (typeof SORT_OPTIONS)[number];
 const sortOptionSchema = z.enum(SORT_OPTIONS);
 
@@ -70,7 +70,7 @@ const sortOptionSchema = z.enum(SORT_OPTIONS);
 // similarity instead. An unrecognized mode value is a validation error,
 // not a silent fallback to keyword -- same "genuine client mistake ->
 // 400" policy the rest of this schema already applies to q/sort/status.
-export const SEARCH_MODES = ["keyword", "semantic"] as const;
+export const SEARCH_MODES = ["keyword", "semantic", "unified"] as const;
 export type SearchMode = (typeof SEARCH_MODES)[number];
 const searchModeSchema = z.enum(SEARCH_MODES);
 

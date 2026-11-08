@@ -1,6 +1,10 @@
 import type { Dictionary } from "../translate";
 
 export const ja: Dictionary = {
+  "search.unified.placeholder": "品名や状況を入力してください",
+  "search.sort.relevance": "関連度順",
+  "search.pagination.label": "検索結果のページ",
+  "search.unified.limited": "上位の検索候補を表示しています。",
   "locale.label": "言語",
   "locale.change": "言語を変更",
   "common.search": "検索",

@@ -69,13 +69,13 @@ describe("withSearchMode", () => {
 
 describe("keywordSearchHref", () => {
   it("opens /search in 키워드 검색, with the words when there are any", () => {
-    expect(keywordSearchHref()).toBe("/search?searchMode=keyword");
-    expect(keywordSearchHref("   ")).toBe("/search?searchMode=keyword");
+    expect(keywordSearchHref()).toBe("/search?mode=unified");
+    expect(keywordSearchHref("   ")).toBe("/search?mode=unified");
     const url = new URL(keywordSearchHref(" 에어팟 "), "https://x");
     expect(url.pathname).toBe("/search");
-    expect(resolveSearchUiMode(url.searchParams, "ai")).toBe("keyword");
+    expect(url.searchParams.get("mode")).toBe("unified");
     expect(url.searchParams.get("q")).toBe("에어팟");
     // no API `mode`: the page validates that one and would drop the filters
-    expect(url.searchParams.has("mode")).toBe(false);
+    expect(url.searchParams.has("searchMode")).toBe(false);
   });
 });

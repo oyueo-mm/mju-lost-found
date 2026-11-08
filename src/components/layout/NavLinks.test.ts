@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { DESKTOP_ADMIN_NAV_ITEM, DESKTOP_NAV_ITEMS, DESKTOP_PROFILE_NAV_ITEM, NAV_ITEMS, isNavActive } from "./NavLinks";
-import { resolveSearchUiMode } from "@/components/search/searchModeParams";
 
 describe("desktop navigation links", () => {
   it("keeps the mobile tab list free of desktop-only dropdown entries", () => {
@@ -13,21 +12,13 @@ describe("desktop navigation links", () => {
       "/lost",
       "/found",
     ]);
-    expect(DESKTOP_NAV_ITEMS.find((item) => item.key === "search")?.children?.map((item) => item.href)).toEqual([
-      "/search",
-      "/search?searchMode=keyword",
-    ]);
   });
 
-  it("opens /search in the mode each search link names, without the API's legacy mode parameter", () => {
-    const [aiLink, keywordLink] = DESKTOP_NAV_ITEMS.find((item) => item.key === "search")!.children!.map(
-      (item) => new URLSearchParams(item.href!.split("?")[1] ?? ""),
-    );
-    // /search's default mode is AI.
-    expect(resolveSearchUiMode(aiLink, "ai")).toBe("ai");
-    expect(resolveSearchUiMode(keywordLink, "ai")).toBe("keyword");
-    expect(aiLink.get("mode")).toBeNull();
-    expect(keywordLink.get("mode")).toBeNull();
+  it("exposes one direct unified search link without a dropdown", () => {
+    const search = DESKTOP_NAV_ITEMS.filter((item) => item.key === "search");
+    expect(search).toHaveLength(1);
+    expect(search[0]).toEqual({ key: "search", href: "/search", labelKey: "nav.search" });
+    expect(isNavActive("search", "/search", "/search")).toBe(true);
   });
 
   it("limits administrator dropdown links to existing admin routes", () => {

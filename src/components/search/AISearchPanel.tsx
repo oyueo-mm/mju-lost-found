@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { validateImageFile } from "@/lib/images/client";
@@ -91,6 +92,7 @@ export function AISearchPanel({
   extraQuery,
   hideHint = false,
 }: AISearchPanelProps) {
+  const router = useRouter();
   const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -224,6 +226,18 @@ export function AISearchPanel({
 
     requestInFlightRef.current = true;
 
+    // Text queries use the same URL-backed unified results as the boards.
+    // Do not send short home queries to the text embedding endpoint.
+    if (!file) {
+      const params = new URLSearchParams(extraQuery);
+      params.set("type", type);
+      params.set("mode", "unified");
+      params.set("q", submittedQuery);
+      setPending(true);
+      router.push(`/search?${params}`);
+      return;
+    }
+
     if (submittedQuery !== query) setQuery(submittedQuery);
 
     setPending(true);
@@ -275,7 +289,7 @@ export function AISearchPanel({
         <form
           onSubmit={handleSearch}
           className="flex items-center gap-2 rounded-full border border-border bg-card px-2 py-1.5 shadow-sm transition-colors focus-within:border-primary sm:px-2.5 sm:py-2"
-          data-search-mode="ai"
+          data-search-mode="unified"
           data-search-type={type}
         >
         {previewUrl ? (
@@ -315,6 +329,7 @@ export function AISearchPanel({
 
         <input
           type="text"
+          aria-label={t("search.unified.placeholder")}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -329,7 +344,7 @@ export function AISearchPanel({
         <button
           type="submit"
           disabled={!canSearch || pending}
-          aria-label={t("aiSearch.label")}
+          aria-label={t("common.search")}
           className="flex shrink-0 items-center gap-1 rounded-full bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           <SearchIcon className="size-3.5 sm:hidden" />
@@ -381,6 +396,7 @@ export function AISearchPanel({
 
       {results !== null && (
         <div className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground" aria-live="polite">{t("search.results.count", { count: results.length })}</p>
           {results.length > 0 && resultsAccessory && (
             <div className="flex items-center justify-end gap-2 sm:hidden">
               {resultsAccessory}
@@ -402,7 +418,7 @@ export function AISearchPanel({
                   search-calibration-2026-09-29.json). The ranking itself --
                   and `post.score` in the API response -- are unchanged. */}
               {results.map((post) => (
-                <PostCard key={`${post.type}-${post.id}`} post={post} scoreDisplay="hidden" variant={cardVariant === "board" ? "board" : "list"} />
+                <PostCard key={`${post.type}-${post.id}`} post={post} scoreDisplay="hidden" variant={cardVariant === "board" ? "board" : "list"} hideEmptyThumbnail />
               ))}
             </div>
           )}

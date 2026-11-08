@@ -1,6 +1,10 @@
 import type { Dictionary } from "../translate";
 
 export const fr: Dictionary = {
+  "search.unified.placeholder": "Nom de l’objet ou description de la situation",
+  "search.sort.relevance": "Pertinence",
+  "search.pagination.label": "Pages de résultats",
+  "search.unified.limited": "Résultats limités aux premiers candidats de recherche.",
   "locale.label": "Langue",
   "locale.change": "Changer de langue",
   "common.search": "Rechercher",

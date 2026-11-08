@@ -1,3 +1,5 @@
+import { compareForSort } from "./postSort";
+export { compareForSort } from "./postSort";
 import { readCustody, type CustodyInfo } from "./custodySchema";
 import { prisma } from "@/lib/db/prisma";
 import { deleteObjectSafely } from "@/lib/images/supabaseAdmin";
@@ -130,6 +132,7 @@ export type LostPostDTO = {
   organizationName: string | null;
   // Phase 23: plain counter, see LostPost.viewCount's schema comment.
   viewCount: number;
+  commentCount?: number;
   // Phase 12/15-2: only ever set on a semantic-search or image-similarity
   // result (normalizeScore()'s 0-1 scale, same as Match.score) -- absent
   // (never present-but-null) on every other DTO-producing path (list/get/
@@ -176,6 +179,7 @@ export type FoundPostDTO = {
   organizationId: number | null;
   organizationName: string | null;
   viewCount: number;
+  commentCount?: number;
   score?: number;
   // Phase 11-4D: see PostImageSummary's own comment -- only present on
   // getFoundPost's result.
@@ -359,16 +363,6 @@ function buildOrderBy(sort: SortOption = DEFAULT_SORT) {
   return [{ createdAt: direction }, { id: direction }];
 }
 
-// The same order for the in-memory merge of type=all (two tables).
-type SortKeys = { createdAt: Date; id: number; viewCount: number; commentCount: number };
-export function compareForSort(sort: SortOption = DEFAULT_SORT) {
-  const newest = (a: SortKeys, b: SortKeys) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id;
-  if (sort === "views") return (a: SortKeys, b: SortKeys) => b.viewCount - a.viewCount || newest(a, b);
-  if (sort === "comments") return (a: SortKeys, b: SortKeys) => b.commentCount - a.commentCount || newest(a, b);
-  if (sort === "oldest") return (a: SortKeys, b: SortKeys) => -newest(a, b);
-  return newest;
-}
-
 export function toLostPostDTO(row: {
   id: number;
   title: string;
@@ -385,6 +379,7 @@ export function toLostPostDTO(row: {
   createdAt: Date;
   updatedAt: Date;
   viewCount: number;
+  commentCount?: number;
   tempHiddenAt?: Date | null;
   removedAt?: Date | null;
   user: Author;
@@ -433,6 +428,7 @@ export function toFoundPostDTO(row: {
   createdAt: Date;
   updatedAt: Date;
   viewCount: number;
+  commentCount?: number;
   tempHiddenAt?: Date | null;
   removedAt?: Date | null;
   user: Author;

@@ -1,0 +1,714 @@
+{
+  "scope": "249 existing synthetic Preview fixtures; title-verified read-only snapshot; stored vectors; local CPU model; exact cosine scan within the fixture corpus (not live HNSW SQL)",
+  "fixtureCount": 249,
+  "warmModelStartupMs": 984.68,
+  "comparison": [
+    {
+      "query": "핑크색 무언가",
+      "strategy": "semantic-fallback",
+      "oldKeyword": [],
+      "oldSemantic": [
+        {
+          "type": "found",
+          "id": 86,
+          "title": "분홍색 마우스 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 144,
+          "title": "분홍색 장우산 습득"
+        },
+        {
+          "type": "found",
+          "id": 85,
+          "title": "분홍 키보드 습득"
+        },
+        {
+          "type": "found",
+          "id": 67,
+          "title": "에어팟 주웠어요 (분홍 케이스)"
+        },
+        {
+          "type": "found",
+          "id": 6,
+          "title": "에어팟 프로 습득 (초록 스티커)"
+        }
+      ],
+      "unified": [
+        {
+          "type": "found",
+          "id": 86,
+          "title": "분홍색 마우스 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 144,
+          "title": "분홍색 장우산 습득"
+        },
+        {
+          "type": "found",
+          "id": 85,
+          "title": "분홍 키보드 습득"
+        },
+        {
+          "type": "found",
+          "id": 67,
+          "title": "에어팟 주웠어요 (분홍 케이스)"
+        },
+        {
+          "type": "found",
+          "id": 6,
+          "title": "에어팟 프로 습득 (초록 스티커)"
+        }
+      ],
+      "total": 10,
+      "localWarmElapsedMs": 10.62,
+      "queryEmbeddings": 1,
+      "paginationExtraEmbeddings": 0
+    },
+    {
+      "query": "분홍색 무언가",
+      "strategy": "semantic-fallback",
+      "oldKeyword": [],
+      "oldSemantic": [
+        {
+          "type": "found",
+          "id": 144,
+          "title": "분홍색 장우산 습득"
+        },
+        {
+          "type": "found",
+          "id": 86,
+          "title": "분홍색 마우스 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 66,
+          "title": "분홍색 에어팟 케이스 습득"
+        },
+        {
+          "type": "found",
+          "id": 67,
+          "title": "에어팟 주웠어요 (분홍 케이스)"
+        },
+        {
+          "type": "found",
+          "id": 85,
+          "title": "분홍 키보드 습득"
+        }
+      ],
+      "unified": [
+        {
+          "type": "found",
+          "id": 144,
+          "title": "분홍색 장우산 습득"
+        },
+        {
+          "type": "found",
+          "id": 86,
+          "title": "분홍색 마우스 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 66,
+          "title": "분홍색 에어팟 케이스 습득"
+        },
+        {
+          "type": "found",
+          "id": 67,
+          "title": "에어팟 주웠어요 (분홍 케이스)"
+        },
+        {
+          "type": "found",
+          "id": 85,
+          "title": "분홍 키보드 습득"
+        }
+      ],
+      "total": 10,
+      "localWarmElapsedMs": 6.86,
+      "queryEmbeddings": 1,
+      "paginationExtraEmbeddings": 0
+    },
+    {
+      "query": "검은색 지갑",
+      "strategy": "semantic-fallback",
+      "oldKeyword": [],
+      "oldSemantic": [
+        {
+          "type": "found",
+          "id": 2,
+          "title": "검은색 장지갑 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 5,
+          "title": "검정 카드지갑 주웠습니다"
+        },
+        {
+          "type": "found",
+          "id": 143,
+          "title": "검은색 백팩 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 119,
+          "title": "네이비 반지갑 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 146,
+          "title": "노란 카드지갑 주웠어요"
+        }
+      ],
+      "unified": [
+        {
+          "type": "found",
+          "id": 2,
+          "title": "검은색 장지갑 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 5,
+          "title": "검정 카드지갑 주웠습니다"
+        },
+        {
+          "type": "found",
+          "id": 143,
+          "title": "검은색 백팩 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 119,
+          "title": "네이비 반지갑 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 146,
+          "title": "노란 카드지갑 주웠어요"
+        }
+      ],
+      "total": 10,
+      "localWarmElapsedMs": 7.44,
+      "queryEmbeddings": 1,
+      "paginationExtraEmbeddings": 0
+    },
+    {
+      "query": "어제 도서관에서 검은색 반지갑을 잃어버렸어요",
+      "strategy": "hybrid",
+      "oldKeyword": [],
+      "oldSemantic": [
+        {
+          "type": "found",
+          "id": 2,
+          "title": "검은색 장지갑 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 88,
+          "title": "검은색 외장하드 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 119,
+          "title": "네이비 반지갑 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 5,
+          "title": "검정 카드지갑 주웠습니다"
+        },
+        {
+          "type": "found",
+          "id": 146,
+          "title": "노란 카드지갑 주웠어요"
+        }
+      ],
+      "unified": [
+        {
+          "type": "found",
+          "id": 2,
+          "title": "검은색 장지갑 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 88,
+          "title": "검은색 외장하드 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 119,
+          "title": "네이비 반지갑 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 5,
+          "title": "검정 카드지갑 주웠습니다"
+        },
+        {
+          "type": "found",
+          "id": 146,
+          "title": "노란 카드지갑 주웠어요"
+        }
+      ],
+      "total": 10,
+      "localWarmElapsedMs": 9.65,
+      "queryEmbeddings": 1,
+      "paginationExtraEmbeddings": 0
+    },
+    {
+      "query": "에어팟 한쪽",
+      "strategy": "keyword",
+      "oldKeyword": [
+        {
+          "type": "found",
+          "id": 149,
+          "title": "무선 이어폰 한쪽 (흰색)"
+        }
+      ],
+      "oldSemantic": [
+        {
+          "type": "found",
+          "id": 149,
+          "title": "무선 이어폰 한쪽 (흰색)"
+        },
+        {
+          "type": "found",
+          "id": 67,
+          "title": "에어팟 주웠어요 (분홍 케이스)"
+        },
+        {
+          "type": "found",
+          "id": 6,
+          "title": "에어팟 프로 습득 (초록 스티커)"
+        },
+        {
+          "type": "found",
+          "id": 66,
+          "title": "분홍색 에어팟 케이스 습득"
+        },
+        {
+          "type": "found",
+          "id": 9,
+          "title": "흰색 에어팟 주웠어요"
+        }
+      ],
+      "unified": [
+        {
+          "type": "found",
+          "id": 149,
+          "title": "무선 이어폰 한쪽 (흰색)"
+        }
+      ],
+      "total": 1,
+      "localWarmElapsedMs": 0.34,
+      "queryEmbeddings": 0,
+      "paginationExtraEmbeddings": 0
+    },
+    {
+      "query": "학생회관에서 흰색 무선 이어폰 케이스를 주웠어요",
+      "strategy": "hybrid",
+      "oldKeyword": [],
+      "oldSemantic": [
+        {
+          "type": "found",
+          "id": 12,
+          "title": "무선 이어폰 주웠습니다"
+        },
+        {
+          "type": "found",
+          "id": 134,
+          "title": "열람실에서 이어폰 케이스 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 93,
+          "title": "무선 충전 패드 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 9,
+          "title": "흰색 에어팟 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 101,
+          "title": "하얀 이어폰 줄 하나 주웠어요"
+        }
+      ],
+      "unified": [
+        {
+          "type": "found",
+          "id": 12,
+          "title": "무선 이어폰 주웠습니다"
+        },
+        {
+          "type": "found",
+          "id": 134,
+          "title": "열람실에서 이어폰 케이스 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 93,
+          "title": "무선 충전 패드 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 9,
+          "title": "흰색 에어팟 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 101,
+          "title": "하얀 이어폰 줄 하나 주웠어요"
+        }
+      ],
+      "total": 10,
+      "localWarmElapsedMs": 11.82,
+      "queryEmbeddings": 1,
+      "paginationExtraEmbeddings": 0
+    },
+    {
+      "query": "C타입 충전기",
+      "strategy": "semantic-fallback",
+      "oldKeyword": [],
+      "oldSemantic": [
+        {
+          "type": "found",
+          "id": 100,
+          "title": "흰색 C타입 케이블 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 117,
+          "title": "흰색 어댑터 하나 보관 중"
+        },
+        {
+          "type": "found",
+          "id": 135,
+          "title": "맥북 충전기 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 114,
+          "title": "흰색 보조배터리 습득 (앤커)"
+        },
+        {
+          "type": "found",
+          "id": 13,
+          "title": "실습실 콘센트에 꽂힌 어댑터"
+        }
+      ],
+      "unified": [
+        {
+          "type": "found",
+          "id": 100,
+          "title": "흰색 C타입 케이블 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 117,
+          "title": "흰색 어댑터 하나 보관 중"
+        },
+        {
+          "type": "found",
+          "id": 135,
+          "title": "맥북 충전기 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 114,
+          "title": "흰색 보조배터리 습득 (앤커)"
+        },
+        {
+          "type": "found",
+          "id": 13,
+          "title": "실습실 콘센트에 꽂힌 어댑터"
+        }
+      ],
+      "total": 10,
+      "localWarmElapsedMs": 7.4,
+      "queryEmbeddings": 1,
+      "paginationExtraEmbeddings": 0
+    },
+    {
+      "query": "파란색 텀블러",
+      "strategy": "keyword",
+      "oldKeyword": [
+        {
+          "type": "found",
+          "id": 17,
+          "title": "파란 텀블러 주웠어요"
+        }
+      ],
+      "oldSemantic": [
+        {
+          "type": "found",
+          "id": 17,
+          "title": "파란 텀블러 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 121,
+          "title": "민트색 보온 텀블러 주웠습니다"
+        },
+        {
+          "type": "found",
+          "id": 15,
+          "title": "검은색 텀블러 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 142,
+          "title": "교통카드 한 장 습득 (파란색)"
+        },
+        {
+          "type": "found",
+          "id": 123,
+          "title": "하늘색 텀블러 보관 중"
+        }
+      ],
+      "unified": [
+        {
+          "type": "found",
+          "id": 17,
+          "title": "파란 텀블러 주웠어요"
+        }
+      ],
+      "total": 1,
+      "localWarmElapsedMs": 0.09,
+      "queryEmbeddings": 0,
+      "paginationExtraEmbeddings": 0
+    },
+    {
+      "query": "검정 카드지갑 주웠습니다",
+      "strategy": "keyword",
+      "oldKeyword": [
+        {
+          "type": "found",
+          "id": 5,
+          "title": "검정 카드지갑 주웠습니다"
+        }
+      ],
+      "oldSemantic": [
+        {
+          "type": "found",
+          "id": 5,
+          "title": "검정 카드지갑 주웠습니다"
+        },
+        {
+          "type": "found",
+          "id": 2,
+          "title": "검은색 장지갑 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 127,
+          "title": "네이비 가죽 카드홀더 보관 중"
+        },
+        {
+          "type": "found",
+          "id": 152,
+          "title": "정문 앞에서 신용카드 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 129,
+          "title": "카드 한 장 주웠어요"
+        }
+      ],
+      "unified": [
+        {
+          "type": "found",
+          "id": 5,
+          "title": "검정 카드지갑 주웠습니다"
+        }
+      ],
+      "total": 1,
+      "localWarmElapsedMs": 0.09,
+      "queryEmbeddings": 0,
+      "paginationExtraEmbeddings": 0
+    },
+    {
+      "query": "어제 도서관 근처에서 까만 가죽 지갑을 놓고 왔어요",
+      "strategy": "hybrid",
+      "oldKeyword": [],
+      "oldSemantic": [
+        {
+          "type": "found",
+          "id": 127,
+          "title": "네이비 가죽 카드홀더 보관 중"
+        },
+        {
+          "type": "found",
+          "id": 2,
+          "title": "검은색 장지갑 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 146,
+          "title": "노란 카드지갑 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 119,
+          "title": "네이비 반지갑 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 143,
+          "title": "검은색 백팩 주웠어요"
+        }
+      ],
+      "unified": [
+        {
+          "type": "found",
+          "id": 127,
+          "title": "네이비 가죽 카드홀더 보관 중"
+        },
+        {
+          "type": "found",
+          "id": 2,
+          "title": "검은색 장지갑 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 146,
+          "title": "노란 카드지갑 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 119,
+          "title": "네이비 반지갑 주웠어요"
+        },
+        {
+          "type": "found",
+          "id": 143,
+          "title": "검은색 백팩 주웠어요"
+        }
+      ],
+      "total": 10,
+      "localWarmElapsedMs": 13.43,
+      "queryEmbeddings": 1,
+      "paginationExtraEmbeddings": 0
+    },
+    {
+      "query": "zzzz-no-existing-fixture-78523",
+      "strategy": "semantic-fallback",
+      "oldKeyword": [],
+      "oldSemantic": [
+        {
+          "type": "found",
+          "id": 102,
+          "title": "카메라 스트랩 습득"
+        },
+        {
+          "type": "found",
+          "id": 3,
+          "title": "나무 손잡이 장우산 보관 중"
+        },
+        {
+          "type": "found",
+          "id": 147,
+          "title": "종합관 우산꽂이에 검정 장우산"
+        },
+        {
+          "type": "found",
+          "id": 136,
+          "title": "검정 3단 우산 습득"
+        },
+        {
+          "type": "found",
+          "id": 13,
+          "title": "실습실 콘센트에 꽂힌 어댑터"
+        }
+      ],
+      "unified": [
+        {
+          "type": "found",
+          "id": 102,
+          "title": "카메라 스트랩 습득"
+        },
+        {
+          "type": "found",
+          "id": 3,
+          "title": "나무 손잡이 장우산 보관 중"
+        },
+        {
+          "type": "found",
+          "id": 147,
+          "title": "종합관 우산꽂이에 검정 장우산"
+        },
+        {
+          "type": "found",
+          "id": 136,
+          "title": "검정 3단 우산 습득"
+        },
+        {
+          "type": "found",
+          "id": 13,
+          "title": "실습실 콘센트에 꽂힌 어댑터"
+        }
+      ],
+      "total": 10,
+      "localWarmElapsedMs": 16.68,
+      "queryEmbeddings": 1,
+      "paginationExtraEmbeddings": 0
+    }
+  ],
+  "labelledNaturalDescriptions": {
+    "count": 7,
+    "oldSemanticHitsAt5": 4,
+    "unifiedHitsAt5": 4,
+    "oldSemanticRecallAt5": 0.5714285714285714,
+    "unifiedRecallAt5": 0.5714285714285714,
+    "cases": [
+      {
+        "pairId": "P08",
+        "target": 12,
+        "semanticRank": 8,
+        "unifiedRank": null
+      },
+      {
+        "pairId": "P01",
+        "target": 5,
+        "semanticRank": 1,
+        "unifiedRank": 1
+      },
+      {
+        "pairId": "P11",
+        "target": 8,
+        "semanticRank": 1,
+        "unifiedRank": 1
+      },
+      {
+        "pairId": "P14",
+        "target": 23,
+        "semanticRank": 2,
+        "unifiedRank": 2
+      },
+      {
+        "pairId": "R01",
+        "target": 134,
+        "semanticRank": 6,
+        "unifiedRank": null
+      },
+      {
+        "pairId": "R02",
+        "target": 113,
+        "semanticRank": null,
+        "unifiedRank": null
+      },
+      {
+        "pairId": "R09",
+        "target": 139,
+        "semanticRank": 2,
+        "unifiedRank": 2
+      }
+    ]
+  },
+  "failure": {
+    "strategy": "keyword-fallback",
+    "limited": false
+  },
+  "limits": "Fixture-only comparison, not production relevance. Representative free-text queries have no labels: no invented accuracy/NDCG. Full SQL/HNSW index behavior and network/serverless cold start are not measured here."
+}

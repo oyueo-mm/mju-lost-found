@@ -21,6 +21,8 @@ import {
   postTypeSchema,
 } from "@/lib/posts/schema";
 import { createFoundPost, createLostPost, searchPosts, searchPostsAI, searchPostsByImage } from "@/lib/posts/aiService";
+import { searchUnifiedPosts } from "@/lib/posts/unifiedSearch";
+import { compareForSort } from "@/lib/posts/service";
 import { ALLOWED_IMAGE_CONTENT_TYPES, MAX_IMAGE_SIZE_BYTES, isAllowedImageContentType } from "@/lib/images/config";
 import { getCurrentUser } from "@/lib/auth/session";
 import { clientIpFrom, enforceRateLimit, rateLimitTierFor } from "@/lib/rateLimit";
@@ -49,7 +51,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     if (limited) return limited;
   }
 
-  const result = await searchPosts(query.data);
+  const result = query.data.mode === "unified"
+    ? await searchUnifiedPosts(query.data, { allowSemantic: async () => !await limitAiSearch(request) })
+    : await searchPosts(query.data);
 
   return NextResponse.json({
     data: result.items,
@@ -59,6 +63,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       total: result.total,
       totalPages: result.totalPages,
     },
+    ...("search" in result && { search: result.search }),
   });
 });
 
@@ -198,17 +203,29 @@ async function handleAiSearch(request: NextRequest) {
   }
   const { categoryCode, subcategory } = categoryFilter.data;
 
+  const additional = listQuerySchema.safeParse({
+    ...Object.fromEntries(searchParams), type: typeResult.data, mode: "keyword", q: undefined,
+    status: searchParams.get("status") || undefined,
+  });
+  if (!additional.success) return jsonError(400, additional.error.issues[0]?.message ?? "잘못된 검색 조건입니다.");
+  const { campus, status, sort } = additional.data;
+  const explicitSort = sort && sort !== "relevance" ? sort : null;
+  const options = {
+    page: explicitSort ? 1 : page,
+    limit: explicitSort ? MAX_LIMIT : limit,
+    eventFrom, eventTo, includeUnknownEventTime, categoryCode, subcategory,
+    ...(campus && { campus }), ...(status && { status }),
+  };
+
   let result;
   try {
-    result = await searchPostsAI(typeResult.data, query, image, {
-      page,
-      limit,
-      eventFrom,
-      eventTo,
-      includeUnknownEventTime,
-      categoryCode,
-      subcategory,
-    });
+    result = explicitSort
+      ? await searchPostsAI(typeResult.data, query, image, options, page === 1)
+      : await searchPostsAI(typeResult.data, query, image, options);
+    if (explicitSort) {
+      const items = result.items.sort((a, b) => compareForSort(explicitSort)({ ...a, commentCount: a.commentCount ?? 0 }, { ...b, commentCount: b.commentCount ?? 0 }) || a.type.localeCompare(b.type));
+      result = { ...result, items: items.slice((page - 1) * limit, page * limit), page, limit, totalPages: Math.max(1, Math.ceil(result.total / limit)) };
+    }
   } catch (error) {
     console.error("AI search failed:", error);
     return jsonError(502, "AI 검색에 실패했습니다. 다시 시도해주세요.");

@@ -5,6 +5,7 @@ import { getUnreadNotificationCount } from "@/lib/notification/service";
 import { countUnreadMessagesForUser } from "@/lib/chat/service";
 import { hasAnyAdminPermission } from "@/lib/permissions/check";
 import { DesktopNav } from "./DesktopNav";
+import { MobileSearchLink } from "./MobileSearchLink";
 import { NotificationBell } from "./NotificationBell";
 import { LogoMark } from "./Logo";
 import { LinkButton } from "@/components/ui/Button";
@@ -87,6 +88,7 @@ export async function Header() {
         />
 
         <div className="flex min-w-0 shrink-0 items-center gap-1.5 md:min-w-0 md:justify-self-end">
+          <MobileSearchLink />
           {user ? (
             <>
               <NotificationBell unreadCount={unreadNotifications} />

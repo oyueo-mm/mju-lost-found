@@ -7,6 +7,7 @@ import { recordDaily } from "@/lib/metrics/record";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { EMBEDDING_INPUT_FIELDS, embedPostBestEffort } from "@/lib/ai/postEmbedding";
 import { getEmbeddingProvider } from "@/lib/ai/embedding";
+import { queryEmbedding } from "@/lib/ai/queryEmbedding";
 import { getImageEmbeddingProvider } from "@/lib/ai/imageEmbedding";
 import { findCandidateCosinesForQuery, findPostsByImageQuery, findPostsBySemanticQuery } from "@/lib/ai/vectorSearch";
 import { aiSimilarity, candidatePool, rankByAiSimilarity } from "@/lib/ai/rankFusion";
@@ -553,6 +554,17 @@ async function searchPostsSemanticAll(
 // carries a non-empty q, so no re-validation happens here. type=all is
 // now valid for mode=semantic too (Phase 11-2) -- routed to
 // searchPostsSemanticAll() instead of being rejected upstream.
+export async function searchTextCandidatesForFusion(type: PostListType, query: string, filters: Omit<ListParams, "page" | "limit">): Promise<PostDTO[]> {
+  const vector = await queryEmbedding(query);
+  const boards: PostType[] = type === "all" ? ["lost", "found"] : [type];
+  const results = await Promise.allSettled(boards.map((board) => rankSemanticCandidates(board, vector, query, filters, "ai")));
+  if (results.every((result) => result.status === "rejected")) throw new Error("Semantic candidates unavailable");
+  return results.flatMap((result) => result.status === "fulfilled" ? result.value : [])
+    .sort((a, b) => b.rankScore - a.rankScore || a.id - b.id || a.type.localeCompare(b.type))
+    .slice(0, SEMANTIC_SEARCH_TOP_K)
+    .map(withoutRankScore);
+}
+
 export async function searchPosts({
   type,
   mode = "keyword",
@@ -665,11 +677,12 @@ export async function searchPostsAI(
   query: string | undefined,
   image: Blob | undefined,
   { page, limit, ...filters }: ListParams,
+  countSearch = true,
 ): Promise<PagedResult<PostDTO>> {
   const trimmedQuery = query?.trim();
   const hasQuery = !!trimmedQuery;
   const hasImage = !!image;
-  if ((hasQuery || hasImage) && page === 1) {
+  if (countSearch && (hasQuery || hasImage) && page === 1) {
     recordDaily(hasImage ? "search.image" : "search.semantic", [type, trimmedQuery ?? "", image?.size ?? 0, filters]);
   }
 

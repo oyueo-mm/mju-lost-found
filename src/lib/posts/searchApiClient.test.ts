@@ -1,9 +1,24 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchPostsFromApi } from "./searchApiClient";
+import { fetchImagePosts, fetchPostsFromApi } from "./searchApiClient";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("browser semantic search transport", () => {
+  it("sends one image request with every filter, body query and page preserved", async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [], pagination: { page: 2, limit: 5, total: 8, totalPages: 2 } }), { headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetch);
+    const file = new File(["photo"], "item.jpg", { type: "image/jpeg" });
+    const controller = new AbortController();
+    await fetchImagePosts(new URLSearchParams({ mode: "unified", type: "found", q: "검은 지갑", campus: "인문캠퍼스", sort: "oldest", page: "2", limit: "5", period: "1w", categoryCode: "wallet", status: "보관 중" }), file, controller.signal);
+    expect(fetch).toHaveBeenCalledOnce();
+    const [url, options] = fetch.mock.calls[0];
+    const params = new URL(url, "https://example.test").searchParams;
+    expect(Object.fromEntries(params)).toMatchObject({ mode: "ai", type: "found", sort: "oldest", page: "2", period: "1w", categoryCode: "wallet", campus: "인문캠퍼스", status: "보관 중" });
+    expect(params.has("q")).toBe(false);
+    expect(options.body.get("q")).toBe("검은 지갑");
+    expect(options.body.get("image")).toBe(file);
+    expect(options).toMatchObject({ method: "POST", credentials: "same-origin", redirect: "error", signal: controller.signal });
+  });
   it("uses the existing same-origin session, preserves filters and revives dates", async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       data: [{ type: "lost", id: 1, createdAt: "2026-10-18T00:00:00Z", updatedAt: "2026-10-18T00:00:00Z", lostAt: null }],

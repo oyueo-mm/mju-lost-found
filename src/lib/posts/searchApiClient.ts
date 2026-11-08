@@ -12,6 +12,7 @@ export type ApiPagedResult = {
   limit: number;
   total: number;
   totalPages: number;
+  search?: { strategy: "keyword" | "hybrid" | "semantic-fallback" | "keyword-fallback"; limited: boolean };
 };
 
 // `params` is the page's own already-validated raw search params (plus a
@@ -35,6 +36,7 @@ export async function fetchPostsFromApi(params: Record<string, string>, signal?:
   const json = (await res.json()) as {
     data: Record<string, unknown>[];
     pagination: { page: number; limit: number; total: number; totalPages: number };
+    search?: ApiPagedResult["search"];
   };
 
   return {
@@ -43,5 +45,19 @@ export async function fetchPostsFromApi(params: Record<string, string>, signal?:
     limit: json.pagination.limit,
     total: json.pagination.total,
     totalPages: json.pagination.totalPages,
+    ...(json.search && { search: json.search }),
   };
+}
+
+export async function fetchImagePosts(params: URLSearchParams, file: File, signal?: AbortSignal): Promise<ApiPagedResult> {
+  const query = new URLSearchParams(params);
+  query.set("mode", "ai");
+  const body = new FormData();
+  body.set("image", file);
+  if (query.get("q")) body.set("q", query.get("q")!);
+  query.delete("q");
+  const response = await fetch(`/api/posts?${query}`, { method: "POST", body, credentials: "same-origin", redirect: "error", signal });
+  if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) throw new Error("Image search request failed");
+  const json = await response.json();
+  return { items: json.data.map(reviveDates), ...json.pagination };
 }

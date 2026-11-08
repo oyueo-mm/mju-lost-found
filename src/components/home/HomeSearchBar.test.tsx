@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import { I18nProvider } from "@/lib/i18n/client";
 import { ko } from "@/lib/i18n/messages/ko";
@@ -20,7 +21,7 @@ describe("HomeSearchBar popular searches", () => {
 
     expect(markup).toContain("인기 검색어");
     for (const keyword of HOME_POPULAR_SEARCHES) {
-      const href = `/search?searchMode=keyword&amp;q=${encodeURIComponent(keyword)}`;
+      const href = `/search?mode=unified&amp;q=${encodeURIComponent(keyword)}`;
       expect(markup).toContain(`href="${href}"`);
       // no AI-search chip button any more
       expect(markup).not.toContain(`value="${keyword}"`);
@@ -30,10 +31,10 @@ describe("HomeSearchBar popular searches", () => {
     expect(markup).not.toContain("무선 이어폰");
   });
 
-  it("keeps Home on the existing AI found search flow", () => {
+  it("opens the unified found search flow from Home", () => {
     const markup = renderHomeSearch();
 
-    expect(markup).toContain('data-search-mode="ai"');
+    expect(markup).toContain('data-search-mode="unified"');
     expect(markup).toContain('data-search-type="found"');
   });
 
