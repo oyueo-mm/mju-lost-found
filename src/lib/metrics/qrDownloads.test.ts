@@ -36,4 +36,13 @@ describe("place QR download archives", () => {
     expect(new TextDecoder().decode(await qrImage(url, "svg"))).toContain('<svg');
     expect((await qrImage(url, "png")).length).toBeGreaterThan(1000);
   });
+
+  it("disambiguates reused location Content across different campaigns without rewriting URLs", async () => {
+    const old = entries[0];
+    const next = { ...old, qr_id: "next_campaign", utm_campaign: "poster_2026_12", url: old.url.replace("poster_2026_11", "poster_2026_12") };
+    const archive = unzipSync(await qrArchive([old, next], "svg"));
+    expect(Object.keys(archive)).toContain("h_jonghap_guard_find__poster_2026_11.svg");
+    expect(Object.keys(archive)).toContain("h_jonghap_guard_find__poster_2026_12.svg");
+    expect(JSON.parse(strFromU8(archive["qr-links.json"])).map((row: { url: string }) => row.url)).toEqual([old.url, next.url]);
+  });
 });

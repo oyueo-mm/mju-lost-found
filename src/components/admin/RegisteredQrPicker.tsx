@@ -42,7 +42,7 @@ export function RegisteredQrPicker({ month, entries = QR_REGISTRY, value, onChan
   const locationName = [campuses.find((o) => o.value === selection.campus)?.label, buildings.find((o) => o.value === selection.building)?.label, placements.find((o) => o.value === selection.placement)?.label].filter(Boolean).join(" · ");
   const scope = [selection.campus, selection.building, selection.placement, selection.purpose, ...placeEntries.map((e) => e.url)].join("|");
   const filter = (label: string, value: string, options: { value: string; label: string }[], change: (value: string) => void) => <label className="flex min-w-0 flex-col gap-1.5 text-sm font-medium">
-    {label}<Select className={field} value={value} disabled={!options.length} onChange={(event) => change(event.target.value)}>
+    {label}<Select aria-label={label} className={field} value={value} disabled={!options.length} onChange={(event) => change(event.target.value)}>
       {!options.length && <option value="">등록된 항목 없음</option>}
       {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
     </Select>

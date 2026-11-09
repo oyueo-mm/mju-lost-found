@@ -28,7 +28,7 @@ function DirectUtmBuilder({ input, setInput }: { input: UtmLinkInput; setInput: 
       setInput((previous) => ({ ...previous, source: preset.source, medium: preset.medium, ...(preset.source === "poster_qr" ? { campaign: POSTER_CAMPAIGN } : {}) }));
     }} className={`rounded-full border px-3 py-1.5 text-xs font-medium ${source === preset.source ? "border-primary bg-primary-muted text-primary" : "border-border text-muted-foreground"}`}>{preset.label}</button>)}</div>
     <div className="grid gap-3 sm:grid-cols-2">
-      <label className="flex flex-col gap-1 text-sm">연결 화면<Select className={field} value={path} onChange={(e) => update("path", e.target.value)}>{UTM_LINK_PAGES.map((p) => <option key={p.path} value={p.path}>{p.label}</option>)}</Select></label>
+      <label className="flex flex-col gap-1 text-sm">연결 화면<Select aria-label="연결 화면" className={field} value={path} onChange={(e) => update("path", e.target.value)}>{UTM_LINK_PAGES.map((p) => <option key={p.path} value={p.path}>{p.label}</option>)}</Select></label>
       {([['출처 Source (필수)', 'source'], ['매체 Medium (선택)', 'medium'], ['캠페인 Campaign (선택)', 'campaign'], ['설치 위치·용도 Content (선택)', 'content']] as const).map(([label, key]) => <label key={key} className="flex flex-col gap-1 text-sm">{label}<input className={field} value={input[key] ?? ""} maxLength={32} onChange={(e) => update(key, e.target.value)} /></label>)}
     </div>
     <p className="text-xs text-muted-foreground">영문 소문자·숫자·_·- 32자 이내. 개인정보를 넣지 마세요. 미등록 Content·조합은 상세 통계에서 묶입니다.</p>
