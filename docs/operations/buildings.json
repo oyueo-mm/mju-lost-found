@@ -1,0 +1,10 @@
+[
+  {"campus_code":"h","campus_name":"인문캠퍼스","building_code":"jonghap","building_name":"종합관","confirmed_on":"2026-11-09","confirmed_by":"학생지원팀 확인을 전달한 운영자"},
+  {"campus_code":"h","campus_name":"인문캠퍼스","building_code":"stuhall","building_name":"학생회관","confirmed_on":"2026-11-09","confirmed_by":"학생지원팀 확인을 전달한 운영자"},
+  {"campus_code":"h","campus_name":"인문캠퍼스","building_code":"mirae","building_name":"미래관","confirmed_on":"2026-11-09","confirmed_by":"학생지원팀 확인을 전달한 운영자"},
+  {"campus_code":"h","campus_name":"인문캠퍼스","building_code":"intl","building_name":"국제관","confirmed_on":"2026-11-09","confirmed_by":"학생지원팀 확인을 전달한 운영자"},
+  {"campus_code":"h","campus_name":"인문캠퍼스","building_code":"admin","building_name":"행정동","confirmed_on":"2026-11-09","confirmed_by":"학생지원팀 확인을 전달한 운영자"},
+  {"campus_code":"h","campus_name":"인문캠퍼스","building_code":"bangmok","building_name":"방목학술정보관","confirmed_on":"2026-11-09","confirmed_by":"학생지원팀 확인을 전달한 운영자"},
+  {"campus_code":"h","campus_name":"인문캠퍼스","building_code":"mcc","building_name":"MCC 통합 경비실","confirmed_on":"2026-11-09","confirmed_by":"학생지원팀 확인을 전달한 운영자"},
+  {"campus_code":"h","campus_name":"인문캠퍼스","building_code":"dorm","building_name":"인문생활관","confirmed_on":"2026-11-09","confirmed_by":"학생지원팀 확인을 전달한 운영자"}
+]

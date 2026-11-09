@@ -19,7 +19,7 @@ const { recordVisitsAction } = await import("./visitActions");
 
 // The counters these tests compare exactly; visit.start.* (start hour, first
 // screen) and the page views by hour are checked on their own below.
-const counted = () => Object.fromEntries([...counts].filter(([k]) => !k.startsWith("visit.start.") && !/^visit\.(anon|member)\.hour\./.test(k)));
+const counted = () => Object.fromEntries([...counts].filter(([k]) => k !== "meta.since.utm_content" && !k.startsWith("visit.start.") && !/^visit\.(anon|member)\.hour\./.test(k)));
 
 beforeEach(() => {
   counts.clear();
@@ -29,6 +29,39 @@ beforeEach(() => {
 });
 
 describe("방문 통계 server action", () => {
+  it("collects all four tags before login, counts Content/pair once and excludes administrators", async () => {
+    const { landingTags, postLandingPath } = await import("@/lib/metrics/landing");
+    const callback = postLandingPath("/found/new", { utm_source: "poster_qr", utm_medium: "offline", utm_campaign: "poster_2026_11", utm_content: "h_jonghap_guard_reg" });
+    const tags = landingTags(`?callbackUrl=${encodeURIComponent(callback)}`);
+    const event = { kind: "login", sessionStart: true, ref: "direct", utmSource: tags.get("utm_source"), utmMedium: tags.get("utm_medium"), utmCampaign: tags.get("utm_campaign"), utmContent: tags.get("utm_content") };
+    await recordVisitsAction([event]);
+    audience = "member";
+    await recordVisitsAction([{ ...event, kind: "onboarding", sessionStart: false }, { ...event, kind: "write", sessionStart: false }]);
+    expect(counts.get("visit.utm_content.h_jonghap_guard_reg")).toBe(1);
+    expect(counts.get("visit.utm_pair.poster_2026_11.h_jonghap_guard_reg")).toBe(1);
+    expect(counts.get("visit.utm_source.poster_qr")).toBe(1);
+    expect(counts.get("visit.utm_medium.offline")).toBe(1);
+    expect(counts.get("visit.utm_campaign.poster_2026_11")).toBe(1);
+    expect(counts.get("meta.since.utm_content")).toBe(1);
+    audience = "internal";
+    await recordVisitsAction([event]);
+    expect(counts.get("visit.utm_content.h_jonghap_guard_reg")).toBe(1);
+    expect(counts.get("meta.since.utm_content")).toBe(1);
+  });
+
+  it("bounds unknown Content/pairs and ignores invalid values without changing legacy sessions", async () => {
+    await recordVisitsAction([
+      { kind: "search", sessionStart: true, utmCampaign: "unknown_campaign", utmContent: "h_jonghap_guard_find" },
+      { kind: "search", sessionStart: true, utmContent: "arbitrary_location" },
+      { kind: "search", sessionStart: true, utmContent: "email@example.com" },
+      { kind: "search", sessionStart: true },
+    ]);
+    expect(counts.get("visit.utm_content.h_jonghap_guard_find")).toBe(1);
+    expect(counts.get("visit.utm_content.unregistered")).toBe(1);
+    expect(counts.get("visit.utm_pair.unregistered.unregistered")).toBe(2);
+    expect(counts.get("visit.session.anon")).toBe(4);
+    expect(counts.get("meta.since.utm_content")).toBe(4);
+  });
   it("counts a poster registration campaign once through login and registration, excluding admins", async () => {
     const { landingTags, postLandingPath } = await import("@/lib/metrics/landing");
     const callback = postLandingPath("/found/new", { utm_source: "poster_qr", utm_medium: "offline", utm_campaign: "h_guard01_register" });

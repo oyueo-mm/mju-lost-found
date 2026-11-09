@@ -274,6 +274,7 @@ export function VisitBeacon() {
       event.utmSource = sanitizeUtm(params.get("utm_source"));
       event.utmMedium = sanitizeUtm(params.get("utm_medium"));
       event.utmCampaign = sanitizeUtm(params.get("utm_campaign"));
+      event.utmContent = sanitizeUtm(params.get("utm_content"));
     }
     writeQueue([...readQueue(), event]);
     schedule();

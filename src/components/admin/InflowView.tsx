@@ -1,6 +1,7 @@
 import { BarList, StackedBarChart, type ChartTone } from "@/components/admin/StatsCharts";
 import { More, SubHeading } from "@/components/admin/StatsBlocks";
 import Link from "next/link";
+import { qrLabel } from "@/lib/metrics/qrRegistry";
 import { AlertIcon } from "@/components/icons";
 import type { InflowReport } from "@/lib/metrics/inflow";
 import { sinceLabel } from "@/lib/metrics/report";
@@ -147,7 +148,7 @@ export function InflowView({ report, canPromote = false }: { report: InflowRepor
           <div className="flex flex-col gap-2">
             <SubHeading basis="선택한 날짜 · 방문 세션 내림차순">캠페인별 유입 비교</SubHeading>
             <BarList rows={report.utm.campaign.map((r) => ({ label: r.value, value: r.sessions }))} unit="회" empty="이 날짜에 기록된 캠페인이 없습니다." />
-            <p className="text-[11px] text-muted-foreground">h_guard01_find: 인문캠퍼스 경비실 01 · 분실물 찾기 / h_guard01_register: 습득물 등록. 출처·매체·캠페인은 각각 독립 합계입니다.</p>
+            <p className="text-[11px] text-muted-foreground">기존 출처·매체·캠페인은 각각 독립 합계입니다. 표준 v1.0의 장소·용도 비교는 아래 캠페인 × Content를 사용하세요. 기존 번호형 캠페인은 과거 값 그대로 표시합니다.</p>
           </div>
           <More label="진입 화면 × 출처, UTM 값별 표">
             <div className="flex flex-col gap-4">
@@ -203,6 +204,24 @@ export function InflowView({ report, canPromote = false }: { report: InflowRepor
         </>
       )}
 
+      <section className="flex flex-col gap-3 rounded-card border border-border p-3">
+        <h3 className="text-sm font-semibold text-foreground">UTM Content · 설치 장소·용도 비교</h3>
+        <p className="text-[11px] text-muted-foreground">
+          {report.content.since ? `이 환경의 Content 측정 시작: ${report.content.since} (시작일 부분 측정). 선택한 날짜 중 ${report.content.measuredDays}일이 측정 범위입니다.` : "이 환경은 아직 Content 미측정입니다. 기록이 없는 0세션과 구분합니다."}
+          {report.content.since && report.days.some((d) => d < report.content.since!) && " 시작일 이전은 미측정이며 과거 캠페인을 Content로 소급 변환하지 않습니다."}
+        </p>
+        {report.content.measuredDays > 0 && <>
+          <BarList rows={report.content.contents.map((r) => ({ label: qrLabel(r.value), value: r.sessions, note: r.value }))} unit="회" empty="측정 범위에 Content가 붙은 세션이 없습니다." />
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <caption className="text-left font-semibold">캠페인 × Content 방문 세션</caption>
+              <thead><tr><th scope="col" className="p-2">캠페인</th><th scope="col" className="p-2">설치 장소·용도 / Content</th><th scope="col" className="p-2">방문 세션</th></tr></thead>
+              <tbody>{report.content.pairs.map((r) => <tr key={`${r.campaign}.${r.content}`} className="border-t border-border"><td className="p-2">{r.campaign === "unregistered" ? "미등록 조합" : r.campaign}</td><td className="p-2">{qrLabel(r.content)}<code className="block break-all text-[11px]">{r.content}</code></td><td className="p-2">{fmt(r.sessions)}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </>}
+        <p className="text-[11px] text-muted-foreground">등록부 Content와 승인된 캠페인×Content 조합만 개별 집계합니다. 미등록 값·조합은 unregistered로 묶습니다. 기존 30종 제한은 출처·매체·캠페인에 그대로 적용되며 새 상세 집계에는 적용하지 않습니다. 동일 세션의 첫 유입만 집계하고 관리자 방문은 제외합니다.</p>
+      </section>
       <More label={`기존 리퍼러 분류 보기 (${sinceLabel("visit")}부터 · 로그인 구분·UTM 우선 없음, ${report.legacyDays}일)`}>
         <BarList
           rows={report.legacyRefs.map((r) => ({ label: r.label, value: r.sessions }))}

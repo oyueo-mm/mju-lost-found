@@ -145,12 +145,23 @@ export function inflowDataset(r: InflowReport): Dataset {
         ],
         rows: r.utm[k].map((t) => [t.value, t.sessions]),
       })),
+      {
+        title: `UTM Content (측정 시작 ${r.content.since ?? "미측정"})`,
+        columns: [{ label: "Content", kind: "text" }, { label: "방문 세션", kind: "int" }],
+        rows: r.content.contents.map((t) => [t.value, t.sessions]),
+      },
+      {
+        title: "캠페인 × Content (신규 측정만)",
+        columns: [{ label: "캠페인", kind: "text" }, { label: "Content", kind: "text" }, { label: "방문 세션", kind: "int" }],
+        rows: r.content.pairs.map((t) => [t.campaign, t.content, t.sessions]),
+      },
     ],
     notes: [
       "방문 세션마다 첫 화면에서 한 번만 셉니다(화면 이동·새로고침은 다시 세지 않음). 유효한 utm_source가 있으면 그 출처를, 없으면 리퍼러 도메인 분류를 씁니다.",
       "리퍼러가 없는 방문은 직접 방문으로 단정하지 않고 '출처 확인 불가'로 둡니다(직접 입력·북마크·앱 안 브라우저 등).",
       "유입 경로 수집을 시작하기 전 날짜는 미측정(0이 아님)이며, 수집 시작일은 부분 측정입니다. 완전히 측정된 날은 유입 세션 합이 방문 세션 수와 같아야 합니다.",
       "전체 리퍼러 주소·검색어·IP는 저장하지 않고, 도메인 분류와 허용된 UTM 값(영문 소문자·숫자·-·_ 32자 이내)만 날짜별 합계로 저장합니다. 관리자·자동화 브라우저의 방문은 제외합니다. 한국 시간(KST) 기준.",
+      `Content 측정 시작: ${r.content.since ?? "미측정"}. 시작일은 부분 측정, 이전은 미측정입니다. 미등록 값·조합은 unregistered로 묶으며 과거 데이터를 소급 변경하지 않습니다.`,
     ],
   };
 }

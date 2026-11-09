@@ -4,6 +4,11 @@ import { onboardingUrl } from "@/lib/auth/onboardingUrl";
 import { buildUtmLink } from "./utmLink";
 
 describe("poster landing through protected registration", () => {
+  it("preserves Content through parent gates and nested login/onboarding return paths", () => {
+    const callback = postLandingPath("/found/new", { utm_source: "poster_qr", utm_medium: "offline", utm_campaign: "poster_2026_11", utm_content: "h_jonghap_guard_reg" });
+    expect(gateReturnPath(callback)).toBe(callback);
+    expect(landingTags(`?callbackUrl=${encodeURIComponent(onboardingUrl(callback))}`).get("utm_content")).toBe("h_jonghap_guard_reg");
+  });
   it("lets the parent layout preserve only safe registration return paths", () => {
     expect(gateReturnPath("/found/new?utm_source=poster_qr&secret=private")).toBe("/found/new?utm_source=poster_qr");
     expect(gateReturnPath("/admin")).toBeUndefined();

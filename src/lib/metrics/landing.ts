@@ -1,7 +1,7 @@
 import { sanitizeCallbackUrl } from "@/lib/auth/callbackUrl";
 import { sanitizeUtm } from "./visits";
 
-const TAGS = ["utm_source", "utm_medium", "utm_campaign"] as const;
+const TAGS = ["utm_source", "utm_medium", "utm_campaign", "utm_content"] as const;
 export const LANDING_HEADER = "x-mju-registration-return";
 
 export function gateReturnPath(raw: string | null): string | undefined {

@@ -1,5 +1,7 @@
 # 운영 가이드 (Production / Preview)
 
+운영 문서의 현재 목차와 UTM 표준·QR 등록부·포스터·인수인계는 [operations/README.md](operations/README.md)를 참고한다. 이 문서의 환경별 설정·도구·요금제 가정은 실제 작업 전에 현재 환경과 대조한다.
+
 이 문서는 MJU 분실물 서비스를 운영·배포하는 사람을 위한 기본 절차다.
 비밀값(DB 접속 문자열, OAuth secret, API key, 세션 secret)과 개인정보(이메일 등)는
 이 문서와 저장소 어디에도 기록하지 않는다.

@@ -31,6 +31,7 @@ export type SiteRow = { site: SiteKey; label: string; anon: number; member: numb
 export type ChannelRow = { channel: string; site: SiteKey; label: string; anon: number; member: number; total: number };
 export type EntryRow = { kind: PageKind; total: number; bySite: Partial<Record<SiteKey, number>> };
 export type TagRow = { value: string; sessions: number };
+export type ContentReport = { since: string | null; measuredDays: number; contents: TagRow[]; pairs: { campaign: string; content: string; sessions: number }[] };
 
 export type InflowReport = {
   days: string[];
@@ -42,6 +43,7 @@ export type InflowReport = {
   channels: ChannelRow[];
   entries: EntryRow[];
   utm: { source: TagRow[]; medium: TagRow[]; campaign: TagRow[]; mediumSince: string | null };
+  content: ContentReport;
   // the referrer-only counter of every chosen day with visit counting (also
   // before the source counters): sessions by referrer category
   legacyRefs: { label: string; sessions: number }[];
@@ -51,7 +53,7 @@ export type InflowReport = {
 const asDay = (d: Date | string) => (typeof d === "string" ? d.slice(0, 10) : d.toISOString().slice(0, 10));
 
 // Pure: counter rows of the chosen days -> the report.
-export function buildInflow(days: string[], rows: { day: string; metric: string; n: number }[], since: string | null): InflowReport {
+export function buildInflow(days: string[], rows: { day: string; metric: string; n: number }[], since: string | null, contentSince: string | null = null): InflowReport {
   const sorted = [...new Set(days)].sort();
   const index = new Map(sorted.map((d, i) => [d, i]));
   const coverageOfDay = (d: string): Coverage => (!since || d < since ? "none" : d === since ? "partial" : "full");
@@ -62,6 +64,8 @@ export function buildInflow(days: string[], rows: { day: string; metric: string;
   const entries = new Map<PageKind, EntryRow>();
   const tags = { source: new Map<string, number>(), medium: new Map<string, number>(), campaign: new Map<string, number>() };
   const legacy = new Map<string, number>();
+  const contents = new Map<string, number>();
+  const pairs = new Map<string, { campaign: string; content: string; sessions: number }>();
 
   for (const r of rows) {
     const i = index.get(r.day);
@@ -96,6 +100,14 @@ export function buildInflow(days: string[], rows: { day: string; metric: string;
       row.total += r.n;
       row.bySite[site] = (row.bySite[site] ?? 0) + r.n;
       entries.set(kind, row);
+    } else if ((m = /^visit\.utm_content\.([a-z0-9_-]+)$/.exec(r.metric))) {
+      if (!contentSince || r.day < contentSince) continue;
+      contents.set(m[1], (contents.get(m[1]) ?? 0) + r.n);
+    } else if ((m = /^visit\.utm_pair\.([a-z0-9_-]+)\.([a-z0-9_-]+)$/.exec(r.metric))) {
+      if (!contentSince || r.day < contentSince) continue;
+      const key = `${m[1]}.${m[2]}`;
+      const row = pairs.get(key) ?? { campaign: m[1], content: m[2], sessions: 0 };
+      row.sessions += r.n; pairs.set(key, row);
     } else if ((m = /^visit\.utm_(source|medium|campaign)\.([a-z0-9_-]+)$/.exec(r.metric))) {
       if (!visitCovered(r.day) || (m[1] === "medium" && d.coverage === "none")) continue;
       const map = tags[m[1] as "source" | "medium" | "campaign"];
@@ -127,6 +139,7 @@ export function buildInflow(days: string[], rows: { day: string; metric: string;
       .sort((a, b) => b.total - a.total || a.channel.localeCompare(b.channel)),
     entries: [...entries.values()].sort((a, b) => b.total - a.total),
     utm: { source: tagRows(tags.source), medium: tagRows(tags.medium), campaign: tagRows(tags.campaign), mediumSince: since },
+    content: { since: contentSince, measuredDays: sorted.filter((d) => contentSince && d >= contentSince).length, contents: tagRows(contents), pairs: [...pairs.values()].sort((a, b) => b.sessions - a.sessions || a.campaign.localeCompare(b.campaign) || a.content.localeCompare(b.content)) },
     legacyRefs: [...legacy].map(([label, sessions]) => ({ label, sessions })).sort((a, b) => b.sessions - a.sessions),
     legacyDays: sorted.filter(visitCovered).length,
   };
@@ -134,7 +147,7 @@ export function buildInflow(days: string[], rows: { day: string; metric: string;
 
 export async function loadInflow(days: string[]): Promise<InflowReport> {
   const wanted = [...new Set(days)].sort();
-  const [rows, first] = await Promise.all([
+  const [rows, first, contentFirst] = await Promise.all([
     wanted.length
       ? prisma.$queryRaw<{ day: Date | string; metric: string; n: bigint | number }[]>`
           SELECT "day", "metric", sum("value") AS n FROM "OperationalMetricDaily"
@@ -144,10 +157,12 @@ export async function loadInflow(days: string[]): Promise<InflowReport> {
           GROUP BY 1, 2`.catch(() => [])
       : Promise.resolve([]),
     prisma.$queryRaw<{ day: Date | string | null }[]>`SELECT min("day") AS day FROM "OperationalMetricDaily" WHERE "metric" LIKE 'visit.src.%'`.catch(() => []),
+    prisma.$queryRaw<{ day: Date | string | null }[]>`SELECT min("day") AS day FROM "OperationalMetricDaily" WHERE "metric" = 'meta.since.utm_content'`.catch(() => []),
   ]);
   return buildInflow(
     wanted,
     rows.map((r) => ({ day: asDay(r.day), metric: r.metric, n: Number(r.n) })),
     first[0]?.day ? asDay(first[0].day) : null,
+    contentFirst[0]?.day ? asDay(contentFirst[0].day) : null,
   );
 }

@@ -19,6 +19,8 @@
 # Local QA servers, fixtures, snapshots and generated browser artifacts.
 .vercel
 .next
+# Local JVM crash diagnostics may contain machine details; never deploy them.
+hs_err_pid*.log
 scripts/preview-select.mjs
 scripts/preview-unified-search.mjs
 scripts/search-preview-build.mjs

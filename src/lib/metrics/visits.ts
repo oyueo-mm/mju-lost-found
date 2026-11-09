@@ -216,6 +216,7 @@ export type VisitEvent = {
   utmSource?: string | null;
   utmMedium?: string | null;
   utmCampaign?: string | null;
+  utmContent?: string | null;
 };
 
 // Visit session: 30 minutes without a page view, or a new KST day, starts a

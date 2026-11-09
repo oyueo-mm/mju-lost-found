@@ -7,6 +7,20 @@ import { inflowDataset } from "./export";
 const r = (day: string, metric: string, n: number) => ({ day, metric, n });
 
 describe("유입 경로", () => {
+  it("separates Content measurement start, groups campaign/content and leaves legacy totals alone", () => {
+    const rows = [
+      r("2026-11-08", "visit.utm_campaign.legacy_guard01", 3),
+      r("2026-11-09", "visit.utm_campaign.poster_2026_11", 2),
+      r("2026-11-09", "visit.utm_content.h_jonghap_guard_reg", 2),
+      r("2026-11-09", "visit.utm_pair.poster_2026_11.h_jonghap_guard_reg", 2),
+      r("2026-11-08", "visit.utm_content.before_measurement", 99),
+    ];
+    const report = buildInflow(["2026-11-08", "2026-11-09"], rows, "2026-10-20", "2026-11-09");
+    expect(report.utm.campaign).toEqual([{ value: "legacy_guard01", sessions: 3 }, { value: "poster_2026_11", sessions: 2 }]);
+    expect(report.content).toEqual({ since: "2026-11-09", measuredDays: 1, contents: [{ value: "h_jonghap_guard_reg", sessions: 2 }], pairs: [{ campaign: "poster_2026_11", content: "h_jonghap_guard_reg", sessions: 2 }] });
+    expect(buildInflow(["2026-11-08"], rows, "2026-10-20").content).toEqual({ since: null, measuredDays: 0, contents: [], pairs: [] });
+    expect(inflowDataset(report).tables.find((t) => t.title?.startsWith("캠페인 × Content"))?.rows).toEqual([["poster_2026_11", "h_jonghap_guard_reg", 2]]);
+  });
   it("accepts only short, plain UTM values -- no URLs, e-mails or long numbers", () => {
     expect(sanitizeUtm(" EveryTime ")).toBe("everytime");
     expect(sanitizeUtm("2026-fall")).toBe("2026-fall");

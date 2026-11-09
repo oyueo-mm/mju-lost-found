@@ -1,4 +1,6 @@
 import { sanitizeUtm } from "./visits";
+import { campaignUrl } from "./utmStandard.mjs";
+import { QR_REGISTRY } from "./qrRegistry";
 
 // 홍보 링크 (components/admin/UtmLinkBuilder): the one place a campaign link
 // and its QR file name are made, so the copied link, the QR code and the
@@ -18,28 +20,28 @@ export const UTM_LINK_PAGES = [
 ] as const;
 export type UtmLinkPath = (typeof UTM_LINK_PAGES)[number]["path"];
 
-export type UtmLinkInput = { path: string; source: string; medium: string; campaign: string };
+export type UtmLinkInput = { path: string; source: string; medium: string; campaign: string; content?: string };
 export type UtmLinkResult =
-  | { ok: true; link: string; source: string; medium: string | null; campaign: string | null }
-  | { ok: false; invalid: ("path" | "source" | "medium" | "campaign")[] };
+  | { ok: true; link: string; source: string; medium: string | null; campaign: string | null; content: string | null }
+  | { ok: false; invalid: ("path" | "source" | "medium" | "campaign" | "content" | "registry")[] };
 
-export function buildUtmLink({ path, source, medium, campaign }: UtmLinkInput): UtmLinkResult {
+export function buildUtmLink({ path, source, medium, campaign, content = "" }: UtmLinkInput): UtmLinkResult {
   const page = UTM_LINK_PAGES.find((p) => p.path === path)?.path;
   const s = sanitizeUtm(source);
   const m = medium.trim() ? sanitizeUtm(medium) : null;
   const c = campaign.trim() ? sanitizeUtm(campaign) : null;
-  const invalid = [!page && "path", !s && "source", medium.trim() && !m && "medium", campaign.trim() && !c && "campaign"].filter(Boolean) as ("path" | "source" | "medium" | "campaign")[];
+  const t = content.trim() ? sanitizeUtm(content) : null;
+  const invalid = [!page && "path", !s && "source", medium.trim() && !m && "medium", campaign.trim() && !c && "campaign", content.trim() && !t && "content"].filter(Boolean) as ("path" | "source" | "medium" | "campaign" | "content")[];
   if (invalid.length) return { ok: false, invalid };
-  const q = new URLSearchParams({ utm_source: s! });
-  if (m) q.set("utm_medium", m);
-  if (c) q.set("utm_campaign", c);
-  return { ok: true, link: `${UTM_LINK_ORIGIN}${page}?${q.toString()}`, source: s!, medium: m, campaign: c };
+  const link = campaignUrl({ path: page!, source: s!, medium: m, campaign: c, content: t });
+  if (s === "poster_qr" && t && !QR_REGISTRY.some((e) => e.url === link && e.status !== "retired")) return { ok: false, invalid: ["registry"] };
+  return { ok: true, link, source: s!, medium: m, campaign: c, content: t };
 }
 
 // "mju-find-qr_instagram_october_promo.png" -- the parts are already
 // limited to a-z, 0-9, - and _, so they are safe in any file system.
-export function qrFileName(source: string, campaign: string | null, ext: "png" | "svg"): string {
-  return `mju-find-qr_${[source, campaign].filter(Boolean).join("_")}.${ext}`;
+export function qrFileName(source: string, campaign: string | null, ext: "png" | "svg", content?: string | null): string {
+  return `mju-find-qr_${[source, campaign, content].filter(Boolean).join("_")}.${ext}`;
 }
 
 // QR look shared by the preview and the files: black on white, quiet zone

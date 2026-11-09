@@ -3,7 +3,8 @@
 import { Select } from "@/components/ui/Select";
 
 import { useEffect, useState } from "react";
-import { sanitizeUtm } from "@/lib/metrics/visits";
+import { QR_REGISTRY, qrLabel } from "@/lib/metrics/qrRegistry";
+import { POSTER_CAMPAIGN } from "@/lib/metrics/utmStandard.mjs";
 
 import { buildUtmLink, QR_OPTIONS, QR_PNG_SIZE, qrFileName, qrPngScale, UTM_LINK_PAGES } from "@/lib/metrics/utmLink";
 
@@ -23,7 +24,7 @@ const PRESETS = [
 ] as const;
 const field = "h-9 w-full rounded-lg border border-border bg-background px-2 text-sm text-foreground";
 const help = "text-[11px] leading-snug text-muted-foreground";
-const LABEL = { path: "연결할 화면", source: "출처(utm_source)", medium: "매체(utm_medium)", campaign: "캠페인(utm_campaign)" } as const;
+const LABEL = { path: "연결할 화면", source: "출처(utm_source)", medium: "매체(utm_medium)", campaign: "캠페인(utm_campaign)", content: "설치 위치·용도(utm_content)", registry: "등록부 일치" } as const;
 
 function save(name: string, href: string) {
   const a = document.createElement("a");
@@ -39,13 +40,12 @@ export function UtmLinkBuilder() {
   const [source, setSource] = useState("everytime");
   const [medium, setMedium] = useState("community");
   const [campaign, setCampaign] = useState("");
-  const [location, setLocation] = useState("guard01");
-  const [board, setBoard] = useState("board01");
+  const [content, setContent] = useState("");
   const [copied, setCopied] = useState(false);
   const [qr, setQr] = useState<{ link: string; svg: string } | null>(null);
   const [qrError, setQrError] = useState(false);
 
-  const result = buildUtmLink({ path, source, medium, campaign });
+  const result = buildUtmLink({ path, source, medium, campaign, content });
   const link = result.ok ? result.link : null;
 
   // the QR follows the link (stale drawings are dropped)
@@ -82,7 +82,7 @@ export function UtmLinkBuilder() {
     try {
       const QR = await import("qrcode");
       const scale = qrPngScale(QR.create(result.link, QR_OPTIONS).modules.size);
-      save(qrFileName(result.source, result.campaign, "png"), await QR.toDataURL(result.link, { ...QR_OPTIONS, scale, type: "image/png" }));
+      save(qrFileName(result.source, result.campaign, "png", result.content), await QR.toDataURL(result.link, { ...QR_OPTIONS, scale, type: "image/png" }));
     } catch {
       setQrError(true);
     }
@@ -90,7 +90,7 @@ export function UtmLinkBuilder() {
   const downloadSvg = () => {
     if (!result.ok || !shown) return;
     const url = URL.createObjectURL(new Blob([shown.svg], { type: "image/svg+xml" }));
-    save(qrFileName(result.source, result.campaign, "svg"), url);
+    save(qrFileName(result.source, result.campaign, "svg", result.content), url);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
@@ -100,24 +100,21 @@ export function UtmLinkBuilder() {
   return (
     <div className="flex flex-col gap-3 text-xs text-muted-foreground">
       <fieldset className="flex flex-col gap-3 rounded-card border border-border p-3">
-        <legend className="px-1 font-semibold text-foreground">인문캠퍼스 포스터 설정</legend>
-        <label>설치 장소
-          <Select className={field} value={location} onChange={(e) => setLocation(e.target.value)}>
-            {Array.from({ length: 8 }, (_, i) => `guard${String(i + 1).padStart(2, "0")}`).map((id, i) => <option key={id} value={id}>경비실 {i + 1} ({id})</option>)}
-            <option value="board">교내 게시판 (장소 코드 입력)</option>
+        <legend className="px-1 font-semibold text-foreground">포스터 UTM 표준 v1.0 · 등록부에서 선택</legend>
+        <label>확정된 설치 장소·QR 용도
+          <Select className={field} value={QR_REGISTRY.find((e) => e.url === link && e.status !== "retired")?.qr_id ?? ""} onChange={(event) => {
+            const entry = QR_REGISTRY.find((e) => e.qr_id === event.target.value);
+            if (!entry) return;
+            setPath(entry.path); setSource(entry.utm_source); setMedium(entry.utm_medium);
+            setCampaign(entry.utm_campaign); setContent(entry.utm_content);
+          }}>
+            <option value="">등록부의 QR을 선택하세요</option>
+            {QR_REGISTRY.filter((e) => e.status !== "retired").map((e) => <option key={e.qr_id} value={e.qr_id}>{qrLabel(e.utm_content)} · {e.utm_campaign}</option>)}
           </Select>
         </label>
-        {location === "board" && <label>게시판 장소 코드<input className={field} maxLength={16} value={board} onChange={(e) => setBoard(e.target.value)} placeholder="board01" /></label>}
-        <div className="flex flex-wrap gap-2">
-          {([['find', '분실물 찾기', '/found'], ['register', '습득물 등록', '/found/new']] as const).map(([purpose, label, target]) => (
-            <button key={purpose} type="button" disabled={location === "board" && (!/^[a-z][a-z0-9_-]{0,15}$/.test(board.trim()) || !sanitizeUtm(board))} className="rounded-lg border border-border px-3 py-2 font-medium text-foreground disabled:opacity-50" onClick={() => {
-              setSource("poster_qr"); setMedium("offline"); setPath(target);
-              setCampaign(`h_${location === "board" ? board.trim() : location}_${purpose}`);
-            }}>{label} QR 설정</button>
-          ))}
-        </div>
-        <p>경비실 01~08에 각각 두 QR을 만드세요(총 16개). 번호와 실제 장소의 대응을 정한 뒤 유지하세요. 게시판도 설치 장소마다 고유 코드를 사용하세요. 찾기는 습득물 게시판으로 연결됩니다.</p>
-        <p>예: h_guard01_find / h_guard01_register. 하루 캠페인 30종을 넘으면 이후 새 값은 etc로 합쳐집니다. 기존 캠페인도 이 한도에 포함됩니다. 같은 세션에서 다른 QR을 열어도 첫 유입만 집계합니다. utm_content는 수집하지 않으므로 장소·용도를 캠페인에 넣습니다.</p>
+        {QR_REGISTRY.length === 0 && <p>확정된 장소 코드가 아직 등록되지 않았습니다. 건물명·코드 확인 후 운영 등록부에 추가하세요. 번호형 경비실 코드는 새로 발급하지 않습니다.</p>}
+        <p>Source poster_qr · Medium offline · Campaign {POSTER_CAMPAIGN}. 설치 장소와 용도는 Content로 구분합니다. 분실물 검색은 검색 화면, 습득물 등록은 등록 화면으로 연결됩니다.</p>
+        <p>등록부와 동일한 URL인지 확인한 뒤 인쇄하세요. 생성기는 등록부를 수정하지 않습니다. 기존 Content 없는 QR도 계속 작동하며 최초 유입만 집계합니다.</p>
       </fieldset>
       <div className="flex flex-wrap gap-1.5" role="group" aria-label="자주 쓰는 출처">
         {PRESETS.map((p) => (
@@ -127,6 +124,7 @@ export function UtmLinkBuilder() {
             onClick={() => {
               setSource(p.source);
               setMedium(p.medium);
+              if (p.source === "poster_qr") setCampaign(POSTER_CAMPAIGN);
             }}
             className={`rounded-full border px-3 py-1.5 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
               source === p.source ? "border-primary bg-primary-muted text-primary" : "border-border hover:text-foreground"
@@ -163,11 +161,16 @@ export function UtmLinkBuilder() {
           <input className={field} value={campaign} maxLength={32} placeholder="예: october_promo" onChange={(e) => setCampaign(e.target.value)} />
           <span className={help}>같은 출처의 홍보 활동을 구분합니다. 예: october_promo, campus_poster</span>
         </label>
+        <label className="flex flex-col gap-1">
+          설치 위치·용도 utm_content (선택)
+          <input className={field} value={content} maxLength={32} placeholder="등록부에서 확정된 Content" onChange={(e) => setContent(e.target.value)} />
+          <span className={help}>예: h_jonghap_guard_find. 미등록 Content는 상세 집계에서 미등록으로 묶입니다.</span>
+        </label>
       </div>
+      {result.ok && result.content && <p role="status">{QR_REGISTRY.some((e) => e.url === result.link) ? "등록부 URL과 일치합니다." : "등록부 URL과 일치하지 않습니다. 신규 인쇄 전에 운영 등록부와 대조하세요. 미등록 캠페인×Content 조합은 상세 집계에서 묶입니다."}</p>}
       {!result.ok ? (
         <p role="alert" className="text-destructive">
-          {result.invalid.map((k) => LABEL[k]).join(", ")}: 영문 소문자·숫자·-·_만, 32자 이내로 입력해 주세요(전화번호·학번·전체 날짜처럼 숫자 7자리 이상은 쓸 수
-          없음).
+          {result.invalid.includes("registry") ? "등록부의 캠페인·Content·용도·목적지와 일치하는 포스터 QR만 발급할 수 있습니다. 확정된 등록부 항목을 선택하세요." : `${result.invalid.map((k) => LABEL[k]).join(", ")}: 영문 소문자·숫자·-·_만, 32자 이내로 입력해 주세요(전화번호·학번·전체 날짜처럼 숫자 7자리 이상은 쓸 수 없음).`}
         </p>
       ) : (
         <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start">

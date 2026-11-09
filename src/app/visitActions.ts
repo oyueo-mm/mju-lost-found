@@ -1,6 +1,7 @@
 "use server";
 
 import { createHash } from "node:crypto";
+import { registeredAttribution } from "@/lib/metrics/qrRegistry";
 import { headers } from "next/headers";
 
 import { addDailyCount, currentAudience, recordRoleDimensions } from "@/lib/metrics/record";
@@ -132,6 +133,9 @@ export async function recordVisitsAction(
       addDailyCount(`visit.${audience}.hour.${String(kstNow.getUTCHours()).padStart(2, "0")}`);
       if (event.sessionStart !== true) continue;
       addDailyCount(`visit.session.${audience}`);
+      // A marker is recorded even for an untagged session, so no Content
+      // traffic on a measured day can be distinguished from pre-release days.
+      addDailyCount("meta.since.utm_content");
       addDailyCount(`visit.device.${device}.session`);
       addDailyCount(`visit.start.hour.${String(kstNow.getUTCHours()).padStart(2, "0")}`);
       addDailyCount(`visit.start.page.${event.kind}`);
@@ -144,6 +148,14 @@ export async function recordVisitsAction(
       if (source) addDailyCount(`visit.utm_source.${source}`);
       if (utmMedium) addDailyCount(`visit.utm_medium.${cappedUtm("medium", utmMedium, day)}`);
       if (utmCampaign) addDailyCount(`visit.utm_campaign.${cappedUtm("campaign", utmCampaign, day)}`);
+      const utmContent = sanitizeUtm(typeof event.utmContent === "string" ? event.utmContent : null);
+      if (utmContent) {
+        // Finite registry keys, without changing the legacy 30-value caps.
+        // Untrusted values/pairs share one bucket; there is no N×M expansion.
+        const tracked = registeredAttribution(utmCampaign, utmContent);
+        addDailyCount(`visit.utm_content.${tracked.content}`);
+        addDailyCount(`visit.utm_pair.${tracked.pair}`);
+      }
       // 유입 경로: the same session once, by source and login state, and by
       // source and first screen (the capped UTM value keeps the names bounded)
       const channel = channelOf(ref, source);
