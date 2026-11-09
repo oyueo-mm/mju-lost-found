@@ -7,7 +7,9 @@ import { DraftJanitor } from "@/components/post/DraftJanitor";
 import { ActivityBeacon } from "@/components/layout/ActivityBeacon";
 import { PrivacyPolicyNotice } from "@/components/layout/PrivacyPolicyNotice";
 import { kstDay } from "@/lib/metrics/record";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { gateReturnPath, LANDING_HEADER } from "@/lib/metrics/landing";
+import { onboardingUrl } from "@/lib/auth/onboardingUrl";
 import { PRIVACY_NOTICE_COOKIE, privacyNotice, privacyNoticeDismissed } from "@/lib/policy/privacyNotice";
 import { getCurrentUser, getRejoinIdentityId, hasRequiredConsents } from "@/lib/auth/session";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
@@ -46,7 +48,8 @@ export default async function MainLayout({ children }: { children: React.ReactNo
   // exception to carve out for them because they simply aren't reachable
   // through this component at all.
   if (user && !hasRequiredConsents(user)) {
-    redirect("/privacy-consent");
+    const callback = gateReturnPath((await headers()).get(LANDING_HEADER));
+    redirect(callback ? `/privacy-consent?callbackUrl=${encodeURIComponent(callback)}` : "/privacy-consent");
   }
 
   // Phase 닉네임 필수: "닉네임 설정을 완료하기 전에는 서비스 이용 불가" --
@@ -68,7 +71,7 @@ export default async function MainLayout({ children }: { children: React.ReactNo
   // never clears their nickname, so this only ever fires for a genuinely
   // brand-new account.
   if (user && user.nickname === null) {
-    redirect("/onboarding");
+    redirect(onboardingUrl(gateReturnPath((await headers()).get(LANDING_HEADER))));
   }
 
   // Phase I section 1: "정지 사용자가 서비스의 일반 기능을 사용할 수 없도록

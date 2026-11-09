@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { landingTags } from "@/lib/metrics/landing";
 
 import { recordVisitsAction } from "@/app/visitActions";
 import { ACTIVITY_THROTTLE_MS, changesBuckets, markSent, pendingUpdate, type FlowRecord, type FlowUpdate } from "@/lib/metrics/flow";
@@ -268,7 +269,7 @@ export function VisitBeacon() {
     const event: VisitEvent = { kind, sessionStart: startsSession(now) };
     notePageView(kind, now, event.sessionStart);
     if (event.sessionStart) {
-      const params = new URLSearchParams(window.location.search);
+      const params = landingTags(window.location.search);
       event.ref = refSourceOf(document.referrer, window.location.host);
       event.utmSource = sanitizeUtm(params.get("utm_source"));
       event.utmMedium = sanitizeUtm(params.get("utm_medium"));

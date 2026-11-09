@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { hasRequiredConsents, requireUser } from "@/lib/auth/session";
 import { validateNickname } from "@/lib/auth/nickname";
 import { prisma } from "@/lib/db/prisma";
+import { sanitizeCallbackUrl } from "@/lib/auth/callbackUrl";
+import { onboardingUrl } from "@/lib/auth/onboardingUrl";
 
 export type SetNicknameState = { error: string } | null;
 
@@ -32,14 +34,17 @@ export async function setNicknameAction(
   _prevState: SetNicknameState,
   formData: FormData,
 ): Promise<SetNicknameState> {
-  const user = await requireUser();
+  const rawCallback = formData.get("callbackUrl");
+  const callbackUrl = sanitizeCallbackUrl(typeof rawCallback === "string" ? rawCallback : undefined);
+  const returnPath = onboardingUrl(callbackUrl);
+  const user = await requireUser(undefined, returnPath);
 
   if (!hasRequiredConsents(user)) {
-    redirect("/privacy-consent?callbackUrl=%2Fonboarding");
+    redirect(`/privacy-consent?callbackUrl=${encodeURIComponent(returnPath)}`);
   }
 
   if (user.nickname !== null) {
-    redirect("/");
+    redirect(callbackUrl ?? "/");
   }
 
   const validation = validateNickname(String(formData.get("nickname") ?? ""));
@@ -54,11 +59,11 @@ export async function setNicknameAction(
   if (count === 0) {
     // Lost a race with itself (double submit) or nickname was already set
     // between the check above and this write -- either way, done.
-    redirect("/");
+    redirect(callbackUrl ?? "/");
   }
 
   // 실명·소속 is no longer a step here: it was offered (optional) on the
   // 가입 동의 screen and collected from the Google name; posting and
   // chatting ask for the consent later if it wasn't given.
-  redirect("/");
+  redirect(callbackUrl ?? "/");
 }

@@ -26,8 +26,11 @@ export default async function IdentityPage({
 }: {
   searchParams: Promise<{ callbackUrl?: string; onboarding?: string }>;
 }) {
-  const user = await requireReadyUser("mypost", "/me/identity");
-  const [t, own, params, session] = await Promise.all([getTranslator(), getOwnIdentityInfo(user.id), searchParams, auth()]);
+  const params = await searchParams;
+  const safeCallback = sanitizeCallbackUrl(params.callbackUrl);
+  const returnPath = safeCallback ? `/me/identity?callbackUrl=${encodeURIComponent(safeCallback)}` : "/me/identity";
+  const user = await requireReadyUser("mypost", returnPath);
+  const [t, own, session] = await Promise.all([getTranslator(), getOwnIdentityInfo(user.id), auth()]);
   const callbackUrl = sanitizeCallbackUrl(params.callbackUrl) ?? null;
   const onboarding = params.onboarding === "1";
   const fromGoogle = own?.realNameSource === "google_display_name";
@@ -74,6 +77,7 @@ export default async function IdentityPage({
         <section className="flex flex-col gap-3 rounded-card border border-border bg-card p-5 text-sm">
           <p className="text-muted-foreground">{t("identity.relogin.description")}</p>
           <form action={reloginForIdentityAction}>
+            {callbackUrl && <input type="hidden" name="callbackUrl" value={callbackUrl} />}
             <Button type="submit" className="w-full sm:w-auto">
               {t("identity.relogin.button")}
             </Button>

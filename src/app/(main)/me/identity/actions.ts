@@ -15,8 +15,10 @@ const afterSave = (formData: FormData) =>
   sanitizeCallbackUrl(String(formData.get("callbackUrl") ?? "")) ?? (formData.get("onboarding") === "1" ? "/" : "/me");
 
 // Hints come only with a sign-in, so a session from before them needs one.
-export async function reloginForIdentityAction(): Promise<void> {
-  await signOut({ redirectTo: "/login?callbackUrl=%2Fme%2Fidentity" });
+export async function reloginForIdentityAction(formData: FormData): Promise<void> {
+  const callback = sanitizeCallbackUrl(String(formData.get("callbackUrl") ?? ""));
+  const identityPath = callback ? `/me/identity?callbackUrl=${encodeURIComponent(callback)}` : "/me/identity";
+  await signOut({ redirectTo: `/login?callbackUrl=${encodeURIComponent(identityPath)}` });
 }
 
 export type SaveIdentityField = "realName" | "department" | "form";

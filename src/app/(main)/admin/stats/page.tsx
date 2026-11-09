@@ -7,7 +7,7 @@ import Link from "next/link";
 
 import { requireAnyPermission } from "@/lib/auth/session";
 import { can } from "@/lib/permissions/check";
-import { UtmLinkBuilder } from "@/components/admin/UtmLinkBuilder";
+import { redirect } from "next/navigation";
 import { summarizePermissionComposition } from "@/lib/permissions/service";
 import { FREE_LIMITS_MB, METRICS, percentileMs, VISIT_SERIES, type Granularity, type TimingRow } from "@/lib/metrics/dashboard";
 import { describeRoute, methodOf } from "@/lib/metrics/apiRoutes";
@@ -184,6 +184,7 @@ export default async function AdminStatsPage({
     dev: Boolean(admin.isAdmin),
   };
   const params = await searchParams;
+  if (tabAccess.promo && (params.tab === "promo" || ![tabAccess.ops, tabAccess.users, tabAccess.admins, tabAccess.dev].some(Boolean))) redirect("/admin/utm");
   const today = kstDay();
   const preset = (PERIOD_PRESETS.some((p) => p.key === params.period) ? params.period : params.p === "7" ? "week" : "month") as PeriodPreset;
   const asked = resolvePeriod({ preset, from: params.from, to: params.to }, today);
@@ -192,9 +193,9 @@ export default async function AdminStatsPage({
   const periodError = "error" in asked ? asked.error : null;
   const unit = period.range.unit;
   // (시간대 분석 is a section of 운영 통계; an old ?tab=hourly link opens 운영 통계)
-  const asked_tab = params.tab === "users" || params.tab === "admins" || params.tab === "dev" || params.tab === "promo" ? params.tab : "ops";
-  const firstAllowed = (["ops", "users", "admins", "promo", "dev"] as const).find((t) => tabAccess[t]) ?? "ops";
-  const tab: "ops" | "users" | "admins" | "promo" | "dev" = tabAccess[asked_tab] ? asked_tab : firstAllowed;
+  const asked_tab = params.tab === "users" || params.tab === "admins" || params.tab === "dev" ? params.tab : "ops";
+  const firstAllowed = (["ops", "users", "admins", "dev"] as const).find((t) => tabAccess[t]) ?? "ops";
+  const tab: "ops" | "users" | "admins" | "dev" = tabAccess[asked_tab] ? asked_tab : firstAllowed;
   // 시간대 분석: the calendar's days (`d`) and metric (`m`), kept across
   // period changes on 운영 통계
   const dParam = params.d === undefined ? null : [params.d].flat().join(",");
@@ -259,11 +260,6 @@ export default async function AdminStatsPage({
         {tabAccess.admins && (
           <Link href={`/admin/stats?tab=admins&${periodQuery}`} aria-current={tab === "admins" ? "page" : undefined} className={tabClass(tab === "admins")}>
             관리자 활동
-          </Link>
-        )}
-        {tabAccess.promo && !tabAccess.ops && (
-          <Link href="/admin/stats?tab=promo" aria-current={tab === "promo" ? "page" : undefined} className={tabClass(tab === "promo")}>
-            홍보 링크
           </Link>
         )}
         {tabAccess.dev && (
@@ -346,15 +342,6 @@ export default async function AdminStatsPage({
         <AdminOperations report={operations} label={period.label} all={all} />
         <AdminActivityView report={activity} viewer={admin.id} all={all} options={options} />
       </StatsSectionNavigation>
-    );
-  }
-
-  if (tab === "promo") {
-    return (
-      <div className="flex flex-col gap-6">
-        {header}
-        <UtmLinkBuilder />
-      </div>
     );
   }
 

@@ -4,9 +4,13 @@ import { hasRequiredConsents, requireUser } from "@/lib/auth/session";
 import { LogoMark } from "@/components/layout/Logo";
 import { NicknameForm } from "./NicknameForm";
 import { getTranslator } from "@/lib/i18n/server";
+import { sanitizeCallbackUrl } from "@/lib/auth/callbackUrl";
+import { onboardingUrl } from "@/lib/auth/onboardingUrl";
 
-export default async function OnboardingPage() {
-  const user = await requireUser(); // redirects to /login if not signed in
+export default async function OnboardingPage({ searchParams }: { searchParams: Promise<{ callbackUrl?: string }> }) {
+  const callbackUrl = sanitizeCallbackUrl((await searchParams).callbackUrl);
+  const returnPath = onboardingUrl(callbackUrl);
+  const user = await requireUser(undefined, returnPath);
   const t = await getTranslator();
 
   // Phase 8: consent comes before nickname (see session.ts's
@@ -19,11 +23,11 @@ export default async function OnboardingPage() {
   // (or on a stale version of) the terms consent -- same redirect target,
   // no separate branch, matching requireReadyUser()'s own single check.
   if (!hasRequiredConsents(user)) {
-    redirect("/privacy-consent?callbackUrl=%2Fonboarding");
+    redirect(`/privacy-consent?callbackUrl=${encodeURIComponent(returnPath)}`);
   }
 
   if (user.nickname !== null) {
-    redirect("/");
+    redirect(callbackUrl ?? "/");
   }
 
   return (
@@ -40,7 +44,7 @@ export default async function OnboardingPage() {
             {t("auth.onboarding.hint")}
           </p>
         </div>
-        <NicknameForm />
+        <NicknameForm callbackUrl={callbackUrl} />
       </div>
     </div>
   );

@@ -16,9 +16,9 @@ describe("홍보 링크", () => {
     expect(r.ok && r.link).toBe("https://mju-find.vercel.app/found?utm_source=instagram&utm_medium=social&utm_campaign=october_promo");
   });
 
-  it("medium and campaign are optional; an unknown page falls back to home", () => {
+  it("rejects an unknown destination instead of silently changing it", () => {
     const r = buildUtmLink({ path: "/admin", source: "kakao", medium: " ", campaign: "" });
-    expect(r.ok && r.link).toBe("https://mju-find.vercel.app/?utm_source=kakao");
+    expect(r).toEqual({ ok: false, invalid: ["path"] });
   });
 
   it("refuses what the visit counter would not count", () => {

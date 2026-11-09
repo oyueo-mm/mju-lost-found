@@ -3,6 +3,7 @@
 import { Select } from "@/components/ui/Select";
 
 import { useEffect, useState } from "react";
+import { sanitizeUtm } from "@/lib/metrics/visits";
 
 import { buildUtmLink, QR_OPTIONS, QR_PNG_SIZE, qrFileName, qrPngScale, UTM_LINK_PAGES } from "@/lib/metrics/utmLink";
 
@@ -22,7 +23,7 @@ const PRESETS = [
 ] as const;
 const field = "h-9 w-full rounded-lg border border-border bg-background px-2 text-sm text-foreground";
 const help = "text-[11px] leading-snug text-muted-foreground";
-const LABEL = { source: "출처(utm_source)", medium: "매체(utm_medium)", campaign: "캠페인(utm_campaign)" } as const;
+const LABEL = { path: "연결할 화면", source: "출처(utm_source)", medium: "매체(utm_medium)", campaign: "캠페인(utm_campaign)" } as const;
 
 function save(name: string, href: string) {
   const a = document.createElement("a");
@@ -38,6 +39,8 @@ export function UtmLinkBuilder() {
   const [source, setSource] = useState("everytime");
   const [medium, setMedium] = useState("community");
   const [campaign, setCampaign] = useState("");
+  const [location, setLocation] = useState("guard01");
+  const [board, setBoard] = useState("board01");
   const [copied, setCopied] = useState(false);
   const [qr, setQr] = useState<{ link: string; svg: string } | null>(null);
   const [qrError, setQrError] = useState(false);
@@ -96,6 +99,26 @@ export function UtmLinkBuilder() {
 
   return (
     <div className="flex flex-col gap-3 text-xs text-muted-foreground">
+      <fieldset className="flex flex-col gap-3 rounded-card border border-border p-3">
+        <legend className="px-1 font-semibold text-foreground">인문캠퍼스 포스터 설정</legend>
+        <label>설치 장소
+          <Select className={field} value={location} onChange={(e) => setLocation(e.target.value)}>
+            {Array.from({ length: 8 }, (_, i) => `guard${String(i + 1).padStart(2, "0")}`).map((id, i) => <option key={id} value={id}>경비실 {i + 1} ({id})</option>)}
+            <option value="board">교내 게시판 (장소 코드 입력)</option>
+          </Select>
+        </label>
+        {location === "board" && <label>게시판 장소 코드<input className={field} maxLength={16} value={board} onChange={(e) => setBoard(e.target.value)} placeholder="board01" /></label>}
+        <div className="flex flex-wrap gap-2">
+          {([['find', '분실물 찾기', '/found'], ['register', '습득물 등록', '/found/new']] as const).map(([purpose, label, target]) => (
+            <button key={purpose} type="button" disabled={location === "board" && (!/^[a-z][a-z0-9_-]{0,15}$/.test(board.trim()) || !sanitizeUtm(board))} className="rounded-lg border border-border px-3 py-2 font-medium text-foreground disabled:opacity-50" onClick={() => {
+              setSource("poster_qr"); setMedium("offline"); setPath(target);
+              setCampaign(`h_${location === "board" ? board.trim() : location}_${purpose}`);
+            }}>{label} QR 설정</button>
+          ))}
+        </div>
+        <p>경비실 01~08에 각각 두 QR을 만드세요(총 16개). 번호와 실제 장소의 대응을 정한 뒤 유지하세요. 게시판도 설치 장소마다 고유 코드를 사용하세요. 찾기는 습득물 게시판으로 연결됩니다.</p>
+        <p>예: h_guard01_find / h_guard01_register. 하루 캠페인 30종을 넘으면 이후 새 값은 etc로 합쳐집니다. 기존 캠페인도 이 한도에 포함됩니다. 같은 세션에서 다른 QR을 열어도 첫 유입만 집계합니다. utm_content는 수집하지 않으므로 장소·용도를 캠페인에 넣습니다.</p>
+      </fieldset>
       <div className="flex flex-wrap gap-1.5" role="group" aria-label="자주 쓰는 출처">
         {PRESETS.map((p) => (
           <button

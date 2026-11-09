@@ -259,6 +259,12 @@ describe("requireReadyUser", () => {
 });
 
 describe("sanitizeCallbackUrl", () => {
+  it("preserves the registration callback through nickname onboarding", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "7" } });
+    findUnique.mockResolvedValueOnce({ id: 7, nickname: null, ...readyConsent });
+    const callback = "/found/new?utm_source=poster_qr&utm_campaign=h_guard01_register";
+    await expect(requireReadyUser("write", callback)).rejects.toThrow(`REDIRECT:/onboarding?callbackUrl=${encodeURIComponent(callback)}`);
+  });
   it("accepts a plain relative path", () => {
     expect(sanitizeCallbackUrl("/chat/5")).toBe("/chat/5");
   });

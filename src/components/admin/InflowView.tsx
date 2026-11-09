@@ -1,6 +1,6 @@
 import { BarList, StackedBarChart, type ChartTone } from "@/components/admin/StatsCharts";
 import { More, SubHeading } from "@/components/admin/StatsBlocks";
-import { UtmLinkBuilder } from "@/components/admin/UtmLinkBuilder";
+import Link from "next/link";
 import { AlertIcon } from "@/components/icons";
 import type { InflowReport } from "@/lib/metrics/inflow";
 import { sinceLabel } from "@/lib/metrics/report";
@@ -31,6 +31,7 @@ export function InflowView({ report, canPromote = false }: { report: InflowRepor
     <div className="flex flex-col gap-4 border-t border-border pt-4">
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold text-foreground">유입 경로</h3>
+        {canPromote && <Link href="/admin/utm" className="text-xs font-medium text-primary underline">UTM 링크 생성기 →</Link>}
         <p className="text-[11px] leading-relaxed text-muted-foreground">
           고른 {n}일의 방문 세션이 어디서 들어왔는지입니다. 세션마다 첫 화면에서 한 번만 세며(화면 이동·새로고침은 다시 세지 않음), 유효한 UTM이 있으면 그
           출처를, 없으면 리퍼러 도메인 분류를 씁니다. 관리자·자동화 브라우저의 방문은 빠집니다.
@@ -143,6 +144,11 @@ export function InflowView({ report, canPromote = false }: { report: InflowRepor
             </div>
           </div>
 
+          <div className="flex flex-col gap-2">
+            <SubHeading basis="선택한 날짜 · 방문 세션 내림차순">캠페인별 유입 비교</SubHeading>
+            <BarList rows={report.utm.campaign.map((r) => ({ label: r.value, value: r.sessions }))} unit="회" empty="이 날짜에 기록된 캠페인이 없습니다." />
+            <p className="text-[11px] text-muted-foreground">h_guard01_find: 인문캠퍼스 경비실 01 · 분실물 찾기 / h_guard01_register: 습득물 등록. 출처·매체·캠페인은 각각 독립 합계입니다.</p>
+          </div>
           <More label="진입 화면 × 출처, UTM 값별 표">
             <div className="flex flex-col gap-4">
               <div className="relative overflow-x-auto">
@@ -206,11 +212,6 @@ export function InflowView({ report, canPromote = false }: { report: InflowRepor
         <p className="mt-1 text-[11px]">유입 경로 수집 전 날짜도 포함하는 이전 방식의 집계로, 위 유입 출처와 더하거나 섞지 마세요.</p>
       </More>
 
-      {canPromote && (
-        <More label="홍보 링크 만들기 (UTM)">
-          <UtmLinkBuilder />
-        </More>
-      )}
     </div>
   );
 }

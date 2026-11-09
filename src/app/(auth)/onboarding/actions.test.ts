@@ -44,6 +44,14 @@ beforeEach(() => {
 });
 
 describe("setNicknameAction", () => {
+  it("returns a poster visitor to registration after setting their nickname", async () => {
+    requireUser.mockResolvedValueOnce({ id: 7, nickname: null, ...readyConsent });
+    updateMany.mockResolvedValueOnce({ count: 1 });
+    const form = new FormData();
+    form.set("nickname", "학생이름");
+    form.set("callbackUrl", "/found/new?utm_source=poster_qr&utm_campaign=h_guard01_register");
+    await expect(setNicknameAction(null, form)).rejects.toThrow("REDIRECT:/found/new?utm_source=poster_qr&utm_campaign=h_guard01_register");
+  });
   it("only ever updates the current session's own user (id comes from requireUser(), never the form)", async () => {
     requireUser.mockResolvedValueOnce({ id: 7, nickname: null, ...readyConsent });
     updateMany.mockResolvedValueOnce({ count: 1 });

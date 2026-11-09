@@ -133,6 +133,12 @@ export default async function AdminDashboardPage() {
         )}
         {/* Phase I: now a real link -- /admin/sanctions (신고 처리와 별개의
             "제재 기록" 전체 목록 + 이의신청 큐, 이번 phase에서 신규 추가). */}
+        {can(admin, "promotion.manage") && (
+          <Link href="/admin/utm" className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 hover:border-foreground/30">
+            <span className="text-xs text-muted-foreground">홍보 관리</span>
+            <span className="text-sm font-semibold text-foreground">UTM 링크 생성</span>
+          </Link>
+        )}
         {can(admin, "users.sanction") && (
         <Link
           href="/admin/sanctions"
@@ -237,7 +243,7 @@ export default async function AdminDashboardPage() {
           <span className="text-2xl font-bold text-foreground">{externalAccessCount}</span>
         </Link>
         )}
-        {canAny(admin, ["stats.operations", "stats.users", "stats.admins", "promotion.manage"]) && (
+        {canAny(admin, ["stats.operations", "stats.users", "stats.admins"]) && (
         <Link
           href="/admin/stats"
           className="flex flex-col gap-1 rounded-card border border-border bg-card p-4 transition-colors hover:border-foreground/30"

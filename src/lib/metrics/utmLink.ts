@@ -13,20 +13,22 @@ export const UTM_LINK_PAGES = [
   { path: "/found", label: "습득물 게시판" },
   { path: "/lost", label: "분실물 게시판" },
   { path: "/search", label: "검색" },
+  { path: "/lost/new", label: "분실물 등록" },
+  { path: "/found/new", label: "습득물 등록" },
 ] as const;
 export type UtmLinkPath = (typeof UTM_LINK_PAGES)[number]["path"];
 
 export type UtmLinkInput = { path: string; source: string; medium: string; campaign: string };
 export type UtmLinkResult =
   | { ok: true; link: string; source: string; medium: string | null; campaign: string | null }
-  | { ok: false; invalid: ("source" | "medium" | "campaign")[] };
+  | { ok: false; invalid: ("path" | "source" | "medium" | "campaign")[] };
 
 export function buildUtmLink({ path, source, medium, campaign }: UtmLinkInput): UtmLinkResult {
-  const page = UTM_LINK_PAGES.find((p) => p.path === path)?.path ?? "/";
+  const page = UTM_LINK_PAGES.find((p) => p.path === path)?.path;
   const s = sanitizeUtm(source);
   const m = medium.trim() ? sanitizeUtm(medium) : null;
   const c = campaign.trim() ? sanitizeUtm(campaign) : null;
-  const invalid = [!s && "source", medium.trim() && !m && "medium", campaign.trim() && !c && "campaign"].filter(Boolean) as ("source" | "medium" | "campaign")[];
+  const invalid = [!page && "path", !s && "source", medium.trim() && !m && "medium", campaign.trim() && !c && "campaign"].filter(Boolean) as ("path" | "source" | "medium" | "campaign")[];
   if (invalid.length) return { ok: false, invalid };
   const q = new URLSearchParams({ utm_source: s! });
   if (m) q.set("utm_medium", m);

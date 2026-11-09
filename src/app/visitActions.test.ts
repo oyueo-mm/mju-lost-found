@@ -29,6 +29,23 @@ beforeEach(() => {
 });
 
 describe("방문 통계 server action", () => {
+  it("counts a poster registration campaign once through login and registration, excluding admins", async () => {
+    const { landingTags, postLandingPath } = await import("@/lib/metrics/landing");
+    const callback = postLandingPath("/found/new", { utm_source: "poster_qr", utm_medium: "offline", utm_campaign: "h_guard01_register" });
+    const tags = landingTags(`?callbackUrl=${encodeURIComponent(callback)}`);
+    const event = { kind: "login", sessionStart: true, ref: "direct", utmSource: tags.get("utm_source"), utmMedium: tags.get("utm_medium"), utmCampaign: tags.get("utm_campaign") };
+    await recordVisitsAction([event]);
+    audience = "member";
+    await recordVisitsAction([{ ...event, kind: "onboarding", sessionStart: false }, { ...event, kind: "write", sessionStart: false }]);
+    expect(counts.get("visit.utm_campaign.h_guard01_register")).toBe(1);
+    expect(counts.get("visit.utm_source.poster_qr")).toBe(1);
+    expect(counts.get("visit.utm_medium.offline")).toBe(1);
+    expect(counts.get("visit.session.anon")).toBe(1);
+    expect(counts.has("visit.session.member")).toBe(false);
+    audience = "internal";
+    await recordVisitsAction([event]);
+    expect(counts.get("visit.utm_campaign.h_guard01_register")).toBe(1);
+  });
   it("counts a signed-out session start with its referrer and UTM, then plain views", async () => {
     await recordVisitsAction([
       { kind: "home", sessionStart: true, ref: "everytime", utmSource: "everytime", utmCampaign: "launch" },

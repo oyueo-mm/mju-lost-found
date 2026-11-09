@@ -7,12 +7,13 @@ import { NICKNAME_MAX_LENGTH, NICKNAME_MIN_LENGTH } from "@/lib/auth/nickname";
 import { Button } from "@/components/ui/Button";
 import { useI18n } from "@/lib/i18n/client";
 
-export function NicknameForm() {
+export function NicknameForm({ callbackUrl }: { callbackUrl?: string }) {
   const { t } = useI18n();
   const [state, formAction, pending] = useActionState(setNicknameAction, null);
 
   return (
     <form action={formAction} className="flex w-full flex-col gap-3">
+      {callbackUrl && <input type="hidden" name="callbackUrl" value={callbackUrl} />}
       <label className="flex flex-col gap-1.5 text-sm">
         <span className="font-medium text-foreground">{t("auth.onboarding.nickname")}</span>
         <input

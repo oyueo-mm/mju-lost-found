@@ -108,6 +108,7 @@ function privacyConsentRedirectUrl(callbackUrl?: string): string {
 // Open-redirect-safe callback paths -- see callbackUrl.ts.
 export { sanitizeCallbackUrl } from "./callbackUrl";
 import { sanitizeCallbackUrl } from "./callbackUrl";
+import { onboardingUrl } from "./onboardingUrl";
 
 // For Server Components/Server Actions that require a signed-in user --
 // redirects to /login instead of returning null so callers don't each
@@ -181,7 +182,7 @@ export function hasRequiredConsents(
 export async function requireReadyUser(reason?: LoginReason, callbackUrl?: string): Promise<CurrentUser> {
   const user = await requireUser(reason, callbackUrl);
   if (!hasRequiredConsents(user)) redirect(privacyConsentRedirectUrl(callbackUrl));
-  if (user.nickname === null) redirect("/onboarding");
+  if (user.nickname === null) redirect(onboardingUrl(callbackUrl));
   return user;
 }
 

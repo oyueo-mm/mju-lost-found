@@ -2,10 +2,12 @@ import { requireIdentityReadyUser } from "@/lib/auth/session";
 import { getMyOrganizationMemberships } from "@/lib/organization/service";
 import { loadNextPostDefaults } from "@/lib/posts/nextPostDefaults";
 import { PostForm } from "@/components/post/PostForm";
+import { postLandingPath } from "@/lib/metrics/landing";
 
-export default async function NewLostPostPage({ searchParams }: { searchParams: Promise<{ after?: string }> }) {
+export default async function NewLostPostPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   // Redirects to /login, /onboarding or (no 실명·학과 yet) /me/identity as needed.
-  const user = await requireIdentityReadyUser("write", "/lost/new");
+  const params = await searchParams;
+  const user = await requireIdentityReadyUser("write", postLandingPath("/lost/new", params));
 
   // Phase 12-5 §13/§14: the org selector's option list always comes from a
   // fresh server-side membership query, never client state -- only ACTIVE
@@ -14,7 +16,7 @@ export default async function NewLostPostPage({ searchParams }: { searchParams: 
   const myOrganizations = (await getMyOrganizationMemberships(user.id)).filter((m) => m.organizationStatus === "active");
   // 연속 등록: ?after=<id> from the post page's "다음 등록" link -- see
   // posts/nextPostDefaults.ts.
-  const defaults = await loadNextPostDefaults("lost", (await searchParams).after, user.id, myOrganizations);
+  const defaults = await loadNextPostDefaults("lost", typeof params.after === "string" ? params.after : undefined, user.id, myOrganizations);
 
   return (
     <div className="flex flex-col gap-6">

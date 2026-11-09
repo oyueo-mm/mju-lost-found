@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { onboardingUrl } from "@/lib/auth/onboardingUrl";
 
 import { signIn } from "@/lib/auth/auth";
 import { getCurrentUser, getRejoinIdentityId, hasRequiredConsents, sanitizeCallbackUrl, type LoginReason } from "@/lib/auth/session";
@@ -63,7 +64,7 @@ export default async function LoginPage({
       const params = callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : "";
       redirect(`/privacy-consent${params}`);
     }
-    redirect(user.nickname ? (callbackUrl ?? "/") : "/onboarding");
+    redirect(user.nickname ? (callbackUrl ?? "/") : onboardingUrl(callbackUrl));
   }
   if (await getRejoinIdentityId()) redirect("/rejoin");
 
