@@ -22,7 +22,7 @@ function HomePreview() {
         <h1 className="text-2xl leading-[1.25] font-extrabold tracking-[-0.03em] break-keep text-foreground sm:text-3xl md:text-[2.5rem] md:leading-[1.2]">잃어버린 물건,<br />다시 찾을 수 있게.</h1>
         <p className="text-sm text-muted-foreground">{ko["landing.subtitle"]}</p>
         <div id="landing-hero-cta" className="mt-1 w-full max-w-2xl"><HomeSearchBar variant="landing" /></div>
-        <HomeSearchResults><div className="flex min-w-0 flex-col gap-3" data-home-recommendations><h2 className="text-sm font-semibold">추천</h2><div className={SEARCH_RESULTS_GRID_CLASS}>{recommendations.map((post: ReturnType<typeof reviveDates>) => <PostCard key={`${post.type}-${post.id}`} post={post} variant="list" hideEmptyThumbnail scoreDisplay="hidden" />)}</div></div></HomeSearchResults>
+        <HomeSearchResults />
       </section>
     </HomeSearchProvider>
     <div data-home-outside className="flex flex-col gap-6">

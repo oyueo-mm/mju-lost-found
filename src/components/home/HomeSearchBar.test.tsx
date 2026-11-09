@@ -11,13 +11,13 @@ import { HomeSearchProvider, HomeSearchResults } from "./HomeSearch";
 function renderHomeSearch(): string {
   return renderToStaticMarkup(
     <I18nProvider locale="ko" messages={ko}>
-      <HomeSearchProvider><HomeSearchBar /><HomeSearchResults><p>기존 추천 게시글</p></HomeSearchResults></HomeSearchProvider>
+      <HomeSearchProvider><HomeSearchBar /><HomeSearchResults /></HomeSearchProvider>
     </I18nProvider>,
   );
 }
 
 describe("HomeSearchBar popular searches", () => {
-  it("renders popular keywords as inline search buttons and preserves the initial home slot", () => {
+  it("renders popular keywords as inline buttons without an initial result area", () => {
     const markup = renderHomeSearch();
 
     expect(markup).toContain("인기 검색어");
@@ -27,7 +27,8 @@ describe("HomeSearchBar popular searches", () => {
     }
     expect(markup).toContain(">버즈</button>");
     expect(markup).toContain(">에어팟</button>");
-    expect(markup).toContain("기존 추천 게시글");
+    expect(markup).not.toContain("data-home-recommendations");
+    expect(markup).not.toContain("data-home-search-results");
     expect(markup).not.toContain("무선 이어폰");
   });
 

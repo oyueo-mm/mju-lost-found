@@ -1,7 +1,6 @@
 import { HomeSearchBar } from "@/components/home/HomeSearchBar";
 import { getTranslator } from "@/lib/i18n/server";
 import { HomeSearchProvider, HomeSearchResults } from "../HomeSearch";
-import { HomeHeroRecommendations } from "../HomeHeroRecommendations";
 
 // The home's first screen, signed in or out (app/(main)/page.tsx): a short
 // headline, one line on what the service does, and the search itself -- the
@@ -30,7 +29,7 @@ export async function Hero({ compact = false }: { compact?: boolean } = {}) {
       <div id="landing-hero-cta" className="mt-1 w-full max-w-2xl">
         <HomeSearchBar variant="landing" />
       </div>
-      <HomeSearchResults><HomeHeroRecommendations /></HomeSearchResults>
+      <HomeSearchResults />
     </section></HomeSearchProvider>
   );
 }

@@ -47,12 +47,12 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
   return <HomeSearchContext.Provider value={{ search, resetVersion, submit, reset, clearResults: () => setSearch(null), navigate }}>{children}</HomeSearchContext.Provider>;
 }
 
-// Only the Hero's server-rendered recommendation slot switches. The compact
-// result list shares text/image requests and contains no filter/sort screen.
-export function HomeSearchResults({ children }: { children: ReactNode }) {
+// Render no result container before a search, so Hero keeps its natural
+// compact height. Text/image requests and the result list remain shared.
+export function HomeSearchResults() {
   const home = useHomeSearch();
   const { t } = useI18n();
-  if (!home?.search) return <>{children}</>;
+  if (!home?.search) return null;
   const { params, image, version } = home.search;
   return (
     <SearchNavigationContext.Provider value={{ push: home.navigate }}>
