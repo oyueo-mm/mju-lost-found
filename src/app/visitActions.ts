@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { registeredAttribution } from "@/lib/metrics/qrRegistry";
 import { headers } from "next/headers";
 
-import { addDailyCount, currentAudience, recordRoleDimensions } from "@/lib/metrics/record";
+import { addDailyCount, addDailyMinimum, currentAudience, recordRoleDimensions } from "@/lib/metrics/record";
+import { CONTENT_FIRST, CONTENT_PREFIX, CONTENT_PAIR_PREFIX, isContentCollectionHost } from "@/lib/metrics/contentMeasurement";
 import { flowCounterChanges, parseFlowUpdate } from "@/lib/metrics/flow";
 import { channelOf, deviceOf, isBotUserAgent, isPageKind, isRefSource, MAX_EVENTS_PER_CALL, sanitizeUtm } from "@/lib/metrics/visits";
 
@@ -99,6 +100,7 @@ export async function recordVisitsAction(
     const flows = Array.isArray(options?.flow) ? options.flow.slice(0, MAX_FLOW_UPDATES) : [];
     if (events.length === 0 && flows.length === 0) return;
     const requestHeaders = await headers();
+    const collectContent = isContentCollectionHost(requestHeaders.get("host"), process.env.VERCEL_ENV);
     if (isBotUserAgent(requestHeaders.get("user-agent"))) return;
     const ip = (requestHeaders.get("x-forwarded-for") ?? requestHeaders.get("x-real-ip") ?? "").split(",")[0].trim();
     const client = createHash("sha256").update(`visit-limit:${ip}`).digest("base64url").slice(0, 16);
@@ -133,9 +135,9 @@ export async function recordVisitsAction(
       addDailyCount(`visit.${audience}.hour.${String(kstNow.getUTCHours()).padStart(2, "0")}`);
       if (event.sessionStart !== true) continue;
       addDailyCount(`visit.session.${audience}`);
-      // A marker is recorded even for an untagged session, so no Content
-      // traffic on a measured day can be distinguished from pre-release days.
-      addDailyCount("meta.since.utm_content");
+      // No legacy marker/counter writes. First ordinary observations are saved
+      // atomically with this release's counters, even without a Content tag.
+      if (collectContent) addDailyMinimum(CONTENT_FIRST, kstNow.getUTCHours() * 3600 + kstNow.getUTCMinutes() * 60 + kstNow.getUTCSeconds(), day);
       addDailyCount(`visit.device.${device}.session`);
       addDailyCount(`visit.start.hour.${String(kstNow.getUTCHours()).padStart(2, "0")}`);
       addDailyCount(`visit.start.page.${event.kind}`);
@@ -149,12 +151,12 @@ export async function recordVisitsAction(
       if (utmMedium) addDailyCount(`visit.utm_medium.${cappedUtm("medium", utmMedium, day)}`);
       if (utmCampaign) addDailyCount(`visit.utm_campaign.${cappedUtm("campaign", utmCampaign, day)}`);
       const utmContent = sanitizeUtm(typeof event.utmContent === "string" ? event.utmContent : null);
-      if (utmContent) {
+      if (utmContent && collectContent) {
         // Finite registry keys, without changing the legacy 30-value caps.
         // Untrusted values/pairs share one bucket; there is no N×M expansion.
         const tracked = registeredAttribution(utmCampaign, utmContent);
-        addDailyCount(`visit.utm_content.${tracked.content}`);
-        addDailyCount(`visit.utm_pair.${tracked.pair}`);
+        addDailyCount(`${CONTENT_PREFIX}${tracked.content}`);
+        addDailyCount(`${CONTENT_PAIR_PREFIX}${tracked.pair}`);
       }
       // 유입 경로: the same session once, by source and login state, and by
       // source and first screen (the capped UTM value keeps the names bounded)

@@ -96,6 +96,16 @@ function signatureOf(parts: unknown[]): string {
 // Counted in this instance's memory and written with the timings (at most
 // once a minute), so a busy page never costs a DB write per view.
 const pendingDaily = new Map<string, number>();
+const pendingDailyMinimum = new Map<string, number>();
+
+// Atomic with the counters: per-day first observation in KST seconds (fits Int).
+// Concurrent instances and retries must take the minimum, never add timestamps.
+export function addDailyMinimum(metric: string, value: number, day: string = kstDay()): void {
+  if (!Number.isInteger(value) || value < 0 || value >= 86400) return;
+  const key = `${day}|${metric}`;
+  pendingDailyMinimum.set(key, Math.min(pendingDailyMinimum.get(key) ?? value, value));
+  noteObservation();
+}
 const classifications = new Set<Promise<boolean>>();
 export function recordDaily(metric: DailyMetric, dedupeParts?: unknown[]): Promise<boolean> {
   // Role-suffixed counters are the source of truth. Unclassified legacy
@@ -349,11 +359,13 @@ function noteObservation() {
 
 export async function flushTimings(): Promise<void> {
   await Promise.all([...classifications]);
-  if (pending.size === 0 && pendingDaily.size === 0 && hourlySinceMarked) return;
+  if (pending.size === 0 && pendingDaily.size === 0 && pendingDailyMinimum.size === 0 && hourlySinceMarked) return;
   const rows = [...pending.values()];
   pending.clear();
   const daily = [...pendingDaily.entries()];
   pendingDaily.clear();
+  const minima = [...pendingDailyMinimum.entries()];
+  pendingDailyMinimum.clear();
   lastFlush = Date.now();
   // DB latency, sampled once per flush (not per request).
   const t0 = performance.now();
@@ -365,11 +377,13 @@ export async function flushTimings(): Promise<void> {
   } catch {
     // The write below will fail the same way and keep the batch for later.
   }
-  // One statement per table, both in one transaction: a batch is written
+  // Counters, optional observation minima and timings share one transaction:
+  // a batch is written
   // whole or not at all. If it fails it goes back into memory and is retried
   // with the next batch (never written twice: nothing was committed).
   const dailyJson = JSON.stringify(daily.map(([key, n]) => ({ day: key.split("|")[0], metric: key.split("|")[1], value: n })));
   const rowsJson = JSON.stringify(rows.map((r) => ({ hour: r.hour, route: r.route, count: r.count, errors: r.errors, total_ms: r.totalMs, buckets: r.buckets })));
+  const minimaJson = JSON.stringify(minima.map(([key, value]) => ({ day: key.split("|")[0], metric: key.split("|")[1], value })));
   try {
     await prisma.$transaction([
       prisma.$executeRaw`INSERT INTO "MetricDaily" ("day", "metric", "value")
@@ -383,6 +397,9 @@ export async function flushTimings(): Promise<void> {
           "errors" = "ApiMetricHourly"."errors" + EXCLUDED."errors",
           "total_ms" = "ApiMetricHourly"."total_ms" + EXCLUDED."total_ms",
           "buckets" = ARRAY(SELECT a + b FROM unnest("ApiMetricHourly"."buckets", EXCLUDED."buckets") WITH ORDINALITY AS u(a, b, i) ORDER BY i)`,
+      ...(minima.length ? [prisma.$executeRaw`INSERT INTO "MetricDaily" ("day", "metric", "value")
+        SELECT x.day, x.metric, x.value FROM json_to_recordset(${minimaJson}::json) AS x(day date, metric text, value int)
+        ON CONFLICT ("day", "metric") DO UPDATE SET "value" = LEAST("MetricDaily"."value", EXCLUDED."value")`] : []),
       // 시간대별 지표: this environment's collection start, once per marker
       ...(hourlySinceMarked
         ? []
@@ -395,13 +412,13 @@ export async function flushTimings(): Promise<void> {
     ]);
     hourlySinceMarked = true;
   } catch (error) {
-    requeue(rows.filter((r) => r.route !== "db:ping"), daily);
+    requeue(rows.filter((r) => r.route !== "db:ping"), daily, minima);
     throw error;
   }
 }
 
 // Puts a failed batch back (bounded, so a long outage can't grow memory).
-function requeue(rows: Agg[], daily: [string, number][]) {
+function requeue(rows: Agg[], daily: [string, number][], minima: [string, number][]) {
   if (pending.size > 2000) return;
   for (const r of rows) {
     const key = `${r.hour}|${r.route}`;
@@ -415,6 +432,7 @@ function requeue(rows: Agg[], daily: [string, number][]) {
     }
   }
   for (const [key, n] of daily) pendingDaily.set(key, (pendingDaily.get(key) ?? 0) + n);
+  for (const [key, n] of minima) pendingDailyMinimum.set(key, Math.min(pendingDailyMinimum.get(key) ?? n, n));
 }
 
 // Times an async step (AI inference etc.) into the same histogram.

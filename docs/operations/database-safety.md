@@ -41,11 +41,11 @@ npm run operations:production -- --confirm-production --approval-reference CHANG
 
 ## 통계 무결성 배포 게이트
 
-Production의 `meta.since.utm_content`는 2026-11-09/value=1이며 방문 통계와 같은 마지막 행 버전 트랜잭션 번호를 가집니다. 번호만으로 기록 주체를 확정하지 않습니다. 현행 Production은 이 표식을 판독하지 않지만, UTM 표준 조회 코드는 최소 표식 날짜를 측정 시작일로 사용하므로 지금 배포하면 11월 9일을 신규 측정 시작일로 표시할 수 있습니다.
+Production의 `meta.since.utm_content`는 2026-11-09/value=1이며 방문 통계와 같은 마지막 행 버전 트랜잭션 번호를 가집니다. 번호만으로 기록 주체를 확정하지 않습니다. 현행 Production은 이 표식을 판독하지 않습니다. 기존 표준 구현은 최소 표식 날짜를 시작일로 사용해 배포를 보류했으며, 후속 구간 분리 구현은 새 키만으로 신규 시작일을 결정합니다.
 
 정확한 테스트 증가량을 복원하지 못했으므로 기존 행 삭제·감산·시작일 변경을 하지 않습니다. 기존 익명 방문·흐름·DB 지연 통계가 영향을 받았을 가능성을 기록합니다.
 
-다음은 **후속 설계 제안이며 미구현·미적용**입니다.
+다음 분리 설계는 후속 작업에서 **구현하여 Preview에서 검증**합니다. Production에는 적용하지 않습니다. 실행 키·일별 관측·활성화·롤백의 현행 기준은 [Content 신규 측정 구간](content-measurement.md)을 따릅니다.
 
 1. 첫 정식 Production Content 측정에 별도 release/epoch 식별자를 부여합니다.
 2. 시작 표식뿐 아니라 Content·campaign×Content 카운터도 새 namespace로 분리합니다. 표식만 바꾸면 같은 날의 과거 카운터가 섞일 수 있습니다.
@@ -53,4 +53,4 @@ Production의 `meta.since.utm_content`는 2026-11-09/value=1이며 방문 통계
 4. 기존 Source·Medium·Campaign, 전체 세션 중복 방지와 관리자 제외는 유지합니다. 새 namespace는 기존 MetricDaily 구조로 표현할 수 있어 스키마 변경 없이 설계 가능합니다.
 5. 실제 시작 시각·행 변경 시각·배포 시각은 다릅니다. 더 정확한 시각 기록이 필요하면 개인정보 없는 릴리스 메타데이터를 검토합니다.
 
-별도 설계 승인·구현·Preview 검증 전에는 UTM Production 배포를 재개하지 않습니다. 정확한 원인과 증가량은 미확인으로 보존합니다.
+신규 구간의 Preview 검증 완료 후에도 Production 배포는 별도 승인된 작업에서만 수행합니다. 정확한 과거 원인과 증가량은 미확인으로 보존합니다.

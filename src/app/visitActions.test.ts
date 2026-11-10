@@ -11,6 +11,7 @@ const counts = new Map<string, number>();
 let audience: "anon" | "member" | "internal" = "anon";
 vi.mock("@/lib/metrics/record", () => ({
   addDailyCount: (metric: string, n = 1) => counts.set(metric, (counts.get(metric) ?? 0) + n),
+  addDailyMinimum: (metric: string, n: number) => counts.set(metric, Math.min(counts.get(metric) ?? n, n)),
   currentAudience: async () => audience,
   recordRoleDimensions: async () => {},
 }));
@@ -19,7 +20,7 @@ const { recordVisitsAction } = await import("./visitActions");
 
 // The counters these tests compare exactly; visit.start.* (start hour, first
 // screen) and the page views by hour are checked on their own below.
-const counted = () => Object.fromEntries([...counts].filter(([k]) => k !== "meta.since.utm_content" && !k.startsWith("visit.start.") && !/^visit\.(anon|member)\.hour\./.test(k)));
+const counted = () => Object.fromEntries([...counts].filter(([k]) => k !== "meta.first.utm_content_v1" && !k.startsWith("visit.start.") && !/^visit\.(anon|member)\.hour\./.test(k)));
 
 beforeEach(() => {
   counts.clear();
@@ -29,6 +30,28 @@ beforeEach(() => {
 });
 
 describe("방문 통계 server action", () => {
+  it("leaves ordinary metrics intact but cannot activate Content on a non-live Production host", async () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    try {
+      await recordVisitsAction([{ kind: "home", sessionStart: true, utmSource: "poster_qr", utmContent: "h_jonghap_guard_reg" }]);
+      expect(counts.get("visit.utm_source.poster_qr")).toBe(1);
+      expect(counts.get("visit.session.anon")).toBe(1);
+      expect([...counts.keys()].some(k => k.startsWith("meta.first.") || k.startsWith("visit.utm_content_v1."))).toBe(false);
+    } finally { vi.unstubAllEnvs(); }
+  });
+  it("does not activate the new interval for admins, bots, opt-out or an existing session", async () => {
+    const event = { kind: "home", sessionStart: true };
+    audience = "internal";
+    await recordVisitsAction([event]);
+    expect(counts.has("meta.first.utm_content_v1")).toBe(false);
+    counts.clear(); audience = "anon"; userAgent = "HeadlessChrome";
+    await recordVisitsAction([event]);
+    expect(counts.size).toBe(0);
+    userAgent = "Mozilla/5.0 Safari/604.1";
+    await recordVisitsAction([event], { optedOut: true });
+    await recordVisitsAction([{ ...event, sessionStart: false }]);
+    expect(counts.has("meta.first.utm_content_v1")).toBe(false);
+  });
   it("collects all four tags before login, counts Content/pair once and excludes administrators", async () => {
     const { landingTags, postLandingPath } = await import("@/lib/metrics/landing");
     const callback = postLandingPath("/found/new", { utm_source: "poster_qr", utm_medium: "offline", utm_campaign: "poster_2026_11", utm_content: "h_jonghap_guard_reg" });
@@ -37,16 +60,19 @@ describe("방문 통계 server action", () => {
     await recordVisitsAction([event]);
     audience = "member";
     await recordVisitsAction([{ ...event, kind: "onboarding", sessionStart: false }, { ...event, kind: "write", sessionStart: false }]);
-    expect(counts.get("visit.utm_content.h_jonghap_guard_reg")).toBe(1);
-    expect(counts.get("visit.utm_pair.poster_2026_11.h_jonghap_guard_reg")).toBe(1);
+    expect(counts.get("visit.utm_content_v1.h_jonghap_guard_reg")).toBe(1);
+    expect(counts.get("visit.utm_pair_v1.poster_2026_11.h_jonghap_guard_reg")).toBe(1);
     expect(counts.get("visit.utm_source.poster_qr")).toBe(1);
     expect(counts.get("visit.utm_medium.offline")).toBe(1);
     expect(counts.get("visit.utm_campaign.poster_2026_11")).toBe(1);
-    expect(counts.get("meta.since.utm_content")).toBe(1);
+    const first = counts.get("meta.first.utm_content_v1");
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(first).toBeLessThan(86400);
+    expect([...counts.keys()].some(k => k === "meta.since.utm_content" || k.startsWith("visit.utm_content.") || k.startsWith("visit.utm_pair."))).toBe(false);
     audience = "internal";
     await recordVisitsAction([event]);
-    expect(counts.get("visit.utm_content.h_jonghap_guard_reg")).toBe(1);
-    expect(counts.get("meta.since.utm_content")).toBe(1);
+    expect(counts.get("visit.utm_content_v1.h_jonghap_guard_reg")).toBe(1);
+    expect(counts.get("meta.first.utm_content_v1")).toBe(first);
   });
 
   it("bounds unknown Content/pairs and ignores invalid values without changing legacy sessions", async () => {
@@ -56,11 +82,11 @@ describe("방문 통계 server action", () => {
       { kind: "search", sessionStart: true, utmContent: "email@example.com" },
       { kind: "search", sessionStart: true },
     ]);
-    expect(counts.get("visit.utm_content.h_jonghap_guard_find")).toBe(1);
-    expect(counts.get("visit.utm_content.unregistered")).toBe(1);
-    expect(counts.get("visit.utm_pair.unregistered.unregistered")).toBe(2);
+    expect(counts.get("visit.utm_content_v1.h_jonghap_guard_find")).toBe(1);
+    expect(counts.get("visit.utm_content_v1.unregistered")).toBe(1);
+    expect(counts.get("visit.utm_pair_v1.unregistered.unregistered")).toBe(2);
     expect(counts.get("visit.session.anon")).toBe(4);
-    expect(counts.get("meta.since.utm_content")).toBe(4);
+    expect(counts.get("meta.first.utm_content_v1")).toBeLessThan(86400);
   });
   it("counts a poster registration campaign once through login and registration, excluding admins", async () => {
     const { landingTags, postLandingPath } = await import("@/lib/metrics/landing");

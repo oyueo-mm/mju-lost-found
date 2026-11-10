@@ -207,11 +207,11 @@ export function InflowView({ report, canPromote = false }: { report: InflowRepor
       <section className="flex flex-col gap-3 rounded-card border border-border p-3">
         <h3 className="text-sm font-semibold text-foreground">UTM Content · 설치 장소·용도 비교</h3>
         <p className="text-[11px] text-muted-foreground">
-          {report.content.since ? `이 환경의 Content 측정 시작: ${report.content.since} (시작일 부분 측정). 선택한 날짜 중 ${report.content.measuredDays}일이 측정 범위입니다.` : "이 환경은 아직 Content 미측정입니다. 기록이 없는 0세션과 구분합니다."}
-          {report.content.since && report.days.some((d) => d < report.content.since!) && " 시작일 이전은 미측정이며 과거 캠페인을 Content로 소급 변환하지 않습니다."}
+          신규 측정 구간 {report.content.epoch}. {report.content.firstObservedAt ? `최초 일반 세션 관측: ${report.content.firstObservedAt.replace("T", " ").replace("+09:00", " KST")}. 선택한 날짜 중 ${report.content.measuredDays}일에 수집 기록이 있습니다.` : "아직 신규 Content 미측정입니다. 기존 표식으로 시작일을 정하지 않습니다."}
+          {" 배포 시각이 아닌 저장에 성공한 세션의 관측 시각입니다. 일별 기록이 없는 날은 미측정이며, 기록이 있는 날도 수집 공백을 배제할 수 없어 부분 측정으로 표시합니다."}
         </p>
         {report.content.measuredDays > 0 && <>
-          <BarList rows={report.content.contents.map((r) => ({ label: qrLabel(r.value), value: r.sessions, note: r.value }))} unit="회" empty="측정 범위에 Content가 붙은 세션이 없습니다." />
+          <BarList rows={report.content.contents.map((r) => ({ label: qrLabel(r.value), value: r.sessions, note: r.value }))} unit="회" empty="관측된 세션 중 Content가 붙은 세션이 없습니다. 하루 전체 0건을 보장하지 않습니다." />
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <caption className="text-left font-semibold">캠페인 × Content 방문 세션</caption>
@@ -220,6 +220,20 @@ export function InflowView({ report, canPromote = false }: { report: InflowRepor
             </table>
           </div>
         </>}
+        <More label="날짜별 신규 Content 측정 상태">
+          <table className="w-full text-left text-xs">
+            <thead><tr><th scope="col" className="p-2">날짜</th><th scope="col" className="p-2">측정 상태</th><th scope="col" className="p-2">관측된 Content 세션</th></tr></thead>
+            <tbody>{report.content.perDay.map(d => <tr key={d.day} className="border-t border-border"><td className="p-2">{d.day}</td><td className="p-2">{d.coverage === "none" ? "미측정" : "부분 측정"}</td><td className="p-2">{d.taggedSessions === null ? "미측정" : fmt(d.taggedSessions)}</td></tr>)}</tbody>
+          </table>
+        </More>
+        <More label="기존 Content 기록 (출처 미확인 · 신규와 합산하지 않음)">
+          <p className="mb-2 text-[11px]">기존 표식 날짜: {report.legacyContent.markerDay ?? "없음"}. 실제 수집 경로와 측정 기간은 미확인입니다. 기존 값을 정상 또는 잘못된 값으로 단정하지 않습니다.</p>
+          <BarList rows={report.legacyContent.contents.map(r => ({ label: qrLabel(r.value), value: r.sessions, note: r.value }))} unit="회" empty="선택일에 기존 Content 기록이 없습니다. 측정 여부 미확인이므로 0건으로 판단하지 않습니다." />
+          <table className="mt-2 w-full text-left text-xs"><caption className="text-left font-semibold">기존 캠페인 × Content 기록</caption>
+            <thead><tr><th scope="col" className="p-2">캠페인</th><th scope="col" className="p-2">Content</th><th scope="col" className="p-2">기존 기록값</th></tr></thead>
+            <tbody>{report.legacyContent.pairs.map(r => <tr key={`${r.campaign}.${r.content}`} className="border-t border-border"><td className="p-2">{r.campaign}</td><td className="p-2 break-all">{r.content}</td><td className="p-2">{fmt(r.sessions)}</td></tr>)}</tbody>
+          </table>
+        </More>
         <p className="text-[11px] text-muted-foreground">등록부 Content와 승인된 캠페인×Content 조합만 개별 집계합니다. 미등록 값·조합은 unregistered로 묶습니다. 기존 30종 제한은 출처·매체·캠페인에 그대로 적용되며 새 상세 집계에는 적용하지 않습니다. 동일 세션의 첫 유입만 집계하고 관리자 방문은 제외합니다.</p>
       </section>
       <More label={`기존 리퍼러 분류 보기 (${sinceLabel("visit")}부터 · 로그인 구분·UTM 우선 없음, ${report.legacyDays}일)`}>

@@ -10,8 +10,8 @@ describe("유입 경로", () => {
   it("does not infer a valid release from an early Content marker or mix Content with legacy session totals", () => {
     const rows = [r("2026-11-09", "visit.session.anon", 5), r("2026-11-10", "visit.session.anon", 2)];
     const marked = buildInflow(["2026-11-09", "2026-11-10"], rows, "2026-10-20", "2026-11-09");
-    // Documents the current risk: a marker alone declares coverage, even with no Content samples.
-    expect(marked.content).toMatchObject({ since: "2026-11-09", measuredDays: 2, contents: [], pairs: [] });
+    expect(marked.content).toMatchObject({ since: null, measuredDays: 0, contents: [], pairs: [] });
+    expect(marked.legacyContent.markerDay).toBe("2026-11-09");
     const unmeasured = buildInflow(["2026-11-09", "2026-11-10"], rows, "2026-10-20");
     expect(unmeasured.content.measuredDays).toBe(0);
     expect(marked.total).toEqual(unmeasured.total);
@@ -26,9 +26,11 @@ describe("유입 경로", () => {
     ];
     const report = buildInflow(["2026-11-08", "2026-11-09"], rows, "2026-10-20", "2026-11-09");
     expect(report.utm.campaign).toEqual([{ value: "legacy_guard01", sessions: 3 }, { value: "poster_2026_11", sessions: 2 }]);
-    expect(report.content).toEqual({ since: "2026-11-09", measuredDays: 1, contents: [{ value: "h_jonghap_guard_reg", sessions: 2 }], pairs: [{ campaign: "poster_2026_11", content: "h_jonghap_guard_reg", sessions: 2 }] });
-    expect(buildInflow(["2026-11-08"], rows, "2026-10-20").content).toEqual({ since: null, measuredDays: 0, contents: [], pairs: [] });
-    expect(inflowDataset(report).tables.find((t) => t.title?.startsWith("캠페인 × Content"))?.rows).toEqual([["poster_2026_11", "h_jonghap_guard_reg", 2]]);
+    expect(report.content).toMatchObject({ since: null, measuredDays: 0, contents: [], pairs: [] });
+    expect(report.legacyContent.pairs).toEqual([{ campaign: "poster_2026_11", content: "h_jonghap_guard_reg", sessions: 2 }]);
+    expect(report.legacyContent.contents).toContainEqual({ value: "before_measurement", sessions: 99 });
+    expect(inflowDataset(report).tables.find((t) => t.title?.startsWith("캠페인 × Content"))?.rows).toEqual([]);
+    expect(inflowDataset(report).tables.find((t) => t.title?.startsWith("기존 캠페인 × Content"))?.rows).toEqual([["poster_2026_11", "h_jonghap_guard_reg", 2]]);
   });
   it("accepts only short, plain UTM values -- no URLs, e-mails or long numbers", () => {
     expect(sanitizeUtm(" EveryTime ")).toBe("everytime");

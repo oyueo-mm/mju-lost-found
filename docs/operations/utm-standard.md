@@ -61,15 +61,15 @@ Content가 있는 `poster_qr` 신규 QR은 등록부의 활성 항목 URL과 정
 
 로그인 전 직접 등록 링크는 서버에서 로그인·가입 화면으로 이동할 수 있습니다. UTM 네 값을 검증된 `callbackUrl`에 보존하고, 처음 렌더링된 로그인/동의 화면에서 그 값을 읽습니다. OAuth 후 화면 복귀와 UTM의 서버 수집·DB 반영은 **별도** 검증 항목입니다.
 
-기존 집계는 변경하지 않습니다. 새 카운터는 다음과 같습니다.
+기존 Source·Medium·Campaign 집계는 변경하지 않습니다. Content 신규 측정 구간의 카운터는 다음과 같습니다. URL 명명 규칙은 그대로입니다.
 
-- `visit.utm_content.<Content>`: Content가 있는 방문 세션.
-- `visit.utm_pair.<Campaign>.<Content>`: 등록부에 존재하는 캠페인×Content 조합의 방문 세션.
-- `meta.since.utm_content`: 이 환경에서 Content 측정 코드가 동작한 첫 일반 방문 세션의 날짜를 찾는 표식. Content 없는 방문도 표식을 기록합니다.
+- `visit.utm_content_v1.<Content>`: 신규 구간의 Content가 있는 방문 세션.
+- `visit.utm_pair_v1.<Campaign>.<Content>`: 신규 구간의 캠페인×Content 조합 방문 세션.
+- `meta.first.utm_content_v1`: 일별 최초 일반 세션의 KST 초. Content 없는 세션도 기록하며 카운터와 같은 트랜잭션으로 저장합니다.
 
 실제 저장 시 방문 카운터에는 기존 `audience_v3.` 접두사가 붙고 운영 통계는 기존 `OperationalMetricDaily` 뷰로 조회합니다. 원본 URL·IP·방문자 식별자는 새로 저장하지 않습니다.
 
-Content 시작일은 환경마다 DB 표식의 최소 날짜로 정합니다. 첫날은 부분 측정, 그 이전은 **미측정**입니다. 이전 날짜의 빈 Content를 0이나 소급 추정치로 표시하지 않습니다. 기존 출처·캠페인의 수집 시작일과 새 Content 시작일은 별개입니다. Content 없는 기존 QR의 세션도 기존 집계에는 계속 포함됩니다.
+신규 시작은 새 표식의 최초 관측 시각이며 배포 시각과 다릅니다. 일별 표식이 없으면 **미측정**, 있으면 수집 공백 가능성을 고려해 **부분 측정**입니다. 기존 `meta.since.utm_content`, `visit.utm_content.*`, `visit.utm_pair.*`는 출처·측정 기간 미확인 기록으로 보존하고 신규와 합산하지 않습니다. [측정 구간·활성화·롤백](content-measurement.md)의 상세 기준을 따릅니다. 기존 출처·캠페인의 수집 시작일과 새 Content 시작일은 별개이며 Content 없는 기존 QR도 기존 집계에는 계속 포함됩니다.
 
 ## 5. 저장량과 장기 운영
 
