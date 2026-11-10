@@ -1,3 +1,4 @@
+import "../db/install-guard.mjs";
 // Full backup of one environment (DB + Storage), read-only on the source.
 //
 //   PG_BIN=<dir with pg_dump> node --env-file=.env scripts/backup/backup.mjs <outDir> --expect <project-ref>
@@ -16,6 +17,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { assertDatabaseAccess } from "../../src/lib/db/accessPolicy.mjs";
 
 const require = createRequire(path.join(process.cwd(), "package.json"));
 const { Client } = require("pg");
@@ -24,6 +26,7 @@ const { createClient } = require("@supabase/supabase-js");
 const [outDir, flag, expected] = process.argv.slice(2);
 if (!outDir || flag !== "--expect" || !expected) throw new Error("usage: backup.mjs <outDir> --expect <project-ref>");
 const url = process.env.DIRECT_URL ?? "";
+assertDatabaseAccess(url, process.env, { usage: "operation" });
 if (!url.includes(expected)) throw new Error(`DIRECT_URL is not project ${expected} -- refusing`);
 if (fs.existsSync(outDir) && fs.readdirSync(outDir).length) throw new Error(`${outDir} is not empty`);
 const bin = (name) => path.join(process.env.PG_BIN ?? "", process.platform === "win32" ? `${name}.exe` : name);

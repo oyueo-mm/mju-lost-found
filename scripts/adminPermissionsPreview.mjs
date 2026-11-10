@@ -1,3 +1,4 @@
+import "./db/install-guard.mjs";
 // Preview-only fixtures + HTTP checks for the per-user admin permissions.
 // Creates throw-away accounts/agencies/posts (never touches a real account) and
 // keeps their session cookies in the git-ignored .vercel folder. Usage:

@@ -1,5 +1,7 @@
 # 운영 가이드 (Production / Preview)
 
+**2026-11-10 접근 보호 추가:** 과거 `.env` 기반 운영 명령을 실행하기 전에 [DB 접근 보호](operations/database-safety.md)를 확인한다. 기본 `.env`에 운영 비밀을 두지 않으며 운영 작업에는 별도 승인 경로가 필요하다. UTM Production 배포는 통계 무결성 검토로 중단 상태다.
+
 운영 문서의 현재 목차와 UTM 표준·QR 등록부·포스터·인수인계는 [operations/README.md](operations/README.md)를 참고한다. 이 문서의 환경별 설정·도구·요금제 가정은 실제 작업 전에 현재 환경과 대조한다.
 
 이 문서는 MJU 분실물 서비스를 운영·배포하는 사람을 위한 기본 절차다.

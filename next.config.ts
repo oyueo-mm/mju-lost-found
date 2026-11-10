@@ -1,4 +1,9 @@
 import type { NextConfig } from "next";
+import { assertDatabaseEnvironment } from "./src/lib/db/accessPolicy.mjs";
+
+// Next has already loaded its environment files here. Block `next dev` too,
+// even when the operator bypasses npm's predev hook.
+assertDatabaseEnvironment(process.env, { allowMissing: process.env.NODE_ENV !== "development" });
 
 // Bug: Preview DB 복제 후 기존 게시글 이미지가 깨지는 문제 -- 이 hostname을
 // `NEXT_PUBLIC_SUPABASE_URL`(현재 환경 자신의 Supabase project)에서만

@@ -1,3 +1,4 @@
+import "./db/install-guard.mjs";
 // Preview-only migration / rollback-only integration tests. No Production
 // credentials are passed to a child process. No test rows are committed.
 import { readFileSync } from "node:fs";

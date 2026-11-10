@@ -1,3 +1,4 @@
+import "./db/install-guard.mjs";
 // Preview-only fixtures for HTTP and browser verification. No real account
 // is edited. Secrets/cookies are kept in ignored .vercel files, never output.
 import { readFileSync, writeFileSync } from "node:fs";

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "../db/install-guard.mjs";
 // 배포 이력 recorder, run on the developer's machine next to the Vercel CLI.
 // Reads deployments through `vercel api` -- the CLI's own login, which never
 // leaves this machine and is never printed -- and upserts them into
@@ -33,7 +34,7 @@ const require = createRequire(join(ROOT, "package.json"));
 const DBS = {
   // the database user names say which Supabase project a URL belongs to
   preview: { file: ".env.preview.local", project: "swqvli" },
-  production: { file: ".env", project: "tmifqt" },
+  production: { file: ".env.operations-production", project: "tmifqt" },
 };
 
 export function parseArgs(argv) {

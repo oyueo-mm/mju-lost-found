@@ -1,3 +1,4 @@
+import "./db/install-guard.mjs";
 // Read-only check of one account's 이름·소속 state on the Preview DB, for the
 // real-account test (log in -> 개인정보 동의 -> automatic save -> sign in again).
 // Prints no name, affiliation or full e-mail -- only whether things are there.

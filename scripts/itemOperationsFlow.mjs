@@ -1,3 +1,4 @@
+import "./db/install-guard.mjs";
 // Authenticated HTTP checks against local build backed ONLY by Preview.
 // Creates uniquely named test fixtures; finally removes exactly those IDs.
 import { parse } from "dotenv";

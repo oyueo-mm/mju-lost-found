@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "../db/install-guard.mjs";
 // 이용약관·개인정보처리방침 변경 안내 -- one in-app notification per member for
 // the current revision (src/lib/policy/revisionNotice.ts; keep the values
 // below in step with it). Idempotent: the Notification unique key

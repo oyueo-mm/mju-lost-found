@@ -11,8 +11,12 @@ import { PrismaClient } from "@/generated/prisma/client";
 // opens a connection pool lazily, on the first query -- constructing it
 // here is safe even with no real DATABASE_URL set yet.
 import { PrismaPg } from "@prisma/adapter-pg";
+import { assertDatabaseEnvironment } from "./accessPolicy.mjs";
 
-// Falling back to "" (rather than crashing at import time) is what lets
+// Validate before reusing a hot-reloaded, globally cached client as well.
+assertDatabaseEnvironment(process.env, { allowMissing: true });
+
+// A deliberately unreachable local address (rather than crashing at import time) lets
 // build-time prerendering and any DATABASE_URL-less dev/test run at all
 // -- the resulting failure still surfaces, just lazily, on the first real
 // query (as a connection error from the pg driver), which is what
@@ -33,14 +37,22 @@ if (!process.env.DATABASE_URL) {
 // DIRECT_URL instead (see schema.prisma's datasource block); this file
 // never touches DIRECT_URL, since only the CLI's migrate/db-push commands
 // need the unpooled connection.
-const adapter = new PrismaPg(process.env.DATABASE_URL ?? "");
+// Never let pg fall back to PGHOST/PGUSER when DATABASE_URL is absent.
+const connectionString = process.env.DATABASE_URL || "postgresql://unconfigured@127.0.0.1:1/unconfigured";
+const adapter = new PrismaPg(connectionString);
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
+  prismaConnectionString: string | undefined;
 };
+
+if (globalForPrisma.prisma && globalForPrisma.prismaConnectionString !== connectionString) {
+  throw new Error("[db-access] Cached database configuration changed. Restart the server before continuing.");
+}
 
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({ adapter });
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
+  globalForPrisma.prismaConnectionString = connectionString;
 }

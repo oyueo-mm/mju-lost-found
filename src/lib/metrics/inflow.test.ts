@@ -7,6 +7,15 @@ import { inflowDataset } from "./export";
 const r = (day: string, metric: string, n: number) => ({ day, metric, n });
 
 describe("유입 경로", () => {
+  it("does not infer a valid release from an early Content marker or mix Content with legacy session totals", () => {
+    const rows = [r("2026-11-09", "visit.session.anon", 5), r("2026-11-10", "visit.session.anon", 2)];
+    const marked = buildInflow(["2026-11-09", "2026-11-10"], rows, "2026-10-20", "2026-11-09");
+    // Documents the current risk: a marker alone declares coverage, even with no Content samples.
+    expect(marked.content).toMatchObject({ since: "2026-11-09", measuredDays: 2, contents: [], pairs: [] });
+    const unmeasured = buildInflow(["2026-11-09", "2026-11-10"], rows, "2026-10-20");
+    expect(unmeasured.content.measuredDays).toBe(0);
+    expect(marked.total).toEqual(unmeasured.total);
+  });
   it("separates Content measurement start, groups campaign/content and leaves legacy totals alone", () => {
     const rows = [
       r("2026-11-08", "visit.utm_campaign.legacy_guard01", 3),

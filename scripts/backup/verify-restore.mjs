@@ -1,3 +1,4 @@
+import "../db/install-guard.mjs";
 // Proves a backup from scripts/backup/backup.mjs can be restored: restores
 // db/public.dump into an EMPTY, throwaway database and compares every table's
 // row count with db/rowcounts.json, then checks that every image path the DB

@@ -1,3 +1,5 @@
+import "./db/install-guard.mjs";
+import { assertScriptSupabaseAccess } from "../src/lib/db/accessPolicy.mjs";
 // 기존 Storage 이미지 WebP 정식 migration script (maintenance, not part
 // of the deployed app). 로컬에서 `.env`를 읽어 node로 직접 실행한다 --
 // 서버 전용 SUPABASE_SERVICE_ROLE_KEY를 쓰므로 절대 브라우저 코드/commit
@@ -90,6 +92,7 @@ const TABLES = [
   { name: "Message", idCol: "id" },
 ];
 
+assertScriptSupabaseAccess(process.env);
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });

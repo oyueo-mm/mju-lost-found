@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "./db/install-guard.mjs";
 // Read-only evaluation of the existing, title-verified synthetic fixtures.
 // No post embedding regeneration, service metrics, env changes, or writes.
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";

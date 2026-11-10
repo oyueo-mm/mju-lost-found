@@ -8,6 +8,8 @@ const RECORD_TIMEOUT_MS = 1000;
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   if (process.env.NEXT_PHASE === "phase-production-build") return;
+  const { assertDatabaseEnvironment } = await import("@/lib/db/accessPolicy.mjs");
+  assertDatabaseEnvironment(process.env);
   if (!process.env.VERCEL_DEPLOYMENT_ID) return;
   const { recordRuntimeDeployment } = await import("@/lib/devstats/deployments");
   await Promise.race([recordRuntimeDeployment(), new Promise((resolve) => setTimeout(resolve, RECORD_TIMEOUT_MS))]);

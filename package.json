@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/downloadModel.mjs",
+    "predev": "node scripts/db/predev.mjs && node scripts/downloadModel.mjs",
     "dev": "next dev",
     "prebuild": "node scripts/operations/validate-qr-registry.mjs && node scripts/downloadModel.mjs && node scripts/pruneOnnxRuntime.mjs",
     "build": "next build",
@@ -13,7 +13,8 @@
     "download-model": "node scripts/downloadModel.mjs",
     "deploy:preview": "node scripts/deployments/deploy.mjs preview --alias",
     "deployments:record": "node scripts/deployments/record.mjs",
-    "operations:validate": "node scripts/operations/validate-qr-registry.mjs"
+    "operations:validate": "node scripts/operations/validate-qr-registry.mjs",
+    "operations:production": "node scripts/db/approved-operation.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

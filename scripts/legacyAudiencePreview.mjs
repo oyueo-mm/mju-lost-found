@@ -1,3 +1,4 @@
+import "./db/install-guard.mjs";
 // Scenario test of the legacy-audience DB functions (migration
 // 20261111000000_legacy_audience_evidence) on the Preview DB. Everything runs in
 // ONE transaction that is always rolled back: no fixture is left behind.

@@ -15,6 +15,7 @@
 //   npx tsx --env-file=.env.preview.local scripts/reportChatImageOrphans.ts
 //   npx tsx --env-file=.env scripts/reportChatImageOrphans.ts --min-age-hours 24
 import { createClient } from "@supabase/supabase-js";
+import { assertScriptSupabaseAccess } from "../src/lib/db/accessPolicy.mjs";
 
 import { prisma } from "@/lib/db/prisma";
 import { CHAT_IMAGES_BUCKET } from "@/lib/images/config";
@@ -31,6 +32,7 @@ async function main() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
   if (!url || !key) throw new Error("NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set (pass --env-file).");
   const minAgeHours = Number(arg("--min-age-hours") ?? 24);
+  assertScriptSupabaseAccess(process.env);
   const bucket = createClient(url, key, { auth: { persistSession: false } }).storage.from(CHAT_IMAGES_BUCKET);
 
   const objects: StoredObject[] = [];

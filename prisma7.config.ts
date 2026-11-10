@@ -2,6 +2,9 @@
 // npm install --save-dev prisma dotenv
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
+import { assertDatabaseAccess } from "./src/lib/db/accessPolicy.mjs";
+
+assertDatabaseAccess(process.env.DIRECT_URL, process.env, { usage: "operation", allowMissing: true });
 
 // This `datasource.url` is what the Prisma CLI (migrate/db push/introspect)
 // connects with -- NOT what the running app uses (that's the separate

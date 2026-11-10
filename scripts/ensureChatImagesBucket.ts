@@ -14,6 +14,7 @@
 //   npx tsx --env-file=.env.preview.local scripts/ensureChatImagesBucket.ts --apply
 //   npx tsx --env-file=.env scripts/ensureChatImagesBucket.ts --apply --confirm-production
 import { createClient } from "@supabase/supabase-js";
+import { assertScriptSupabaseAccess } from "../src/lib/db/accessPolicy.mjs";
 
 import { ALLOWED_IMAGE_CONTENT_TYPES, CHAT_IMAGES_BUCKET, MAX_IMAGE_SIZE_BYTES } from "@/lib/images/config";
 
@@ -38,6 +39,7 @@ async function main() {
     throw new Error("Writing to Production needs --confirm-production as well.");
   }
 
+  assertScriptSupabaseAccess(process.env);
   const storage = createClient(url, key, { auth: { persistSession: false } }).storage;
   const { data: existing } = await storage.getBucket(CHAT_IMAGES_BUCKET);
 
