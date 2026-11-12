@@ -20,7 +20,7 @@ import { removeCommentInTx } from "@/lib/comment/remove";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { createAdminActionProposal, type AdminActionProposalDTO } from "@/lib/admin/proposals";
 import { ACTION_TYPES_FOR_TARGET, type ModerationActionTypeValue } from "./schema";
-import { can } from "@/lib/permissions/check";
+import { can, isActiveFullAdmin } from "@/lib/permissions/check";
 
 // Same duplication tradeoff as notification/service.ts's
 // NOTIFICATION_TYPE_FROM_DB: posts/service.ts already has this exact
@@ -64,8 +64,9 @@ const ACTION_TYPE_FROM_DB: Record<PrismaModerationActionType, ModerationActionTy
 // read, see src/lib/auth/session.ts), never from client-controlled state.
 // Mirrors legacy db.is_admin()/_require_admin()'s "never trust the
 // caller" rule.
-export function isAdmin(user: Pick<User, "isAdmin">): boolean {
-  return user.isAdmin;
+// A suspended administrator is not treated as one (see permissions/check.ts).
+export function isAdmin(user: Pick<User, "isAdmin" | "isSuspended" | "suspendedUntil">): boolean {
+  return isActiveFullAdmin(user);
 }
 
 export type ModerationActionDTO = {

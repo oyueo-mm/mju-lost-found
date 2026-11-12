@@ -11,6 +11,7 @@ import {
   type User,
 } from "@/generated/prisma/client";
 import type { AdminActionProposalTypeValue } from "./schema";
+import { isActiveFullAdmin } from "@/lib/permissions/check";
 
 // Deliberately NOT imported from moderation/service.ts's own isAdmin() --
 // moderation/service.ts::applyReportAction() now calls into this module
@@ -19,8 +20,10 @@ import type { AdminActionProposalTypeValue } from "./schema";
 // cycle. This is the exact same one-line DB-sourced check either way
 // (`user.isAdmin`, never a client-controlled value) -- see that function's
 // own comment for why it must always come from a fresh session read.
-function isAdmin(candidate: Pick<User, "isAdmin">): boolean {
-  return candidate.isAdmin;
+// A suspended administrator can neither propose, approve, cancel nor list
+// proposals (see permissions/check.ts::isActiveFullAdmin).
+function isAdmin(candidate: Pick<User, "isAdmin" | "isSuspended" | "suspendedUntil">): boolean {
+  return isActiveFullAdmin(candidate);
 }
 
 // Phase 관리자 승인제: "관리자 대상 고위험 조치는 관리자 1명이 단독으로 실행할 수
@@ -334,6 +337,9 @@ export async function createAdminActionProposal(
   }: { reasonCategory?: string; reason?: string; suspendDurationDays?: number },
 ): Promise<AdminProposalMutationResult<AdminActionProposalDTO>> {
   if (!isAdmin(admin)) return { kind: "forbidden" };
+  // Nobody proposes lifting their own suspension (defense in depth: a
+  // suspended administrator is already refused by isAdmin() above).
+  if (actionType === "unsuspend_user" && targetUserId === admin.id) return { kind: "forbidden" };
 
   const target = await prisma.user.findUnique({ where: { id: targetUserId } });
   if (!target) return { kind: "not_found" };

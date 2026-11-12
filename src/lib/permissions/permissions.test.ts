@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { can, canAny, hasAnyAdminPermission } from "./check";
+import { can, canAny, hasAnyAdminPermission, isActiveFullAdmin, isSuspendedHolder } from "./check";
 import {
   ADMIN_MENU, GRANTABLE_PERMISSION_KEYS, PERMISSION_GROUPS, PERMISSION_INFO, PERMISSION_KEYS, PERMISSION_PRESETS,
   isGrantablePermissionKey, matchingPresetId, withRequiredPermissions,
 } from "./definitions";
+
+// Every holder carries its suspension state (see check.ts); these are active accounts.
+const active = { isSuspended: false, suspendedUntil: null } as const;
 
 describe("permission list", () => {
   it("has 19 permissions in 8 groups, each exactly once, all with Korean label and description", () => {
@@ -29,33 +32,68 @@ describe("permission list", () => {
 
 describe("can()", () => {
   it("gives a full administrator everything, including 권한 관리", () => {
-    for (const key of PERMISSION_KEYS) expect(can({ isAdmin: true }, key)).toBe(true);
+    for (const key of PERMISSION_KEYS) expect(can({ ...active, isAdmin: true }, key)).toBe(true);
   });
   it("gives anyone else exactly what was granted, and never 권한 관리 -- even if such a row existed", () => {
-    const user = { isAdmin: false, adminPermissions: ["reports.view", "permissions.manage"] };
+    const user = { ...active, isAdmin: false, adminPermissions: ["reports.view", "permissions.manage"] };
     expect(can(user, "reports.view")).toBe(true);
     expect(can(user, "reports.process")).toBe(false);
     expect(can(user, "permissions.manage")).toBe(false);
     expect(can(null, "reports.view")).toBe(false);
-    expect(can({}, "reports.view")).toBe(false);
+    expect(can({ ...active }, "reports.view")).toBe(false);
   });
   it("keeps independent permissions independent", () => {
-    const stats = { isAdmin: false, adminPermissions: ["stats.operations"] };
+    const stats = { ...active, isAdmin: false, adminPermissions: ["stats.operations"] };
     expect(can(stats, "stats.users")).toBe(false);
     expect(can(stats, "stats.admins")).toBe(false);
-    const view = { isAdmin: false, adminPermissions: ["users.view"] };
+    const view = { ...active, isAdmin: false, adminPermissions: ["users.view"] };
     expect(can(view, "users.sanction")).toBe(false);
-    expect(can({ isAdmin: false, adminPermissions: ["posts.manage"] }, "posts.delete")).toBe(false);
-    expect(can({ isAdmin: false, adminPermissions: ["institutions.manage"] }, "items.receive")).toBe(false);
-    expect(can({ isAdmin: false, adminPermissions: ["access.external"] }, "institutions.manage")).toBe(false);
+    expect(can({ ...active, isAdmin: false, adminPermissions: ["posts.manage"] }, "posts.delete")).toBe(false);
+    expect(can({ ...active, isAdmin: false, adminPermissions: ["institutions.manage"] }, "items.receive")).toBe(false);
+    expect(can({ ...active, isAdmin: false, adminPermissions: ["access.external"] }, "institutions.manage")).toBe(false);
   });
   it("shows the admin menu only to someone with at least one permission", () => {
     expect(hasAnyAdminPermission(null)).toBe(false);
-    expect(hasAnyAdminPermission({ isAdmin: false, adminPermissions: [] })).toBe(false);
-    expect(hasAnyAdminPermission({ isAdmin: false, adminPermissions: ["permissions.manage"] })).toBe(false);
-    expect(hasAnyAdminPermission({ isAdmin: false, adminPermissions: ["reports.view"] })).toBe(true);
-    expect(hasAnyAdminPermission({ isAdmin: true })).toBe(true);
-    expect(canAny({ isAdmin: false, adminPermissions: ["posts.delete"] }, ["posts.manage", "posts.delete"])).toBe(true);
+    expect(hasAnyAdminPermission({ ...active, isAdmin: false, adminPermissions: [] })).toBe(false);
+    expect(hasAnyAdminPermission({ ...active, isAdmin: false, adminPermissions: ["permissions.manage"] })).toBe(false);
+    expect(hasAnyAdminPermission({ ...active, isAdmin: false, adminPermissions: ["reports.view"] })).toBe(true);
+    expect(hasAnyAdminPermission({ ...active, isAdmin: true })).toBe(true);
+    expect(canAny({ ...active, isAdmin: false, adminPermissions: ["posts.delete"] }, ["posts.manage", "posts.delete"])).toBe(true);
+  });
+});
+
+describe("suspension (H-1)", () => {
+  const future = () => new Date(Date.now() + 24 * 3600 * 1000);
+  const past = () => new Date(Date.now() - 1000);
+  it("takes every permission away from a suspended full administrator, permanent or timed", () => {
+    for (const suspendedUntil of [null, future()]) {
+      const admin = { isAdmin: true, isSuspended: true, suspendedUntil };
+      for (const key of PERMISSION_KEYS) expect(can(admin, key)).toBe(false);
+      expect(hasAnyAdminPermission(admin)).toBe(false);
+      expect(isActiveFullAdmin(admin)).toBe(false);
+    }
+  });
+  it("takes delegated permissions away from a suspended officer", () => {
+    const officer = { isAdmin: false, adminPermissions: ["reports.view", "users.sanction", "users.view"], isSuspended: true, suspendedUntil: future() };
+    expect(can(officer, "reports.view")).toBe(false);
+    expect(can(officer, "users.sanction")).toBe(false);
+    expect(canAny(officer, ["reports.view", "users.view"])).toBe(false);
+    expect(hasAnyAdminPermission(officer)).toBe(false);
+  });
+  it("gives the permissions back once a timed suspension has ended, or when it is lifted", () => {
+    const ended = { isAdmin: false, adminPermissions: ["reports.view"], isSuspended: true, suspendedUntil: past() };
+    expect(isSuspendedHolder(ended)).toBe(false);
+    expect(can(ended, "reports.view")).toBe(true);
+    const lifted = { isAdmin: true, isSuspended: false, suspendedUntil: null };
+    expect(can(lifted, "permissions.manage")).toBe(true);
+    expect(isActiveFullAdmin(lifted)).toBe(true);
+  });
+  it("leaves delegation itself unchanged for active accounts", () => {
+    const officer = { ...active, isAdmin: false, adminPermissions: ["reports.view"] };
+    expect(can(officer, "reports.view")).toBe(true);
+    expect(can(officer, "permissions.manage")).toBe(false);
+    expect(isActiveFullAdmin(officer)).toBe(false);
+    expect(isActiveFullAdmin(null)).toBe(false);
   });
 });
 
@@ -78,7 +116,7 @@ describe("presets and dependencies", () => {
 });
 
 describe("admin menu", () => {
-  const visible = (perms: string[], isAdmin = false) => ADMIN_MENU.filter((m) => m.anyOf.some((k) => can({ isAdmin, adminPermissions: perms }, k))).map((m) => m.label);
+  const visible = (perms: string[], isAdmin = false) => ADMIN_MENU.filter((m) => m.anyOf.some((k) => can({ ...active, isAdmin, adminPermissions: perms }, k))).map((m) => m.label);
   it("shows only the entries a permission opens", () => {
     expect(visible([])).toEqual([]);
     expect(visible(["items.return"])).toEqual(["물품 관리"]);

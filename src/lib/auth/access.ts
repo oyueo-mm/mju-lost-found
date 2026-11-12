@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { isAllowedEmail } from "@/lib/auth/domain";
-import { isGoogleTestModeEnabled } from "@/lib/settings/service";
+import { isGoogleTestModeEnabled, readGoogleTestModeEnabled } from "@/lib/settings/service";
 import { ExternalAccessStatus, UserType } from "@/generated/prisma/client";
 
 // Who may use the service, decided only on the server:
@@ -59,11 +59,22 @@ export async function userTypeForEmail(email: string): Promise<UserType> {
 // (session.ts::getCurrentUser), so revoking an approval takes effect
 // immediately, not when the session cookie expires:
 //   - an approval that was revoked blocks the account;
-//   - an EXTERNAL_VERIFIED account needs its approval to still be ACTIVE.
+//   - an EXTERNAL_VERIFIED account needs its approval to still be ACTIVE;
+//   - an EXTERNAL_TEST account is let in only while the admin test-mode
+//     setting is on (H-1/H-2 security fix: before, an existing session kept
+//     working after test mode was switched off). An email approved in the
+//     meantime (ACTIVE) keeps working; it becomes EXTERNAL_VERIFIED at its
+//     next sign-in. A failed settings read counts as "off" (fail closed).
 // STUDENT accounts never reach this (no extra query for them).
 export async function hasOngoingExternalAccess(user: { email: string; userType: UserType }): Promise<boolean> {
   const grant = await grantFor(user.email);
   if (grant?.status === ExternalAccessStatus.REVOKED) return false;
   if (user.userType === UserType.EXTERNAL_VERIFIED) return grant?.status === ExternalAccessStatus.ACTIVE;
-  return true;
+  if (grant?.status === ExternalAccessStatus.ACTIVE) return true;
+  try {
+    return await readGoogleTestModeEnabled();
+  } catch (error) {
+    console.error("Failed to read googleTestModeEnabled for an existing test-mode session -- failing closed:", error instanceof Error ? error.name : "unknown");
+    return false;
+  }
 }

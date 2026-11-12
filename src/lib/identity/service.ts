@@ -163,7 +163,7 @@ export type AdminIdentityViewResult =
 // reason. The log row is written in the same transaction as the read, so
 // there is never a view without its record.
 export async function viewIdentityForReport(
-  admin: Pick<User, "id" | "isAdmin">,
+  admin: Pick<User, "id" | "isAdmin" | "isSuspended" | "suspendedUntil">,
   { reportId, targetUserId, reason }: { reportId: number; targetUserId: number; reason: unknown },
 ): Promise<AdminIdentityViewResult> {
   if (!can(admin, "reports.process")) return { kind: "forbidden" };

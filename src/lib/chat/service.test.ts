@@ -2504,6 +2504,16 @@ describe("getChatImageForViewer", () => {
     });
   });
 
+  it("refuses a suspended admin who passes a report id, without reading the report or the message (H-1)", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    const suspendedAdmin = { id: stranger, isAdmin: true, isSuspended: true, suspendedUntil: null } as unknown as User;
+
+    expect(await getChatImageForViewer(100, 7, suspendedAdmin, 5)).toEqual({ kind: "forbidden" });
+    expect(reportTable.findUnique).not.toHaveBeenCalled();
+    expect(message.findUnique).not.toHaveBeenCalled();
+    expect(adminAccessLog.create).not.toHaveBeenCalled();
+  });
+
   it("refuses a non-participant admin without a report, or with another room's report", async () => {
     chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     expect(await getChatImageForViewer(100, 7, user(stranger, true))).toEqual({ kind: "forbidden" });

@@ -2,7 +2,7 @@ import type { NextResponse } from "next/server";
 
 import { jsonError, requireUserForApi } from "@/lib/posts/http";
 import type { CurrentUser } from "@/lib/auth/session";
-import { can } from "@/lib/permissions/check";
+import { can, isActiveFullAdmin } from "@/lib/permissions/check";
 import type { PermissionKey } from "@/lib/permissions/definitions";
 
 export { jsonError, jsonOk, withErrorHandling } from "@/lib/posts/http";
@@ -23,7 +23,7 @@ export async function requireAdminForApi(permission?: PermissionKey | Permission
   if ("response" in auth) return auth;
   const allowed = permission
     ? [permission].flat().some((p) => can(auth.user, p))
-    : Boolean(auth.user.isAdmin);
+    : isActiveFullAdmin(auth.user);
   if (!allowed) return { response: jsonError(403, "관리자 권한이 필요합니다.") };
   return { user: auth.user as CurrentUser };
 }

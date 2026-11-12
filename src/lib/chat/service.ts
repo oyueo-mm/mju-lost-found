@@ -14,7 +14,7 @@ import { getMembership } from "@/lib/organization/authz";
 import { fanOutToOrganizationManagers } from "@/lib/notification/adminFanout";
 import { broadcastChatEvent } from "./realtimeAdmin";
 import { MESSAGE_PAGE_SIZE } from "./schema";
-import { can } from "@/lib/permissions/check";
+import { can, isActiveFullAdmin } from "@/lib/permissions/check";
 
 // Same placeholder text as the legacy HIDDEN_MESSAGE_PLACEHOLDER --
 // Message.hiddenAt/hiddenByUserId/hiddenReason exist in schema.prisma for
@@ -1476,7 +1476,7 @@ export async function getChatImageForViewer(
   // Admin chat access Phase: a non-participant admin needs a MESSAGE
   // report for this room, same rule as getChatRoomForAdmin.
   const viaReport =
-    !isParticipant && viewer.isAdmin && reportId !== undefined && (await isReportForChatRoom(reportId, chatRoomId));
+    !isParticipant && isActiveFullAdmin(viewer) && reportId !== undefined && (await isReportForChatRoom(reportId, chatRoomId));
   if (!isParticipant && !viaReport) return { kind: "forbidden" };
 
   const message = await prisma.message.findUnique({

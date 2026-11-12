@@ -9,9 +9,9 @@ const { Prisma } = await import("@/generated/prisma/client");
 
 describe("service administrator activity visibility", () => {
   it("allows all service administrators, but never ordinary users or officers", () => {
-    expect(canViewAllAdminActivity({ id: 20, isAdmin: true }, "13")).toBe(true);
-    expect(canViewAllAdminActivity({ id: 20, isAdmin: true }, undefined)).toBe(true);
-    expect(canViewAllAdminActivity({ id: 13, isAdmin: false }, "13")).toBe(false);
+    expect(canViewAllAdminActivity({ id: 20, isAdmin: true, isSuspended: false, suspendedUntil: null }, "13")).toBe(true);
+    expect(canViewAllAdminActivity({ id: 20, isAdmin: true, isSuspended: false, suspendedUntil: null }, undefined)).toBe(true);
+    expect(canViewAllAdminActivity({ id: 13, isAdmin: false, isSuspended: false, suspendedUntil: null }, "13")).toBe(false);
   });
 });
 

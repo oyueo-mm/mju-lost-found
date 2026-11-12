@@ -26,6 +26,18 @@ describe("requireAdminForApi(permission)", () => {
     as({ id: 1, isAdmin: true, adminPermissions: [] });
     expect(await requireAdminForApi()).toHaveProperty("user");
   });
+  it("refuses a suspended account with or without a permission argument (H-1)", async () => {
+    const until = new Date(Date.now() + 3600 * 1000);
+    as({ id: 1, isAdmin: true, adminPermissions: [], isSuspended: true, suspendedUntil: null });
+    expect(await requireAdminForApi()).toEqual({ response: { status: 403, error: "관리자 권한이 필요합니다." } });
+    expect(await requireAdminForApi("reports.view")).toHaveProperty("response");
+    as({ id: 2, isAdmin: false, adminPermissions: ["reports.view", "users.view", "users.sanction"], isSuspended: true, suspendedUntil: until });
+    expect(await requireAdminForApi("reports.view")).toHaveProperty("response");
+    expect(await requireAdminForApi(["users.sanction", "permissions.manage"])).toHaveProperty("response");
+    // the same officer once the suspension has ended
+    as({ id: 2, isAdmin: false, adminPermissions: ["reports.view"], isSuspended: true, suspendedUntil: new Date(Date.now() - 1000) });
+    expect(await requireAdminForApi("reports.view")).toHaveProperty("user");
+  });
   it("passes a 401/403 from the login check straight through, and a regular user never passes", async () => {
     requireUserForApi.mockResolvedValue({ response: { status: 401 } });
     expect(await requireAdminForApi("reports.view")).toEqual({ response: { status: 401 } });

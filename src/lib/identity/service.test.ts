@@ -24,7 +24,7 @@ const {
 } = await import("./service");
 const { ACCEPTED_IDENTITY_CONSENT_VERSIONS, CURRENT_IDENTITY_CONSENT_VERSION } = await import("@/lib/auth/terms");
 
-const admin = { id: 9, isAdmin: true };
+const admin = { id: 9, isAdmin: true, isSuspended: false, suspendedUntil: null };
 const REASON = "습득물 반환 분쟁 확인";
 
 beforeEach(() => {
@@ -108,7 +108,15 @@ describe("admin view of 실명·학과", () => {
   });
 
   it("refuses a non-admin before reading or logging anything", async () => {
-    const result = await viewIdentityForReport({ id: 3, isAdmin: false }, { reportId: 10, targetUserId: 2, reason: REASON });
+    const result = await viewIdentityForReport({ id: 3, isAdmin: false, isSuspended: false, suspendedUntil: null }, { reportId: 10, targetUserId: 2, reason: REASON });
+    expect(result).toEqual({ kind: "forbidden" });
+    expect(report.findUnique).not.toHaveBeenCalled();
+    expect(identityAccessLog.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a suspended administrator before reading or logging anything (H-1)", async () => {
+    const suspended = { id: 9, isAdmin: true, isSuspended: true, suspendedUntil: null };
+    const result = await viewIdentityForReport(suspended, { reportId: 10, targetUserId: 2, reason: REASON });
     expect(result).toEqual({ kind: "forbidden" });
     expect(report.findUnique).not.toHaveBeenCalled();
     expect(identityAccessLog.create).not.toHaveBeenCalled();

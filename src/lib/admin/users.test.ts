@@ -222,6 +222,26 @@ describe("updateUserByAdmin", () => {
     expect(user.update).not.toHaveBeenCalled();
   });
 
+  it("blocks lifting one's own suspension, even with 사용자 제재 (H-1)", async () => {
+    const officer = { id: 7, isAdmin: false, adminPermissions: ["users.view", "users.sanction"] };
+    expect(await updateUserByAdmin(officer as never, officer.id, "unsuspend")).toEqual({ kind: "self" });
+    expect(await updateUserByAdmin(admin as never, admin.id, "unsuspend")).toEqual({ kind: "self" });
+    expect(user.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses every action by a suspended administrator or officer, own suspension included (H-1)", async () => {
+    const suspendedAdmin = { id: 1, isAdmin: true, isSuspended: true, suspendedUntil: null };
+    const suspendedOfficer = { id: 7, isAdmin: false, adminPermissions: ["users.view", "users.sanction"], isSuspended: true, suspendedUntil: new Date(Date.now() + 3600 * 1000) };
+    for (const actor of [suspendedAdmin, suspendedOfficer]) {
+      for (const action of ["unsuspend", "suspend", "promote", "demote"] as const) {
+        expect(await updateUserByAdmin(actor as never, actor.id, action, 7, "기타", "사유")).toEqual({ kind: "forbidden" });
+        expect(await updateUserByAdmin(actor as never, 5, action, 7, "기타", "사유")).toEqual({ kind: "forbidden" });
+      }
+    }
+    expect(user.findUnique).not.toHaveBeenCalled();
+    expect(user.update).not.toHaveBeenCalled();
+  });
+
   it("returns not_found for a nonexistent target user", async () => {
     user.findUnique.mockResolvedValueOnce(null);
     const result = await updateUserByAdmin(admin as never, 999, "promote");

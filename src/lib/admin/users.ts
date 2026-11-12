@@ -305,7 +305,9 @@ export async function updateUserByAdmin(
     return { kind: "forbidden" };
   }
 
-  if (targetUserId === admin.id && (action === "demote" || action === "suspend")) {
+  // Lifting one's own suspension is refused too (a suspended account is
+  // already refused by can() above; this keeps the rule explicit).
+  if (targetUserId === admin.id && (action === "demote" || action === "suspend" || action === "unsuspend")) {
     return { kind: "self" };
   }
 

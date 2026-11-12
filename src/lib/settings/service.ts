@@ -42,6 +42,15 @@ export async function isGoogleTestModeEnabled(): Promise<boolean> {
   return settings.googleTestModeEnabled;
 }
 
+// Read-only variant for the per-request access check (auth/access.ts): no
+// upsert, so a request never writes. A missing settings row means the
+// default, test mode off. A database error is thrown to the caller, which
+// treats it as "off" (fail closed).
+export async function readGoogleTestModeEnabled(): Promise<boolean> {
+  const row = await prisma.appSettings.findUnique({ where: { id: SETTINGS_ID }, select: { googleTestModeEnabled: true } });
+  return row?.googleTestModeEnabled ?? false;
+}
+
 export type SettingsMutationResult<T> = { kind: "ok"; data: T } | { kind: "forbidden" };
 
 // admin is passed in (not re-fetched) the same way every other admin
@@ -51,7 +60,7 @@ export type SettingsMutationResult<T> = { kind: "ok"; data: T } | { kind: "forbi
 // isAdmin() is re-checked here anyway, same belt-and-suspenders
 // convention every admin-only service function in this project follows.
 export async function setGoogleTestMode(
-  admin: { id: number; isAdmin: boolean },
+  admin: { id: number; isAdmin: boolean; isSuspended: boolean; suspendedUntil: Date | null },
   enabled: boolean,
 ): Promise<SettingsMutationResult<AppSettingsDTO>> {
   // Same one-line DB-sourced check as moderation/service.ts::isAdmin(),

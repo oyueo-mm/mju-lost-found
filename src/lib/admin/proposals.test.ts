@@ -120,6 +120,23 @@ beforeEach(() => {
   setActiveAdmins([proposer.id, approverA.id, approverB.id, target.id]);
 });
 
+describe("suspended administrators (H-1)", () => {
+  const suspended = { id: 5, isAdmin: true, isSuspended: true, suspendedUntil: null };
+  it("cannot propose -- not even lifting their own suspension -- nor approve, cancel or list", async () => {
+    expect(await createAdminActionProposal(suspended as never, suspended.id, "unsuspend_user", {})).toEqual({ kind: "forbidden" });
+    expect(await createAdminActionProposal(suspended as never, target.id, "suspend_user", { reasonCategory: "기타", reason: "사유" })).toEqual({ kind: "forbidden" });
+    expect(await approveAdminActionProposal(suspended as never, 100)).toEqual({ kind: "forbidden" });
+    expect(await cancelAdminActionProposal(suspended as never, 100)).toEqual({ kind: "forbidden" });
+    expect(await listAdminActionProposalsForAdmin(suspended as never)).toEqual({ kind: "forbidden" });
+    expect(txAdminActionProposal.create).not.toHaveBeenCalled();
+    expect(user.findUnique).not.toHaveBeenCalled();
+  });
+  it("an active administrator cannot propose lifting their own suspension either", async () => {
+    expect(await createAdminActionProposal(proposer as never, proposer.id, "unsuspend_user", {})).toEqual({ kind: "forbidden" });
+    expect(txAdminActionProposal.create).not.toHaveBeenCalled();
+  });
+});
+
 describe("createAdminActionProposal", () => {
   it("rejects a non-admin caller", async () => {
     const result = await createAdminActionProposal(nonAdmin as never, target.id, "suspend_user", {});

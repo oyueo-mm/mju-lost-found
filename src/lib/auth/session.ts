@@ -7,7 +7,7 @@ import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { CURRENT_TERMS_VERSION, isAcceptedIdentityConsentVersion, isAcceptedPrivacyVersion } from "@/lib/auth/terms";
 import { prisma } from "@/lib/db/prisma";
 import type { User } from "@/generated/prisma/client";
-import { can, hasAnyAdminPermission } from "@/lib/permissions/check";
+import { can, hasAnyAdminPermission, isActiveFullAdmin } from "@/lib/permissions/check";
 import type { PermissionKey } from "@/lib/permissions/definitions";
 
 // The User row plus the admin permissions granted to it, both read from the DB
@@ -216,7 +216,8 @@ export async function requireActiveUser(): Promise<CurrentUser> {
 // admin (there's no dedicated "access denied" page in this app).
 export async function requireAdmin(): Promise<CurrentUser> {
   const user = await requireReadyUser();
-  if (!user.isAdmin) redirect("/");
+  // A suspended administrator is not an administrator for this purpose.
+  if (!isActiveFullAdmin(user)) redirect("/");
   return user;
 }
 

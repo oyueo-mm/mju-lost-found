@@ -17,7 +17,13 @@ export async function loadHolder(userId: number, db: Pick<Prisma.TransactionClie
   const user = await db.user.findUnique({ where: { id: userId } });
   if (!user || !activeAccount(user) || isCurrentlySuspended(user)) return null;
   const grants = user.isAdmin ? [] : await db.adminPermissionGrant.findMany({ where: { userId }, select: { permission: true } });
-  return { id: user.id, isAdmin: user.isAdmin, adminPermissions: grants.map((g) => g.permission) };
+  return {
+    id: user.id,
+    isAdmin: user.isAdmin,
+    adminPermissions: grants.map((g) => g.permission),
+    isSuspended: user.isSuspended,
+    suspendedUntil: user.suspendedUntil,
+  };
 }
 
 // Full administrators only (the permission to manage permissions is not delegable).

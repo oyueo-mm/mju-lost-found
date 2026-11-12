@@ -116,7 +116,10 @@ export async function recordAdminVisit(adminUserId: number, now: Date = new Date
 // user ids in ADMIN_ACTIVITY_VIEWER_IDS (comma-separated), who must also
 // be admins. Any other admin sees only their own row and history. Unset:
 // nobody sees the others.
-export function canViewAllAdminActivity(user: { id: number; isAdmin: boolean; adminPermissions?: readonly string[] }, _env = process.env.ADMIN_ACTIVITY_VIEWER_IDS): boolean {
+export function canViewAllAdminActivity(
+  user: { id: number; isAdmin: boolean; adminPermissions?: readonly string[]; isSuspended: boolean; suspendedUntil: Date | null },
+  _env = process.env.ADMIN_ACTIVITY_VIEWER_IDS,
+): boolean {
   void _env;
   return can(user, "stats.admins");
 }

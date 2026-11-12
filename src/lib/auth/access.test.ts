@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const grantFindUnique = vi.fn();
 const isGoogleTestModeEnabled = vi.fn();
+const readGoogleTestModeEnabled = vi.fn();
 vi.mock("@/lib/db/prisma", () => ({ prisma: { externalAccessGrant: { findUnique: grantFindUnique } } }));
-vi.mock("@/lib/settings/service", () => ({ isGoogleTestModeEnabled }));
+vi.mock("@/lib/settings/service", () => ({ isGoogleTestModeEnabled, readGoogleTestModeEnabled }));
 vi.mock("@/generated/prisma/client", () => ({
   UserType: { STUDENT: "STUDENT", EXTERNAL_VERIFIED: "EXTERNAL_VERIFIED", EXTERNAL_TEST: "EXTERNAL_TEST" },
   ExternalAccessStatus: { ACTIVE: "ACTIVE", REVOKED: "REVOKED" },
@@ -15,6 +16,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   grantFindUnique.mockResolvedValue(null);
   isGoogleTestModeEnabled.mockResolvedValue(false);
+  readGoogleTestModeEnabled.mockResolvedValue(false);
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -87,9 +89,37 @@ describe("hasOngoingExternalAccess (checked on every request)", () => {
     expect(await hasOngoingExternalAccess({ email: "guard@gmail.com", userType: "EXTERNAL_VERIFIED" as never })).toBe(false);
   });
 
-  it("leaves a test-mode account alone unless its email was explicitly revoked", async () => {
+  // H-2: before, a test-mode account was let in whatever the setting said, so an
+  // existing session outlived the end of the test period.
+  it("lets a test-mode account in only while test mode is on, and never once its email was revoked", async () => {
+    readGoogleTestModeEnabled.mockResolvedValue(true);
     expect(await hasOngoingExternalAccess({ email: "t@gmail.com", userType: "EXTERNAL_TEST" as never })).toBe(true);
     grantFindUnique.mockResolvedValueOnce({ status: "REVOKED" });
     expect(await hasOngoingExternalAccess({ email: "t@gmail.com", userType: "EXTERNAL_TEST" as never })).toBe(false);
+  });
+
+  it("cuts off an existing test-mode session once test mode is switched off (H-2)", async () => {
+    readGoogleTestModeEnabled.mockResolvedValueOnce(false);
+    expect(await hasOngoingExternalAccess({ email: "t@gmail.com", userType: "EXTERNAL_TEST" as never })).toBe(false);
+  });
+
+  it("fails closed when the setting cannot be read (H-2)", async () => {
+    readGoogleTestModeEnabled.mockRejectedValueOnce(new Error("db down"));
+    expect(await hasOngoingExternalAccess({ email: "t@gmail.com", userType: "EXTERNAL_TEST" as never })).toBe(false);
+  });
+
+  it("keeps a test-mode account whose email an admin has since approved (H-2)", async () => {
+    grantFindUnique.mockResolvedValueOnce({ status: "ACTIVE" });
+    expect(await hasOngoingExternalAccess({ email: "t@gmail.com", userType: "EXTERNAL_TEST" as never })).toBe(true);
+    expect(readGoogleTestModeEnabled).not.toHaveBeenCalled();
+  });
+
+  it("never consults the test-mode setting for an approved external account (H-2 leaves EXTERNAL_VERIFIED as it was)", async () => {
+    grantFindUnique.mockResolvedValueOnce({ status: "ACTIVE" });
+    expect(await hasOngoingExternalAccess({ email: "guard@gmail.com", userType: "EXTERNAL_VERIFIED" as never })).toBe(true);
+    grantFindUnique.mockResolvedValueOnce(null);
+    readGoogleTestModeEnabled.mockResolvedValue(true);
+    expect(await hasOngoingExternalAccess({ email: "guard@gmail.com", userType: "EXTERNAL_VERIFIED" as never })).toBe(false);
+    expect(readGoogleTestModeEnabled).not.toHaveBeenCalled();
   });
 });

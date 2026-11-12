@@ -58,6 +58,19 @@ describe("getCurrentUser", () => {
     findUnique.mockReset();
   });
 
+  it("treats a test-mode account as signed out once its access check fails (H-2)", async () => {
+    auth.mockResolvedValue({ user: { id: "88" } });
+    findUnique.mockResolvedValue({ id: 88, email: "t@gmail.com", userType: "EXTERNAL_TEST", deletedAt: null });
+
+    hasOngoingExternalAccess.mockResolvedValueOnce(true);
+    expect(await getCurrentUser()).toMatchObject({ id: 88 });
+    hasOngoingExternalAccess.mockResolvedValueOnce(false);
+    expect(await getCurrentUser()).toBeNull();
+    expect(hasOngoingExternalAccess).toHaveBeenCalledWith(expect.objectContaining({ userType: "EXTERNAL_TEST" }));
+    auth.mockReset();
+    findUnique.mockReset();
+  });
+
   it("never runs the external-access check for a student account", async () => {
     auth.mockResolvedValueOnce({ user: { id: "5" } });
     findUnique.mockResolvedValueOnce({ id: 5, email: "s@mju.ac.kr", userType: "STUDENT", deletedAt: null });
@@ -410,5 +423,21 @@ describe("requireAdmin", () => {
     findUnique.mockResolvedValueOnce({ id: 1, nickname: null, ...readyConsent, isAdmin: true });
 
     await expect(requireAdmin()).rejects.toThrow("REDIRECT:/onboarding");
+  });
+
+  it("redirects a suspended administrator to / -- page and Server Action gates alike (H-1)", async () => {
+    for (const suspendedUntil of [null, new Date(Date.now() + 3600 * 1000)]) {
+      auth.mockResolvedValueOnce({ user: { id: "1" } });
+      findUnique.mockResolvedValueOnce({ id: 1, nickname: "닉네임", ...readyConsent, isAdmin: true, isSuspended: true, suspendedUntil });
+      await expect(requireAdmin()).rejects.toThrow("REDIRECT:/");
+    }
+  });
+
+  it("lets the administrator back in once the suspension has ended", async () => {
+    auth.mockResolvedValueOnce({ user: { id: "1" } });
+    findUnique.mockResolvedValueOnce({
+      id: 1, nickname: "닉네임", ...readyConsent, isAdmin: true, isSuspended: true, suspendedUntil: new Date(Date.now() - 1000),
+    });
+    await expect(requireAdmin()).resolves.toMatchObject({ id: 1, isAdmin: true });
   });
 });
