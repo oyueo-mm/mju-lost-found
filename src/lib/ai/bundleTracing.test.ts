@@ -20,10 +20,28 @@ describe("AI files in the function bundles", () => {
   });
 
   it("the CPU onnxruntime for linux/x64 only (no arm64, no other platform)", () => {
-    const ort = Object.values(includes)
+    const ortBinaries = Object.values(includes)
       .flat()
-      .filter((g) => g.includes("onnxruntime-node"));
-    expect(ort).toEqual(["./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**"]);
+      .filter((g) => g.includes("onnxruntime-node/bin"));
+    expect(ortBinaries).toEqual(["./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**"]);
+  });
+
+  // Release B: transformers >= 4.3 requires onnxruntime-node at runtime via
+  // createRequire(), which the tracer does not follow -- without these the
+  // deployed AI routes failed with "Cannot find module 'onnxruntime-node'".
+  it("the onnxruntime-node JS entry and onnxruntime-common ride along with the binaries", () => {
+    const apiPosts = includes["/api/posts"] ?? [];
+    expect(apiPosts).toEqual(
+      expect.arrayContaining([
+        "./node_modules/onnxruntime-node/package.json",
+        "./node_modules/onnxruntime-node/dist/**",
+        "./node_modules/onnxruntime-common/package.json",
+        "./node_modules/onnxruntime-common/dist/cjs/**",
+      ]),
+    );
+    const pkg = JSON.parse(readFileSync(path.join(process.cwd(), "node_modules/onnxruntime-node/package.json"), "utf8"));
+    expect(pkg.main).toBe("dist/index.js");
+    expect(Object.keys(pkg.dependencies ?? {})).toContain("onnxruntime-common");
   });
 
   it("excludes nothing (Turbopack builds ignore outputFileTracingExcludes)", () => {

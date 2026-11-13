@@ -92,8 +92,22 @@ const nextConfig: NextConfig = {
   // TensorRT providers (~300MB) its install downloads into linux/x64 are
   // deleted before the build (scripts/pruneOnnxRuntime.mjs), since an
   // include glob cannot leave single files out.
+  //
+  // Release B: @huggingface/transformers >= 4.3 loads onnxruntime-node with
+  // createRequire(import.meta.url)("onnxruntime-node") instead of a static
+  // import, which the tracer cannot follow -- the deployed functions then
+  // failed with "Cannot find module 'onnxruntime-node'" (Preview
+  // dpl_CYqLN5JU..., local `next start` unaffected). Its JS entry and the
+  // onnxruntime-common it requires are therefore listed explicitly too
+  // (a few hundred KB; still only the linux/x64 binaries).
   outputFileTracingIncludes: {
-    "/api/posts": ["./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**"],
+    "/api/posts": [
+      "./node_modules/onnxruntime-node/package.json",
+      "./node_modules/onnxruntime-node/dist/**",
+      "./node_modules/onnxruntime-common/package.json",
+      "./node_modules/onnxruntime-common/dist/cjs/**",
+      "./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**",
+    ],
     "/api/posts!(/**)": ["./models/**"],
     "/api/posts/\\[id\\]!(/**)": ["./models/**"],
   },
