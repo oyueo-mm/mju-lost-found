@@ -8,6 +8,7 @@ const requireUserForApi = vi.fn();
 const requireIdentityForApi = vi.fn();
 const searchPosts = vi.fn();
 const searchPostsAI = vi.fn();
+const searchPostsByImage = vi.fn();
 const searchUnifiedPosts = vi.fn();
 vi.mock("@/lib/posts/unifiedSearch", () => ({ searchUnifiedPosts }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: {} }));
@@ -27,6 +28,7 @@ vi.mock("@/lib/posts/http", async () => {
 vi.mock("@/lib/posts/aiService", () => ({
   searchPosts,
   searchPostsAI,
+  searchPostsByImage,
   createLostPost,
   createFoundPost,
 }));
@@ -474,5 +476,40 @@ describe("실명·학과 gate", () => {
     expect((await res.json()).code).toBe("identity_required");
     expect(requireIdentityForApi).toHaveBeenCalledWith(sessionUser);
     expect(createLostPost).not.toHaveBeenCalled();
+  });
+});
+
+// Release B (H-3): the file's own bytes must match its declared type before
+// anything is decoded; a disguised file is a 400, never a 502 from the decoder.
+describe("POST image/AI search -- magic-byte check (release B, H-3)", () => {
+  const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 0]);
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
+  const enc = (t: string) => new TextEncoder().encode(t);
+  const request = (mode: "image" | "ai", bytes: Uint8Array, type: string) => {
+    const form = new FormData();
+    form.append("image", new File([new Uint8Array(bytes)], "q", { type }));
+    return new NextRequest(`http://localhost/api/posts?mode=${mode}&type=lost`, { method: "POST", body: form });
+  };
+  const disguised: [string, Uint8Array, string][] = [
+    ["SVG labelled image/png", enc("<svg xmlns=\"http://www.w3.org/2000/svg\"><script>1</script></svg>"), "image/png"],
+    ["HEIF labelled image/jpeg", new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63, 0, 0]), "image/jpeg"],
+    ["PNG bytes labelled image/jpeg", PNG, "image/jpeg"],
+    ["truncated JPEG", new Uint8Array([0xff, 0xd8, 0xff]), "image/jpeg"],
+  ];
+  for (const mode of ["image", "ai"] as const) {
+    for (const [name, bytes, type] of disguised) {
+      it(`mode=${mode}: rejects ${name} with 400 before searching`, async () => {
+        const res = await POST(request(mode, bytes, type));
+        expect(res.status).toBe(400);
+        expect(searchPostsByImage).not.toHaveBeenCalled();
+        expect(searchPostsAI).not.toHaveBeenCalled();
+      });
+    }
+  }
+  it("lets a real JPEG through to the search", async () => {
+    searchPostsByImage.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 0, totalPages: 1 });
+    const res = await POST(request("image", JPEG, "image/jpeg"));
+    expect(res.status).toBe(200);
+    expect(searchPostsByImage).toHaveBeenCalledTimes(1);
   });
 });

@@ -71,6 +71,32 @@ describe("sanitizeStoredImage", () => {
     expect(await sanitizeStoredImage("post-images", "posts/lost/1/y.jpg")).toEqual({ ok: false, reason: "format_mismatch" });
   });
 
+  describe("decides the format from the bytes before sharp sees them (release B, H-3)", () => {
+    const enc = (s: string) => Buffer.from(s, "utf8");
+    it("refuses an SVG or HEIF file stored under an image name", async () => {
+      stored.set("posts/lost/1/s.png", enc('<svg xmlns="http://www.w3.org/2000/svg"><script>1</script></svg>'));
+      expect(await sanitizeStoredImage("post-images", "posts/lost/1/s.png")).toEqual({ ok: false, reason: "not_image" });
+      stored.set("chat/3/h.jpg", Buffer.from([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63, 0, 0, 0, 0]));
+      expect(await sanitizeStoredImage("chat-images", "chat/3/h.jpg")).toEqual({ ok: false, reason: "not_image" });
+      expect(update).not.toHaveBeenCalled();
+    });
+    it("refuses a real WebP stored as .jpg before decoding (MIME/extension disguise)", async () => {
+      stored.set("posts/lost/1/w.jpg", await photo("webp", false));
+      expect(await sanitizeStoredImage("post-images", "posts/lost/1/w.jpg")).toEqual({ ok: false, reason: "format_mismatch" });
+    });
+    it("still refuses a file whose header is right but whose body is corrupt", async () => {
+      const header = (await photo("jpeg", false)).subarray(0, 40);
+      stored.set("posts/lost/1/c.jpg", Buffer.concat([header, Buffer.alloc(64, 0x41)]));
+      expect(await sanitizeStoredImage("post-images", "posts/lost/1/c.jpg")).toMatchObject({ ok: false });
+      expect(update).not.toHaveBeenCalled();
+    });
+    it("keeps the pixel limit: an oversized but valid PNG is refused", async () => {
+      const huge = await sharp({ create: { width: 8000, height: 6000, channels: 3, background: "#000" } }).png({ compressionLevel: 9 }).toBuffer();
+      stored.set("posts/lost/1/huge.png", huge);
+      expect(await sanitizeStoredImage("post-images", "posts/lost/1/huge.png")).toEqual({ ok: false, reason: "not_image" });
+    });
+  });
+
   it("rejects an object that was never uploaded", async () => {
     expect(await sanitizeStoredImage("post-images", "posts/lost/1/missing.webp")).toEqual({ ok: false, reason: "missing" });
   });

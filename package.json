@@ -17,13 +17,13 @@
     "operations:production": "node scripts/db/approved-operation.mjs"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.2.0",
+    "@huggingface/transformers": "^4.3.2",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "@supabase/supabase-js": "^2.115.0",
-    "@vercel/functions": "3.10.1",
+    "@vercel/functions": "3.11.1",
     "fflate": "0.8.3",
-    "next": "16.3.4",
+    "next": "16.4.6",
     "next-auth": "^5.0.0-beta.32",
     "prisma": "^7.10.0",
     "qrcode": "1.5.4",
@@ -31,7 +31,7 @@
     "react-dom": "19.2.8",
     "sharp": "^0.35.5",
     "web-push": "^3.6.7",
-    "zod": "^4.5.4"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -41,7 +41,7 @@
     "@types/react-dom": "^19",
     "@types/web-push": "^3.6.4",
     "eslint": "^9",
-    "eslint-config-next": "16.3.4",
+    "eslint-config-next": "16.4.6",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^5.0.0"
@@ -50,8 +50,7 @@
     "prisma@7.10.0": true,
     "@prisma/engines@7.10.0": true,
     "unrs-resolver@1.12.2": true,
-    "onnxruntime-node@1.24.3": true,
-    "sharp@0.34.5": true,
+    "onnxruntime-node@1.30.0": true,
     "sharp@0.35.4": true,
     "protobufjs@7.6.6": true
   }

@@ -3,6 +3,7 @@ import sharp, { type Metadata } from "sharp";
 import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
 
 import { CHAT_IMAGES_BUCKET, MAX_IMAGE_SIZE_BYTES, POST_IMAGES_BUCKET } from "./config";
+import { sniffImageType } from "./magicBytes";
 
 // Server-side check of an image the browser uploaded straight to Storage
 // (signed upload URL), run before the image is attached to a post or a
@@ -51,6 +52,13 @@ export async function sanitizeStoredImage(
   if (error || !blob) return { ok: false, reason: "missing" };
   if (blob.size > MAX_IMAGE_SIZE_BYTES) return { ok: false, reason: "too_large" };
   const input = Buffer.from(await blob.arrayBuffer());
+
+  // Release B (H-3): decide the format from the bytes before sharp/libvips
+  // parses anything -- an SVG, HEIF or other file stored under a .jpg/.png
+  // name never reaches the decoder.
+  const sniffed = sniffImageType(input);
+  if (!sniffed) return { ok: false, reason: "not_image" };
+  if (sniffed !== CONTENT_TYPE[expected]) return { ok: false, reason: "format_mismatch" };
 
   let meta: Metadata;
   try {

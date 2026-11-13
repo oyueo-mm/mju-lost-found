@@ -1,5 +1,7 @@
 import { timed } from "@/lib/metrics/record";
 import path from "node:path";
+import { MAX_IMAGE_SIZE_BYTES } from "@/lib/images/config";
+import { UnsupportedImageBytesError, sniffBlobImageType } from "@/lib/images/magicBytes";
 import { ONNX_SESSION_OPTIONS } from "./onnxSessionOptions";
 
 // Server-only: pulls in @huggingface/transformers + onnxruntime-node (a
@@ -113,16 +115,33 @@ export class TransformersImageEmbeddingProvider implements ImageEmbeddingProvide
   // corrupt file all surface as a plain rejected promise here -- the
   // caller (embedPostImageBestEffort / searchPostsByImage) is what decides
   // what to do with that failure, not this class's concern.
+  //
+  // Release B (H-3): the bytes are fetched here and checked before the
+  // decoder sees them -- only JPEG/PNG/WebP by their own magic bytes, and
+  // never more than the upload size limit -- so an SVG/HEIF/other file
+  // (whatever its Content-Type or URL says) never reaches libvips.
   async embed(input: string | Blob): Promise<number[]> {
     return timed("ai:image-embed", async () => {
+      const blob = typeof input === "string" ? await fetchImageBlob(input) : input;
+      if (blob.size > MAX_IMAGE_SIZE_BYTES) throw new UnsupportedImageBytesError();
+      if (!(await sniffBlobImageType(blob))) throw new UnsupportedImageBytesError();
       const { processor, model } = await TransformersImageEmbeddingProvider.getSession();
       const { RawImage } = await import("@huggingface/transformers");
-      const image = await RawImage.read(input);
+      const image = await RawImage.read(blob);
       const inputs = await processor(image);
       const { pooler_output } = await model(inputs);
       return normalize(Array.from(pooler_output.data));
     });
   }
+}
+
+// Only http(s) image URLs are fetched (post photos live in Storage).
+async function fetchImageBlob(url: string): Promise<Blob> {
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new UnsupportedImageBytesError();
+  const response = await fetch(parsed);
+  if (!response.ok) throw new Error(`Image fetch failed with status ${response.status}`);
+  return response.blob();
 }
 
 let defaultProvider: ImageEmbeddingProvider | undefined;

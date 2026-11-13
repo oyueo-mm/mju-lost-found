@@ -24,6 +24,7 @@ import { createFoundPost, createLostPost, searchPosts, searchPostsAI, searchPost
 import { searchUnifiedPosts } from "@/lib/posts/unifiedSearch";
 import { compareForSort } from "@/lib/posts/service";
 import { ALLOWED_IMAGE_CONTENT_TYPES, MAX_IMAGE_SIZE_BYTES, isAllowedImageContentType } from "@/lib/images/config";
+import { sniffBlobImageType } from "@/lib/images/magicBytes";
 import { getCurrentUser } from "@/lib/auth/session";
 import { clientIpFrom, enforceRateLimit, rateLimitTierFor } from "@/lib/rateLimit";
 
@@ -111,6 +112,10 @@ async function handleImageSearch(request: NextRequest) {
   if (image.size > MAX_IMAGE_SIZE_BYTES) {
     return jsonError(400, "이미지 용량은 10MB를 넘을 수 없습니다.");
   }
+  // Release B (H-3): the declared type must match the file's own bytes.
+  if ((await sniffBlobImageType(image)) !== image.type) {
+    return jsonError(400, `${ALLOWED_IMAGE_CONTENT_TYPES.join(", ")} 형식의 이미지만 업로드할 수 있습니다.`);
+  }
 
   const page = parsePageParam(searchParams.get("page"));
   const limit = parseLimitParam(searchParams.get("limit"));
@@ -168,6 +173,10 @@ async function handleAiSearch(request: NextRequest) {
     }
     if (rawImage.size > MAX_IMAGE_SIZE_BYTES) {
       return jsonError(400, "이미지 용량은 10MB를 넘을 수 없습니다.");
+    }
+    // Release B (H-3): the declared type must match the file's own bytes.
+    if ((await sniffBlobImageType(rawImage)) !== rawImage.type) {
+      return jsonError(400, `${ALLOWED_IMAGE_CONTENT_TYPES.join(", ")} 형식의 이미지만 업로드할 수 있습니다.`);
     }
     image = rawImage;
   }
