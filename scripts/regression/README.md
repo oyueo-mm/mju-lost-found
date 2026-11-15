@@ -44,3 +44,13 @@ node --env-file=.env.preview.local scripts/operations/verify-image-jobs.mjs
 독립 신규 계정과 글만 사용한다. 4개 프로세스의 중복 억제, 동일 입력 재사용, 최종 시도 중단 복구, 실제 자식 worker 강제 종료, 실패 재시도, 사진 교체·추천 캐시 무효화, 사진 제거 후 오래된 벡터 차단을 검사한다. 실제 종료 검사는 이 스크립트가 생성한 자식 프로세스만 종료하며, 기다리는 시간을 줄이기 위해 해당 임시 작업의 lease 만료 시각만 앞당긴다. 기존 사용자·서비스 프로세스를 종료하지 않는다.
 
 이 검사의 모델은 자식 프로세스 내부 test double이다. 호출 횟수와 저장 벡터를 확인하는 검사이며 배포된 실제 모델 품질을 대신하지 않는다. 배포된 Preview에서 실제 AI/이미지 검색과 로그인 상태 사진 첨부도 따로 확인한다. 테스트용 런타임 우회 플래그나 임의 모델 선택 API를 서비스에 추가하지 않는다. 마지막에 신규 글·작업·테스트 캐시·카운터·계정을 정리한다.
+
+D-2 보완 검사는 구형 D-1 저장·구형 D-2 claim/완료·Runtime 일시 정지도 포함한다. 따라서 16단계 회귀·실모델 검사와 순차 실행한다. 사진 첨부 after()가 이미 lease를 보유할 수 있어 08단계는 최대 30초 동안 완료를 기다린 뒤 `embedded=true`와 실제 DB의 현재 입력·768차원·completed 상태를 모두 요구한다. pending이나 in_progress만으로 통과시키지 않는다.
+
+배포된 실제 모델 검사는 다음 명령을 사용한다. 신규 계정·사진 1개를 생성 즉시 실행별 명세에 기록하고 마지막에 원본 부재까지 확인한다.
+
+```powershell
+node --env-file=.env.preview.local scripts/operations/verify-deployed-image-job.mjs
+```
+
+[배포 전환·롤백 절차](../../docs/operations/release-d2-transition.md)의 `release-probes.mjs`, `release-d2-health.mjs`, `release-logs.mjs`는 Production에서 데이터를 생성하지 않는 별도 검사다. 16단계 자체는 쓰기 검사가 있으므로 **Preview에서만** 실행한다.
