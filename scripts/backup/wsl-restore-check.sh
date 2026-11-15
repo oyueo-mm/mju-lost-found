@@ -3,7 +3,9 @@
 # PostgreSQL + pgvector binaries come from the official Ubuntu packages and are
 # not subject to Windows Smart App Control. Called by protect.ps1:
 #
-#   wsl.exe -d Ubuntu -e bash <repo>/scripts/backup/wsl-restore-check.sh <windows backup dir> <windows repo dir>
+#   wsl.exe -d Ubuntu -e bash <repo>/scripts/backup/wsl-restore-check.sh <windows backup dir> <windows repo dir> [<windows migration dir> ...]
+#
+# Migration dirs, if given, are rehearsed on the restored copy (verify-restore.mjs --migrations).
 #
 # PostgreSQL lives unpacked (no root, no service) under $MJUFIND_PG_ROOT
 # (default ~/mjufind-pg/root, made with `apt-get download postgresql-18
@@ -13,13 +15,16 @@
 # stopped and deleted on exit -- whatever the outcome.
 set -euo pipefail
 
-if [ "$#" -ne 2 ]; then echo "usage: wsl-restore-check.sh <windows backup dir> <windows repo dir>" >&2; exit 2; fi
+if [ "$#" -lt 2 ]; then echo "usage: wsl-restore-check.sh <windows backup dir> <windows repo dir> [<windows migration dir> ...]" >&2; exit 2; fi
 PGROOT="${MJUFIND_PG_ROOT:-$HOME/mjufind-pg/root}"
 BIN="$PGROOT/usr/lib/postgresql/18/bin"
 export LD_LIBRARY_PATH="$PGROOT/usr/lib/x86_64-linux-gnu"
 PORT="${MJUFIND_RESTORE_PORT:-55439}"
 DIR="$(wslpath -a "$1")"
 REPO="$(wslpath -a "$2")"
+shift 2
+MIGRATIONS=()
+for m in "$@"; do MIGRATIONS+=("$(wslpath -a "$m")"); done
 [ -x "$BIN/postgres" ] || { echo "PostgreSQL for WSL not found under $PGROOT" >&2; exit 3; }
 [ -f "$DIR/SHA256SUMS" ] || { echo "not a backup folder: $DIR" >&2; exit 2; }
 
@@ -41,4 +46,4 @@ trap cleanup EXIT
 "$BIN/createdb" -h 127.0.0.1 -p "$PORT" -U postgres verify
 echo "restore engine: $("$BIN/postgres" --version), pgvector $(ls "$PGROOT/usr/share/postgresql/18/extension/" | sed -n 's/^vector--\([0-9.]*\)\.sql$/\1/p' | sort -V | tail -1)"
 cd "$REPO"
-PG_BIN="$BIN" VERIFY_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/verify" node scripts/backup/verify-restore.mjs "$DIR"
+PG_BIN="$BIN" VERIFY_DATABASE_URL="postgresql://postgres@127.0.0.1:$PORT/verify" node scripts/backup/verify-restore.mjs "$DIR" ${MIGRATIONS[@]+--migrations "${MIGRATIONS[@]}"}

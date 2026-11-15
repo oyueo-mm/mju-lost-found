@@ -19,9 +19,13 @@
 #
 # Restore check only, of an archive made earlier (nothing sealed or deleted):
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup\protect.ps1 -Enc <file.tar.enc>
+# Migration rehearsal on that restored throwaway copy (each folder's
+# migration.sql applied in order after the restore check; no marker written):
+#   ... protect.ps1 -Enc <file.tar.enc> -Rehearse <migrationDir>[,<dir>...]
 param(
   [string]$Dir = "",
   [string]$Enc = "",
+  [string[]]$Rehearse = @(),
   [switch]$RemovePlain,
   [string]$Repo = "",
   [string]$WslDistro = "Ubuntu",
@@ -34,10 +38,13 @@ Import-Module (Join-Path $PSScriptRoot "BackupSecret.psm1") -Force
 $verifyOnly = [bool]$Enc
 if ($verifyOnly) {
   if ($Dir -or $RemovePlain) { throw "-Enc checks an existing archive only (no -Dir / -RemovePlain)" }
+  # (powershell -File hands a comma list over as one string)
+  $Rehearse = @($Rehearse | ForEach-Object { $_ -split "," } | Where-Object { $_ } | ForEach-Object { (Resolve-Path $_).Path })
   $Enc = (Resolve-Path $Enc).Path
   $Dir = $Enc -replace "\.tar\.enc$", ""
 } else {
   if (-not $Dir) { throw "give -Dir <backupDir> (encrypt + check) or -Enc <file.tar.enc> (check only)" }
+  if ($Rehearse.Count) { throw "-Rehearse needs -Enc (an existing archive)" }
   $Dir = (Resolve-Path $Dir).Path.TrimEnd("\")
 }
 if (-not $Log) { $Log = Join-Path (Split-Path $Dir -Parent) "protect-backup.log" }
@@ -80,11 +87,12 @@ try {
   }
 
   Log "restore check of $enc (WSL $WslDistro)"
-  $o = Run "wsl.exe" @("-d", $WslDistro, "-e", "bash", (& wsl.exe -d $WslDistro -e wslpath -a (Join-Path $Repo "scripts\backup\wsl-restore-check.sh")).Trim(), $restored, $Repo) "restore check"
+  $o = Run "wsl.exe" (@("-d", $WslDistro, "-e", "bash", (& wsl.exe -d $WslDistro -e wslpath -a (Join-Path $Repo "scripts\backup\wsl-restore-check.sh")).Trim(), $restored, $Repo) + $Rehearse) "restore check"
   Log $o.Trim()
   if ($o -notmatch "RESTORE VERIFIED") { throw "restore not verified" }
   $tables = if ($o -match "tables: (\d+), row-count mismatches: (\d+)") { @{ tables = [int]$matches[1]; mismatches = [int]$matches[2] } } else { @{} }
   $images = if ($o -match "image paths referenced: (\d+), missing from backup: (\d+)") { @{ referenced = [int]$matches[1]; missing = [int]$matches[2] } } else { @{} }
+  if ($Rehearse.Count) { Log "migration rehearsal finished on the throwaway copy (no marker written)"; return }
   [pscustomobject]@{ archive = (Split-Path $enc -Leaf); verifiedAt = (Get-Date -Format o); checksums = "ok"; tables = $tables; images = $images; engine = "wsl:$WslDistro" } |
     ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 $marker
   Log "RESTORE VERIFIED from the encrypted file: $enc"
