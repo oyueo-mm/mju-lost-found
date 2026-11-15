@@ -4,30 +4,33 @@ import {spawnSync} from "node:child_process";
 import {readFileSync,writeFileSync,mkdirSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {POST_IMAGE_REMOTE_PATTERNS} from "../../src/lib/images/optimizationHosts.mjs";
-const [target,expectedSha,expectedDeployment]=process.argv.slice(2);
+const [target,expectedSha,expectedDeployment,baselineFlag]=process.argv.slice(2);
 if(!["production","preview"].includes(target)||!/^([a-f0-9]{40})$/.test(expectedSha??"")||!/^dpl_[A-Za-z0-9]+$/.test(expectedDeployment??""))throw new Error("Usage: release-probes.mjs production|preview <SHA> <deployment>");
+const baseline=baselineFlag==="--baseline-d1";
+if(baselineFlag&&(!baseline||target!=="production"||expectedSha!=="cb3bb71184d1c7d534827cdf7660a15cede81569"))throw new Error("Baseline mode is restricted to the known D1 production commit");
 const base=target==="production"?"https://mju-find.vercel.app":"https://mju-lost-found-preview.vercel.app";
 const results=[];
 const check=(name,passed,details={})=>{results.push({name,passed,...details});if(!passed)throw new Error(`Probe failed: ${name}`);};
 async function request(path,image=false){
-  const start=performance.now();let status,text;
+  const start=performance.now();let status,text,measuredMs;
   if(target==="production"){
     const form=image?new FormData():null;if(form)form.set("image",new Blob([readFileSync("docs/ai-eval-seed/query-images/R12.jpg")],{type:"image/jpeg"}),"query.jpg");
     const r=await fetch(base+path,{method:image?"POST":"GET",body:form,redirect:"manual",signal:AbortSignal.timeout(90000)});status=r.status;text=await r.text();
   }else{
     // path is constructed only from the fixed checks below and encoded DB URLs.
     if(/["\r\n`$]/.test(path))throw new Error("Unexpected probe path");
-    const command=`npx --no-install vercel curl "${path}" --deployment ${base} -- --silent --show-error --max-time 90 --write-out "\\nPROBE_STATUS %{http_code}"${image?' --form "image=@docs/ai-eval-seed/query-images/R12.jpg;type=image/jpeg"':''}`;
+    const command=`npx --no-install vercel curl "${path}" --deployment ${base} -- --silent --show-error --max-time 90 --write-out "\\nPROBE_STATUS %{http_code} %{time_total}"${image?' --form "image=@docs/ai-eval-seed/query-images/R12.jpg;type=image/jpeg"':''}`;
     const r=spawnSync(command,{shell:true,encoding:"utf8",windowsHide:true,maxBuffer:4*1024*1024});if(r.status)throw new Error("Preview probe transport failed");
-    const match=/\sPROBE_STATUS (\d{3})\s*$/.exec(r.stdout);if(!match)throw new Error("Probe status missing");status=Number(match[1]);text=r.stdout.slice(0,match.index);
+    const match=/\sPROBE_STATUS (\d{3}) ([\d.]+)\s*$/.exec(r.stdout);if(!match)throw new Error("Probe status missing");status=Number(match[1]);measuredMs=Math.round(Number(match[2])*1000);text=r.stdout.slice(0,match.index);
   }
   let json;try{json=JSON.parse(text);}catch{}
-  return {status,json,ms:Math.round(performance.now()-start)};
+  return {status,json,ms:measuredMs??Math.round(performance.now()-start)};
 }
 try{
   const version=await request("/api/version");check("version",version.status===200&&version.json?.gitSha===expectedSha&&version.json?.deploymentId===expectedDeployment,{version:version.json});
   for(const path of ["/","/login","/api/auth/session","/policy/privacy"]){const r=await request(path);check(`public ${path}`,r.status===200,{status:r.status});}
-  for(const path of ["/api/chat","/api/admin/reports","/api/admin/reports/1/evidence/0","/api/posts?mode=embedding-maintenance"]){const r=await request(path);check(`authentication ${path}`,[401,403].includes(r.status),{status:r.status});}
+  for(const path of ["/api/chat","/api/admin/reports","/api/admin/reports/1/evidence/0"]){const r=await request(path);check(`authentication ${path}`,[401,403].includes(r.status),{status:r.status});}
+  const maintenance=await request("/api/posts?mode=embedding-maintenance");check(baseline?"D2 maintenance absent in D1":"maintenance authentication",baseline?maintenance.status===400:maintenance.status===401,{status:maintenance.status});
   for(const mode of ["keyword","semantic","unified","image"]){
     const r=await request(`/api/posts?type=found&mode=${mode}&limit=5${mode==="image"?"":`&q=${encodeURIComponent("검은 지갑")}`}`,mode==="image");
     const rows=r.json?.data;check(`search ${mode}`,r.status===200&&Array.isArray(rows),{status:r.status,ms:r.ms,count:rows?.length,rankHash:Array.isArray(rows)?createHash("sha256").update(JSON.stringify(rows.map(p=>({id:p.id,type:p.type??p.postType,score:p.score??p.aiSimilarity??p.similarity??null})))).digest("hex"):null});
