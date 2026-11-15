@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import { timingSafeEqual } from "node:crypto";
-import { drainImageJobs } from "@/lib/ai/imageJob";
+import { drainImageJobs, recoverImageJobsAfterRequest } from "@/lib/ai/imageJob";
 export const maxDuration = 120;
 
 import {
@@ -75,7 +75,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   if (admission.unavailable) return admission.unavailable;
 
   // Rejected/invalid requests must not amplify into queue reads or inference.
-  after(async () => { try { await drainImageJobs(1); } catch (error) { console.error("Image job recovery unavailable:", error instanceof Error ? error.name : "Error"); } });
+  after(async () => { try { await recoverImageJobsAfterRequest(); } catch (error) { console.error("Image job recovery unavailable:", error instanceof Error ? error.name : "Error"); } });
 
   return NextResponse.json({
     data: result.items,

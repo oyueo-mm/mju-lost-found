@@ -2214,6 +2214,15 @@ model PostReturn {
   @@map("PostReturn")
 }
 
+// Durable rollout switch: queue writes continue while old functions drain.
+model ImageEmbeddingRuntime {
+  id Boolean @id @default(true)
+  enabled Boolean @default(false)
+  resumeAt DateTime? @db.Timestamp(3) @map("resume_at")
+
+  @@map("ImageEmbeddingRuntime")
+}
+
 // ---------- Web push (chat messages only) ----------
 // One row per browser/device subscription (endpoint is unique). Keys are the
 // browser's public ones; the VAPID private key lives only in the server env.

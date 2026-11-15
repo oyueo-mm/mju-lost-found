@@ -14,7 +14,7 @@ const job = () => ({ post_type: "lost", post_id: 1, owner_id: 7, generation: 1, 
 beforeEach(() => {
   for (const mock of [query, execute, txQuery, txExecute, user, admission, tier, embed, invalidate, transaction]) mock.mockReset();
   transaction.mockImplementation(async fn => fn({ $queryRaw: txQuery, $executeRaw: txExecute }));
-  query.mockResolvedValueOnce([{ image_url: url, user_id: 7, has_vector: false }]).mockResolvedValueOnce([job()]).mockImplementationOnce(async (_sql, token) => { lease = token; return [job()]; });
+  query.mockResolvedValueOnce([{ image_url: url, user_id: 7, has_vector: false, worker_ready: true }]).mockResolvedValueOnce([job()]).mockImplementationOnce(async (_sql, token) => { lease = token; return [job()]; });
   txQuery.mockResolvedValueOnce([{ image_url: url }]).mockImplementationOnce(async () => [job()]);
   user.mockResolvedValue({ id: 7, isAdmin: false, deletedAt: null, withdrawnAt: null, isSuspended: false });
   admission.mockResolvedValue({ ok: true }); tier.mockResolvedValue("user");
@@ -24,19 +24,24 @@ beforeEach(() => {
 describe("controlled image embedding", () => {
   it("computes compatible vectors and invalidates cache only after fenced commit", async () => {
     expect(await runImageJob("lost", 1, true)).toEqual({ status: "completed" });
-    expect(embed).toHaveBeenCalledWith(url); expect(txExecute).toHaveBeenCalledTimes(2);
+    expect(embed).toHaveBeenCalledWith(url); expect(txExecute).toHaveBeenCalledTimes(3);
     expect(invalidate).toHaveBeenCalledWith("lost", 1, expect.any(Object));
-    expect(invalidate.mock.invocationCallOrder[0]).toBeGreaterThan(txExecute.mock.invocationCallOrder[0]);
-    expect(invalidate.mock.invocationCallOrder[0]).toBeLessThan(txExecute.mock.invocationCallOrder[1]);
+    expect(invalidate.mock.invocationCallOrder[0]).toBeGreaterThan(txExecute.mock.invocationCallOrder[1]);
+    expect(invalidate.mock.invocationCallOrder[0]).toBeLessThan(txExecute.mock.invocationCallOrder[2]);
   });
   it("reuses a completed current input without budget or inference", async () => {
-    query.mockReset().mockResolvedValueOnce([{ image_url: url, user_id: 7, has_vector: true }]).mockResolvedValueOnce([{ ...job(), completed_hash: imageInputHash(url), state: "completed" }]);
+    query.mockReset().mockResolvedValueOnce([{ image_url: url, user_id: 7, has_vector: true, worker_ready: true }]).mockResolvedValueOnce([{ ...job(), completed_hash: imageInputHash(url), state: "completed" }]);
     expect(await runImageJob("lost", 1)).toEqual({ status: "reused" });
     expect(embed).not.toHaveBeenCalled(); expect(admission).not.toHaveBeenCalled();
   });
   it("coalesces an active lease without inference or budget", async () => {
-    query.mockReset().mockResolvedValueOnce([{ image_url: url, user_id: 7 }]).mockResolvedValueOnce([job()]).mockResolvedValueOnce([]);
+    query.mockReset().mockResolvedValueOnce([{ image_url: url, user_id: 7, worker_ready: true }]).mockResolvedValueOnce([job()]).mockResolvedValueOnce([]);
     expect(await runImageJob("lost", 1)).toEqual({ status: "in_progress" }); expect(embed).not.toHaveBeenCalled(); expect(admission).not.toHaveBeenCalled();
+  });
+  it("keeps work pending without admission or inference during deployment drain", async () => {
+    query.mockReset().mockResolvedValueOnce([{ image_url: url, user_id: 7, worker_ready: false }]);
+    expect(await runImageJob("lost", 1, true)).toEqual({ status: "pending" });
+    expect(execute).not.toHaveBeenCalled(); expect(embed).not.toHaveBeenCalled(); expect(admission).not.toHaveBeenCalled();
   });
   it.each(["limited", "unavailable"])("never infers when admission is %s", async reason => {
     admission.mockResolvedValueOnce({ ok: false, reason, retryAfterSeconds: 5 });

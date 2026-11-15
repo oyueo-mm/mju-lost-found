@@ -1,6 +1,5 @@
 import { buildEmbeddingText, getEmbeddingProvider, type EmbeddableFields } from "./embedding";
-import { getImageEmbeddingProvider } from "./imageEmbedding";
-import { saveEmbedding, saveImageEmbedding } from "./vectorSearch";
+import { saveEmbedding } from "./vectorSearch";
 import type { PostType } from "@/lib/posts/schema";
 
 // The four fields whose change should trigger re-embedding a post -- see
@@ -33,28 +32,21 @@ export async function embedPostBestEffort(
   }
 }
 
-// Phase 15-2: image counterpart of embedPostBestEffort() above -- same
-// "post-commit, best-effort, never blocks or fails the mutation it
-// follows" policy. Only ever called from src/lib/images/service.ts
-// (setPostImage), right after that post's imageUrl has already been
-// written -- a post whose image-embedding generation fails here still has
-// its new image and is fully usable; it simply doesn't show up in "이 사진과
-// 비슷한 게시물" until a future successful image replace regenerates it (no
-// backfill script exists for images yet, matching this phase's scope --
-// see docs/IMAGE_EMBEDDING_POC.md). The failure itself is logged
-// server-side (for operators to notice a systemic problem, e.g. the model
-// files missing) but never surfaced to the client -- setPostImage's
-// return value doesn't carry it at all, so no stack trace or internal
-// error detail can leak into the HTTP response.
+// Compatibility entry point for older operational tools. The DB's current
+// image and durable job are authoritative; a caller's stale URL cannot start
+// independent inference. Lazy import avoids a posts/recommendations cycle at
+// module initialization. The text embedding path above stays unchanged.
 export async function embedPostImageBestEffort(
   type: PostType,
   id: number,
   imageUrl: string,
 ): Promise<void> {
+  void imageUrl; // retained for source compatibility with existing seed tools
   try {
-    const vector = await getImageEmbeddingProvider().embed(imageUrl);
-    await saveImageEmbedding(type, id, vector);
+    const { runImageJob } = await import("./imageJob");
+    const result = await runImageJob(type, id);
+    if (result.status === "failed") console.error("Image embedding job failed");
   } catch (error) {
-    console.error(`Failed to generate image embedding for ${type} post ${id}:`, error);
+    console.error("Image embedding job unavailable:", error instanceof Error ? error.name : "Error");
   }
 }

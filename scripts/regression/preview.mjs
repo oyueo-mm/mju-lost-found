@@ -102,7 +102,18 @@ try {
     must((await api(null, "GET", `/post/${postId}?type=lost`)).status === 200);
   });
   await step("08 image embedding recompute", async () => {
-    const r = await api(0, "PUT", `/api/posts/${postId}?type=lost`); must(r.status === 200 && r.data?.embedded === true);
+    // The attach after() may already own the lease. Wait for actual completion,
+    // never accept in_progress/pending as a successful embedding test.
+    let completed=false;
+    for(let i=0;i<30;i++){
+      const r=await api(0,"PUT",`/api/posts/${postId}?type=lost`);must(r.status===200);
+      if(r.data?.embedded===true){completed=true;break;}
+      must(["in_progress","pending"].includes(r.data?.jobStatus));
+      await new Promise(resolve=>setTimeout(resolve,1000));
+    }
+    must(completed);
+    const vector=(await prisma.$queryRaw`SELECT vector_dims(p."imageEmbedding") AS dimensions,j.state,j.desired_hash=j.completed_hash AS current FROM "LostPost" p JOIN "ImageEmbeddingJob" j ON j.post_type='lost' AND j.post_id=p.id WHERE p.id=${postId}`)[0];
+    must(vector?.dimensions===768&&vector.state==="completed"&&vector.current===true);
   });
   await step("09 keyword, semantic, unified, image search", async () => {
     for (const mode of ["keyword", "semantic", "unified"]) {

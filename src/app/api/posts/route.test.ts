@@ -1,6 +1,7 @@
 vi.mock("next/server", async () => ({ ...await vi.importActual("next/server"), after: vi.fn() }));
 const drainImageJobs = vi.fn();
-vi.mock("@/lib/ai/imageJob", () => ({ drainImageJobs }));
+const recoverImageJobsAfterRequest = vi.fn();
+vi.mock("@/lib/ai/imageJob", () => ({ drainImageJobs, recoverImageJobsAfterRequest }));
 import { NextRequest, NextResponse, after } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

@@ -132,19 +132,9 @@ export const PATCH = withErrorHandling(
   },
 );
 
-// Phase 15-2, internal-only: recomputes this post's image embedding from
-// its *current* imageUrl (never a client-supplied one -- there is no
-// request body at all). Not a public feature in its own right; exists so
-// POST /api/posts/[id]/image can trigger image-embedding computation via
-// an internal request to *this* route, which already carries the ONNX
-// runtime + model files in its Vercel function bundle (see this file's
-// `runtime = "nodejs"` above and next.config.ts's outputFileTracingIncludes)
-// -- the image-attach route's own bundle deliberately does not, since
-// giving it that same tracing entry was confirmed (via a real Vercel
-// deployment) to push the Hobby plan's 12-Serverless-Function cap. Same
-// auth/ownership gate as PATCH/DELETE above; a caller who isn't signed in
-// or doesn't own the post can't trigger this for someone else's post, and
-// a post with no image simply has nothing to embed.
+// Owner-requested recompute of the DB's current image through the shared job
+// controller. Image attachment calls the same controller directly in after();
+// no origin/Host-derived HTTP callback or forwarded cookie remains.
 export const PUT = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const auth = await requireUserForApi();
