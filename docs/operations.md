@@ -116,6 +116,27 @@ Supabase Free에는 **자동 백업이 없다.** 백업은 운영자가 직접 �
   → "MJU Find daily backup": 매일 04:00 + 로그인 10분 후, 놓치면 켜진 뒤 실행, 중복 실행 무시, 최대 2시간.
   → "MJU Find backup watchdog": 매일 13:00 + 로그인 2시간 후. 검증된 최신 자동 백업이 36시간보다 오래되면(작업이 아예 안 돈
     경우 포함) 경고 창과 `backup-watchdog.log`. 이 사용자가 로그인해 있을 때만 실행(자격 증명 관리자 접근).
+- **백업 전용 작업 트리**(2026-11-15): 작업 스케줄러는 개발 체크아웃이 아니라 `C:proj_claudemju-find-backup-ops`(브랜치
+  `ops/backup`, git worktree)를 실행한다. 개발 중 브랜치를 바꿔도 백업 코드는 바뀌지 않고, 같은 브랜치는 두 곳에서 체크아웃할 수
+  없어 실수로 덮어쓸 수 없다. `register-backup.ps1`은 `ops/backup`이 아니면 등록을 거부하고, 실행마다 코드 브랜치·커밋을
+  `backup-status.json`과 `backup.log`에 남긴다.
+  ```
+  git worktree add -b ops/backup C:proj_claudemju-find-backup-ops <검토된 커밋>
+  cd C:proj_claudemju-find-backup-ops; npm ci --omit=dev --ignore-scripts   # pg, supabase-js, dotenv만 필요
+  New-Item -ItemType HardLink -Path .env.operations-production -Target C:proj_claudemju-lost-found-vercel.env.operations-production
+  powershell -NoProfile -ExecutionPolicy Bypass -File scriptsackupegister-backup.ps1
+  ```
+  갱신: 백업 코드가 바뀌어 검토가 끝난 커밋으로만 `git -C C:proj_claudemju-find-backup-ops merge --ff-only <커밋>` →
+  `npm ci --omit=dev --ignore-scripts` → 위 등록 재실행. 운영 자격증명 파일은 하드 링크(내용 하나)라 원본을 편집하면 함께 바뀐다.
+  원본 파일을 새로 만들어 교체했다면 링크를 다시 만든다.
+  새 개발 브랜치는 백업 복구 커밋(`fix/backup-recovery`)을 포함한 커밋에서 만든다(구 `weekly.ps1` 시절 커밋에서 분기하면
+  운영 문서·실행기 수정이 빠진다).
+- 다음 정기 실행 확인: `backup-status.json`의 `lastSuccessAt`·`codeCommit`, `backup.log`의 `done auto-날짜`, 감시 작업
+  `backup-watchdog.log`의 `ok:`. 실패하거나 36시간 넘게 검증되지 않으면 경고 창이 뜬다.
+- 행 수 검증 범위: `rowcounts.json`은 `public`의 테이블(`pg_tables`, 2026-11-15 기준 51개)만 센다. 카탈로그의 52개는 뷰
+  `OperationalMetricDaily`를 포함한 수이며, 뷰 정의는 `pg_dump`에 포함되어 복원 시 함께 만들어진다.
+- 장기 과제: 백업 전용 **읽기 전용 DB 역할**(현재는 운영 자격증명 + 읽기 전용 트랜잭션·정적 테스트로 보장)과,
+  암호화본의 **별도 장치 보관 자동화**(아래 수동 절차를 정기 작업으로).
 - 실패 확인과 복구: `backup.log`의 `FAILED:` 줄, 실패 시 메시지 창(작업을 붙잡지 않음), `backup-status.json`의 `lastError`.
   | 로그 | 원인 | 조치 |
   |---|---|---|

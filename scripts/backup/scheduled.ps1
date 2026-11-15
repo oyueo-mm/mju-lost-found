@@ -15,7 +15,10 @@
 # - Retention (7 daily / 4 weekly / 3 monthly, retention.mjs) prunes only
 #   verified auto-* archives, and only after THIS run was restore-verified.
 param(
-  [string]$Repo = "C:\proj_claude\mju-lost-found-vercel",
+  # The checkout this script itself lives in -- the dedicated backup worktree
+  # (C:\proj_claude\mju-find-backup-ops, branch ops/backup), so switching
+  # branches in the development checkout never changes the backup code.
+  [string]$Repo = "",
   [string]$Out = "$env:USERPROFILE\mju-lost-found-backups",
   [string]$PgBin = "$env:USERPROFILE\pgsql-edb\18.7\pgsql\bin",
   [string]$ProjectRef = "tmifqt",
@@ -26,6 +29,7 @@ param(
   [switch]$Quiet
 )
 $ErrorActionPreference = "Stop"
+if (-not $Repo) { $Repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path }
 Import-Module (Join-Path $PSScriptRoot "BackupSecret.psm1") -Force
 New-Item -ItemType Directory -Force $Out | Out-Null
 $log = Join-Path $Out "backup.log"
@@ -53,9 +57,12 @@ $mutex = New-Object System.Threading.Mutex($false, "Local\MJUFindScheduledBackup
 if (-not $mutex.WaitOne(0)) { Log "skip: another backup run is in progress"; exit 0 }
 try {
   Set-Location $Repo
-  Save-Status @{ lastAttemptAt = (Get-Date -Format o); lastAttemptName = $name }
+  $codeBranch = (& git -C $Repo rev-parse --abbrev-ref HEAD 2>$null)
+  $codeCommit = (& git -C $Repo rev-parse --short HEAD 2>$null)
+  Save-Status @{ lastAttemptAt = (Get-Date -Format o); lastAttemptName = $name; codeRepo = $Repo; codeBranch = $codeBranch; codeCommit = $codeCommit }
   if (-not $Force -and (Test-Path "$enc.verified.json")) { Log "skip: $name is already restore-verified"; exit 0 }
-  Log "start $name"
+  Log "start $name (code $codeBranch@$codeCommit in $Repo)"
+  if ($codeBranch -ne "ops/backup") { Log "warning: not running from the ops/backup worktree" }
   if (-not (Test-BackupPassphrase -Target $CredentialTarget)) { throw "backup passphrase not in Windows Credential Manager (run Set-BackupPassphrase)" }
   foreach ($tool in "pg_dump", "pg_restore") {
     $exe = Join-Path $PgBin "$tool.exe"

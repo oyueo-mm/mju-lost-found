@@ -11,10 +11,23 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup\register-backup.ps1
 param(
   [string]$At = "04:00",
-  [string]$WatchAt = "13:00"
+  [string]$WatchAt = "13:00",
+  [switch]$AllowDevCheckout
 )
 $ErrorActionPreference = "Stop"
 Import-Module (Join-Path $PSScriptRoot "BackupSecret.psm1") -Force
+# Register only from the dedicated backup worktree (branch ops/backup), never
+# from a development checkout whose branch changes all the time:
+#   git worktree add -b ops/backup C:\proj_claude\mju-find-backup-ops <commit>
+# (setup and update steps: docs/operations.md, "백업 전용 작업 트리").
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$branch = (& git -C $repoRoot rev-parse --abbrev-ref HEAD 2>$null)
+if ($branch -ne "ops/backup" -and -not $AllowDevCheckout) {
+  throw "register from the ops/backup worktree (this checkout is on '$branch'); see docs/operations.md"
+}
+foreach ($required in ".env.operations-production", "node_modules\pg", "node_modules\@supabase\supabase-js", "node_modules\dotenv") {
+  if (-not (Test-Path (Join-Path $repoRoot $required))) { throw "missing in ${repoRoot}: $required (see docs/operations.md)" }
+}
 if (-not (Test-BackupPassphrase)) { throw "먼저 Set-BackupPassphrase로 백업 암호를 저장하세요." }
 $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
