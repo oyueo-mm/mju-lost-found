@@ -35,7 +35,7 @@ export async function runImageJob(type: PostType, id: number, manual = false): P
     if (old?.completed_hash === hash && old.state === "completed" && current.has_vector) return { status: "reused" };
     // An explicitly requested retry still observes persisted cooldowns and
     // all budgets. Automatic retries stop after five failed attempts.
-    if (manual) await prisma.$executeRaw`UPDATE "ImageEmbeddingJob" SET attempts=0,state='pending' WHERE post_type=${type} AND post_id=${id} AND state='failed' AND next_run_at <= (now() AT TIME ZONE 'UTC') AND (lease_until IS NULL OR lease_until < (now() AT TIME ZONE 'UTC'))`;
+    if (manual) await prisma.$executeRaw`UPDATE "ImageEmbeddingJob" SET attempts=0,state='pending' WHERE post_type=${type} AND post_id=${id} AND state IN ('failed','running') AND next_run_at <= (now() AT TIME ZONE 'UTC') AND (lease_until IS NULL OR lease_until < (now() AT TIME ZONE 'UTC'))`;
     job = (await prisma.$queryRaw<Job[]>`UPDATE "ImageEmbeddingJob" SET lease_token=${token},lease_until=(now() AT TIME ZONE 'UTC')+interval '150 seconds',attempts=attempts+1,state='running',updated_at=(now() AT TIME ZONE 'UTC') WHERE post_type=${type} AND post_id=${id} AND desired_hash=${hash} AND state IN ('pending','running','failed') AND attempts<5 AND next_run_at <= (now() AT TIME ZONE 'UTC') AND (lease_until IS NULL OR lease_until < (now() AT TIME ZONE 'UTC')) RETURNING *`)[0];
     if (!job) return { status: "in_progress" };
     acquired = true;
@@ -45,7 +45,7 @@ export async function runImageJob(type: PostType, id: number, manual = false): P
     for (const [action, subject] of [[manual ? "embeddingRecompute" : "embeddingAutomatic", { userId: owner.id, tier }], [type === "lost" ? "embeddingLostPost" : "embeddingFoundPost", { userId: id }]] as const) {
       const admission = await checkRateLimit(action, subject);
       if (!admission.ok) {
-        await prisma.$executeRaw`UPDATE "ImageEmbeddingJob" SET lease_token=NULL,lease_until=NULL,state='pending',attempts=GREATEST(0,attempts-1),next_run_at=(now() AT TIME ZONE 'UTC')+${admission.retryAfterSeconds}*interval '1 second' WHERE post_type=${type} AND post_id=${id} AND lease_token=${token}`;
+        await prisma.$executeRaw`UPDATE "ImageEmbeddingJob" SET lease_token=NULL,lease_until=NULL,state='pending',attempts=CASE WHEN generation=${job.generation} THEN GREATEST(0,attempts-1) ELSE attempts END,next_run_at=CASE WHEN generation=${job.generation} THEN (now() AT TIME ZONE 'UTC')+${admission.retryAfterSeconds}*interval '1 second' ELSE next_run_at END WHERE post_type=${type} AND post_id=${id} AND lease_token=${token}`;
         acquired = false;
         return { status: "limited", admission };
       }
@@ -55,7 +55,7 @@ export async function runImageJob(type: PostType, id: number, manual = false): P
     const committed = await prisma.$transaction(async tx => {
       // Consistent lock order with the source trigger: post first, job second.
       const rows = await tx.$queryRaw<{ image_url: string | null }[]>(Prisma.sql`SELECT image_url FROM ${table(type)} WHERE id=${id} FOR UPDATE`);
-      const jobs = await tx.$queryRaw<Job[]>`SELECT *, (lease_until > (now() AT TIME ZONE 'UTC')) AS lease_valid FROM "ImageEmbeddingJob" WHERE post_type=${type} AND post_id=${id} FOR UPDATE`;
+      const jobs = await tx.$queryRaw<Job[]>`SELECT *, (lease_until > (clock_timestamp() AT TIME ZONE 'UTC')) AS lease_valid FROM "ImageEmbeddingJob" WHERE post_type=${type} AND post_id=${id} FOR UPDATE`;
       const active = jobs[0];
       if (rows[0]?.image_url !== current.image_url || active?.lease_token !== token || !active.lease_valid || active.generation !== job!.generation || active.desired_hash !== hash) return false;
       await tx.$executeRaw(Prisma.sql`UPDATE ${table(type)} SET "imageEmbedding"=${`[${vector.join(",")}]`}::vector WHERE id=${id}`);

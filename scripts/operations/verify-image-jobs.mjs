@@ -42,6 +42,8 @@ try {
   check("identical input reused",(await worker(first)).status==="reused"&&count()===before+1);
   await prisma.$executeRaw`UPDATE "ImageEmbeddingJob" SET state='running',lease_token='simulated-crash',lease_until=(now() AT TIME ZONE 'UTC')-interval '1 second' WHERE post_type='lost' AND post_id=${first}`;
   check("expired crashed lease recovered",(await worker(first)).status==="completed"&&count()===before+2);
+  await prisma.$executeRaw`UPDATE "ImageEmbeddingJob" SET state='running',attempts=5,lease_token='last-attempt-crash',lease_until=(now() AT TIME ZONE 'UTC')-interval '1 second' WHERE post_type='lost' AND post_id=${first}`;
+  check("explicit retry recovers final-attempt crash",(await worker(first)).status==="completed"&&count()===before+3);
   const failed=await create();
   check("inference failure persisted",(await worker(failed,0,1)).status==="failed"&&(await state(failed)).last_error!==null);
   await prisma.$executeRaw`UPDATE "ImageEmbeddingJob" SET next_run_at=(now() AT TIME ZONE 'UTC')-interval '1 second' WHERE post_type='lost' AND post_id=${failed}`;
