@@ -38,7 +38,7 @@ describe("getReportEvidenceImages (release C)", () => {
     report.findUnique.mockResolvedValueOnce({ targetId: 3, targetSnapshot: messageSnapshot });
     const views = await getReportEvidenceImages(admin, 9);
     expect(adminAccessLog.create).toHaveBeenCalledWith({
-      data: { adminUserId: 1, resource: "report_evidence_image", chatRoomId: 4, messageId: 3, reportId: 9 },
+      data: { adminUserId: 1, resource: "chat_image", chatRoomId: 4, messageId: 3, reportId: 9 },
     });
     expect(views).toEqual([{ index: 0, source: "chat", status: "copied", url: "https://signed/reports/9/0.jpg" }]);
   });

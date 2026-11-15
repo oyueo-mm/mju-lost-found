@@ -10,7 +10,8 @@ export type EvidenceImageView = { index: number; source: "post" | "chat"; status
 // for the admin report page. Re-checks reports.view itself; reads the
 // snapshot from the DB by report id (never a client-supplied path). A chat
 // image is a private message, so handing it out is logged exactly like the
-// live one is (AdminAccessLog, resource "report_evidence_image").
+// live one is (AdminAccessLog, resource "chat_image" -- the same allowed
+// value, adminaccesslog_resource_check -- with this report and message).
 export async function getReportEvidenceImages(admin: User, reportId: number): Promise<EvidenceImageView[] | null> {
   if (!can(admin, "reports.view")) return null;
   const row = await prisma.report.findUnique({ where: { id: reportId }, select: { targetId: true, targetSnapshot: true } });
@@ -23,7 +24,7 @@ export async function getReportEvidenceImages(admin: User, reportId: number): Pr
     const url = image.status === "copied" && image.path ? await signEvidenceUrl(image.path) : null;
     if (url && image.source === "chat" && snapshot.target.kind === "message" && !loggedChat) {
       await prisma.adminAccessLog.create({
-        data: { adminUserId: admin.id, resource: "report_evidence_image", chatRoomId: snapshot.target.chatRoomId, messageId: row.targetId, reportId },
+        data: { adminUserId: admin.id, resource: "chat_image", chatRoomId: snapshot.target.chatRoomId, messageId: row.targetId, reportId },
       });
       loggedChat = true;
     }

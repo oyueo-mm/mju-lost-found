@@ -223,7 +223,7 @@ egister-backup.ps1
     **서버측 복사**(Storage copy, 바이트가 앱 서버를 지나지 않음)한다. 작성자가 이후 글·메시지를 고치거나 지워도 증거는 남는다.
     복사 실패·이전 저장소(Vercel Blob) 사진은 스냅샷에 `failed`/`unsupported`로 기록되고 신고 자체는 접수된다.
   - 관리자 신고 상세(`reports.view`)의 "신고 당시 내용"에서만 보인다. 사진은 5분짜리 signed URL. 채팅 사진 사본을 열면
-    `AdminAccessLog`(resource `report_evidence_image`)가 남는다. 신고자 화면·목록 API에는 스냅샷이 없다.
+    `AdminAccessLog`(resource `chat_image`, 해당 신고·메시지 id)가 먼저 남는다(기록 실패 시 사진 링크를 주지 않음). 신고자 화면·목록 API에는 스냅샷이 없다.
   - 보존: 처리 대기 중 계속, 처리 후 1년(`processed_at` 기준). 신고 대상 계정이 정지 중이거나 재가입 보류가 남아 있으면,
     또는 1년 안에 열람 기록이 있으면 계속 보관. 매일 retention이 사진 사본 → 스냅샷 순으로 지운다(`snapshot_purged_at` 기록,
     신고 행과 처리 결과는 유지). 사진 삭제가 실패하면 스냅샷을 남겨 다음 날 다시 시도한다.

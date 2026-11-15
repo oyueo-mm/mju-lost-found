@@ -59,8 +59,15 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
   }
 
   const report = result.data;
-  // Signed only when there is something to show (each chat image view is logged).
-  const evidenceImages = report.snapshot?.data?.images.length ? await getReportEvidenceImages(admin, report.id) : null;
+  // Signed only when there is something to show (each chat image view is
+  // logged first). If that fails the page still renders, without image links.
+  const snapshotImages = report.snapshot?.data?.images ?? [];
+  const evidenceImages = snapshotImages.length
+    ? await getReportEvidenceImages(admin, report.id).catch((error) => {
+        console.error("Report evidence images unavailable:", error instanceof Error ? error.name : "unknown");
+        return snapshotImages.map((image) => ({ index: image.index, source: image.source, status: image.status, url: null }));
+      })
+    : null;
 
   // 신고 당사자 (실명·학과 열람 대상): nicknames only here -- the 실명·학과
   // themselves load only through the logged view (ReportIdentityPanel).
