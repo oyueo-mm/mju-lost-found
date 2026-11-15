@@ -18,6 +18,15 @@ export const POST_IMAGES_BUCKET = "post-images";
 // scripts/ensureChatImagesBucket.ts (see docs/operations.md).
 export const CHAT_IMAGES_BUCKET = "chat-images";
 
+// Release C (M-1): private bucket holding copies of the images a report was
+// about, taken when the report was filed (lib/report/snapshot.ts), so the
+// evidence survives the author editing or deleting the original. Objects are
+// reports/{reportId}/{index}.{ext}; only an admin with reports.view sees them,
+// through short-lived signed URLs. Created by
+// scripts/ensureChatImagesBucket.ts --bucket report-evidence.
+export const REPORT_EVIDENCE_BUCKET = "report-evidence";
+export const REPORT_EVIDENCE_URL_TTL_SECONDS = 300;
+
 // How long (seconds) a signed chat-image URL stays valid, and how long the
 // browser / Supabase CDN may cache the object (set at upload time). Kept
 // equal so a deleted image can't outlive either for long.

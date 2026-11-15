@@ -13,10 +13,17 @@
 //   npx tsx --env-file=.env.preview.local scripts/ensureChatImagesBucket.ts            (dry run, Preview)
 //   npx tsx --env-file=.env.preview.local scripts/ensureChatImagesBucket.ts --apply
 //   npx tsx --env-file=.env scripts/ensureChatImagesBucket.ts --apply --confirm-production
+//   ... --bucket report-evidence    (release C: private report-evidence bucket, same limits)
 import { createClient } from "@supabase/supabase-js";
 import { assertScriptSupabaseAccess } from "../src/lib/db/accessPolicy.mjs";
 
-import { ALLOWED_IMAGE_CONTENT_TYPES, CHAT_IMAGES_BUCKET, MAX_IMAGE_SIZE_BYTES } from "@/lib/images/config";
+import { ALLOWED_IMAGE_CONTENT_TYPES, CHAT_IMAGES_BUCKET, MAX_IMAGE_SIZE_BYTES, REPORT_EVIDENCE_BUCKET } from "@/lib/images/config";
+
+// Release C (M-1): the same private-bucket rules also create the
+// report-evidence bucket (--bucket report-evidence). Only these two names.
+const BUCKETS = [CHAT_IMAGES_BUCKET, REPORT_EVIDENCE_BUCKET];
+const bucketArg = process.argv.indexOf("--bucket");
+const BUCKET = bucketArg === -1 ? CHAT_IMAGES_BUCKET : process.argv[bucketArg + 1];
 
 const PRODUCTION_REF = "tmifqtyxojtuoejxjrng";
 const PREVIEW_REF = "swqvlihgupranzfzjevb";
@@ -28,6 +35,7 @@ const WANTED = {
 };
 
 async function main() {
+  if (!BUCKETS.includes(BUCKET)) throw new Error(`--bucket must be one of: ${BUCKETS.join(", ")}`);
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
   if (!url || !key) throw new Error("NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set (pass --env-file).");
@@ -41,7 +49,7 @@ async function main() {
 
   assertScriptSupabaseAccess(process.env);
   const storage = createClient(url, key, { auth: { persistSession: false } }).storage;
-  const { data: existing } = await storage.getBucket(CHAT_IMAGES_BUCKET);
+  const { data: existing } = await storage.getBucket(BUCKET);
 
   if (existing) {
     const actual = {
@@ -53,7 +61,7 @@ async function main() {
       actual.public === false &&
       actual.fileSizeLimit === WANTED.fileSizeLimit &&
       JSON.stringify(actual.allowedMimeTypes) === JSON.stringify([...WANTED.allowedMimeTypes].sort());
-    console.log(JSON.stringify({ environment, bucket: CHAT_IMAGES_BUCKET, exists: true, settings: actual, ok }));
+    console.log(JSON.stringify({ environment, bucket: BUCKET, exists: true, settings: actual, ok }));
     if (!ok) {
       process.exitCode = 1;
       console.error("Bucket exists with unexpected settings -- fix it deliberately; this script never changes an existing bucket.");
@@ -61,14 +69,14 @@ async function main() {
     return;
   }
 
-  console.log(JSON.stringify({ environment, bucket: CHAT_IMAGES_BUCKET, exists: false, willCreate: WANTED, apply }));
+  console.log(JSON.stringify({ environment, bucket: BUCKET, exists: false, willCreate: WANTED, apply }));
   if (!apply) {
     console.log("dry run -- nothing created (add --apply)");
     return;
   }
-  const { error } = await storage.createBucket(CHAT_IMAGES_BUCKET, WANTED);
+  const { error } = await storage.createBucket(BUCKET, WANTED);
   if (error) throw new Error(`createBucket failed: ${error.message}`);
-  const { data: created } = await storage.getBucket(CHAT_IMAGES_BUCKET);
+  const { data: created } = await storage.getBucket(BUCKET);
   console.log(
     JSON.stringify({
       created: true,

@@ -755,3 +755,50 @@ describe("temporary hide", () => {
     expect(await restoreTempHiddenContent({ ...admin, isAdmin: false } as User, 10)).toEqual({ kind: "forbidden" });
   });
 });
+
+describe("getReportForAdmin -- release C (M-1) snapshot", () => {
+  const base = { reporter: { nickname: "신고자" }, processedBy: null, moderationAction: null };
+
+  it("shows the snapshot taken at report time even when the target is gone now", async () => {
+    const takenAt = new Date("2026-11-15T03:00:00Z");
+    const data = { v: 1, subjectUserId: 2, target: { kind: "comment", content: "원래 댓글", authorNickname: "a" }, images: [] };
+    report.findUnique.mockResolvedValueOnce({ ...reportRow({ targetType: "COMMENT", targetId: 42 }), ...base, targetSnapshot: data, snapshotAt: takenAt, snapshotPurgedAt: null });
+    comment.findUnique.mockResolvedValueOnce(null);
+
+    const result = await getReportForAdmin(admin, 10);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.targetDeleted).toBe(true);
+      expect(result.data.snapshot).toEqual({ takenAt, purgedAt: null, data });
+    }
+  });
+
+  it("reports filed before snapshots existed keep working (snapshot: null)", async () => {
+    report.findUnique.mockResolvedValueOnce({ ...reportRow({ targetType: "COMMENT", targetId: 42 }), ...base, targetSnapshot: null, snapshotAt: null, snapshotPurgedAt: null });
+    comment.findUnique.mockResolvedValueOnce(null);
+    const result = await getReportForAdmin(admin, 10);
+    expect(result.kind === "ok" && result.data.snapshot).toBeNull();
+  });
+
+  it("a purged snapshot says when it was purged and carries no content", async () => {
+    const purgedAt = new Date("2027-12-01T00:00:00Z");
+    report.findUnique.mockResolvedValueOnce({ ...reportRow({ targetType: "COMMENT", targetId: 42 }), ...base, targetSnapshot: null, snapshotAt: new Date("2026-11-15"), snapshotPurgedAt: purgedAt });
+    comment.findUnique.mockResolvedValueOnce(null);
+    const result = await getReportForAdmin(admin, 10);
+    expect(result.kind === "ok" && result.data.snapshot).toEqual({ takenAt: new Date("2026-11-15"), purgedAt, data: null });
+  });
+
+  it("never puts the snapshot in the list view", async () => {
+    const row = { ...reportRow({ targetType: "USER", targetId: 2, status: "DISMISSED" }), ...base, targetSnapshot: { v: 1 }, snapshotAt: new Date(), snapshotPurgedAt: null };
+    report.findMany.mockResolvedValueOnce([row]);
+    report.count.mockResolvedValueOnce(1);
+    const result = await listReportsForAdmin(admin, { page: 1, limit: 20, status: "dismissed" });
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data.items).toHaveLength(1);
+      expect(result.data.items[0]).not.toHaveProperty("snapshot");
+      expect(result.data.items[0]).not.toHaveProperty("targetSnapshot");
+    }
+  });
+});

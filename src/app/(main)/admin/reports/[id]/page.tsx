@@ -16,6 +16,8 @@ import {
 import { ReportProcessForm } from "@/components/admin/ReportProcessForm";
 import { RestoreTempHideButton } from "@/components/admin/RestoreTempHideButton";
 import { ReportIdentityPanel } from "@/components/admin/ReportIdentityPanel";
+import { ReportSnapshotPanel } from "@/components/admin/ReportSnapshotPanel";
+import { getReportEvidenceImages } from "@/lib/report/evidenceView";
 import { reportPartyUserIds } from "@/lib/identity/service";
 import { prisma } from "@/lib/db/prisma";
 import { ShieldIcon, AlertIcon } from "@/components/icons";
@@ -57,6 +59,8 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
   }
 
   const report = result.data;
+  // Signed only when there is something to show (each chat image view is logged).
+  const evidenceImages = report.snapshot?.data?.images.length ? await getReportEvidenceImages(admin, report.id) : null;
 
   // 신고 당사자 (실명·학과 열람 대상): nicknames only here -- the 실명·학과
   // themselves load only through the logged view (ReportIdentityPanel).
@@ -103,7 +107,7 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
         {report.targetDeleted || !report.targetInfo ? (
           <p className="flex items-center gap-1.5 text-sm text-warning">
             <AlertIcon className="size-4 shrink-0" />
-            신고 대상이 삭제되었습니다. (신고 기록은 계속 보관됩니다)
+            신고 대상이 삭제되었습니다. (신고 기록은 계속 보관되며, 아래 ‘신고 당시 내용’에서 접수 시점 내용을 확인할 수 있습니다)
           </p>
         ) : report.targetInfo.kind === "post" ? (
           <div className="flex flex-col gap-1 text-sm">
@@ -171,6 +175,11 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
             <span className="text-muted-foreground">닉네임: {report.targetInfo.nickname ?? "알 수 없음"}</span>
           </div>
         )}
+      </Section>
+
+      {/* 1-1. 신고 당시 내용 (release C) */}
+      <Section title="신고 당시 내용">
+        <ReportSnapshotPanel snapshot={report.snapshot} images={evidenceImages} />
       </Section>
 
       {/* 2. 신고 사유 */}

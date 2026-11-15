@@ -1112,6 +1112,14 @@ model Report {
   processedByUserId Int?             @map("processed_by_user_id")
   processedBy       User?            @relation("ReportProcessedBy", fields: [processedByUserId], references: [id], onDelete: Restrict)
   adminNote         String?          @map("admin_note") @db.Text
+  // Release C (M-1): the reported content as it was when reported (text,
+  // author id, evidence-image copies in the private report-evidence
+  // bucket) -- lib/report/snapshot.ts. Null for reports filed before the
+  // snapshot existed, and after retention purged it (snapshotPurgedAt).
+  // Admin-only (reports.view); never in a reporter-facing DTO.
+  targetSnapshot    Json?            @map("target_snapshot")
+  snapshotAt        DateTime?        @map("snapshot_at")
+  snapshotPurgedAt  DateTime?        @map("snapshot_purged_at")
 
   moderationAction ModerationAction?
   adminAccessLogs  AdminAccessLog[]

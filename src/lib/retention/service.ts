@@ -16,7 +16,9 @@ import {
   evidenceReleased,
   type ReportFacts,
 } from "@/lib/retention/policy";
-import { AdminActionProposalStatus, ReportStatus, ReportTargetType, RejoinRequestStatus } from "@/generated/prisma/client";
+import { AdminActionProposalStatus, Prisma, ReportStatus, ReportTargetType, RejoinRequestStatus } from "@/generated/prisma/client";
+import { removeReportEvidence } from "@/lib/report/evidenceStorage";
+import { purgeReportSnapshot, readSnapshot } from "@/lib/report/snapshot";
 
 // 회원탈퇴 보유정책 -- removes what withdrawAccount() kept once its period is
 // over. Runs daily (GET /api/admin/settings, Vercel Cron). Only data tied
@@ -35,6 +37,10 @@ import { AdminActionProposalStatus, ReportStatus, ReportTargetType, RejoinReques
 //    1 year after processing. Records about the account (and its evidence)
 //    are kept while it is still suspended or its withdrawn hold is open.
 //  - Rejoin request decisions: 1 year after review.
+//  - Report snapshots (신고 시점 내용, evidence images in report-evidence),
+//    every report: while pending, then 1 year after processing; longer
+//    while the person it is about is suspended / on hold, or the report was
+//    viewed within a year. The report row stays (lib/report/snapshot.ts).
 //  - AdminAccessLog: at least 1 year -- a report is removed only once every
 //    access log on it is a year old (those logs go with it); others stay.
 //  - WithdrawnIdentity: deleted as soon as its purpose ends
@@ -57,6 +63,9 @@ export type RetentionResult = {
   commentsPurged: number;
   reportsDeleted: number;
   reportsDeferredForAccessLogs: number;
+  reportSnapshotsPurged: number;
+  reportSnapshotsDeferred: number;
+  reportEvidenceDeferred: number;
   actionsDeleted: number;
   appealsDeleted: number;
   proposalsDeleted: number;
@@ -78,6 +87,9 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
     commentsPurged: 0,
     reportsDeleted: 0,
     reportsDeferredForAccessLogs: 0,
+    reportSnapshotsPurged: 0,
+    reportSnapshotsDeferred: 0,
+    reportEvidenceDeferred: 0,
     actionsDeleted: 0,
     appealsDeleted: 0,
     proposalsDeleted: 0,
@@ -196,6 +208,12 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
         result.reportsDeferredForAccessLogs++;
         continue;
       }
+      // Release C (M-1): its evidence copies go first; if they can't be
+      // removed the report waits for the next run (nothing left orphaned).
+      if (!(await removeReportEvidence(r.id))) {
+        result.reportEvidenceDeferred++;
+        continue;
+      }
       await prisma.$transaction(async (tx) => {
         await tx.adminAccessLog.deleteMany({ where: { reportId: r.id } });
         await tx.identityAccessLog.deleteMany({ where: { reportId: r.id } });
@@ -231,6 +249,36 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
         },
       })
     ).count;
+  }
+
+  // ---- Release C (M-1): report snapshots (신고 시점 내용 + evidence images),
+  // for every report, not only withdrawn accounts': kept while the report is
+  // pending, then 1 year after processing (processedAt), longer while the
+  // person it is about is still suspended or has an open withdrawn hold, or
+  // while the report was viewed within the access-log minimum. Only the
+  // snapshot goes; the report and its decision stay.
+  const snapshotsDue = await prisma.report.findMany({
+    where: { NOT: { targetSnapshot: { equals: Prisma.DbNull } }, status: { not: ReportStatus.PENDING }, processedAt: { lte: recordCutoff } },
+    select: { id: true, targetSnapshot: true },
+    orderBy: { id: "asc" },
+  });
+  for (const r of snapshotsDue) {
+    const subjectId = readSnapshot(r.targetSnapshot)?.subjectUserId;
+    const subject = subjectId
+      ? await prisma.user.findUnique({
+          where: { id: subjectId },
+          select: { isSuspended: true, suspendedUntil: true, _count: { select: { withdrawnIdentities: true } } },
+        })
+      : null;
+    const recentViews =
+      (await prisma.adminAccessLog.count({ where: { reportId: r.id, accessedAt: { gt: accessLogCutoff } } })) +
+      (await prisma.identityAccessLog.count({ where: { reportId: r.id, accessedAt: { gt: accessLogCutoff } } }));
+    if ((subject && (isCurrentlySuspended(subject) || subject._count.withdrawnIdentities > 0)) || recentViews > 0) {
+      result.reportSnapshotsDeferred++;
+      continue;
+    }
+    if (await purgeReportSnapshot(r.id, now)) result.reportSnapshotsPurged++;
+    else result.reportEvidenceDeferred++;
   }
 
   // ---- rejoin decisions (all belong to withdrawn accounts): 1 year after review

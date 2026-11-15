@@ -17,6 +17,7 @@ import { ILLEGAL_SEXUAL_CONTENT_REASON, isRightsInfringementReason } from "@/lib
 import { resolveCommentTarget, resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "@/lib/report/targets";
 import { deletePostRowInTx, deletePostStorageObjects } from "@/lib/posts/service";
 import { removeCommentInTx } from "@/lib/comment/remove";
+import { readSnapshot, type ReportSnapshot } from "@/lib/report/snapshot";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { createAdminActionProposal, type AdminActionProposalDTO } from "@/lib/admin/proposals";
 import { ACTION_TYPES_FOR_TARGET, type ModerationActionTypeValue } from "./schema";
@@ -229,6 +230,10 @@ export type ReportAdminDTO = ReportDTO & {
   targetDeleted: boolean;
   targetInfo: ReportTargetInfo | null;
   moderationAction: ModerationActionDTO | null;
+  // Release C (M-1): 신고 시점 스냅샷 -- detail view only (getReportForAdmin).
+  // null: filed before snapshots existed (or the target was already gone);
+  // purgedAt set: removed by retention 1 year after processing.
+  snapshot?: { takenAt: Date | null; purgedAt: Date | null; data: ReportSnapshot | null } | null;
 };
 
 type ReportRowForAdmin = Report & {
@@ -384,7 +389,11 @@ export async function getReportForAdmin(admin: User, id: number): Promise<AdminM
 
   const row = await prisma.report.findUnique({ where: { id }, include: REPORT_INCLUDE_FOR_ADMIN });
   if (!row) return { kind: "not_found" };
-  return { kind: "ok", data: await toReportAdminDTO(row) };
+  const snapshot =
+    row.snapshotAt || row.snapshotPurgedAt
+      ? { takenAt: row.snapshotAt, purgedAt: row.snapshotPurgedAt, data: readSnapshot(row.targetSnapshot) }
+      : null;
+  return { kind: "ok", data: { ...(await toReportAdminDTO(row)), snapshot } };
 }
 
 // Mirrors legacy db.process_report(): records a "dismissed" decision.

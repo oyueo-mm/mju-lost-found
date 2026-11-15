@@ -112,7 +112,8 @@ Supabase Free에는 **자동 백업이 없다.** 백업은 운영자가 직접 �
   날은 건너뜀), 동시 실행 방지, 중단된 실행의 평문 폴더는 다음 실행이 삭제. 상태: `backup-status.json`.
   보존(`retention.mjs`): 검증 표식이 있는 `auto-*`만 대상, 최근 7개 + 최근 4주의 주별 최신 + 최근 3개월의 월별 최신.
   **이번 실행이 복원 검증된 뒤에만** 정리하며 `weekly-*`·배포 전 백업·검증 안 된 백업은 자동 삭제하지 않는다.
-  등록(운영자가 한 번, 암호 저장 후, 관리자 권한 불필요): `powershell -NoProfile -ExecutionPolicy Bypass -File scriptsackupegister-backup.ps1`
+  등록(운영자가 한 번, 암호 저장 후, 관리자 권한 불필요): `powershell -NoProfile -ExecutionPolicy Bypass -File scriptsackup
+egister-backup.ps1`
   → "MJU Find daily backup": 매일 04:00 + 로그인 10분 후, 놓치면 켜진 뒤 실행, 중복 실행 무시, 최대 2시간.
   → "MJU Find backup watchdog": 매일 13:00 + 로그인 2시간 후. 검증된 최신 자동 백업이 36시간보다 오래되면(작업이 아예 안 돈
     경우 포함) 경고 창과 `backup-watchdog.log`. 이 사용자가 로그인해 있을 때만 실행(자격 증명 관리자 접근).
@@ -124,7 +125,8 @@ Supabase Free에는 **자동 백업이 없다.** 백업은 운영자가 직접 �
   git worktree add -b ops/backup C:proj_claudemju-find-backup-ops <검토된 커밋>
   cd C:proj_claudemju-find-backup-ops; npm ci --omit=dev --ignore-scripts   # pg, supabase-js, dotenv만 필요
   New-Item -ItemType HardLink -Path .env.operations-production -Target C:proj_claudemju-lost-found-vercel.env.operations-production
-  powershell -NoProfile -ExecutionPolicy Bypass -File scriptsackupegister-backup.ps1
+  powershell -NoProfile -ExecutionPolicy Bypass -File scriptsackup
+egister-backup.ps1
   ```
   갱신: 백업 코드가 바뀌어 검토가 끝난 커밋으로만 `git -C C:proj_claudemju-find-backup-ops merge --ff-only <커밋>` →
   `npm ci --omit=dev --ignore-scripts` → 위 등록 재실행. 운영 자격증명 파일은 하드 링크(내용 하나)라 원본을 편집하면 함께 바뀐다.
@@ -204,6 +206,7 @@ Supabase Free에는 **자동 백업이 없다.** 백업은 운영자가 직접 �
 |---|---|---|---|
 | `post-images` | 공개 | 게시글 이미지(누구나 보는 게시글에 붙는 사진) | 10MB, jpeg/png/webp |
 | `chat-images` | **비공개** | 1:1 채팅·단체 문의 채팅 이미지 | 10MB, jpeg/png/webp |
+| `report-evidence` | **비공개** | 신고 시점 사진 사본(신고 증거, 릴리스 C) | 10MB, jpeg/png/webp |
 
 - `chat-images`는 공개로 바꾸지 않는다. 앱은 공개 URL을 만들지 않고, DB(`Message.image_url` 컬럼, 코드에서는 `imagePath`)에
   object path(`chat/{roomId}/{uuid}.{ext}`)만 저장한다.
@@ -215,6 +218,18 @@ Supabase Free에는 **자동 백업이 없다.** 백업은 운영자가 직접 �
   2. 생성: 같은 명령에 `--apply` (Production은 `--env-file=.env ... --apply --confirm-production`)
   - 이미 있으면 설정만 검사한다(비공개, 10MB, 이미지 타입). 다르면 실패로 끝나고 기존 bucket은 바꾸지 않는다.
 - storage RLS 정책은 두지 않는다. 비공개 bucket은 service role(서버)만 접근하고, 업로드는 서버가 발급한 signed upload URL로만 한다.
+- **신고 증거 사진 `report-evidence`** (릴리스 C, M-1):
+  - 신고가 접수되면 대상의 텍스트를 `Report.target_snapshot`(JSON)에, 사진은 이 bucket의 `reports/{reportId}/{index}.{ext}`로
+    **서버측 복사**(Storage copy, 바이트가 앱 서버를 지나지 않음)한다. 작성자가 이후 글·메시지를 고치거나 지워도 증거는 남는다.
+    복사 실패·이전 저장소(Vercel Blob) 사진은 스냅샷에 `failed`/`unsupported`로 기록되고 신고 자체는 접수된다.
+  - 관리자 신고 상세(`reports.view`)의 "신고 당시 내용"에서만 보인다. 사진은 5분짜리 signed URL. 채팅 사진 사본을 열면
+    `AdminAccessLog`(resource `report_evidence_image`)가 남는다. 신고자 화면·목록 API에는 스냅샷이 없다.
+  - 보존: 처리 대기 중 계속, 처리 후 1년(`processed_at` 기준). 신고 대상 계정이 정지 중이거나 재가입 보류가 남아 있으면,
+    또는 1년 안에 열람 기록이 있으면 계속 보관. 매일 retention이 사진 사본 → 스냅샷 순으로 지운다(`snapshot_purged_at` 기록,
+    신고 행과 처리 결과는 유지). 사진 삭제가 실패하면 스냅샷을 남겨 다음 날 다시 시도한다.
+  - 릴리스 C 이전 신고는 스냅샷이 없다(NULL) — 화면에 "기록 기능 이전 신고"로 표시되고 동작은 이전과 같다.
+  - 생성: `scripts/ensureChatImagesBucket.ts --bucket report-evidence` (dry run → `--apply`, Production은 `--confirm-production` 추가).
+    **마이그레이션 `20261121000000_report_snapshot` 배포 전에** 만든다(없으면 사진 복사만 `failed`로 기록됨).
 - **고아 채팅 이미지 점검** (업로드만 하고 전송하지 않은 파일, Storage 삭제 실패):
   `npx tsx --env-file=.env scripts/reportChatImageOrphans.ts` — 읽기 전용. 24시간 넘게 어떤 메시지도 참조하지 않는 파일과,
   메시지가 가리키는데 실제로는 없는 파일을 보고한다. 자동 삭제는 하지 않는다. 지워야 하면 보고서의 path를 확인한 뒤 그 path만 삭제한다.

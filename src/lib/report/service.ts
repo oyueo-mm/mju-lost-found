@@ -13,6 +13,7 @@ import { REPORT_TARGET_TYPE_LABELS, isUrgentReportReason } from "./schema";
 import { resolveCommentTarget, resolveMessageTarget, resolvePostTarget, resolveUserTarget } from "./targets";
 import { getChatRoomParticipantIds } from "@/lib/chat/service";
 import { fanOutToAdmins } from "@/lib/notification/adminFanout";
+import { captureTarget, preserveEvidenceImages } from "./snapshot";
 
 // Prisma's generated enum values are the ASCII identifiers (POST, MESSAGE,
 // USER / PENDING, DISMISSED, ACTIONED) -- @map only renames the DB column
@@ -124,7 +125,10 @@ export async function createReport(reporter: User, input: CreateReportInput): Pr
     // versa (same "creation stays inside the causing domain's own
     // transaction" rule announcement/service.ts's createAnnouncement
     // already follows for its own fan-out).
-    const created = await prisma.$transaction(async (tx) => {
+    const { report: created, captured } = await prisma.$transaction(async (tx) => {
+      // Release C (M-1): the target as it is now, in the same transaction
+      // as the report row (lib/report/snapshot.ts).
+      const captured = await captureTarget(tx, input.targetType, input.targetId);
       const report = await tx.report.create({
         data: {
           reporterUserId: reporter.id,
@@ -132,6 +136,7 @@ export async function createReport(reporter: User, input: CreateReportInput): Pr
           targetId: input.targetId,
           reason: input.reason,
           detail: input.detail ?? null,
+          ...(captured && { targetSnapshot: captured.snapshot, snapshotAt: new Date() }),
         },
       });
       // Illegal sexual content is flagged in the admin notification itself
@@ -143,8 +148,12 @@ export async function createReport(reporter: User, input: CreateReportInput): Pr
         relatedType: "report",
         relatedId: report.id,
       }, "reports.view");
-      return report;
+      return { report, captured };
     });
+    // Images are copied once the report exists (its id names the evidence
+    // folder) and before answering, so a delete right after the report
+    // can't beat the copy. A failed copy is recorded, never fatal.
+    if (captured?.sources.length) await preserveEvidenceImages(created.id, captured);
     return { kind: "ok", data: toReportDTO(created) };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {

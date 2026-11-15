@@ -38,6 +38,11 @@ vi.mock("@/lib/db/prisma", () => ({
 }));
 vi.mock("@/lib/chat/service", () => ({ getChatRoomParticipantIds }));
 vi.mock("@/lib/notification/adminFanout", () => ({ fanOutToAdmins }));
+// Release C (M-1): the snapshot itself is tested in snapshot.test.ts; here
+// only how createReport stores it. No snapshot unless a test sets one.
+const captureTarget = vi.fn(async () => null as unknown);
+const preserveEvidenceImages = vi.fn();
+vi.mock("./snapshot", () => ({ captureTarget, preserveEvidenceImages }));
 vi.mock("@/generated/prisma/client", () => ({
   ReportTargetType: { POST: "POST", MESSAGE: "MESSAGE", USER: "USER", COMMENT: "COMMENT" },
   ReportStatus: { PENDING: "PENDING", DISMISSED: "DISMISSED", ACTIONED: "ACTIONED" },
@@ -406,5 +411,47 @@ describe("report reasons (Legal pre-beta Phase)", () => {
     await createReport(reporter, { targetType: "post", targetId: 5, reason: "명예훼손" });
 
     expect(fanOutToAdmins).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ title: "새 신고가 접수되었습니다" }), "reports.view");
+  });
+});
+
+describe("createReport -- release C (M-1) snapshot", () => {
+  const snapshot = { v: 1, subjectUserId: 2, target: { kind: "comment", content: "원문" }, images: [] };
+
+  it("stores the snapshot taken inside the report's transaction and keeps it out of the reporter's DTO", async () => {
+    comment.findUnique.mockResolvedValueOnce({ id: 7, authorUserId: 2, parentId: null });
+    captureTarget.mockResolvedValueOnce({ snapshot, sources: [] });
+    report.create.mockResolvedValueOnce(reportRow({ targetType: "COMMENT", targetId: 7, targetSnapshot: snapshot, snapshotAt: new Date() }));
+
+    const result = await createReport(reporter, { targetType: "comment", targetId: 7, reason: "기타" });
+
+    expect(captureTarget).toHaveBeenCalledWith(expect.anything(), "comment", 7);
+    expect(report.create.mock.calls[0][0].data).toMatchObject({ targetSnapshot: snapshot, snapshotAt: expect.any(Date) });
+    expect(preserveEvidenceImages).not.toHaveBeenCalled();
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data).not.toHaveProperty("targetSnapshot");
+      expect(result.data).not.toHaveProperty("snapshotAt");
+    }
+  });
+
+  it("copies evidence images only after the report row exists", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 5, userId: 2 });
+    const captured = { snapshot: { ...snapshot, target: { kind: "post" } }, sources: [{ bucket: "post-images", path: "posts/lost/5/a.jpg" }] };
+    captureTarget.mockResolvedValueOnce(captured);
+    report.create.mockResolvedValueOnce(reportRow({ id: 42 }));
+
+    await createReport(reporter, { targetType: "post", targetId: 5, reason: "기타" });
+
+    expect(preserveEvidenceImages).toHaveBeenCalledWith(42, captured);
+  });
+
+  it("files a report without a snapshot when the target vanished meanwhile (like an old report)", async () => {
+    lostPost.findUnique.mockResolvedValueOnce({ id: 5, userId: 2 });
+    report.create.mockResolvedValueOnce(reportRow());
+
+    const result = await createReport(reporter, { targetType: "post", targetId: 5, reason: "기타" });
+
+    expect(report.create.mock.calls[0][0].data).not.toHaveProperty("targetSnapshot");
+    expect(result.kind).toBe("ok");
   });
 });
