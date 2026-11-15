@@ -96,26 +96,39 @@ Supabase Free에는 **자동 백업이 없다.** 백업은 운영자가 직접 �
   Set-BackupPassphrase        # 두 번 입력(화면에 안 보임), 16자 이상
   Test-BackupPassphrase       # True면 저장됨 (암호는 출력하지 않음)
   ```
-- 암호화 + 복원 검증: `scripts/backup/protect.ps1 -Dir <백업 폴더> [-RemovePlain]`
-  1) `seal.mjs seal`(AES-256-GCM, scrypt 키, 직후 복호화 대조) 2) 만든 `.tar.enc`를 임시로 풀어 임시 로컬 PostgreSQL에서
-  `verify-restore.mjs`(행 수, 사진 존재) 3) `RESTORE VERIFIED`일 때만, 그리고 `-RemovePlain`을 준 경우에만 평문 폴더 삭제.
-  임시 복원본·클러스터는 항상 지운다. 로그: 백업 폴더 옆 `protect-backup.log`(주간 실행은 `weekly-backup.log`).
+- 암호화 + 복원 검증: `scripts/backup/protect.ps1 -Dir <백업 폴더> [-RemovePlain]` (2026-11-15 개정)
+  1) `seal.mjs seal`(AES-256-GCM, scrypt 키, 직후 복호화 대조, **기존 `.tar.enc`는 덮어쓰지 않음**) 2) 임시로 풀어 `checksums.mjs verify`로
+  원본 `SHA256SUMS`와 전체 대조 3) 통과하면 `-RemovePlain`일 때 **바로 평문 삭제**(복원 검사 실패와 무관하게 평문을 남기지 않음)
+  4) WSL에서 복원 검사(`wsl-restore-check.sh`: Ubuntu 공식 PostgreSQL 18 + pgvector, 임시 클러스터) 5) 성공 시 `<파일>.verified.json`.
+  임시 복원본·클러스터는 항상 지운다. 로그: `protect-backup.log`(자동 실행은 `backup.log`).
   실제 복원은 `seal.mjs unseal <파일> <폴더>`(암호는 `BACKUP_PASSPHRASE` 환경변수로 그 창에만) 후 위 복원 절차.
-- **자동 실행(주 1회)**: `weekly.ps1` = `backup.mjs`(Production 읽기만) → `protect.ps1 -RemovePlain` →
-  `weekly-*.tar.enc` 최근 4개만 보존(이름이 다른 백업은 건드리지 않음). 등록(운영자가 한 번, 암호 저장 후):
-  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup\register-weekly.ps1`
-  → 매주 일요일 04:00, 놓치면 켜진 뒤 바로 실행, 이 사용자가 로그인해 있을 때만(자격 증명 관리자 접근), 일반 권한, 최대 2시간.
-- 실패 확인과 복구: `weekly-backup.log`의 `FAILED:` 줄, 실패 시 메시지 창, 작업 스케줄러 > "MJU Find weekly backup" >
-  마지막 실행 결과(0이 아니면 실패). 실패해도 평문은 지우지 않으므로 남은 `weekly-날짜` 폴더를 확인한다.
+- **실행 환경**(Smart App Control이 켜진 PC): MSYS2의 서명 없는 PostgreSQL 도구는 간헐적으로 차단된다. 백업은 **서명된 EDB
+  Windows 배포판**(`%USERPROFILE%pgsql-edb8.7pgsqlin`, 공식 binaries zip, 모든 exe·dll이 EnterpriseDB Corporation 서명)을,
+  복원 검사는 **WSL Ubuntu**(`~/mjufind-pg/root`, `apt-get download postgresql-18 postgresql-client-18 libpq5 postgresql-18-pgvector
+  libnuma1 libicu78 liburing2` + `dpkg-deb -x`, root·서비스 불필요)를 쓴다. 보안 기능은 끄지 않는다.
+- **자동 실행(매일)**: `scheduled.ps1` = 승인 실행기 + 정기 참조 `WEEKLY-BACKUP-STANDING`으로 `backup.mjs`(Production 읽기만) →
+  `protect.ps1 -RemovePlain` → 보존 정리. 정기 참조는 `scripts/db/approvalPolicy.mjs`가 **`backup.mjs`를 백업 폴더 바로 아래
+  `auto-|weekly-날짜` 폴더로 실행하는 경우에만** 허용한다(다른 스크립트·인자·`STANDING` 참조는 거부). 하루에 한 번만(이미 검증된
+  날은 건너뜀), 동시 실행 방지, 중단된 실행의 평문 폴더는 다음 실행이 삭제. 상태: `backup-status.json`.
+  보존(`retention.mjs`): 검증 표식이 있는 `auto-*`만 대상, 최근 7개 + 최근 4주의 주별 최신 + 최근 3개월의 월별 최신.
+  **이번 실행이 복원 검증된 뒤에만** 정리하며 `weekly-*`·배포 전 백업·검증 안 된 백업은 자동 삭제하지 않는다.
+  등록(운영자가 한 번, 암호 저장 후, 관리자 권한 불필요): `powershell -NoProfile -ExecutionPolicy Bypass -File scriptsackupegister-backup.ps1`
+  → "MJU Find daily backup": 매일 04:00 + 로그인 10분 후, 놓치면 켜진 뒤 실행, 중복 실행 무시, 최대 2시간.
+  → "MJU Find backup watchdog": 매일 13:00 + 로그인 2시간 후. 검증된 최신 자동 백업이 36시간보다 오래되면(작업이 아예 안 돈
+    경우 포함) 경고 창과 `backup-watchdog.log`. 이 사용자가 로그인해 있을 때만 실행(자격 증명 관리자 접근).
+- 실패 확인과 복구: `backup.log`의 `FAILED:` 줄, 실패 시 메시지 창(작업을 붙잡지 않음), `backup-status.json`의 `lastError`.
   | 로그 | 원인 | 조치 |
   |---|---|---|
   | `passphrase not in Windows Credential Manager` | 암호 미저장·다른 사용자로 실행 | `Set-BackupPassphrase` |
-  | `backup.mjs failed` | 네트워크, `.env` 변경, Supabase 장애 | 연결 확인 후 수동 재실행 |
-  | `seal.mjs ... failed` / `restore not verified` | 디스크 부족, pgvector 없음, 손상 | 남은 평문 폴더로 `protect.ps1 -Dir <폴더>` 재실행 |
-  수동 재실행: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup\weekly.ps1`(같은 날짜면 폴더를 먼저 정리).
-  매월 1회 로그와 최신 파일 날짜를 확인한다(주간 실행이 매번 복원 검증을 포함).
-  이미 만든 암호화본만 다시 검증할 때(분기 점검, 오래된 사본 정리 전): `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup\protect.ps1 -Enc <파일.tar.enc>`
+  | `pg_dump cannot run` / `not found` | EDB 도구 경로 없음·차단 | 위 실행 환경 확인(서명 확인: `Get-AuthenticodeSignature`) |
+  | `backup.mjs failed` | 네트워크, `.env.operations-production` 누락, Supabase 장애, 접근 가드 | 로그의 오류 확인 후 수동 재실행 |
+  | `restore check failed` / `restore not verified` | WSL·PostgreSQL 미설치, 손상 | 평문은 이미 지워짐. `protect.ps1 -Enc <파일>`로 재검증 |
+  수동 실행: `powershell -NoProfile -ExecutionPolicy Bypass -File scriptsackupscheduled.ps1`(같은 날 다시 만들 때 `-Force`;
+  이미 있는 암호화본은 덮어쓰지 않고 검증만 다시 한다).
+  이미 만든 암호화본만 다시 검증할 때(분기 점검, 오래된 사본 정리 전): `powershell -NoProfile -ExecutionPolicy Bypass -File scriptsackupprotect.ps1 -Enc <파일.tar.enc>`
   (암호화·삭제 없이 복원 검증만).
+- 용량·비용(2026-11-15 기준): 백업 1회 ≈ 24.6MB(DB 2.5MB + Storage 22MB, 객체 134개). 보존 최대 14개 ≈ 350MB.
+  Supabase 다운로드(egress) ≈ 하루 25MB, 월 0.75GB — 사진이 늘면 비례해서 늘어나므로 분기마다 `backup.log`의 크기를 확인한다.
 - 저장 위치와 권한: 운영자 PC의 `%USERPROFILE%\mju-lost-found-backups`(상속 해제, 본인·SYSTEM·Administrators만 접근).
 - 별도 저장소(같은 PC 고장·분실 대비): **암호화본(`.tar.enc`)만** 월 1회 외장 디스크 등 다른 매체에 복사하고 해시를 대조한다.
   `robocopy %USERPROFILE%\mju-lost-found-backups E:\mju-backups *.tar.enc /XO` →
