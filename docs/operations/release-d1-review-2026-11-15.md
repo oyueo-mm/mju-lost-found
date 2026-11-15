@@ -1,5 +1,7 @@
 # 릴리스 D-1 구현 및 Preview 검증
 
+2026-11-16 Production 배포·실제 로그인 수동 검증까지 완료했다. 배포 ID, 로그, 백업 상태, 롤백 대상은 [Production 최종 보고서](release-d1-production-2026-11-16.md)에 기록한다.
+
 ## 범위와 기준
 
 - 작업 브랜치: `fix/release-d1-resource-limits`, `baca1ac`에서 분기. Production `059ce7a`와 백업 복구·릴리스 C를 포함한다. main 병합, 원격 Push 없음.
