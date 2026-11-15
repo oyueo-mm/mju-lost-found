@@ -30,7 +30,7 @@ const logFile=`.vercel/image-jobs-${marker}.jsonl`;writeFileSync(logFile,"");
 const count=()=>readFileSync(logFile,"utf8").trim().split("\n").filter(Boolean).length;
 const check=(name,ok)=>{console.log(JSON.stringify({check:name,passed:!!ok}));if(!ok)throw new Error(name);};
 const photo=(id,name)=>`https://${PREVIEW_DB_PROJECT}.supabase.co/storage/v1/object/public/post-images/posts/lost/${id}/${name}.jpg`;
-function worker(id,delay=0,fail=0) {return new Promise((resolve,reject)=>{const c=spawn(process.execPath,[fileURLToPath(import.meta.url),"worker",String(id),logFile,String(delay),String(fail)],{env:process.env,windowsHide:true});let out="";c.stdout.on("data",b=>out+=b);c.stderr.on("data",()=>{});c.on("error",()=>reject(new Error("Worker could not start")));c.on("close",code=>code?reject(new Error("Worker failed")):resolve(JSON.parse(out.trim().split("\n").at(-1))));});}
+function worker(id,delay=0,fail=0,onChild=()=>{}) {return new Promise((resolve,reject)=>{const c=spawn(process.execPath,[fileURLToPath(import.meta.url),"worker",String(id),logFile,String(delay),String(fail)],{env:process.env,windowsHide:true});onChild(c);let out="";c.stdout.on("data",b=>out+=b);c.stderr.on("data",()=>{});c.on("error",()=>reject(new Error("Worker could not start")));c.on("close",code=>{if(code!==0)return reject(new Error("Worker failed"));try{resolve(JSON.parse(out.trim().split("\n").at(-1)));}catch{reject(new Error("Worker output invalid"));}});});}
 async function create() {const p=await prisma.lostPost.create({data:{userId:user.id,title:`Image job ${marker}`,description:"Synthetic fixture",category:"기타",location:"Synthetic fixture",lostDate:new Date()}});posts.push(p.id);await prisma.lostPost.update({where:{id:p.id},data:{imageUrl:photo(p.id,"a")}});return p.id;}
 async function state(id) {return (await prisma.$queryRaw`SELECT p.image_url,p."imageEmbedding"::text AS vector,j.* FROM "LostPost" p JOIN "ImageEmbeddingJob" j ON j.post_type='lost' AND j.post_id=p.id WHERE p.id=${id}`)[0];}
 async function waitStart(previous) {for(let i=0;i<200;i++){if(count()>previous)return;await new Promise(r=>setTimeout(r,50));}throw new Error("Worker did not infer");}
@@ -44,6 +44,17 @@ try {
   check("expired crashed lease recovered",(await worker(first)).status==="completed"&&count()===before+2);
   await prisma.$executeRaw`UPDATE "ImageEmbeddingJob" SET state='running',attempts=5,lease_token='last-attempt-crash',lease_until=(now() AT TIME ZONE 'UTC')-interval '1 second' WHERE post_type='lost' AND post_id=${first}`;
   check("explicit retry recovers final-attempt crash",(await worker(first)).status==="completed"&&count()===before+3);
+  await prisma.matchCandidateCache.create({data:{sourceType:"lost",sourcePostId:first,candidates:{scale:"synthetic",ranking:[]}}});
+  await prisma.lostPost.update({where:{id:first},data:{imageUrl:photo(first,"b")}});
+  check("photo change atomically invalidates old vector and ranking",(await prisma.matchCandidateCache.count({where:{sourceType:"lost",sourcePostId:first}}))===0&&(await state(first)).vector===null);
+  check("new input runs after atomic invalidation",(await worker(first)).status==="completed");
+  const crashed=await create(), crashStart=count();let victim;
+  const stopped=worker(crashed,30000,0,c=>{victim=c;}).then(()=>false,()=>true);
+  await waitStart(crashStart);victim.kill("SIGKILL");
+  check("actual worker termination leaves an unfinished lease",await stopped&&(await state(crashed)).state==="running"&&(await state(crashed)).vector===null);
+  // Only this isolated test lease is advanced, avoiding a 150-second sleep.
+  await prisma.$executeRaw`UPDATE "ImageEmbeddingJob" SET lease_until=(now() AT TIME ZONE 'UTC')-interval '1 second' WHERE post_type='lost' AND post_id=${crashed}`;
+  check("terminated worker recovered after lease expiry",(await worker(crashed)).status==="completed");
   const failed=await create();
   check("inference failure persisted",(await worker(failed,0,1)).status==="failed"&&(await state(failed)).last_error!==null);
   await prisma.$executeRaw`UPDATE "ImageEmbeddingJob" SET next_run_at=(now() AT TIME ZONE 'UTC')-interval '1 second' WHERE post_type='lost' AND post_id=${failed}`;
@@ -58,7 +69,7 @@ try {
 } finally {
   try {
     if(user){const own=await prisma.user.findUnique({where:{id:user.id}});if(own?.email!==`${marker}@image-jobs.example.invalid`)throw new Error("Cleanup ownership mismatch");
-      await prisma.$transaction(async tx=>{await tx.lostPost.deleteMany({where:{id:{in:posts},userId:user.id}});await tx.rateLimitCounter.deleteMany({where:{OR:["embeddingRecompute","embeddingAutomatic"].map(a=>({key:{startsWith:`${a}:u:${user.id}:`}})).concat(posts.map(id=>({key:{startsWith:`embeddingLostPost:u:${id}:`}})))}});await tx.user.delete({where:{id:user.id}});});
+      await prisma.$transaction(async tx=>{await tx.lostPost.deleteMany({where:{id:{in:posts},userId:user.id}});await tx.matchCandidateCache.deleteMany({where:{sourceType:"lost",sourcePostId:{in:posts}}});await tx.rateLimitCounter.deleteMany({where:{OR:["embeddingRecompute","embeddingAutomatic"].map(a=>({key:{startsWith:`${a}:u:${user.id}:`}})).concat(posts.map(id=>({key:{startsWith:`embeddingLostPost:u:${id}:`}})))}});await tx.user.delete({where:{id:user.id}});});
       console.log(JSON.stringify({cleanup:true,userId:user.id,postIds:posts}));}
   } finally {await prisma.$disconnect();if(existsSync(logFile))unlinkSync(logFile);}
 }
