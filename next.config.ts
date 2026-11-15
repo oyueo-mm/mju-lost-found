@@ -58,7 +58,8 @@ const nextConfig: NextConfig = {
   // - Only a plain key brings in files under node_modules (the dlopen()ed
   //   libonnxruntime.so.1); keys with glob syntax add files outside
   //   node_modules only.
-  // - outputFileTracingExcludes is not applied at all.
+  // - Earlier builds ignored exclusions. D-2 rechecked 16.4.6: the narrow
+  //   image-worker exclusion below works (its trace has only SigLIP).
   // So: the onnxruntime runtime (~34MB) goes to everything under
   // /api/posts via the plain key, and the ~200MB of models only to the two
   // routes that load them -- "!(/**)" = nothing after the route, brackets
@@ -89,6 +90,9 @@ const nextConfig: NextConfig = {
     "/api/posts!(/**)": ["./models/**"],
     "/api/posts/\\[id\\]!(/**)": ["./models/**"],
     "/api/posts/\\[id\\]/image!(/**)": ["./models/Xenova/siglip-base-patch16-224/**"],
+  },
+  outputFileTracingExcludes: {
+    "/api/posts/**/image": ["./models/jhgan/**/*"],
   },
   images: {
     // 운영 비용 (Hobby: 5,000 image transformations a month): every width

@@ -45,8 +45,8 @@ describe("AI files in the function bundles", () => {
     expect(Object.keys(pkg.dependencies ?? {})).toContain("onnxruntime-common");
   });
 
-  it("excludes nothing (Turbopack builds ignore outputFileTracingExcludes)", () => {
-    expect(nextConfig.outputFileTracingExcludes).toBeUndefined();
+  it("excludes the text model only from the image mutation worker", () => {
+    expect(nextConfig.outputFileTracingExcludes).toEqual({ "/api/posts/**/image": ["./models/jhgan/**/*"] });
   });
 
   it("the unused GPU providers are deleted before every build", () => {
