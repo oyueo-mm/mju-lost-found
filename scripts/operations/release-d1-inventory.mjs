@@ -10,6 +10,15 @@ try {
   await db.connect();
   await db.query("BEGIN READ ONLY");
   await db.query("SET LOCAL statement_timeout='15s'");
+  if (process.argv.includes("--data-api")) {
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!base || !key) throw new Error("Data API check configuration missing");
+    const response = await fetch(`${base}/rest/v1/`, { headers: { apikey: key, Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15000) });
+    await response.body?.cancel();
+    console.log(JSON.stringify({ target, dataApiStatus: response.status, remainsUnavailable: response.status === 503 }));
+    if (response.status !== 503) throw new Error("Data API state unexpected");
+  }
   const urls = (await db.query(`SELECT image_url FROM "LostPost" WHERE image_url IS NOT NULL UNION ALL SELECT image_url FROM "FoundPost" WHERE image_url IS NOT NULL UNION ALL SELECT image_url FROM "PostImage"`)).rows;
   const hosts = {};
   const pathKinds = {};

@@ -56,11 +56,51 @@
 
 ## 배포 후 기록
 
-Preview 배포 ID, 배포 코드 커밋, 실제 헤더 위조 검증, 검색 순위·응답 시간 및 최종 Production 유지 확인은 배포 후 추가한다. 원격 Push와 Production 배포는 별도 승인 전까지 수행하지 않는다.
+- 배포 코드: `b062cd7dbd3a111f9c149f7cbfdddcd0fda38c0a`. Preview **`dpl_iEQTM1CSxUVkqs1jWHpxY2svSZwQ`**, READY.
+- 고정 주소: https://mju-lost-found-preview.vercel.app/ → https://mju-lost-found-vercel-foijymrga-oyueo.vercel.app/ . 실제 `/api/version`의 배포 ID·preview 환경·SHA 모두 일치했다.
+- `node scripts/deployments/deploy.mjs preview --alias --dry-run` 사용. 배포와 별칭은 실제 수행했고, dry-run은 배포 이력 DB 기록에만 적용된다. Production 기록 쓰기도 하지 않았다.
+- 업로드된 소스 1,090개 검사: .env·.vercel·QA 비공개 파일 등 금지 파일 0개. 배포 소스의 기존 UI 파일도 존재한다.
+- 배포 후 새 비로그인 스모크 16개 전부 통과: 홈·분실/습득 목록·검색·정책 2개·목록 API 2개·익명 세션·업로드/채팅/신고/관리자 인증 차단·키워드/피드백 로그인 이동·배포 버전. 목록 HTML에 `/_next/image?` 없음도 확인하여 Preview 비최적화 유지. 과거 원본 16단계와는 별개다.
+- 실제 Vercel 경유 24회: 매번 다른 x-forwarded-for/x-vercel-forwarded-for/x-real-ip를 보냈지만 바뀐 익명 일간 버킷은 **1개**였다. 분 경계 전후 각각 10건까지만 허용, 총 20건 200/4건 429. 일간 증가도 허용된 20건뿐. 헤더로 별도 버킷을 선택할 수 없음을 실제 배포에서 확인했다. 카운터 키·원본 IP는 로그에 남기지 않았다.
+- 단위 모형 외 실제 Prisma 어댑터도 연결 불가능한 로컬 주소로 실행해 503 / RATE_LIMIT_UNAVAILABLE / Retry-After 5를 확인했다. 배포 환경이나 실제 DB를 장애 상태로 바꾸지 않았다.
+- Production·Preview 서비스 키 REST 루트는 각각 503 유지. 설정 변경 없음. 이 응답은 기존 관측과 같지만 관리 API의 비활성화 설정값 자체를 새로 조회한 것은 아니다.
+- 최종 Production 공개 버전은 여전히 `059ce7a` / `dpl_E9ztQCBpZwsfqMsi2h5dRob83mG2`. 원격에는 D-1 브랜치가 없고 원격 C 브랜치는 `baca1ac` 그대로임을 읽기 전용 확인했다. Push 없음.
+- 백업 전용 작업 트리 깨끗함, 일간 백업과 독립 감시 예약 작업 모두 Ready. D-1에서는 새 백업·복원·마이그레이션을 수행할 이유가 없어 기존 검증 결과와 구분한다.
+- 로그인 상태 UI 수동 검증은 사용자에게 요청했고 아직 결과를 받지 못했다. 정상 로그인·댓글/피드백/감사/키워드 화면의 실제 사용자 확인을 자동 검증 완료와 혼동하지 않는다.
+- 독립 테스트 사용자 355와 그 키워드/카운터는 모두 정리했다. 실제 Preview 요청이 만든 정상 운영 통계·익명 카운터는 기존 기록을 보호하기 위해 임의로 삭제하지 않았다.
+
+### 검색 품질과 시간
+
+같은 입력의 상위 5건 ID·유형·유사도 해시가 전후 모두 일치했다. 모델·검색 점수·정렬 로직 변경 없음. 아래는 curl의 전송 시간이며 CLI 시작 시간은 제외했다. ‘초기’는 배포별 첫 요청으로 진정한 모델 cold start를 보장하는 명칭은 아니다.
+
+| 표본 | 기존 C (ms) | D-1 (ms) |
+| --- | ---: | ---: |
+| semantic 초기 | 2,640 | 3,226 |
+| semantic 후속 | 202 | 494 |
+| unified | 173 | 446 |
+| 이미지 초기 | 922 | 829 |
+| 이미지 후속 | 609 | 582 |
+
+첫 표본의 텍스트 지연 증가를 확인하기 위해 두 불변 Preview 배포에 같은 쿼리를 C→D-1 순으로 3회씩 추가 요청했다. 결과 해시는 모두 같았으며 C는 2,236/179/208ms, D-1은 2,604/136/202ms였다. 준비된 상태의 지속적 지연 증가는 재현되지 않았다. 다만 표본이 적어 p95·고부하 성능이나 성능 개선을 주장하지 않는다. 원자적 DB 처리에 따른 추가 왕복과 풀 대기는 관찰할 운영 위험이다.
+
+### 변경 파일
+
+| 역할 | 파일 |
+| --- | --- |
+| 공유 카운터·정책·IP·429/503 | `src/lib/rateLimit/index.ts`, `index.test.ts` |
+| 스팸 생성 서비스와 테스트 | `src/lib/comment/service.ts`, `src/lib/feedback/service.ts`, `src/lib/thanks/service.ts`, `src/lib/keywordAlert/service.ts`, 각 `service.test.ts` |
+| API/Action 응답 | `src/app/api/posts/route.ts`, `src/app/api/posts/[id]/comments/route.ts`, `src/app/(main)/feedback/actions.ts`, `src/app/(main)/me/keyword-alerts/actions.ts` |
+| 업로드·채팅·검색 회귀 | `src/app/api/upload/route.test.ts`, `src/app/api/chat/[id]/upload/route.test.ts`, `src/app/api/chat/[id]/messages/route.test.ts`, `src/app/api/posts/route.test.ts` |
+| 이미지 최적화 | `next.config.ts`, `src/lib/images/optimizationHosts.mjs`, `optimizationHosts.test.ts` |
+| 오류 안내 | `src/components/thanks/ThankReviewDialog.tsx`, `src/lib/i18n/messages/{ko,en,fr,ja,mn,vi,zh}.ts`, `localeParity.test.ts` |
+| 재현 가능한 운영 조사·동시성 검증 | `scripts/operations/release-d1-inventory.mjs`, `scripts/operations/release-d1-verify.mjs` |
+| 보고서 | 이 문서 |
+
+총 33개 파일. 배포 뒤 inventory에 읽기 전용 `--data-api` 검사를 추가했으며 앱 런타임 코드는 배포 커밋과 동일하다. 운영 스크립트 린트도 다시 통과했다. 로컬 `.vercel`의 시간·IP·스모크 보조 파일은 배포·원격 업로드 대상이 아니다.
 
 ## 운영상 남은 한계
 
-- fail-closed로 DB/풀 장애 때 정상 요청도 잠시 차단된다. 트랜잭션 대기 2초/실행 3초 제한을 두었으며 DB 왕복이 늘어난다. 실제 지연 비교는 배포 후 기록한다.
+- fail-closed로 DB/풀 장애 때 정상 요청도 잠시 차단된다. 트랜잭션 대기 2초/실행 3초 제한을 두었으며 DB 왕복이 늘어난다. 위 실측은 소규모 Preview 비교이며 기관의 실제 브라우저 일괄 등록 부하 시험은 아니다.
 - 고정 창 경계에서 두 창의 예산이 근접해 사용될 수 있다. 이는 슬라이딩 창/전역 비용 예산이 아니며 기능별 공유 계정·네트워크 악용을 전부 막지는 않는다.
 - 감사 쪽지의 기존 저장 트랜잭션 안에서 별도 제한 트랜잭션을 사용하므로 짧게 두 연결이 필요할 수 있다. 제한 카운터는 이후 콘텐츠 저장이 실패해도 성공한 입장 시도를 계산한다.
 - 새 DB 스키마가 없으므로 이전 Preview 배포로 재지정해 코드 롤백할 수 있다. 새 카운터 행은 구버전이 무시하며 신고 증거·백업은 그대로 보존한다.
