@@ -73,7 +73,7 @@ describe("deletePostForAdmin", () => {
 
     const result = await deletePostForAdmin(admin as never, "lost", 5);
 
-    expect(deleteLostPost).toHaveBeenCalledWith(5, admin.id, { asAdmin: true });
+    expect(deleteLostPost).toHaveBeenCalledWith(5, admin, { asAdmin: true });
     expect(result).toEqual({ kind: "ok", data: { id: 5 } });
   });
 
@@ -82,7 +82,7 @@ describe("deletePostForAdmin", () => {
 
     const result = await deletePostForAdmin(admin as never, "found", 9);
 
-    expect(deleteFoundPost).toHaveBeenCalledWith(9, admin.id, { asAdmin: true });
+    expect(deleteFoundPost).toHaveBeenCalledWith(9, admin, { asAdmin: true });
     expect(result).toEqual({ kind: "ok", data: { id: 9 } });
   });
 

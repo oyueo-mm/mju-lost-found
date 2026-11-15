@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { isCurrentlySuspended, type ContentActor } from "@/lib/auth/suspension";
 import type { PostType } from "@/lib/posts/schema";
 import { saveImageEmbedding } from "@/lib/ai/vectorSearch";
 import { deleteObjectSafely, publicUrlFor } from "./supabaseAdmin";
@@ -9,7 +10,8 @@ import { MAX_IMAGES_PER_POST } from "./config";
 export type ImageMutationResult<T> =
   | { kind: "ok"; data: T }
   | { kind: "not_found" }
-  | { kind: "forbidden" }
+  // Release C (M-1): reason "suspended" -- the actor is currently suspended.
+  | { kind: "forbidden"; reason?: "suspended" }
   | { kind: "invalid_path" }
   // Legal pre-beta Phase: the uploaded object isn't a real image of the
   // type its path claims (lib/images/sanitize.ts); it was removed.
@@ -77,12 +79,13 @@ async function verifyUploadedPostImages(paths: string[]): Promise<boolean> {
 export async function setPostImage(
   type: PostType,
   id: number,
-  userId: number,
+  actor: ContentActor,
   upload: { path: string; previousAttemptPath?: string },
 ): Promise<ImageMutationResult<{ imageUrl: string }>> {
+  if (isCurrentlySuspended(actor)) return { kind: "forbidden", reason: "suspended" };
   const existing = await findOwnedPost(type, id);
   if (!existing) return { kind: "not_found" };
-  if (existing.userId !== userId) return { kind: "forbidden" };
+  if (existing.userId !== actor.id) return { kind: "forbidden" };
 
   // The path was already validated once when the signed upload URL was
   // minted (see /api/upload's checks), but that doesn't stop a client from
@@ -167,12 +170,13 @@ export async function setPostImage(
 export async function attachPostImages(
   type: PostType,
   id: number,
-  userId: number,
+  actor: ContentActor,
   input: { paths: string[] },
 ): Promise<ImageMutationResult<{ images: PostImageDTO[]; imageUrl: string | null }>> {
+  if (isCurrentlySuspended(actor)) return { kind: "forbidden", reason: "suspended" };
   const existing = await findOwnedPost(type, id);
   if (!existing) return { kind: "not_found" };
-  if (existing.userId !== userId) return { kind: "forbidden" };
+  if (existing.userId !== actor.id) return { kind: "forbidden" };
 
   const parsedPaths: string[] = [];
   for (const path of input.paths) {
@@ -261,12 +265,13 @@ export async function attachPostImages(
 export async function deletePostImage(
   type: PostType,
   id: number,
-  userId: number,
+  actor: ContentActor,
   imageId: number,
 ): Promise<ImageMutationResult<{ imageUrl: string | null }>> {
+  if (isCurrentlySuspended(actor)) return { kind: "forbidden", reason: "suspended" };
   const existing = await findOwnedPost(type, id);
   if (!existing) return { kind: "not_found" };
-  if (existing.userId !== userId) return { kind: "forbidden" };
+  if (existing.userId !== actor.id) return { kind: "forbidden" };
 
   const image = await prisma.postImage.findUnique({ where: { id: imageId } });
   // Cross-post deletion is rejected the same way a nonexistent image is --
@@ -338,11 +343,12 @@ export async function deletePostImage(
 export async function clearPostImage(
   type: PostType,
   id: number,
-  userId: number,
+  actor: ContentActor,
 ): Promise<ImageMutationResult<{ imageUrl: null }>> {
+  if (isCurrentlySuspended(actor)) return { kind: "forbidden", reason: "suspended" };
   const existing = await findOwnedPost(type, id);
   if (!existing) return { kind: "not_found" };
-  if (existing.userId !== userId) return { kind: "forbidden" };
+  if (existing.userId !== actor.id) return { kind: "forbidden" };
 
   const previousUrl = existing.imageUrl;
   const images = await prisma.postImage.findMany({ where: postImageWhere(type, id) });
@@ -397,12 +403,13 @@ export async function clearPostImage(
 export async function reorderPostImages(
   type: PostType,
   id: number,
-  userId: number,
+  actor: ContentActor,
   imageIds: number[],
 ): Promise<ImageMutationResult<{ images: PostImageDTO[]; imageUrl: string | null }>> {
+  if (isCurrentlySuspended(actor)) return { kind: "forbidden", reason: "suspended" };
   const existing = await findOwnedPost(type, id);
   if (!existing) return { kind: "not_found" };
-  if (existing.userId !== userId) return { kind: "forbidden" };
+  if (existing.userId !== actor.id) return { kind: "forbidden" };
 
   const currentImages = await prisma.postImage.findMany({ where: postImageWhere(type, id) });
   const currentIds = new Set(currentImages.map((image) => image.id));

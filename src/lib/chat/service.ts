@@ -3,7 +3,7 @@ import { after } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
 import { notifyUser } from "@/lib/notification/recipients";
-import { isCurrentlySuspended } from "@/lib/auth/suspension";
+import { isCurrentlySuspended, type ContentActor } from "@/lib/auth/suspension";
 import { NotificationType, OrganizationRole, OrganizationStatus, Prisma, type User } from "@/generated/prisma/client";
 import type { PostType } from "@/lib/posts/schema";
 import { parseChatImagePathname } from "@/lib/images/pathname";
@@ -1098,7 +1098,7 @@ export async function sendMessage(
   const participantIds = await participantIdsOf(room);
   if (!participantIds) return { kind: "not_found" };
   if (!participantIds.has(sender.id)) return { kind: "forbidden" };
-  if (isCurrentlySuspended(sender)) return { kind: "forbidden" };
+  if (isCurrentlySuspended(sender)) return { kind: "forbidden", reason: "suspended" };
   // 회원탈퇴: the conversation stays readable, but nobody can keep writing
   // to someone who has left the service.
   const directParticipants = [room.initiatorUserId, room.counterpartUserId].filter((id): id is number => id !== null && id !== sender.id);
@@ -1335,9 +1335,12 @@ export async function toggleMessageReaction(
 export async function editMessage(
   chatRoomId: number,
   messageId: number,
-  requesterId: number,
+  requester: ContentActor,
   content: string,
 ): Promise<ChatMutationResult<MessageDTO>> {
+  // Release C (M-1): same block sendMessage() already applies.
+  if (isCurrentlySuspended(requester)) return { kind: "forbidden", reason: "suspended" };
+  const requesterId = requester.id;
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
   const participantIds = await participantIdsOf(room);
@@ -1405,6 +1408,9 @@ export async function deleteMessage(
   messageId: number,
   requester: User,
 ): Promise<ChatMutationResult<{ messageId: number }>> {
+  // Release C (M-1): a suspended sender can't delete (and so purge the
+  // image of) a message it may be reported for.
+  if (isCurrentlySuspended(requester)) return { kind: "forbidden", reason: "suspended" };
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
   const participantIds = await participantIdsOf(room);

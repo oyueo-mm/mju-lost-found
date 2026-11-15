@@ -63,8 +63,8 @@ export async function deletePostForAdmin(
 
   const result =
     type === "lost"
-      ? await deleteLostPost(id, admin.id, { asAdmin: true })
-      : await deleteFoundPost(id, admin.id, { asAdmin: true });
+      ? await deleteLostPost(id, admin, { asAdmin: true })
+      : await deleteFoundPost(id, admin, { asAdmin: true });
 
   // `forbidden` (not_owner) can never actually happen here -- asAdmin:
   // true bypasses that branch entirely in deleteLostPost/deleteFoundPost.

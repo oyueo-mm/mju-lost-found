@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { User } from "@/generated/prisma/client";
 import { normalizeScore } from "@/lib/ai/matching";
 import { aiSimilarity } from "@/lib/ai/rankFusion";
+// Release C (M-1): services take the acting user (id + suspension state).
+const actor = (id: number) => ({ id, isSuspended: false, suspendedUntil: null });
+
 
 const lostPost = {
   findMany: vi.fn(),
@@ -501,7 +504,7 @@ describe("updateLostPost", () => {
       user: { id: 1, nickname: "닉네임" },
     });
 
-    const result = await updateLostPost(1, 1, { title: "새 제목" });
+    const result = await updateLostPost(1, actor(1), { title: "새 제목" });
 
     expect(result.kind).toBe("ok");
   });
@@ -528,7 +531,7 @@ describe("updateLostPost", () => {
       organization: { id: 10, name: "원래 단체" },
     });
 
-    await updateLostPost(1, 1, { title: "새 제목" });
+    await updateLostPost(1, actor(1), { title: "새 제목" });
 
     const callArgs = lostPost.update.mock.calls[0][0];
     expect(callArgs.data).not.toHaveProperty("organizationId");
@@ -552,7 +555,7 @@ describe("updateLostPost", () => {
       user: { id: 1, nickname: "닉네임" },
     });
 
-    await updateLostPost(1, 1, { title: "새 제목" });
+    await updateLostPost(1, actor(1), { title: "새 제목" });
     await flushAfterCallbacks();
 
     expect(embedPostBestEffort).toHaveBeenCalledWith("lost", 1, expect.objectContaining({ title: "새 제목" }));
@@ -578,7 +581,7 @@ describe("updateLostPost", () => {
       user: { id: 1, nickname: "닉네임" },
     });
 
-    const result = await updateLostPost(1, 1, { location: null });
+    const result = await updateLostPost(1, actor(1), { location: null });
     await flushAfterCallbacks();
 
     expect(result.kind).toBe("ok");
@@ -606,7 +609,7 @@ describe("updateLostPost", () => {
       user: { id: 1, nickname: "닉네임" },
     });
 
-    const result = await updateLostPost(1, 1, { location: "학생회관 2층" });
+    const result = await updateLostPost(1, actor(1), { location: "학생회관 2층" });
     await flushAfterCallbacks();
 
     expect(result.kind).toBe("ok");
@@ -635,7 +638,7 @@ describe("updateLostPost", () => {
       user: { id: 1, nickname: "닉네임" },
     });
 
-    const result = await updateLostPost(1, 1, { lostAt: null });
+    const result = await updateLostPost(1, actor(1), { lostAt: null });
     await flushAfterCallbacks();
 
     expect(result.kind).toBe("ok");
@@ -669,7 +672,7 @@ describe("updateLostPost", () => {
       user: { id: 1, nickname: "닉네임" },
     });
 
-    await updateLostPost(1, 1, { title: "새 제목" });
+    await updateLostPost(1, actor(1), { title: "새 제목" });
     await flushAfterCallbacks();
 
     expect(matchCandidateCache.deleteMany).toHaveBeenCalledWith({
@@ -694,7 +697,7 @@ describe("updateLostPost", () => {
       user: { id: 1, nickname: "닉네임" },
     });
 
-    await updateLostPost(1, 1, { status: "찾음" });
+    await updateLostPost(1, actor(1), { status: "찾음" });
 
     expect(embedPostBestEffort).not.toHaveBeenCalled();
     expect(matchCandidateCache.deleteMany).not.toHaveBeenCalled();
@@ -722,7 +725,7 @@ describe("updateLostPost", () => {
       user: { id: 1, nickname: "닉네임" },
     });
 
-    await updateLostPost(1, 1, { category: "전자기기", categoryCode: "earphones", subcategory: "earphones.airpods" });
+    await updateLostPost(1, actor(1), { category: "전자기기", categoryCode: "earphones", subcategory: "earphones.airpods" });
     await flushAfterCallbacks();
 
     expect(lostPost.update).toHaveBeenCalledWith(
@@ -750,7 +753,7 @@ describe("updateLostPost", () => {
       user: { id: 1, nickname: "닉네임" },
     });
 
-    await updateLostPost(1, 1, { category: "지갑", categoryCode: "wallet", subcategory: "wallet.card_wallet" });
+    await updateLostPost(1, actor(1), { category: "지갑", categoryCode: "wallet", subcategory: "wallet.card_wallet" });
     await flushAfterCallbacks();
 
     expect(lostPost.update).toHaveBeenCalledWith(
@@ -788,7 +791,7 @@ describe("updateLostPost", () => {
       user: { id: 1, nickname: "닉네임" },
     });
 
-    const result = await updateLostPost(1, 1, { status: "찾음" });
+    const result = await updateLostPost(1, actor(1), { status: "찾음" });
 
     expect(result.kind).toBe("ok");
     expect(lostPost.update).toHaveBeenCalledWith(
@@ -799,7 +802,7 @@ describe("updateLostPost", () => {
   it("non-owner cannot change another user's post status", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
 
-    const result = await updateLostPost(1, 2, { status: "찾음" });
+    const result = await updateLostPost(1, actor(2), { status: "찾음" });
 
     expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
     expect(lostPost.update).not.toHaveBeenCalled();
@@ -808,7 +811,7 @@ describe("updateLostPost", () => {
   it("rejects updating someone else's post", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
 
-    const result = await updateLostPost(1, 2, { title: "해킹 시도" });
+    const result = await updateLostPost(1, actor(2), { title: "해킹 시도" });
 
     expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
     expect(lostPost.update).not.toHaveBeenCalled();
@@ -816,13 +819,13 @@ describe("updateLostPost", () => {
 
   it("reports not_found for a nonexistent post", async () => {
     lostPost.findUnique.mockResolvedValueOnce(null);
-    expect(await updateLostPost(999, 1, { title: "x" })).toEqual({ kind: "not_found" });
+    expect(await updateLostPost(999, actor(1), { title: "x" })).toEqual({ kind: "not_found" });
   });
 
   it("rejects updating someone else's FoundPost the same way", async () => {
     foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1 });
 
-    const result = await updateFoundPost(2, 2, { title: "해킹 시도" });
+    const result = await updateFoundPost(2, actor(2), { title: "해킹 시도" });
 
     expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
     expect(foundPost.update).not.toHaveBeenCalled();
@@ -849,7 +852,7 @@ describe("updateLostPost", () => {
       user: { id: 1, nickname: "닉네임" },
     });
 
-    const result = await updateFoundPost(2, 1, { location: null, foundAt: null });
+    const result = await updateFoundPost(2, actor(1), { location: null, foundAt: null });
     await flushAfterCallbacks();
 
     expect(result.kind).toBe("ok");
@@ -882,7 +885,7 @@ describe("updateLostPost", () => {
         .mockResolvedValueOnce({ status: "COMPLETED" }); // re-read under the row lock
       foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
 
-      const result = await updateFoundPost(2, 1, { status: "보관 중" });
+      const result = await updateFoundPost(2, actor(1), { status: "보관 중" });
 
       expect(result.kind).toBe("ok");
       expect($transaction).toHaveBeenCalledTimes(1);
@@ -904,7 +907,7 @@ describe("updateLostPost", () => {
         foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, custody: keeping.custody }).mockResolvedValueOnce(keeping);
         foundPost.update.mockResolvedValueOnce({ ...foundRow("KEEPING"), custody: null });
 
-        const result = await updateFoundPost(2, 1, { custody: null });
+        const result = await updateFoundPost(2, actor(1), { custody: null });
 
         expect(result.kind).toBe("ok");
         expect(foundPost.update).toHaveBeenCalledWith(expect.objectContaining({ data: { custody: "DbNull" } }));
@@ -917,7 +920,7 @@ describe("updateLostPost", () => {
         foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, custody: null }).mockResolvedValueOnce({ ...keeping, custody: null });
         foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
 
-        await updateFoundPost(2, 1, { custody: { state: "OTHER", place: "", note: "다른 학생이 보관 중" } });
+        await updateFoundPost(2, actor(1), { custody: { state: "OTHER", place: "", note: "다른 학생이 보관 중" } });
 
         expect(foundPost.update).toHaveBeenCalledWith(expect.objectContaining({ data: { custody: { state: "OTHER", place: "", note: "다른 학생이 보관 중" } } }));
       });
@@ -927,7 +930,7 @@ describe("updateLostPost", () => {
         foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, custody: other }).mockResolvedValueOnce({ ...keeping, custody: other });
         foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
 
-        await updateFoundPost(2, 1, { campus: "자연캠퍼스" });
+        await updateFoundPost(2, actor(1), { campus: "자연캠퍼스" });
 
         expect(foundPost.update).toHaveBeenCalledWith(expect.objectContaining({ data: { campus: "자연캠퍼스", custody: other } }));
       });
@@ -936,7 +939,7 @@ describe("updateLostPost", () => {
         foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, custody: keeping.custody });
         foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
 
-        await updateFoundPost(2, 1, { title: "새 제목" });
+        await updateFoundPost(2, actor(1), { title: "새 제목" });
 
         expect(foundPost.update).toHaveBeenCalledWith(expect.objectContaining({ data: { title: "새 제목" } }));
         expect($transaction).not.toHaveBeenCalled();
@@ -945,7 +948,7 @@ describe("updateLostPost", () => {
       it("an institution-managed item's custody stays locked for the finder (even clearing it)", async () => {
         foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, custody: keeping.custody }).mockResolvedValueOnce({ ...keeping, custodyOrganizationId: 7 });
 
-        const result = await updateFoundPost(2, 1, { custody: null });
+        const result = await updateFoundPost(2, actor(1), { custody: null });
 
         expect(result).toEqual({ kind: "forbidden", reason: "custody_managed" });
         expect(foundPost.update).not.toHaveBeenCalled();
@@ -959,7 +962,7 @@ describe("updateLostPost", () => {
         .mockResolvedValueOnce({ status: "KEEPING" });
       foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
 
-      const result = await updateFoundPost(2, 1, { status: "보관 중" });
+      const result = await updateFoundPost(2, actor(1), { status: "보관 중" });
 
       expect(result.kind).toBe("ok");
       expect(postStatusChange.create).not.toHaveBeenCalled();
@@ -970,11 +973,11 @@ describe("updateLostPost", () => {
         .mockResolvedValueOnce({ id: 2, userId: 1, status: "KEEPING" })
         .mockResolvedValueOnce({ status: "KEEPING" });
       foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
-      await updateFoundPost(2, 1, { status: "보관 중" });
+      await updateFoundPost(2, actor(1), { status: "보관 중" });
 
       foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1, status: "KEEPING" });
       foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
-      await updateFoundPost(2, 1, { title: "새 제목" });
+      await updateFoundPost(2, actor(1), { title: "새 제목" });
 
       expect(postStatusChange.create).not.toHaveBeenCalled();
       expect($transaction).toHaveBeenCalledTimes(1);
@@ -986,7 +989,7 @@ describe("updateLostPost", () => {
         .mockResolvedValueOnce({ status: "SEARCHING" });
       lostPost.update.mockResolvedValueOnce({ ...foundRow("FOUND"), id: 1, lostAt: null, lostDate: null });
 
-      const result = await updateLostPost(1, 1, { status: "찾음" });
+      const result = await updateLostPost(1, actor(1), { status: "찾음" });
 
       expect(result.kind).toBe("ok");
       expect(($queryRaw.mock.calls[0][0] as string[]).join("?")).toMatch(/FROM "LostPost" WHERE id = \? FOR UPDATE/);
@@ -1002,13 +1005,13 @@ describe("updateLostPost", () => {
         .mockResolvedValueOnce({ status: "COMPLETED" });
       foundPost.update.mockResolvedValueOnce(foundRow("KEEPING"));
 
-      await expect(updateFoundPost(2, 1, { status: "보관 중" })).rejects.toThrow("db down");
+      await expect(updateFoundPost(2, actor(1), { status: "보관 중" })).rejects.toThrow("db down");
     });
 
     it("doesn't let a non-owner change the status (or write history)", async () => {
       foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 9, status: "COMPLETED" });
 
-      const result = await updateFoundPost(2, 1, { status: "보관 중" });
+      const result = await updateFoundPost(2, actor(1), { status: "보관 중" });
 
       expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
       expect($transaction).not.toHaveBeenCalled();
@@ -1042,7 +1045,7 @@ describe("updateLostPost", () => {
         organization: { id: 10, name: "총학생회" },
       });
 
-      const result = await updateLostPost(1, 1, { organizationId: 10 });
+      const result = await updateLostPost(1, actor(1), { organizationId: 10 });
 
       expect(validateOrganizationPosting).toHaveBeenCalledWith(1, 10);
       expect(result.kind).toBe("ok");
@@ -1071,7 +1074,7 @@ describe("updateLostPost", () => {
         organization: { id: 20, name: "AI 동아리" },
       });
 
-      const result = await updateLostPost(1, 1, { organizationId: 20 });
+      const result = await updateLostPost(1, actor(1), { organizationId: 20 });
 
       expect(validateOrganizationPosting).toHaveBeenCalledWith(1, 20);
       expect(result.kind).toBe("ok");
@@ -1096,7 +1099,7 @@ describe("updateLostPost", () => {
         organization: null,
       });
 
-      const result = await updateLostPost(1, 1, { organizationId: null });
+      const result = await updateLostPost(1, actor(1), { organizationId: null });
 
       expect(validateOrganizationPosting).not.toHaveBeenCalled();
       expect(result.kind).toBe("ok");
@@ -1110,7 +1113,7 @@ describe("updateLostPost", () => {
       validateOrganizationPosting.mockResolvedValueOnce({ kind: "forbidden" });
       lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
 
-      const result = await updateLostPost(1, 1, { organizationId: 999 });
+      const result = await updateLostPost(1, actor(1), { organizationId: 999 });
 
       expect(result).toEqual({ kind: "forbidden", reason: "organization_not_member" });
       expect(lostPost.update).not.toHaveBeenCalled();
@@ -1120,7 +1123,7 @@ describe("updateLostPost", () => {
       validateOrganizationPosting.mockResolvedValueOnce({ kind: "inactive_organization" });
       lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
 
-      const result = await updateLostPost(1, 1, { organizationId: 10 });
+      const result = await updateLostPost(1, actor(1), { organizationId: 10 });
 
       expect(result).toEqual({ kind: "forbidden", reason: "organization_inactive" });
       expect(lostPost.update).not.toHaveBeenCalled();
@@ -1130,7 +1133,7 @@ describe("updateLostPost", () => {
       validateOrganizationPosting.mockResolvedValueOnce({ kind: "not_found" });
       lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
 
-      const result = await updateLostPost(1, 1, { organizationId: 999999 });
+      const result = await updateLostPost(1, actor(1), { organizationId: 999999 });
 
       expect(result).toEqual({ kind: "forbidden", reason: "organization_not_found" });
       expect(lostPost.update).not.toHaveBeenCalled();
@@ -1139,7 +1142,7 @@ describe("updateLostPost", () => {
     it("소유자가 아니면 organizationId 검증 전에 이미 forbidden", async () => {
       lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 2 });
 
-      const result = await updateLostPost(1, 1, { organizationId: 10 });
+      const result = await updateLostPost(1, actor(1), { organizationId: 10 });
 
       expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
       expect(validateOrganizationPosting).not.toHaveBeenCalled();
@@ -1149,7 +1152,7 @@ describe("updateLostPost", () => {
       validateOrganizationPosting.mockResolvedValueOnce({ kind: "forbidden" });
       foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1 });
 
-      const result = await updateFoundPost(2, 1, { organizationId: 10 });
+      const result = await updateFoundPost(2, actor(1), { organizationId: 10 });
 
       expect(result).toEqual({ kind: "forbidden", reason: "organization_not_member" });
       expect(foundPost.update).not.toHaveBeenCalled();
@@ -1728,5 +1731,26 @@ describe("AI search similarity threshold", () => {
       { id: 1, score: 0.82 },
       { id: 3, score: 0.65 },
     ]);
+  });
+});
+
+describe("release C (M-1): suspended authors can't edit their posts", () => {
+  const permanently = { id: 1, isSuspended: true, suspendedUntil: null };
+  const untilTomorrow = { id: 1, isSuspended: true, suspendedUntil: new Date(Date.now() + 86_400_000) };
+
+  it.each([permanently, untilTomorrow])("refuses updateLostPost/updateFoundPost before reading the post", async (suspended) => {
+    expect(await updateLostPost(1, suspended, { title: "x" })).toEqual({ kind: "forbidden", reason: "suspended" });
+    expect(await updateFoundPost(2, suspended, { title: "x" })).toEqual({ kind: "forbidden", reason: "suspended" });
+    expect(lostPost.findUnique).not.toHaveBeenCalled();
+    expect(foundPost.findUnique).not.toHaveBeenCalled();
+    expect(lostPost.update).not.toHaveBeenCalled();
+    expect(foundPost.update).not.toHaveBeenCalled();
+  });
+
+  it("an expired timed suspension no longer blocks the edit", async () => {
+    const expired = { id: 1, isSuspended: true, suspendedUntil: new Date(Date.now() - 1000) };
+    lostPost.findUnique.mockResolvedValueOnce(null);
+    expect(await updateLostPost(1, expired, { title: "x" })).toEqual({ kind: "not_found" });
+    expect(lostPost.findUnique).toHaveBeenCalled();
   });
 });

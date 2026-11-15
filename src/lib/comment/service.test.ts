@@ -1,3 +1,6 @@
+// Release C (M-1): services take the acting user (id + suspension state).
+const actor = (id: number) => ({ id, isSuspended: false, suspendedUntil: null });
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { User } from "@/generated/prisma/client";
 
@@ -473,7 +476,7 @@ describe("updateComment", () => {
       author: { id: 1, nickname: "닉네임" },
     });
 
-    const result = await updateComment(1, 10, { content: "수정된 내용" });
+    const result = await updateComment(actor(1), 10, { content: "수정된 내용" });
 
     expect(result.kind).toBe("ok");
   });
@@ -497,7 +500,7 @@ describe("updateComment", () => {
       organization: { id: 5, name: "원래 조직" },
     });
 
-    await updateComment(1, 10, { content: "수정된 내용", organizationId: 999 } as never);
+    await updateComment(actor(1), 10, { content: "수정된 내용", organizationId: 999 } as never);
 
     const callArgs = comment.update.mock.calls[0][0];
     expect(callArgs.data).not.toHaveProperty("organizationId");
@@ -506,7 +509,7 @@ describe("updateComment", () => {
   it("rejects editing someone else's comment, even for an admin", async () => {
     comment.findUnique.mockResolvedValueOnce({ id: 10, authorUserId: 1, author: { id: 1, nickname: "닉네임" } });
 
-    const result = await updateComment(2, 10, { content: "해킹 시도" });
+    const result = await updateComment(actor(2), 10, { content: "해킹 시도" });
 
     expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
     expect(comment.update).not.toHaveBeenCalled();
@@ -514,7 +517,7 @@ describe("updateComment", () => {
 
   it("reports not_found for a nonexistent comment", async () => {
     comment.findUnique.mockResolvedValueOnce(null);
-    expect(await updateComment(1, 999, { content: "x" })).toEqual({ kind: "not_found" });
+    expect(await updateComment(actor(1), 999, { content: "x" })).toEqual({ kind: "not_found" });
   });
 });
 
@@ -711,5 +714,16 @@ describe("temporarily hidden comments (Legal pre-beta Phase)", () => {
 
     expect(await createComment(author, "lost", 5, { content: "답글", parentId: 11 })).toEqual({ kind: "parent_not_found" });
     expect(comment.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("release C (M-1): suspended authors can't edit or delete comments", () => {
+  const suspended = { id: 1, isSuspended: true, suspendedUntil: null, isAdmin: false } as unknown as User;
+  it("refuses updateComment and deleteComment before reading the comment", async () => {
+    expect(await updateComment(suspended, 10, { content: "x" })).toEqual({ kind: "forbidden", reason: "suspended" });
+    expect(await deleteComment(suspended, 10)).toEqual({ kind: "forbidden", reason: "suspended" });
+    expect(comment.findUnique).not.toHaveBeenCalled();
+    expect(comment.update).not.toHaveBeenCalled();
+    expect($transaction).not.toHaveBeenCalled();
   });
 });

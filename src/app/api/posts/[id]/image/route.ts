@@ -1,6 +1,7 @@
 import { NextRequest, after } from "next/server";
 
 import { jsonError, jsonOk, requireUserForApi, withErrorHandling } from "@/lib/posts/http";
+import { SUSPENDED_ACCOUNT_MESSAGE } from "@/lib/posts/response";
 import { postTypeSchema } from "@/lib/posts/schema";
 import { attachImageSchema, reorderImagesSchema } from "@/lib/images/schema";
 import { MAX_IMAGES_PER_POST } from "@/lib/images/config";
@@ -42,6 +43,7 @@ function imageResultToResponse<T>(result: ImageMutationResult<T>) {
     case "not_found":
       return jsonError(404, "게시물을 찾을 수 없습니다.");
     case "forbidden":
+      if (result.reason === "suspended") return jsonError(403, SUSPENDED_ACCOUNT_MESSAGE);
       return jsonError(403, "본인 게시물만 수정할 수 있습니다.");
     case "invalid_path":
       return jsonError(400, "업로드 결과를 확인할 수 없습니다.");
@@ -112,8 +114,8 @@ export const POST = withErrorHandling(
     // two branches of one union rather than two separate request bodies.
     const result: ImageMutationResult<{ imageUrl: string | null }> =
       "paths" in parsed.data
-        ? await attachPostImages(parsedParams.type, parsedParams.id, auth.user.id, parsed.data)
-        : await setPostImage(parsedParams.type, parsedParams.id, auth.user.id, parsed.data);
+        ? await attachPostImages(parsedParams.type, parsedParams.id, auth.user, parsed.data)
+        : await setPostImage(parsedParams.type, parsedParams.id, auth.user, parsed.data);
 
     if (result.kind === "ok") triggerEmbeddingRecompute(request, parsedParams.id, parsedParams.type);
 
@@ -143,12 +145,12 @@ export const DELETE = withErrorHandling(
       if (!Number.isInteger(imageId)) {
         return jsonError(400, "imageId가 올바르지 않습니다.");
       }
-      const result = await deletePostImage(parsed.type, parsed.id, auth.user.id, imageId);
+      const result = await deletePostImage(parsed.type, parsed.id, auth.user, imageId);
       if (result.kind === "ok") triggerEmbeddingRecompute(request, parsed.id, parsed.type);
       return imageResultToResponse(result);
     }
 
-    const result = await clearPostImage(parsed.type, parsed.id, auth.user.id);
+    const result = await clearPostImage(parsed.type, parsed.id, auth.user);
     return imageResultToResponse(result);
   },
 );
@@ -181,7 +183,7 @@ export const PATCH = withErrorHandling(
       return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
     }
 
-    const result = await reorderPostImages(parsedParams.type, parsedParams.id, auth.user.id, parsed.data.imageIds);
+    const result = await reorderPostImages(parsedParams.type, parsedParams.id, auth.user, parsed.data.imageIds);
     if (result.kind === "ok") triggerEmbeddingRecompute(request, parsedParams.id, parsedParams.type);
 
     return imageResultToResponse(result);

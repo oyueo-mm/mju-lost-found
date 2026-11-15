@@ -143,7 +143,7 @@ export const PATCH = withErrorHandling(
       if (!parsed.success) {
         return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
       }
-      const result = await editMessage(id, parsed.data.messageId, auth.user.id, parsed.data.content);
+      const result = await editMessage(id, parsed.data.messageId, auth.user, parsed.data.content);
       return chatMutationResultToResponse(result);
     }
 

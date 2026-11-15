@@ -136,3 +136,19 @@ describe("실명·학과 gate", () => {
     expect(getChatRoomForUser).not.toHaveBeenCalled();
   });
 });
+
+describe("release C (M-1): POST /api/chat/[id]/upload for a suspended account", () => {
+  it("issues no upload token and never checks the room", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: { ...sessionUser, isSuspended: true, suspendedUntil: null } });
+
+    const res = await POST(
+      new NextRequest("http://localhost/api/chat/1/upload", { method: "POST", body: JSON.stringify({ contentType: "image/jpeg" }) }),
+      params("1"),
+    );
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("정지된 계정은 이 기능을 사용할 수 없습니다.");
+    expect(getChatRoomForUser).not.toHaveBeenCalled();
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
+  });
+});

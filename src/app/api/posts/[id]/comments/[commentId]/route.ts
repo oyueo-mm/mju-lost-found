@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 
 import { jsonError, jsonOk, requireUserForApi, withErrorHandling } from "@/lib/posts/http";
+import { SUSPENDED_ACCOUNT_MESSAGE } from "@/lib/posts/response";
 import { updateCommentSchema } from "@/lib/comment/schema";
 import { deleteComment, updateComment } from "@/lib/comment/service";
 
@@ -29,7 +30,7 @@ export const PATCH = withErrorHandling(
       return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
     }
 
-    const result = await updateComment(auth.user.id, commentId, parsed.data);
+    const result = await updateComment(auth.user, commentId, parsed.data);
     switch (result.kind) {
       case "ok":
         return jsonOk(result.data);
@@ -41,6 +42,7 @@ export const PATCH = withErrorHandling(
       case "parent_not_found":
         return jsonError(404, "댓글을 찾을 수 없습니다.");
       case "forbidden":
+        if (result.reason === "suspended") return jsonError(403, SUSPENDED_ACCOUNT_MESSAGE);
         return jsonError(403, "본인 댓글만 수정할 수 있습니다.");
     }
   },
@@ -66,6 +68,7 @@ export const DELETE = withErrorHandling(
       case "parent_not_found":
         return jsonError(404, "댓글을 찾을 수 없습니다.");
       case "forbidden":
+        if (result.reason === "suspended") return jsonError(403, SUSPENDED_ACCOUNT_MESSAGE);
         return jsonError(403, "본인 댓글만 삭제할 수 있습니다.");
     }
   },

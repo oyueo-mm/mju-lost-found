@@ -15,6 +15,8 @@ import { embedPostImageBestEffort } from "@/lib/ai/postEmbedding";
 import { findPostRecommendations, invalidateRecommendationCache } from "@/lib/recommendation/service";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canAny } from "@/lib/permissions/check";
+import { isCurrentlySuspended } from "@/lib/auth/suspension";
+import { SUSPENDED_ACCOUNT_MESSAGE } from "@/lib/posts/response";
 
 // PATCH conditionally triggers embedPostBestEffort() -- real ONNX Runtime
 // inference (@huggingface/transformers, a native addon) that cannot run on
@@ -114,7 +116,7 @@ export const PATCH = withErrorHandling(
       if (!parsed.success) {
         return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
       }
-      const result = await updateLostPost(parsedParams.id, auth.user.id, parsed.data);
+      const result = await updateLostPost(parsedParams.id, auth.user, parsed.data);
       return postMutationResultToResponse(result);
     }
 
@@ -122,7 +124,7 @@ export const PATCH = withErrorHandling(
     if (!parsed.success) {
       return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
     }
-    const result = await updateFoundPost(parsedParams.id, auth.user.id, parsed.data);
+    const result = await updateFoundPost(parsedParams.id, auth.user, parsed.data);
     return postMutationResultToResponse(result);
   },
 );
@@ -144,6 +146,9 @@ export const PUT = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const auth = await requireUserForApi();
     if ("response" in auth) return auth.response;
+
+    // Release C (M-1): a suspended author can't trigger re-embedding.
+    if (isCurrentlySuspended(auth.user)) return jsonError(403, SUSPENDED_ACCOUNT_MESSAGE);
 
     const { id: idParam } = await params;
     const parsedParams = parseParams(idParam, request.nextUrl.searchParams);
@@ -183,8 +188,8 @@ export const DELETE = withErrorHandling(
 
     const result =
       parsed.type === "lost"
-        ? await deleteLostPost(parsed.id, auth.user.id)
-        : await deleteFoundPost(parsed.id, auth.user.id);
+        ? await deleteLostPost(parsed.id, auth.user)
+        : await deleteFoundPost(parsed.id, auth.user);
     return postMutationResultToResponse(result);
   },
 );

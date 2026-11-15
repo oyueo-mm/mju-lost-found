@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// Release C (M-1): services take the acting user (id + suspension state).
+const actor = (id: number) => ({ id, isSuspended: false, suspendedUntil: null });
+
 
 const lostPost = { findUnique: vi.fn(), update: vi.fn() };
 const foundPost = { findUnique: vi.fn(), update: vi.fn() };
@@ -56,13 +59,13 @@ beforeEach(() => {
 describe("setPostImage", () => {
   it("returns not_found for a nonexistent post", async () => {
     lostPost.findUnique.mockResolvedValueOnce(null);
-    const result = await setPostImage("lost", 1, 1, { path: VALID_PATH });
+    const result = await setPostImage("lost", 1, actor(1), { path: VALID_PATH });
     expect(result).toEqual({ kind: "not_found" });
   });
 
   it("rejects attaching an image to someone else's post", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
-    const result = await setPostImage("lost", 1, 2, { path: VALID_PATH });
+    const result = await setPostImage("lost", 1, actor(2), { path: VALID_PATH });
     expect(result).toEqual({ kind: "forbidden" });
     expect(lostPost.update).not.toHaveBeenCalled();
   });
@@ -70,7 +73,7 @@ describe("setPostImage", () => {
   it("rejects a path that doesn't parse as a valid posts/{type}/{id}/{uuid}.{ext} shape", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
 
-    const result = await setPostImage("lost", 1, 1, { path: "not-a-valid-path.jpg" });
+    const result = await setPostImage("lost", 1, actor(1), { path: "not-a-valid-path.jpg" });
 
     expect(result).toEqual({ kind: "invalid_path" });
     expect(lostPost.update).not.toHaveBeenCalled();
@@ -81,7 +84,7 @@ describe("setPostImage", () => {
 
     // Well-formed, but for post id 2 -- attaching it to post 1 must fail
     // even though the requester owns post 1.
-    const result = await setPostImage("lost", 1, 1, {
+    const result = await setPostImage("lost", 1, actor(1), {
       path: "posts/lost/2/11111111-1111-1111-1111-111111111111.jpg",
     });
 
@@ -92,7 +95,7 @@ describe("setPostImage", () => {
   it("rejects a path that names the right id but the wrong board (found vs lost)", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
 
-    const result = await setPostImage("lost", 1, 1, {
+    const result = await setPostImage("lost", 1, actor(1), {
       path: "posts/found/1/11111111-1111-1111-1111-111111111111.jpg",
     });
 
@@ -102,7 +105,7 @@ describe("setPostImage", () => {
   it("saves the new image (derived server-side from the path) and only then deletes the old one", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://old/image.jpg" });
 
-    const result = await setPostImage("lost", 1, 1, { path: VALID_PATH });
+    const result = await setPostImage("lost", 1, actor(1), { path: VALID_PATH });
 
     const newUrl = "https://storage.example/post-images/" + VALID_PATH;
     expect(result).toEqual({ kind: "ok", data: { imageUrl: newUrl } });
@@ -117,7 +120,7 @@ describe("setPostImage", () => {
   it("doesn't attempt to delete anything when there was no previous image", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
 
-    await setPostImage("lost", 1, 1, { path: VALID_PATH });
+    await setPostImage("lost", 1, actor(1), { path: VALID_PATH });
 
     expect(deleteObjectSafely).not.toHaveBeenCalled();
   });
@@ -130,7 +133,7 @@ describe("setPostImage", () => {
       postImage.findFirst.mockResolvedValueOnce(null); // no existing primary row
 
       const newUrl = "https://storage.example/post-images/" + VALID_PATH;
-      await setPostImage("lost", 1, 1, { path: VALID_PATH });
+      await setPostImage("lost", 1, actor(1), { path: VALID_PATH });
 
       expect(postImage.create).toHaveBeenCalledWith({
         data: { lostPostId: 1, imageUrl: newUrl, displayOrder: 0, isPrimary: true },
@@ -143,7 +146,7 @@ describe("setPostImage", () => {
       postImage.findFirst.mockResolvedValueOnce({ id: 42, isPrimary: true });
 
       const newUrl = "https://storage.example/post-images/" + VALID_PATH;
-      await setPostImage("lost", 1, 1, { path: VALID_PATH });
+      await setPostImage("lost", 1, actor(1), { path: VALID_PATH });
 
       expect(postImage.update).toHaveBeenCalledWith({ where: { id: 42 }, data: { imageUrl: newUrl } });
       expect(postImage.create).not.toHaveBeenCalled();
@@ -157,7 +160,7 @@ describe("setPostImage", () => {
     it("deletes a previousAttemptPath that names the same (type, id) as this request", async () => {
       lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
 
-      await setPostImage("lost", 1, 1, { path: VALID_PATH, previousAttemptPath: PREVIOUS_PATH });
+      await setPostImage("lost", 1, actor(1), { path: VALID_PATH, previousAttemptPath: PREVIOUS_PATH });
 
       expect(deleteObjectSafely).toHaveBeenCalledWith("https://storage.example/post-images/" + PREVIOUS_PATH);
     });
@@ -165,7 +168,7 @@ describe("setPostImage", () => {
     it("never trusts a previousAttemptPath at face value -- ignores one naming a different post id", async () => {
       lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
 
-      await setPostImage("lost", 1, 1, {
+      await setPostImage("lost", 1, actor(1), {
         path: VALID_PATH,
         previousAttemptPath: "posts/lost/999/22222222-2222-2222-2222-222222222222.jpg",
       });
@@ -176,7 +179,7 @@ describe("setPostImage", () => {
     it("ignores a previousAttemptPath naming the right id but the wrong board", async () => {
       lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
 
-      await setPostImage("lost", 1, 1, {
+      await setPostImage("lost", 1, actor(1), {
         path: VALID_PATH,
         previousAttemptPath: "posts/found/1/22222222-2222-2222-2222-222222222222.jpg",
       });
@@ -187,7 +190,7 @@ describe("setPostImage", () => {
     it("ignores a malformed previousAttemptPath instead of failing the whole attach", async () => {
       lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
 
-      const result = await setPostImage("lost", 1, 1, {
+      const result = await setPostImage("lost", 1, actor(1), {
         path: VALID_PATH,
         previousAttemptPath: "not-a-real-path",
       });
@@ -199,7 +202,7 @@ describe("setPostImage", () => {
     it("does not re-delete the same path it just attached (previousAttemptPath === path)", async () => {
       lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
 
-      await setPostImage("lost", 1, 1, { path: VALID_PATH, previousAttemptPath: VALID_PATH });
+      await setPostImage("lost", 1, actor(1), { path: VALID_PATH, previousAttemptPath: VALID_PATH });
 
       expect(deleteObjectSafely).not.toHaveBeenCalled();
     });
@@ -207,7 +210,7 @@ describe("setPostImage", () => {
     it("cleans up both the previous *attached* image and a previousAttemptPath orphan in the same call", async () => {
       lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://old/image.jpg" });
 
-      await setPostImage("lost", 1, 1, { path: VALID_PATH, previousAttemptPath: PREVIOUS_PATH });
+      await setPostImage("lost", 1, actor(1), { path: VALID_PATH, previousAttemptPath: PREVIOUS_PATH });
 
       expect(deleteObjectSafely).toHaveBeenCalledWith("https://old/image.jpg");
       expect(deleteObjectSafely).toHaveBeenCalledWith("https://storage.example/post-images/" + PREVIOUS_PATH);
@@ -219,13 +222,13 @@ describe("setPostImage", () => {
 describe("attachPostImages", () => {
   it("returns not_found for a nonexistent post", async () => {
     lostPost.findUnique.mockResolvedValueOnce(null);
-    const result = await attachPostImages("lost", 1, 1, { paths: [VALID_PATH] });
+    const result = await attachPostImages("lost", 1, actor(1), { paths: [VALID_PATH] });
     expect(result).toEqual({ kind: "not_found" });
   });
 
   it("rejects attaching to someone else's post", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
-    const result = await attachPostImages("lost", 1, 2, { paths: [VALID_PATH] });
+    const result = await attachPostImages("lost", 1, actor(2), { paths: [VALID_PATH] });
     expect(result).toEqual({ kind: "forbidden" });
     expect(postImage.create).not.toHaveBeenCalled();
   });
@@ -233,7 +236,7 @@ describe("attachPostImages", () => {
   it("rejects a path naming a different post id (cross-post-path)", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
 
-    const result = await attachPostImages("lost", 1, 1, {
+    const result = await attachPostImages("lost", 1, actor(1), {
       paths: ["posts/lost/2/11111111-1111-1111-1111-111111111111.jpg"],
     });
 
@@ -244,7 +247,7 @@ describe("attachPostImages", () => {
   it("rejects a path naming the right id but the wrong board (wrong-postType)", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
 
-    const result = await attachPostImages("lost", 1, 1, {
+    const result = await attachPostImages("lost", 1, actor(1), {
       paths: ["posts/found/1/11111111-1111-1111-1111-111111111111.jpg"],
     });
 
@@ -258,7 +261,7 @@ describe("attachPostImages", () => {
     postImage.count.mockResolvedValueOnce(0); // hasPrimary check
     postImage.create.mockResolvedValueOnce({ id: 10, imageUrl: "https://storage.example/post-images/" + VALID_PATH, displayOrder: 0, isPrimary: true });
 
-    const result = await attachPostImages("lost", 1, 1, { paths: [VALID_PATH] });
+    const result = await attachPostImages("lost", 1, actor(1), { paths: [VALID_PATH] });
 
     const newUrl = "https://storage.example/post-images/" + VALID_PATH;
     expect(postImage.create).toHaveBeenCalledWith({
@@ -280,7 +283,7 @@ describe("attachPostImages", () => {
       .mockResolvedValueOnce({ id: 11, imageUrl: "https://storage.example/post-images/" + VALID_PATH_2, displayOrder: 1, isPrimary: false })
       .mockResolvedValueOnce({ id: 12, imageUrl: "https://storage.example/post-images/" + VALID_PATH_3, displayOrder: 2, isPrimary: false });
 
-    const result = await attachPostImages("lost", 1, 1, { paths: [VALID_PATH_2, VALID_PATH_3] });
+    const result = await attachPostImages("lost", 1, actor(1), { paths: [VALID_PATH_2, VALID_PATH_3] });
 
     expect(postImage.create).toHaveBeenNthCalledWith(1, {
       data: { lostPostId: 1, imageUrl: "https://storage.example/post-images/" + VALID_PATH_2, displayOrder: 1, isPrimary: false },
@@ -300,7 +303,7 @@ describe("attachPostImages", () => {
     postImage.count.mockResolvedValueOnce(1); // has a primary already
     postImage.create.mockResolvedValue({ id: 99, imageUrl: "https://x", displayOrder: 0, isPrimary: false });
 
-    const result = await attachPostImages("lost", 1, 1, { paths: [VALID_PATH, VALID_PATH_2, VALID_PATH_3] });
+    const result = await attachPostImages("lost", 1, actor(1), { paths: [VALID_PATH, VALID_PATH_2, VALID_PATH_3] });
 
     expect(result.kind).toBe("ok");
     expect(postImage.create).toHaveBeenCalledTimes(3);
@@ -310,7 +313,7 @@ describe("attachPostImages", () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x" });
     postImage.count.mockResolvedValueOnce(5); // already at the cap
 
-    const result = await attachPostImages("lost", 1, 1, { paths: [VALID_PATH] });
+    const result = await attachPostImages("lost", 1, actor(1), { paths: [VALID_PATH] });
 
     expect(result).toEqual({ kind: "too_many_images" });
     expect(postImage.create).not.toHaveBeenCalled();
@@ -329,7 +332,7 @@ describe("attachPostImages", () => {
       postImage.count.mockResolvedValueOnce(0);
       postImage.create.mockRejectedValueOnce(new Error("transient DB error"));
 
-      await expect(attachPostImages("lost", 1, 1, { paths: [VALID_PATH, VALID_PATH_2] })).rejects.toThrow(
+      await expect(attachPostImages("lost", 1, actor(1), { paths: [VALID_PATH, VALID_PATH_2] })).rejects.toThrow(
         "transient DB error",
       );
 
@@ -349,7 +352,7 @@ describe("attachPostImages", () => {
       // original error.
       deleteObjectSafely.mockRejectedValueOnce(new Error("storage cleanup also failed"));
 
-      await expect(attachPostImages("lost", 1, 1, { paths: [VALID_PATH] })).rejects.toThrow("original DB error");
+      await expect(attachPostImages("lost", 1, actor(1), { paths: [VALID_PATH] })).rejects.toThrow("original DB error");
     });
   });
 });
@@ -357,13 +360,13 @@ describe("attachPostImages", () => {
 describe("deletePostImage", () => {
   it("returns not_found for a nonexistent post", async () => {
     lostPost.findUnique.mockResolvedValueOnce(null);
-    const result = await deletePostImage("lost", 1, 1, 10);
+    const result = await deletePostImage("lost", 1, actor(1), 10);
     expect(result).toEqual({ kind: "not_found" });
   });
 
   it("rejects deleting someone else's post's image", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x" });
-    const result = await deletePostImage("lost", 1, 2, 10);
+    const result = await deletePostImage("lost", 1, actor(2), 10);
     expect(result).toEqual({ kind: "forbidden" });
     expect(postImage.delete).not.toHaveBeenCalled();
   });
@@ -372,7 +375,7 @@ describe("deletePostImage", () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x" });
     postImage.findUnique.mockResolvedValueOnce({ id: 10, lostPostId: 2, foundPostId: null, imageUrl: "https://x", isPrimary: true });
 
-    const result = await deletePostImage("lost", 1, 1, 10);
+    const result = await deletePostImage("lost", 1, actor(1), 10);
 
     expect(result).toEqual({ kind: "not_found" });
     expect(postImage.delete).not.toHaveBeenCalled();
@@ -382,7 +385,7 @@ describe("deletePostImage", () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x" });
     postImage.findUnique.mockResolvedValueOnce(null);
 
-    const result = await deletePostImage("lost", 1, 1, 999);
+    const result = await deletePostImage("lost", 1, actor(1), 999);
 
     expect(result).toEqual({ kind: "not_found" });
   });
@@ -397,7 +400,7 @@ describe("deletePostImage", () => {
       isPrimary: false,
     });
 
-    const result = await deletePostImage("lost", 1, 1, 20);
+    const result = await deletePostImage("lost", 1, actor(1), 20);
 
     expect(postImage.delete).toHaveBeenCalledWith({ where: { id: 20 } });
     expect(lostPost.update).not.toHaveBeenCalled();
@@ -416,7 +419,7 @@ describe("deletePostImage", () => {
     });
     postImage.findFirst.mockResolvedValueOnce({ id: 11, imageUrl: "https://second.jpg", displayOrder: 1 });
 
-    const result = await deletePostImage("lost", 1, 1, 10);
+    const result = await deletePostImage("lost", 1, actor(1), 10);
 
     expect(postImage.delete).toHaveBeenCalledWith({ where: { id: 10 } });
     expect(postImage.update).toHaveBeenCalledWith({ where: { id: 11 }, data: { isPrimary: true } });
@@ -440,7 +443,7 @@ describe("deletePostImage", () => {
     });
     postImage.findFirst.mockResolvedValueOnce(null); // nothing left to promote
 
-    const result = await deletePostImage("lost", 1, 1, 10);
+    const result = await deletePostImage("lost", 1, actor(1), 10);
 
     expect(lostPost.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { imageUrl: null } });
     expect(saveImageEmbedding).toHaveBeenCalledWith("lost", 1, null);
@@ -451,7 +454,7 @@ describe("deletePostImage", () => {
 describe("clearPostImage", () => {
   it("rejects clearing someone else's post image", async () => {
     foundPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x/y.jpg" });
-    const result = await clearPostImage("found", 1, 2);
+    const result = await clearPostImage("found", 1, actor(2));
     expect(result).toEqual({ kind: "forbidden" });
     expect(foundPost.update).not.toHaveBeenCalled();
     expect(saveImageEmbedding).not.toHaveBeenCalled();
@@ -460,7 +463,7 @@ describe("clearPostImage", () => {
   it("nulls the imageUrl, clears the image embedding, and deletes the storage object", async () => {
     foundPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x/y.jpg" });
 
-    const result = await clearPostImage("found", 1, 1);
+    const result = await clearPostImage("found", 1, actor(1));
 
     expect(result).toEqual({ kind: "ok", data: { imageUrl: null } });
     expect(foundPost.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { imageUrl: null } });
@@ -471,7 +474,7 @@ describe("clearPostImage", () => {
   it("is a no-op delete-wise when there was no image to begin with", async () => {
     foundPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
 
-    await clearPostImage("found", 1, 1);
+    await clearPostImage("found", 1, actor(1));
 
     expect(deleteObjectSafely).not.toHaveBeenCalled();
   });
@@ -484,7 +487,7 @@ describe("clearPostImage", () => {
     foundPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x/y.jpg" });
     saveImageEmbedding.mockRejectedValueOnce(new Error("transient DB error"));
 
-    const result = await clearPostImage("found", 1, 1);
+    const result = await clearPostImage("found", 1, actor(1));
 
     expect(result).toEqual({ kind: "ok", data: { imageUrl: null } });
     expect(foundPost.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { imageUrl: null } });
@@ -504,7 +507,7 @@ describe("clearPostImage", () => {
       { imageUrl: "https://second.jpg" },
     ]);
 
-    await clearPostImage("found", 1, 1);
+    await clearPostImage("found", 1, actor(1));
 
     expect(postImage.deleteMany).toHaveBeenCalledWith({ where: { foundPostId: 1 } });
     expect(deleteObjectSafely).toHaveBeenCalledWith("https://cover.jpg");
@@ -516,13 +519,13 @@ describe("clearPostImage", () => {
 describe("reorderPostImages", () => {
   it("returns not_found for a nonexistent post", async () => {
     lostPost.findUnique.mockResolvedValueOnce(null);
-    const result = await reorderPostImages("lost", 1, 1, [10, 11]);
+    const result = await reorderPostImages("lost", 1, actor(1), [10, 11]);
     expect(result).toEqual({ kind: "not_found" });
   });
 
   it("rejects reordering someone else's post", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x" });
-    const result = await reorderPostImages("lost", 1, 2, [10, 11]);
+    const result = await reorderPostImages("lost", 1, actor(2), [10, 11]);
     expect(result).toEqual({ kind: "forbidden" });
     expect(postImage.update).not.toHaveBeenCalled();
   });
@@ -531,7 +534,7 @@ describe("reorderPostImages", () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x" });
     postImage.findMany.mockResolvedValueOnce([{ id: 10 }, { id: 11 }, { id: 12 }]);
 
-    const result = await reorderPostImages("lost", 1, 1, [10, 11]);
+    const result = await reorderPostImages("lost", 1, actor(1), [10, 11]);
 
     expect(result).toEqual({ kind: "invalid_order" });
     expect(postImage.update).not.toHaveBeenCalled();
@@ -541,7 +544,7 @@ describe("reorderPostImages", () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: "https://x" });
     postImage.findMany.mockResolvedValueOnce([{ id: 10 }, { id: 11 }]);
 
-    const result = await reorderPostImages("lost", 1, 1, [10, 999]);
+    const result = await reorderPostImages("lost", 1, actor(1), [10, 999]);
 
     expect(result).toEqual({ kind: "invalid_order" });
     expect(postImage.update).not.toHaveBeenCalled();
@@ -555,7 +558,7 @@ describe("reorderPostImages", () => {
       .mockResolvedValueOnce({ id: 10, imageUrl: "https://a", displayOrder: 1, isPrimary: false })
       .mockResolvedValueOnce({ id: 11, imageUrl: "https://b", displayOrder: 2, isPrimary: false });
 
-    const result = await reorderPostImages("lost", 1, 1, [12, 10, 11]);
+    const result = await reorderPostImages("lost", 1, actor(1), [12, 10, 11]);
 
     expect(postImage.update).toHaveBeenNthCalledWith(1, { where: { id: 12 }, data: { displayOrder: 0, isPrimary: true } });
     expect(postImage.update).toHaveBeenNthCalledWith(2, { where: { id: 10 }, data: { displayOrder: 1, isPrimary: false } });
@@ -583,7 +586,7 @@ describe("server-side image check before attaching", () => {
     const second = "posts/lost/1/22222222-2222-2222-2222-222222222222.png";
     sanitizeStoredImage.mockResolvedValueOnce({ ok: true, rewritten: false }).mockResolvedValueOnce({ ok: false, reason: "not_image" });
 
-    const result = await attachPostImages("lost", 1, 1, { paths: [VALID_PATH, second] });
+    const result = await attachPostImages("lost", 1, actor(1), { paths: [VALID_PATH, second] });
 
     expect(result).toEqual({ kind: "invalid_image" });
     expect(sanitizeStoredImage).toHaveBeenCalledWith("post-images", VALID_PATH);
@@ -595,7 +598,24 @@ describe("server-side image check before attaching", () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, imageUrl: null });
     sanitizeStoredImage.mockResolvedValueOnce({ ok: false, reason: "format_mismatch" });
 
-    expect(await setPostImage("lost", 1, 1, { path: VALID_PATH })).toEqual({ kind: "invalid_image" });
+    expect(await setPostImage("lost", 1, actor(1), { path: VALID_PATH })).toEqual({ kind: "invalid_image" });
     expect(lostPost.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("release C (M-1): suspended authors can't change post images", () => {
+  const suspended = { id: 1, isSuspended: true, suspendedUntil: null };
+  it("refuses every image mutation before reading the post", async () => {
+    const forbidden = { kind: "forbidden", reason: "suspended" };
+    expect(await setPostImage("lost", 1, suspended, { path: VALID_PATH })).toEqual(forbidden);
+    expect(await attachPostImages("lost", 1, suspended, { paths: [VALID_PATH] })).toEqual(forbidden);
+    expect(await deletePostImage("lost", 1, suspended, 10)).toEqual(forbidden);
+    expect(await clearPostImage("found", 1, suspended)).toEqual(forbidden);
+    expect(await reorderPostImages("lost", 1, suspended, [10, 11])).toEqual(forbidden);
+    expect(lostPost.findUnique).not.toHaveBeenCalled();
+    expect(foundPost.findUnique).not.toHaveBeenCalled();
+    expect($transaction).not.toHaveBeenCalled();
+    expect(deleteObjectSafely).not.toHaveBeenCalled();
+    expect(sanitizeStoredImage).not.toHaveBeenCalled();
   });
 });

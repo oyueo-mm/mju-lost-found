@@ -4,7 +4,7 @@ import { after } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
 import { recordDaily } from "@/lib/metrics/record";
-import { isCurrentlySuspended } from "@/lib/auth/suspension";
+import { isCurrentlySuspended, type ContentActor } from "@/lib/auth/suspension";
 import { EMBEDDING_INPUT_FIELDS, embedPostBestEffort } from "@/lib/ai/postEmbedding";
 import { getEmbeddingProvider } from "@/lib/ai/embedding";
 import { queryEmbedding } from "@/lib/ai/queryEmbedding";
@@ -140,9 +140,14 @@ type StatusTx = Pick<Prisma.TransactionClient, "lostPost" | "foundPost" | "postS
 
 export async function updateLostPost(
   id: number,
-  userId: number,
+  actor: ContentActor,
   input: UpdateLostPostInput,
 ): Promise<PostMutationResult<LostPostDTO>> {
+  // Release C (M-1): a suspended account can't rewrite what it already
+  // posted either (create was already blocked) -- checked first, from the
+  // User row the route re-read for this request.
+  if (isCurrentlySuspended(actor)) return { kind: "forbidden", reason: "suspended" };
+  const userId = actor.id;
   const existing = await prisma.lostPost.findUnique({ where: { id } });
   if (!existing) return { kind: "not_found" };
   if (existing.userId !== userId) return { kind: "forbidden", reason: "not_owner" };
@@ -256,9 +261,14 @@ export async function createFoundPost(
 
 export async function updateFoundPost(
   id: number,
-  userId: number,
+  actor: ContentActor,
   input: UpdateFoundPostInput,
 ): Promise<PostMutationResult<FoundPostDTO>> {
+  // Release C (M-1): a suspended account can't rewrite what it already
+  // posted either (create was already blocked) -- checked first, from the
+  // User row the route re-read for this request.
+  if (isCurrentlySuspended(actor)) return { kind: "forbidden", reason: "suspended" };
+  const userId = actor.id;
   const existing = await prisma.foundPost.findUnique({ where: { id } });
   if (!existing) return { kind: "not_found" };
   if (existing.userId !== userId) return { kind: "forbidden", reason: "not_owner" };

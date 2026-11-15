@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// Release C (M-1): services take the acting user (id + suspension state).
+const actor = (id: number) => ({ id, isSuspended: false, suspendedUntil: null });
+
 
 const lostPost = {
   findMany: vi.fn(),
@@ -212,7 +215,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
   it("deletes the post's view records and cached rankings with it", async () => {
     mockPost(lostPost, { id: 1, userId: 1, title: "지갑", imageUrl: null });
 
-    await deleteLostPost(1, 1);
+    await deleteLostPost(1, actor(1));
 
     expect(postView.deleteMany).toHaveBeenCalledWith({ where: { postType: "lost", postId: 1 } });
     expect(postStatusChange.deleteMany).toHaveBeenCalledWith({ where: { postType: "lost", postId: 1 } });
@@ -226,7 +229,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
   it("uses the found board's own keys for a found post", async () => {
     mockPost(foundPost, { id: 7, userId: 1, title: "우산", imageUrl: null });
 
-    await deleteFoundPost(7, 1);
+    await deleteFoundPost(7, actor(1));
 
     expect(postView.deleteMany).toHaveBeenCalledWith({ where: { postType: "found", postId: 7 } });
     expect(matchCandidateCache.deleteMany).toHaveBeenCalledWith({ where: { sourceType: "found", sourcePostId: 7 } });
@@ -236,7 +239,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
   it("deletes nothing derived when the post is already gone", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, title: "지갑", imageUrl: null }).mockResolvedValueOnce(null);
 
-    await deleteLostPost(1, 1);
+    await deleteLostPost(1, actor(1));
 
     expect(postView.deleteMany).not.toHaveBeenCalled();
     expect(matchCandidateCache.deleteMany).not.toHaveBeenCalled();
@@ -246,7 +249,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
   it("allows the owner to delete their own post", async () => {
     mockPost(lostPost, { id: 1, userId: 1, title: "지갑", imageUrl: null });
 
-    const result = await deleteLostPost(1, 1);
+    const result = await deleteLostPost(1, actor(1));
 
     expect(result).toEqual({ kind: "ok", data: { id: 1 } });
     expect(lostPost.delete).toHaveBeenCalledWith({ where: { id: 1 } });
@@ -255,7 +258,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
   it("cleans up the post's image in Storage on delete", async () => {
     mockPost(lostPost, { id: 1, userId: 1, title: "지갑", imageUrl: "https://x/y.jpg" });
 
-    await deleteLostPost(1, 1);
+    await deleteLostPost(1, actor(1));
 
     expect(deleteObjectSafely).toHaveBeenCalledWith("https://x/y.jpg");
   });
@@ -269,7 +272,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
   it("rejects deleting someone else's post", async () => {
     foundPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
 
-    const result = await deleteFoundPost(1, 2);
+    const result = await deleteFoundPost(1, actor(2));
 
     expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
     expect(foundPost.delete).not.toHaveBeenCalled();
@@ -282,7 +285,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
   it("allows deleting someone else's post when asAdmin is true", async () => {
     mockPost(lostPost, { id: 1, userId: 99, title: "지갑", imageUrl: "https://x/y.jpg" });
 
-    const result = await deleteLostPost(1, 1, { asAdmin: true });
+    const result = await deleteLostPost(1, actor(1), { asAdmin: true });
 
     expect(result).toEqual({ kind: "ok", data: { id: 1 } });
     expect(lostPost.delete).toHaveBeenCalledWith({ where: { id: 1 } });
@@ -292,7 +295,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
   it("still rejects deleting someone else's post when asAdmin is false/omitted", async () => {
     foundPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 99 });
 
-    const result = await deleteFoundPost(1, 1, { asAdmin: false });
+    const result = await deleteFoundPost(1, actor(1), { asAdmin: false });
 
     expect(result).toEqual({ kind: "forbidden", reason: "not_owner" });
     expect(foundPost.delete).not.toHaveBeenCalled();
@@ -309,7 +312,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
       { imageUrl: "https://x/third.jpg" },
     ]);
 
-    await deleteLostPost(1, 1);
+    await deleteLostPost(1, actor(1));
 
     expect(postImage.findMany).toHaveBeenCalledWith({ where: { lostPostId: 1 }, select: { imageUrl: true } });
     expect(deleteObjectSafely).toHaveBeenCalledWith("https://x/cover.jpg");
@@ -324,7 +327,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
     mockPost(foundPost, { id: 1, userId: 1, title: "지갑", imageUrl: null });
     postImage.findMany.mockResolvedValueOnce([]);
 
-    await deleteFoundPost(1, 1);
+    await deleteFoundPost(1, actor(1));
 
     expect(deleteObjectSafely).not.toHaveBeenCalled();
   });
@@ -332,7 +335,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
   it("keeps the chats started from the post, refreshing their title snapshot before the delete", async () => {
     mockPost(lostPost, { id: 1, userId: 1, title: "검은 지갑 (최종)", imageUrl: null });
 
-    await deleteLostPost(1, 1);
+    await deleteLostPost(1, actor(1));
 
     expect(chatRoom.updateMany).toHaveBeenCalledWith({
       where: { directLostPostId: 1 },
@@ -346,7 +349,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
   it("refreshes a found post's chats by the found-post column", async () => {
     mockPost(foundPost, { id: 7, userId: 1, title: "우산", imageUrl: null });
 
-    await deleteFoundPost(7, 1);
+    await deleteFoundPost(7, actor(1));
 
     expect(chatRoom.updateMany).toHaveBeenCalledWith({ where: { directFoundPostId: 7 }, data: { postTitle: "우산" } });
   });
@@ -355,7 +358,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
     mockPost(lostPost, { id: 1, userId: 1, title: "지갑", imageUrl: "https://x/posts/lost/1/a.webp" });
     postImage.findMany.mockResolvedValueOnce([{ imageUrl: "https://x/posts/lost/1/b.webp" }]);
 
-    await deleteLostPost(1, 1);
+    await deleteLostPost(1, actor(1));
 
     const deleted = deleteObjectSafely.mock.calls.map(([url]) => url);
     expect(deleted.sort()).toEqual(["https://x/posts/lost/1/a.webp", "https://x/posts/lost/1/b.webp"]);
@@ -367,7 +370,7 @@ describe("deleteLostPost / deleteFoundPost", () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, title: "지갑", imageUrl: "https://x/y.jpg" });
     lostPost.findUnique.mockResolvedValueOnce(null);
 
-    const result = await deleteLostPost(1, 1);
+    const result = await deleteLostPost(1, actor(1));
 
     expect(result).toEqual({ kind: "not_found" });
     expect(lostPost.delete).not.toHaveBeenCalled();
@@ -621,5 +624,16 @@ describe("getPostStats", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("release C (M-1): suspended authors can't delete their posts", () => {
+  const suspended = { id: 1, isSuspended: true, suspendedUntil: null };
+  it("refuses deleteLostPost/deleteFoundPost before touching the post or Storage", async () => {
+    expect(await deleteLostPost(1, suspended)).toEqual({ kind: "forbidden", reason: "suspended" });
+    expect(await deleteFoundPost(1, suspended)).toEqual({ kind: "forbidden", reason: "suspended" });
+    expect(lostPost.findUnique).not.toHaveBeenCalled();
+    expect(foundPost.findUnique).not.toHaveBeenCalled();
+    expect($transaction).not.toHaveBeenCalled();
   });
 });

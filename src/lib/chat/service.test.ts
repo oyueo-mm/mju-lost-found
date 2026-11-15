@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { User } from "@/generated/prisma/client";
+// Release C (M-1): services take the acting user (id + suspension state).
+const actor = (id: number) => ({ id, isSuspended: false, suspendedUntil: null });
+
 
 class FakePrismaClientKnownRequestError extends Error {
   code: string;
@@ -1418,7 +1421,7 @@ describe("sendMessage", () => {
 
     const result = await sendMessage(100, suspended, "안녕");
 
-    expect(result).toEqual({ kind: "forbidden" });
+    expect(result).toEqual({ kind: "forbidden", reason: "suspended" });
     expect($transaction).not.toHaveBeenCalled();
   });
 
@@ -2054,7 +2057,7 @@ describe("editMessage", () => {
   it("returns not_found for a nonexistent room", async () => {
     chatRoom.findUnique.mockResolvedValueOnce(null);
 
-    const result = await editMessage(999, 1, lostOwner, "수정된 내용");
+    const result = await editMessage(999, 1, actor(lostOwner), "수정된 내용");
 
     expect(result).toEqual({ kind: "not_found" });
     expect(message.update).not.toHaveBeenCalled();
@@ -2063,7 +2066,7 @@ describe("editMessage", () => {
   it("rejects a non-participant", async () => {
     chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
 
-    const result = await editMessage(100, 1, stranger, "수정된 내용");
+    const result = await editMessage(100, 1, actor(stranger), "수정된 내용");
 
     expect(result).toEqual({ kind: "forbidden" });
     expect(message.update).not.toHaveBeenCalled();
@@ -2073,7 +2076,7 @@ describe("editMessage", () => {
     chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findUnique.mockResolvedValueOnce({ id: 1, chatRoomId: 999, senderUserId: lostOwner, hiddenAt: null });
 
-    const result = await editMessage(100, 1, lostOwner, "수정된 내용");
+    const result = await editMessage(100, 1, actor(lostOwner), "수정된 내용");
 
     expect(result).toEqual({ kind: "invalid_message" });
     expect(message.update).not.toHaveBeenCalled();
@@ -2083,7 +2086,7 @@ describe("editMessage", () => {
     chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findUnique.mockResolvedValueOnce({ id: 1, chatRoomId: 100, senderUserId: foundOwner, hiddenAt: null });
 
-    const result = await editMessage(100, 1, lostOwner, "해킹 시도");
+    const result = await editMessage(100, 1, actor(lostOwner), "해킹 시도");
 
     expect(result).toEqual({ kind: "forbidden" });
     expect(message.update).not.toHaveBeenCalled();
@@ -2098,7 +2101,7 @@ describe("editMessage", () => {
       hiddenAt: new Date(),
     });
 
-    const result = await editMessage(100, 1, lostOwner, "수정된 내용");
+    const result = await editMessage(100, 1, actor(lostOwner), "수정된 내용");
 
     expect(result).toEqual({ kind: "invalid_message" });
     expect(message.update).not.toHaveBeenCalled();
@@ -2108,7 +2111,7 @@ describe("editMessage", () => {
     chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findUnique.mockResolvedValueOnce({ id: 1, chatRoomId: 100, senderUserId: lostOwner, hiddenAt: null });
 
-    const result = await editMessage(100, 1, lostOwner, "   ");
+    const result = await editMessage(100, 1, actor(lostOwner), "   ");
 
     expect(result).toEqual({ kind: "invalid_content" });
     expect(message.update).not.toHaveBeenCalled();
@@ -2130,7 +2133,7 @@ describe("editMessage", () => {
     });
     messageReaction.findMany.mockResolvedValueOnce([]);
 
-    const result = await editMessage(100, 1, lostOwner, "  수정된 내용  ");
+    const result = await editMessage(100, 1, actor(lostOwner), "  수정된 내용  ");
 
     expect(result.kind).toBe("ok");
     if (result.kind === "ok") {
@@ -2596,5 +2599,16 @@ describe("sendMessage server-side image check (Legal pre-beta Phase)", () => {
     expect(sanitizeStoredImage).toHaveBeenCalledWith("chat-images", "chat/100/fake.webp", { cacheControl: "60" });
     expect(deleteChatImageSafely).toHaveBeenCalledWith("chat/100/fake.webp");
     expect($transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("release C (M-1): suspended senders can't edit or delete messages", () => {
+  const suspended = { id: 1, isSuspended: true, suspendedUntil: null, isAdmin: false } as unknown as User;
+  it("refuses editMessage and deleteMessage before reading the room or message", async () => {
+    expect(await editMessage(1, 5, suspended, "x")).toEqual({ kind: "forbidden", reason: "suspended" });
+    expect(await deleteMessage(1, 5, suspended)).toEqual({ kind: "forbidden", reason: "suspended" });
+    expect(chatRoom.findUnique).not.toHaveBeenCalled();
+    expect(message.findUnique).not.toHaveBeenCalled();
+    expect(message.update).not.toHaveBeenCalled();
   });
 });

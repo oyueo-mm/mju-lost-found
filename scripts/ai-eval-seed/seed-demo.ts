@@ -107,7 +107,7 @@ async function createPost(board: Board, spec: PostSpec, userId: number, now: num
       .storage.from(POST_IMAGES_BUCKET)
       .uploadToSignedUrl(uploadPath, token, jpg, { contentType: "image/jpeg" });
     if (error) throw new Error(`upload failed: ${error.message}`);
-    const result = await setPostImage(board, row.id, userId, { path: uploadPath });
+    const result = await setPostImage(board, row.id, { id: userId, isSuspended: false, suspendedUntil: null }, { path: uploadPath });
     if (result.kind !== "ok") throw new Error(`setPostImage failed: ${result.kind}`);
     await embedPostImageBestEffort(board, row.id, result.data.imageUrl);
     await invalidateRecommendationCache(board, row.id);

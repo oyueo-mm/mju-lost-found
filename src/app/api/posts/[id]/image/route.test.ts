@@ -134,7 +134,7 @@ describe("POST /api/posts/[id]/image", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(setPostImage).toHaveBeenCalledWith("lost", 1, sessionUser.id, {
+    expect(setPostImage).toHaveBeenCalledWith("lost", 1, sessionUser, {
       path: "posts/lost/1/y.jpg",
     });
   });
@@ -155,7 +155,7 @@ describe("POST /api/posts/[id]/image", () => {
       params("1"),
     );
 
-    expect(setPostImage).toHaveBeenCalledWith("lost", 1, sessionUser.id, {
+    expect(setPostImage).toHaveBeenCalledWith("lost", 1, sessionUser, {
       path: "posts/lost/1/y.jpg",
       previousAttemptPath: "posts/lost/1/old.jpg",
     });
@@ -311,7 +311,7 @@ describe("DELETE /api/posts/[id]/image", () => {
       const json = await res.json();
 
       expect(res.status).toBe(200);
-      expect(deletePostImage).toHaveBeenCalledWith("lost", 1, sessionUser.id, 10);
+      expect(deletePostImage).toHaveBeenCalledWith("lost", 1, sessionUser, 10);
       expect(clearPostImage).not.toHaveBeenCalled();
       expect(json.data.imageUrl).toBe("https://x/second.jpg");
     });
@@ -407,7 +407,7 @@ describe("PATCH /api/posts/[id]/image (reorder)", () => {
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    expect(reorderPostImages).toHaveBeenCalledWith("lost", 1, sessionUser.id, [11]);
+    expect(reorderPostImages).toHaveBeenCalledWith("lost", 1, sessionUser, [11]);
     expect(json.data.imageUrl).toBe("https://x/b.jpg");
   });
 

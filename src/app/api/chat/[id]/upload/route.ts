@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { jsonError, jsonOk, requireIdentityForApi, requireUserForApi, withErrorHandling } from "@/lib/chat/http";
 import { getChatRoomForUser } from "@/lib/chat/service";
+import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { isAllowedImageContentType } from "@/lib/images/config";
 import { buildChatImagePathname } from "@/lib/images/pathname";
 import { createChatImageUploadUrl } from "@/lib/images/chatStorage";
@@ -26,6 +27,10 @@ export const POST = withErrorHandling(
     if ("response" in auth) return auth.response;
     const identityMissing = await requireIdentityForApi(auth.user);
     if (identityMissing) return identityMissing;
+    // Release C (M-1): sendMessage() refuses a suspended sender, so a token
+    // would only ever create an orphan upload -- refuse it up front, like
+    // /api/upload already does for post images.
+    if (isCurrentlySuspended(auth.user)) return jsonError(403, "정지된 계정은 이 기능을 사용할 수 없습니다.");
 
     const { id: idParam } = await params;
     const chatRoomId = Number(idParam);

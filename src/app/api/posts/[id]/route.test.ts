@@ -203,7 +203,7 @@ describe("PATCH /api/posts/[id]", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(updateLostPost).toHaveBeenCalledWith(1, sessionUser.id, expect.any(Object));
+    expect(updateLostPost).toHaveBeenCalledWith(1, sessionUser, expect.any(Object));
   });
 });
 
@@ -302,5 +302,19 @@ describe("DELETE /api/posts/[id]", () => {
     );
 
     expect(res.status).toBe(200);
+  });
+});
+
+describe("release C (M-1): PUT /api/posts/[id] for a suspended author", () => {
+  it("does not recompute the image embedding", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: { ...sessionUser, isSuspended: true, suspendedUntil: null } });
+    getLostPost.mockResolvedValueOnce({ id: 1, imageUrl: "https://x/y.jpg", author: { id: sessionUser.id } });
+
+    const res = await PUT(new NextRequest("http://localhost/api/posts/1?type=lost", { method: "PUT" }), params("1"));
+
+    expect(res.status).toBe(403);
+    expect(getLostPost).not.toHaveBeenCalled();
+    expect(embedPostImageBestEffort).not.toHaveBeenCalled();
+    expect(invalidateRecommendationCache).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,7 @@ import { compareForSort } from "./postSort";
 export { compareForSort } from "./postSort";
 import { readCustody, type CustodyInfo } from "./custodySchema";
 import { prisma } from "@/lib/db/prisma";
+import { isCurrentlySuspended, type ContentActor } from "@/lib/auth/suspension";
 import { deleteObjectSafely } from "@/lib/images/supabaseAdmin";
 import {
   FoundPostStatus as PrismaFoundPostStatus,
@@ -514,7 +515,7 @@ export async function getLostPost(id: number): Promise<LostPostDTO | null> {
 
 export async function deleteLostPost(
   id: number,
-  userId: number,
+  actor: ContentActor,
   // Phase 28-2: lets an admin delete a post they don't own (see
   // src/lib/admin/posts.ts::deletePostForAdmin) without duplicating this
   // function's delete+Storage-cleanup logic. Omitted (the default) for
@@ -522,9 +523,13 @@ export async function deleteLostPost(
   // before, byte-for-byte the same behavior this function already had.
   options?: { asAdmin?: boolean },
 ): Promise<PostMutationResult<{ id: number }>> {
+  // Release C (M-1): a suspended account can't delete its content (and
+  // so can't remove what it may be reported for). The admin path never
+  // gets here suspended -- can() already refuses a suspended admin.
+  if (isCurrentlySuspended(actor)) return { kind: "forbidden", reason: "suspended" };
   const existing = await prisma.lostPost.findUnique({ where: { id } });
   if (!existing) return { kind: "not_found" };
-  if (existing.userId !== userId && !options?.asAdmin) return { kind: "forbidden", reason: "not_owner" };
+  if (existing.userId !== actor.id && !options?.asAdmin) return { kind: "forbidden", reason: "not_owner" };
 
   const urls = await prisma.$transaction((tx) => deletePostRowInTx(tx, "lost", id));
   if (urls === null) return { kind: "not_found" }; // deleted concurrently
@@ -583,13 +588,17 @@ export async function getFoundPost(id: number): Promise<FoundPostDTO | null> {
 
 export async function deleteFoundPost(
   id: number,
-  userId: number,
+  actor: ContentActor,
   // See deleteLostPost's own comment -- identical shape/reasoning.
   options?: { asAdmin?: boolean },
 ): Promise<PostMutationResult<{ id: number }>> {
+  // Release C (M-1): a suspended account can't delete its content (and
+  // so can't remove what it may be reported for). The admin path never
+  // gets here suspended -- can() already refuses a suspended admin.
+  if (isCurrentlySuspended(actor)) return { kind: "forbidden", reason: "suspended" };
   const existing = await prisma.foundPost.findUnique({ where: { id } });
   if (!existing) return { kind: "not_found" };
-  if (existing.userId !== userId && !options?.asAdmin) return { kind: "forbidden", reason: "not_owner" };
+  if (existing.userId !== actor.id && !options?.asAdmin) return { kind: "forbidden", reason: "not_owner" };
 
   const urls = await prisma.$transaction((tx) => deletePostRowInTx(tx, "found", id));
   if (urls === null) return { kind: "not_found" }; // deleted concurrently

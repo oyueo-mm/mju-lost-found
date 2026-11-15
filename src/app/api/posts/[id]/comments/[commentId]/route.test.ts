@@ -66,7 +66,7 @@ describe("PATCH /api/posts/[id]/comments/[commentId]", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(updateComment).toHaveBeenCalledWith(1, 10, { content: "수정된 댓글" });
+    expect(updateComment).toHaveBeenCalledWith(sessionUser, 10, { content: "수정된 댓글" });
   });
 });
 

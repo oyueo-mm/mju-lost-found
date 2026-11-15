@@ -49,7 +49,7 @@ export function withErrorHandling<Args extends unknown[]>(
 
 // Same message the legacy db._require_not_suspended() raises
 // (SUSPENDED_ACCOUNT_MESSAGE), reused verbatim for parity.
-const SUSPENDED_ACCOUNT_MESSAGE = "정지된 계정은 이 기능을 사용할 수 없습니다.";
+export const SUSPENDED_ACCOUNT_MESSAGE = "정지된 계정은 이 기능을 사용할 수 없습니다.";
 
 export function postMutationResultToResponse<T>(
   result: PostMutationResult<T>,

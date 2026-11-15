@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { notifyUser } from "@/lib/notification/recipients";
-import { isCurrentlySuspended } from "@/lib/auth/suspension";
+import { isCurrentlySuspended, type ContentActor } from "@/lib/auth/suspension";
 import { can } from "@/lib/permissions/check";
 import { validateOrganizationPosting } from "@/lib/organization/service";
 import type { PostType } from "@/lib/posts/schema";
@@ -290,13 +290,15 @@ async function findOwnedComment(id: number) {
 // server-side, regardless of what the UI does or doesn't show a button
 // for.
 export async function updateComment(
-  requesterId: number,
+  requester: ContentActor,
   id: number,
   input: UpdateCommentInput,
 ): Promise<CommentMutationResult<CommentDTO>> {
+  // Release C (M-1): same block createComment() already applies.
+  if (isCurrentlySuspended(requester)) return { kind: "forbidden", reason: "suspended" };
   const existing = await findOwnedComment(id);
   if (!existing || existing.deletedAt) return { kind: "not_found" };
-  if (existing.authorUserId !== requesterId) {
+  if (existing.authorUserId !== requester.id) {
     return { kind: "forbidden", reason: "not_owner" };
   }
 
@@ -319,6 +321,9 @@ export async function deleteComment(
   requester: User,
   id: number,
 ): Promise<CommentMutationResult<{ id: number }>> {
+  // Release C (M-1): a suspended author can't delete their comment; a
+  // suspended admin already fails can() below.
+  if (isCurrentlySuspended(requester)) return { kind: "forbidden", reason: "suspended" };
   const existing = await findOwnedComment(id);
   if (!existing || existing.deletedAt) return { kind: "not_found" };
 

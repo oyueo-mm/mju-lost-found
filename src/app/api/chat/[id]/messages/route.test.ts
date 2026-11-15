@@ -395,7 +395,7 @@ describe("PATCH /api/chat/[id]/messages (edit)", () => {
 
     expect(res.status).toBe(200);
     expect(json.data.content).toBe("수정된 내용");
-    expect(editMessage).toHaveBeenCalledWith(1, 1, sessionUser.id, "수정된 내용");
+    expect(editMessage).toHaveBeenCalledWith(1, 1, sessionUser, "수정된 내용");
     expect(toggleMessageReaction).not.toHaveBeenCalled();
   });
 
