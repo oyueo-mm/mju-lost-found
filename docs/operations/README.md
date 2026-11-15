@@ -13,7 +13,9 @@
 | [포스터 절차](poster-workflow.md) | 생성, 검증, 인쇄, 배부, 점검 |
 | [배포·검증·롤백](deployment.md) | 환경 분리, Preview 검증, 배포 기록과 복구 |
 | [D-1 Production 최종 검증](release-d1-production-2026-11-16.md) | 배포 SHA·롤백 대상·사용자 검증·백업 실패 별도 기록 |
-| [D-2 상세 계획](release-d2-plan-2026-11-16.md) | 실행 예산·중복 통제·내부 호출·DB 변경 제안, 구현 미착수 |
+| [D-2 초기 상세 계획](release-d2-plan-2026-11-16.md) | 최초 설계 근거. 이후 승인된 구현·Preview 결과는 아래 별도 문서 |
+| [백업 snapshot 복구](backup-snapshot-repair-2026-11-16.md) | 경합 재현·공유 snapshot·암호화 실제 복원·예약 실행 검증 |
+| [D-2 구현·Preview 검사](release-d2-review-2026-11-16.md) | 작업 테이블·실행 임대·입력 버전·모델 번들·Preview 결과 |
 | [보안 후속 항목](security-followups.md) | 삭제 이미지 CDN 잔존·백업 snapshot 일관성 문제 |
 | [인수인계](handover.md) | 계정·권한·등록부·현장 상태·미결 사항 전달 |
 
