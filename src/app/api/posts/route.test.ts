@@ -1,7 +1,7 @@
 vi.mock("next/server", async () => ({ ...await vi.importActual("next/server"), after: vi.fn() }));
 const drainImageJobs = vi.fn();
 vi.mock("@/lib/ai/imageJob", () => ({ drainImageJobs }));
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { jsonError } from "@/lib/posts/response";
@@ -530,6 +530,12 @@ describe("POST image/AI search -- magic-byte check (release B, H-3)", () => {
 
 
 describe("embedding queue maintenance authentication", () => {
+  it("does not schedule background work for rejected search parameters", async () => {
+    const res = await GET(new NextRequest("http://localhost/api/posts?type=invalid&mode=semantic"));
+    expect(res.status).toBe(400);
+    expect(after).not.toHaveBeenCalled();
+    expect(drainImageJobs).not.toHaveBeenCalled();
+  });
   it("refuses maintenance without its server secret", async () => {
     vi.stubEnv("CRON_SECRET", "test-maintenance-secret");
     const res = await GET(new NextRequest("http://localhost/api/posts?mode=embedding-maintenance"));
