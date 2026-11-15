@@ -26,6 +26,9 @@ param(
   [string]$WslDistro = "Ubuntu",
   [string]$CredentialTarget = "MJU Find backup passphrase",
   [switch]$Force,
+  # One-off repair validation may preserve every old archive; regular
+  # scheduled invocations still run the unchanged retention policy.
+  [switch]$SkipRetention,
   [switch]$Quiet
 )
 $ErrorActionPreference = "Stop"
@@ -72,10 +75,21 @@ try {
   }
 
   if (Test-Path $enc) {
-    # An earlier run today sealed but did not finish the restore check.
-    Log "existing unverified archive $name.tar.enc -- restore check only"
-    & (Join-Path $PSScriptRoot "protect.ps1") -Enc $enc -Repo $Repo -WslDistro $WslDistro -Log $log -CredentialTarget $CredentialTarget
-  } else {
+    if (Test-Path "$enc.verified.json") {
+      # -Force may recheck an already verified archive, never overwrite it.
+      & (Join-Path $PSScriptRoot "protect.ps1") -Enc $enc -Repo $Repo -WslDistro $WslDistro -Log $log -CredentialTarget $CredentialTarget
+    } else {
+      # Preserve failed/interrupted ciphertext under a unique name before
+      # retrying. Otherwise a corrected dumper would only recheck old data.
+      $rootPath = (Resolve-Path -LiteralPath $Out).Path
+      $sourcePath = [IO.Path]::GetFullPath($enc)
+      $failedPath = Join-Path $rootPath ("failed-$name-" + [guid]::NewGuid().ToString("N") + ".tar.enc")
+      if ([IO.Path]::GetDirectoryName($sourcePath) -ne $rootPath -or [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($failedPath)) -ne $rootPath) { throw "archive preservation path outside backup root" }
+      Move-Item -LiteralPath $sourcePath -Destination $failedPath
+      Log "preserved unverified archive as $(Split-Path $failedPath -Leaf)"
+    }
+  }
+  if (-not (Test-Path $enc)) {
     if (Test-Path $dir) {
       # Left over by an interrupted run: incomplete or unchecked plaintext.
       Remove-Item -LiteralPath $dir -Recurse -Force
@@ -97,6 +111,7 @@ try {
   Save-Status @{ lastSuccessAt = (Get-Date -Format o); lastSuccessName = "$name.tar.enc"; lastSuccessSizeMB = $sizeMB; lastError = $null }
 
   # Retention -- only now that this run is verified.
+  if ($SkipRetention) { Log "retention skipped for this explicit repair verification; all existing archives preserved"; exit 0 }
   $plan = (& node scripts/backup/retention.mjs plan $Out --today $stamp) | ConvertFrom-Json
   foreach ($file in $plan.prune) {
     $path = Join-Path $Out $file

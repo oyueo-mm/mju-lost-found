@@ -12,7 +12,9 @@ import "../db/install-guard.mjs";
 // - The output holds personal data: keep it outside the repository, on an
 //   encrypted disk, and delete old copies per docs/operations.md §5.
 // Verify a backup with scripts/backup/verify-restore.mjs.
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { withBackupSnapshot } from "./snapshot.mjs";
+import { assertSnapshotObjects, assertSnapshotBytes } from "./storage-snapshot.mjs";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -33,62 +35,71 @@ const bin = (name) => path.join(process.env.PG_BIN ?? "", process.platform === "
 
 fs.mkdirSync(path.join(outDir, "db"), { recursive: true });
 fs.mkdirSync(path.join(outDir, "storage"), { recursive: true });
-const run = (name, args) => execFileSync(bin(name), args, { stdio: ["ignore", "pipe", "inherit"], maxBuffer: 1 << 30 });
-
-console.log("dumping database ...");
-run("pg_dump", [url, "-Fc", "-f", path.join(outDir, "db/full.dump")]);
-run("pg_dump", [url, "-Fc", "-n", "public", "-f", path.join(outDir, "db/public.dump")]);
-run("pg_dump", [url, "-s", "-n", "public", "-f", path.join(outDir, "db/public-schema.sql")]);
-for (const f of ["full", "public"]) fs.writeFileSync(path.join(outDir, `db/${f}.toc.txt`), run("pg_restore", ["--list", path.join(outDir, `db/${f}.dump`)]));
+const run = (name, args, signal) => new Promise((resolve, reject) => {
+  execFile(bin(name), args, { maxBuffer: 1 << 30, signal, timeout: 240000, windowsHide: true }, (error, stdout) => {
+    if (error) reject(new Error(`${name} failed (${error.code ?? error.name}); sensitive diagnostics suppressed`));
+    else resolve(stdout);
+  });
+});
 
 const db = new Client({ connectionString: url });
 await db.connect();
-// Read-only per transaction, never per session: a session setting can stay
-// on a pooled server connection and reach the app (Supabase pooler).
-await db.query("BEGIN READ ONLY");
 const counts = {};
-for (const { tablename } of (await db.query(`SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1`)).rows) {
-  counts[tablename] = Number((await db.query(`SELECT count(*) FROM public."${tablename}"`)).rows[0].count);
+let migrations, bucketRows, objectRows;
+try {
+  await withBackupSnapshot(db, async (snapshot, signal) => {
+    console.log("dumping database with a shared read-only snapshot ...");
+    for (const { tablename } of (await db.query(`SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1`)).rows) {
+      const quoted = tablename.replaceAll('"', '""');
+      counts[tablename] = Number((await db.query(`SELECT count(*) FROM public."${quoted}"`)).rows[0].count);
+    }
+    migrations = (await db.query(`SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY 1`)).rows.map(r => r.migration_name);
+    bucketRows = (await db.query("SELECT id, public FROM storage.buckets ORDER BY id")).rows;
+    objectRows = (await db.query("SELECT id, bucket_id, name, metadata, updated_at, version FROM storage.objects ORDER BY bucket_id, name")).rows;
+    await run("pg_dump", [url, "--snapshot", snapshot, "-Fc", "-f", path.join(outDir, "db/full.dump")], signal);
+    await run("pg_dump", [url, "--snapshot", snapshot, "-Fc", "-n", "public", "-f", path.join(outDir, "db/public.dump")], signal);
+    await run("pg_dump", [url, "--snapshot", snapshot, "-s", "-n", "public", "-f", path.join(outDir, "db/public-schema.sql")], signal);
+  });
+} finally {
+  await db.end();
 }
-const migrations = (await db.query(`SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY 1`)).rows.map((r) => r.migration_name);
-await db.query("COMMIT");
-await db.end();
+for (const f of ["full", "public"]) fs.writeFileSync(path.join(outDir, `db/${f}.toc.txt`), await run("pg_restore", ["--list", path.join(outDir, `db/${f}.dump`)]));
 fs.writeFileSync(path.join(outDir, "db/rowcounts.json"), JSON.stringify({ takenAt: new Date().toISOString(), counts, migrations }, null, 1));
 console.log(`row counts: ${Object.keys(counts).length} tables, last migration ${migrations.at(-1)}`);
 
 console.log("downloading storage ...");
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
-async function walk(bucket, prefix, acc) {
-  for (let offset = 0; ; offset += 1000) {
-    const { data, error } = await sb.storage.from(bucket).list(prefix, { limit: 1000, offset });
-    if (error) throw error;
-    for (const e of data) {
-      const p = prefix ? `${prefix}/${e.name}` : e.name;
-      if (e.id === null) await walk(bucket, p, acc);
-      else acc.push({ path: p, size: e.metadata?.size, mimetype: e.metadata?.mimetype });
-    }
-    if (data.length < 1000) break;
-  }
-  return acc;
-}
-const { data: buckets, error } = await sb.storage.listBuckets();
-if (error) throw error;
+// Inventory is from the SAME DB snapshot, not paginated live Storage lists.
+// New uploads after the snapshot are intentionally outside this backup.
+const buckets = bucketRows;
 const manifest = { buckets: buckets.map((b) => ({ id: b.id, public: b.public })), objects: {} };
 for (const b of buckets) {
-  const objects = await walk(b.id, "", []);
+  const objects = objectRows.filter(o => o.bucket_id === b.id).map(o => ({ path: o.name, size: o.metadata?.size, etag: o.metadata?.eTag, mimetype: o.metadata?.mimetype, version: o.version, updatedAt: o.updated_at, id: o.id }));
   for (const o of objects) {
     const { data, error: e } = await sb.storage.from(b.id).download(o.path);
-    if (e) throw new Error(`${b.id}/${o.path}: ${e.message}`);
+    if (e) throw new Error("Snapshot Storage object unavailable; backup incomplete");
     const buf = Buffer.from(await data.arrayBuffer());
     const file = path.join(outDir, "storage", b.id, o.path);
+    const root = path.resolve(outDir, "storage");
+    if (!path.resolve(file).startsWith(root + path.sep)) throw new Error("Unsafe Storage path");
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, buf);
     o.sha256 = createHash("sha256").update(buf).digest("hex");
     o.downloadedBytes = buf.length;
+    assertSnapshotBytes(o, buf);
   }
   manifest.objects[b.id] = objects;
   console.log(`  ${b.id}: ${objects.length} objects, size mismatches ${objects.filter((o) => o.size !== o.downloadedBytes).length}`);
 }
+// A deleted/replaced object must fail closed, never silently disappear from
+// the manifest. Storage and Postgres are not an atomic cross-system snapshot.
+const current = new Client({ connectionString: url });
+try {
+  await current.connect(); await current.query("BEGIN READ ONLY");
+  const rows = (await current.query("SELECT id, bucket_id, name, updated_at, version FROM storage.objects")).rows;
+  assertSnapshotObjects(objectRows, rows);
+  await current.query("COMMIT");
+} finally { await current.end(); }
 fs.writeFileSync(path.join(outDir, "storage/objects.json"), JSON.stringify(manifest, null, 1));
 
 const files = [];
