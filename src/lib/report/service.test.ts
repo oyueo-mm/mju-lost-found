@@ -440,9 +440,19 @@ describe("createReport -- release C (M-1) snapshot", () => {
     captureTarget.mockResolvedValueOnce(captured);
     report.create.mockResolvedValueOnce(reportRow({ id: 42 }));
 
+    let transactionOpen = false;
+    $transaction.mockImplementationOnce(async (fn) => {
+      transactionOpen = true;
+      try { return await fn({ report }); }
+      finally { transactionOpen = false; }
+    });
+    preserveEvidenceImages.mockImplementationOnce(async () => {
+      expect(transactionOpen).toBe(true);
+    });
+
     await createReport(reporter, { targetType: "post", targetId: 5, reason: "기타" });
 
-    expect(preserveEvidenceImages).toHaveBeenCalledWith(42, captured);
+    expect(preserveEvidenceImages).toHaveBeenCalledWith(42, captured, expect.objectContaining({ report }));
   });
 
   it("files a report without a snapshot when the target vanished meanwhile (like an old report)", async () => {

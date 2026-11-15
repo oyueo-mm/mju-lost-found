@@ -80,7 +80,7 @@ export function ReportSnapshotPanel({
       )}
       {images && images.length > 0 && (
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium text-foreground">신고 당시 사진 ({images.length}장, 링크는 5분간 유효)</span>
+          <span className="text-xs font-medium text-foreground">신고 당시 사진 ({images.length}장, 관리자 권한 확인 후 표시)</span>
           <div className="flex flex-wrap gap-2">
             {images.map((image) =>
               image.url ? (

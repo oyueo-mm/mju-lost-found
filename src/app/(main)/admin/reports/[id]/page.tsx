@@ -17,6 +17,7 @@ import { ReportProcessForm } from "@/components/admin/ReportProcessForm";
 import { RestoreTempHideButton } from "@/components/admin/RestoreTempHideButton";
 import { ReportIdentityPanel } from "@/components/admin/ReportIdentityPanel";
 import { ReportSnapshotPanel } from "@/components/admin/ReportSnapshotPanel";
+import { RetryReportEvidenceButton } from "@/components/admin/RetryReportEvidenceButton";
 import { getReportEvidenceImages } from "@/lib/report/evidenceView";
 import { reportPartyUserIds } from "@/lib/identity/service";
 import { prisma } from "@/lib/db/prisma";
@@ -63,7 +64,9 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
   // logged first). If that fails the page still renders, without image links.
   const snapshotImages = report.snapshot?.data?.images ?? [];
   const evidenceImages = snapshotImages.length
-    ? await getReportEvidenceImages(admin, report.id).catch((error) => {
+    ? await getReportEvidenceImages(admin, report.id).then((images) => images?.map((image) => ({
+        ...image, url: image.url ? `/api/admin/reports/${report.id}/evidence/${image.index}` : null,
+      })) ?? null).catch((error) => {
         console.error("Report evidence images unavailable:", error instanceof Error ? error.name : "unknown");
         return snapshotImages.map((image) => ({ index: image.index, source: image.source, status: image.status, url: null }));
       })
@@ -187,6 +190,7 @@ export default async function AdminReportDetailPage({ params }: { params: Promis
       {/* 1-1. 신고 당시 내용 (release C) */}
       <Section title="신고 당시 내용">
         <ReportSnapshotPanel snapshot={report.snapshot} images={evidenceImages} />
+        {report.status === "pending" && snapshotImages.some((image) => image.status === "failed") && <RetryReportEvidenceButton reportId={report.id} />}
       </Section>
 
       {/* 2. 신고 사유 */}

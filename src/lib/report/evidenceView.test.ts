@@ -5,7 +5,7 @@ const report = { findUnique: vi.fn() };
 const adminAccessLog = { create: vi.fn() };
 vi.mock("@/lib/db/prisma", () => ({ prisma: { report, adminAccessLog } }));
 const signEvidenceUrl = vi.fn(async (path: string) => `https://signed/${path}`);
-vi.mock("./evidenceStorage", () => ({ signEvidenceUrl, copyToEvidence: vi.fn(), removeReportEvidence: vi.fn(), evidencePathFor: vi.fn() }));
+vi.mock("./evidenceStorage", async () => ({ ...await vi.importActual<typeof import("./evidenceStorage")>("./evidenceStorage"), signEvidenceUrl, copyToEvidence: vi.fn(), removeReportEvidence: vi.fn(), evidencePathFor: vi.fn() }));
 vi.mock("@/lib/images/supabaseAdmin", () => ({ pathnameFromPublicUrl: () => null }));
 const can = vi.fn(() => true);
 vi.mock("@/lib/permissions/check", () => ({ can }));
@@ -47,6 +47,19 @@ describe("getReportEvidenceImages (release C)", () => {
     report.findUnique.mockResolvedValueOnce({ targetId: 3, targetSnapshot: messageSnapshot });
     adminAccessLog.create.mockRejectedValueOnce(new Error("db down"));
     await expect(getReportEvidenceImages(admin, 9)).rejects.toThrow();
+    expect(signEvidenceUrl).not.toHaveBeenCalled();
+  });
+
+  it("never signs a different report's path or a mismatched image index", async () => {
+    report.findUnique.mockResolvedValueOnce({ targetId: 3, targetSnapshot: {
+      ...messageSnapshot, images: [
+        { index: 0, source: "chat", status: "copied", path: "reports/10/0.jpg" },
+        { index: 1, source: "chat", status: "copied", path: "reports/9/0.jpg" },
+      ],
+    } });
+    expect((await getReportEvidenceImages(admin, 9))?.map((v) => v.url)).toEqual([null, null]);
+    expect(signEvidenceUrl).not.toHaveBeenCalled();
+    expect(adminAccessLog.create).not.toHaveBeenCalled();
   });
 
   it("does not log public post evidence, and signs nothing for failed copies", async () => {

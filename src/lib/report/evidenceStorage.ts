@@ -1,5 +1,6 @@
 import { getSupabaseAdminClient } from "@/lib/supabase/adminClient";
 import { REPORT_EVIDENCE_BUCKET, REPORT_EVIDENCE_URL_TTL_SECONDS } from "@/lib/images/config";
+import { createClient } from "@supabase/supabase-js";
 
 // Server-only access to the private report-evidence bucket (service role).
 // Only paths shaped like reports/{reportId}/{index}.{ext} are ever written,
@@ -22,13 +23,22 @@ export function parseEvidencePath(path: string): { reportId: number; index: numb
 export async function copyToEvidence(sourceBucket: string, sourcePath: string, evidencePath: string): Promise<boolean> {
   if (!parseEvidencePath(evidencePath)) return false;
   try {
-    const { error } = await getSupabaseAdminClient()
+    // Bound each request while capture holds database locks (max 5 images).
+    const signal = AbortSignal.timeout(3000);
+    const client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+      auth: { persistSession: false },
+      global: { fetch: (input, init) => fetch(input, { ...init, signal }) },
+    });
+    // An earlier timed-out copy may already have completed. Never overwrite it.
+    const existing = await client.storage.from(REPORT_EVIDENCE_BUCKET).exists(evidencePath);
+    if (!existing.error && existing.data) return true;
+    const { error } = await client
       .storage.from(sourceBucket)
       .copy(sourcePath, evidencePath, { destinationBucket: REPORT_EVIDENCE_BUCKET });
     if (error) throw error;
     return true;
   } catch (error) {
-    console.error("Report evidence copy failed:", sourceBucket, error instanceof Error ? error.message : "unknown");
+    console.error("Report evidence copy failed:", sourceBucket, error instanceof Error ? error.name : "unknown");
     return false;
   }
 }

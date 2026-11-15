@@ -12,8 +12,8 @@ import { copyToEvidence, evidencePathFor, removeReportEvidence } from "./evidenc
 // images are copied into the private report-evidence bucket, so the evidence
 // survives the author editing or deleting the original afterwards.
 //
-// - Taken inside the report's own transaction (text) and right after it
-//   commits (image copies), never later -- a later read could already see
+// - Taken inside the report's own transaction (text and image copies),
+//   under row locks -- a later read could already see
 //   an edited or deleted target.
 // - Admin-only: read through moderation/service.ts::getReportForAdmin
 //   (reports.view); never part of the reporter-facing ReportDTO.
@@ -47,7 +47,7 @@ export type SnapshotTarget =
   | { kind: "user"; nickname: string | null };
 
 export type SnapshotImageStatus = "copied" | "failed" | "unsupported";
-export type SnapshotImage = { index: number; source: "post" | "chat"; status: SnapshotImageStatus; path: string | null };
+export type SnapshotImage = { index: number; source: "post" | "chat"; status: SnapshotImageStatus; path: string | null; retryPath?: string };
 
 export type ReportSnapshot = {
   v: number;
@@ -60,7 +60,7 @@ export type ReportSnapshot = {
 
 type ImageSource = { bucket: string; path: string | null };
 type Captured = { snapshot: ReportSnapshot; sources: ImageSource[] };
-type SnapshotTx = Pick<Prisma.TransactionClient, "lostPost" | "foundPost" | "postImage" | "message" | "comment" | "thankNote" | "user">;
+type SnapshotTx = Pick<Prisma.TransactionClient, "$queryRaw" | "lostPost" | "foundPost" | "message" | "comment" | "thankNote" | "user">;
 
 const iso = (d: Date) => d.toISOString();
 // Same labels as posts/service.ts (kept local so this module stays light).
@@ -78,6 +78,18 @@ function postImageSource(url: string): ImageSource {
 // that only happens on a concurrent delete -- the report then simply has no
 // snapshot, like an old report).
 export async function captureTarget(tx: SnapshotTx, targetType: ReportTargetType, targetId: number): Promise<Captured | null> {
+  // Hold row locks until the report AND image copies are saved. All app
+  // removals mutate these rows before deleting Storage objects. A concurrent
+  // edit/delete therefore either finishes before this capture or waits for it.
+  if (targetType === "post") {
+    if (targetId > 0) {
+      await tx.$queryRaw`SELECT id FROM "LostPost" WHERE id = ${targetId} FOR SHARE`;
+    } else {
+      await tx.$queryRaw`SELECT id FROM "FoundPost" WHERE id = ${-targetId} FOR SHARE`;
+    }
+  } else if (targetType === "message") {
+    await tx.$queryRaw`SELECT id FROM "Message" WHERE id = ${targetId} FOR SHARE`;
+  }
   if (targetType === "post") {
     const postKind = targetId > 0 ? "lost" : "found";
     const id = Math.abs(targetId);
@@ -86,12 +98,11 @@ export async function captureTarget(tx: SnapshotTx, targetType: ReportTargetType
         ? await tx.lostPost.findUnique({ where: { id }, include: { user: { select: { nickname: true } } } })
         : await tx.foundPost.findUnique({ where: { id }, include: { user: { select: { nickname: true } } } });
     if (!post) return null;
-    const rows = await tx.postImage.findMany({
-      where: postKind === "lost" ? { lostPostId: id } : { foundPostId: id },
-      orderBy: { displayOrder: "asc" },
-      select: { imageUrl: true },
-      take: MAX_IMAGES_PER_POST,
-    });
+    // Read the gallery and acquire its locks in ONE statement. A separate
+    // findMany could see a newly inserted (and unlocked) image at READ COMMITTED.
+    const rows = postKind === "lost"
+      ? await tx.$queryRaw<{ imageUrl: string }[]>`SELECT image_url AS "imageUrl" FROM "PostImage" WHERE lost_post_id = ${id} ORDER BY display_order, id LIMIT ${MAX_IMAGES_PER_POST} FOR SHARE`
+      : await tx.$queryRaw<{ imageUrl: string }[]>`SELECT image_url AS "imageUrl" FROM "PostImage" WHERE found_post_id = ${id} ORDER BY display_order, id LIMIT ${MAX_IMAGES_PER_POST} FOR SHARE`;
     const urls = rows.length ? rows.map((r) => r.imageUrl) : post.imageUrl ? [post.imageUrl] : [];
     return {
       snapshot: {
@@ -198,10 +209,9 @@ function extensionOf(path: string): string | null {
 }
 
 // Copies the captured images into report-evidence and records the outcome of
-// each on the snapshot. Runs after the report committed (its id names the
-// evidence folder). Never throws: a failed copy is recorded as "failed" and
-// the report stands -- its text snapshot is already saved.
-export async function preserveEvidenceImages(reportId: number, captured: Captured): Promise<ReportSnapshot> {
+// each on the snapshot before the report transaction commits. Storage
+// failure is nonfatal; database failure aborts the report transaction.
+export async function preserveEvidenceImages(reportId: number, captured: Captured, writer: Pick<Prisma.TransactionClient, "report"> = prisma): Promise<ReportSnapshot> {
   const images: SnapshotImage[] = [];
   for (const [index, source] of captured.sources.entries()) {
     const kind = source.bucket === CHAT_IMAGES_BUCKET ? "chat" : "post";
@@ -212,16 +222,17 @@ export async function preserveEvidenceImages(reportId: number, captured: Capture
       continue;
     }
     const ok = await copyToEvidence(source.bucket, source.path, dest);
-    images.push({ index, source: kind, status: ok ? "copied" : "failed", path: ok ? dest : null });
+    images.push({ index, source: kind, status: ok ? "copied" : "failed", path: ok ? dest : null, ...(!ok && { retryPath: source.path }) });
   }
   const snapshot = { ...captured.snapshot, images };
   if (images.length) {
     try {
-      await prisma.report.update({ where: { id: reportId }, data: { targetSnapshot: snapshot } });
+      await writer.report.update({ where: { id: reportId }, data: { targetSnapshot: snapshot } });
     } catch (error) {
       // The copies exist but the snapshot doesn't list them: retention's
       // folder sweep (purgeReportSnapshot) still removes reports/{id}/.
       console.error("Report snapshot image update failed:", error instanceof Error ? error.name : "unknown");
+      if (writer !== prisma) throw error;
     }
   }
   return snapshot;

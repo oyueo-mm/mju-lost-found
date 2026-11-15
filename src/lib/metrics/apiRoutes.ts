@@ -50,6 +50,8 @@ export const API_ROUTE_NOTES: Record<string, string> = {
   "DELETE /api/admin/posts/[id]": "관리자: 게시글 삭제",
   "GET /api/admin/reports": "관리자: 신고 목록",
   "GET /api/admin/reports/[id]": "관리자: 신고 상세",
+  "GET /api/admin/reports/[id]/evidence/[id]": "관리자: 신고 증거 사진 열람 (권한 확인·감사 기록·캐시 금지)",
+  "POST /api/admin/reports/[id]/evidence/retry": "관리자: 신고 당시 사진 사본 복사 재시도",
   "POST /api/admin/reports/[id]/process": "관리자: 신고 처리 (기각·조치)",
   "POST /api/admin/reports/[id]/restore": "관리자: 신고로 임시 숨긴 글·댓글 복구",
   "GET /api/admin/users": "관리자: 회원 목록·검색",

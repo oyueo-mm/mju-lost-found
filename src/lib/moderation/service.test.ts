@@ -15,6 +15,7 @@ const foundPost = { findUnique: vi.fn() };
 const message = { findUnique: vi.fn() };
 const userTable = { findUnique: vi.fn() };
 const comment = { findUnique: vi.fn() };
+const adminAccessLog = { create: vi.fn() };
 
 // Transaction body operates on a `tx` object -- give it its own set of
 // mocks so assertions on e.g. tx.report.updateMany don't collide with the
@@ -56,7 +57,7 @@ const $transaction = vi.fn(async (fn: (tx: unknown) => unknown) =>
 );
 
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { report, lostPost, foundPost, message, user: userTable, comment, $transaction },
+  prisma: { report, lostPost, foundPost, message, user: userTable, comment, adminAccessLog, $transaction },
 }));
 // The post/comment removal itself is shared with the owner/admin delete
 // paths and tested there (posts/service.test.ts, comment/service.test.ts);
@@ -758,6 +759,21 @@ describe("temporary hide", () => {
 
 describe("getReportForAdmin -- release C (M-1) snapshot", () => {
   const base = { reporter: { nickname: "신고자" }, processedBy: null, moderationAction: null };
+
+  it("logs private message text even when the original message no longer exists", async () => {
+    const row = { ...reportRow({ targetType: "MESSAGE", targetId: 42 }), ...base, targetSnapshot: {
+      v: 1, subjectUserId: 2, target: { kind: "message", chatRoomId: 4, content: "private" }, images: [],
+    }, snapshotAt: new Date(), snapshotPurgedAt: null };
+    report.findUnique.mockResolvedValueOnce(row);
+    message.findUnique.mockResolvedValueOnce(null);
+    await getReportForAdmin(admin, 10);
+    expect(adminAccessLog.create).toHaveBeenCalledWith({ data: {
+      adminUserId: admin.id, resource: "chat_room", chatRoomId: 4, messageId: 42, reportId: 10,
+    } });
+    report.findUnique.mockResolvedValueOnce(row);
+    adminAccessLog.create.mockRejectedValueOnce(new Error("audit unavailable"));
+    await expect(getReportForAdmin(admin, 10)).rejects.toThrow("audit unavailable");
+  });
 
   it("shows the snapshot taken at report time even when the target is gone now", async () => {
     const takenAt = new Date("2026-11-15T03:00:00Z");

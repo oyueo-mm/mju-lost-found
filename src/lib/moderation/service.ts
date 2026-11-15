@@ -393,6 +393,13 @@ export async function getReportForAdmin(admin: User, id: number): Promise<AdminM
     row.snapshotAt || row.snapshotPurgedAt
       ? { takenAt: row.snapshotAt, purgedAt: row.snapshotPurgedAt, data: readSnapshot(row.targetSnapshot) }
       : null;
+  if (snapshot?.data?.target.kind === "message") {
+    // The snapshot reveals private chat text even if its original is gone.
+    // Use the existing allowed resource and fail closed before returning it.
+    await prisma.adminAccessLog.create({
+      data: { adminUserId: admin.id, resource: "chat_room", chatRoomId: snapshot.data.target.chatRoomId, messageId: row.targetId, reportId: id },
+    });
+  }
   return { kind: "ok", data: { ...(await toReportAdminDTO(row)), snapshot } };
 }
 

@@ -195,10 +195,20 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
         status: { not: ReportStatus.PENDING },
         OR: [...(sanctionOpen ? [] : [{ id: { in: [...aboutIds] } }]), { reporterUserId: w.id }],
       },
-      select: { id: true, processedAt: true, createdAt: true },
+      select: { id: true, processedAt: true, createdAt: true, targetSnapshot: true },
     });
     for (const r of expiredReports) {
       if ((r.processedAt ?? r.createdAt) > recordCutoff) continue;
+      // A withdrawn reporter must not release evidence about a different
+      // person whose sanction/withdrawal hold is still open.
+      const subjectId = readSnapshot(r.targetSnapshot)?.subjectUserId;
+      const subject = subjectId ? await prisma.user.findUnique({ where: { id: subjectId }, select: {
+        isSuspended: true, suspendedUntil: true, _count: { select: { withdrawnIdentities: true } },
+      } }) : null;
+      if (subject && (isCurrentlySuspended(subject) || subject._count.withdrawnIdentities > 0)) {
+        result.reportSnapshotsDeferred++;
+        continue;
+      }
       // Chat views and 실명·학과 views alike: a report viewed through within
       // the last year waits; older view logs go with the report.
       const recentViews =

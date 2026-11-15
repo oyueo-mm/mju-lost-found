@@ -14,6 +14,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { verifyStorageReferences } from "./storage-references.mjs";
 
 const require = createRequire(path.join(process.cwd(), "package.json"));
 const { Client } = require("pg");
@@ -50,11 +51,26 @@ for (const { table_name: t, column_name: c } of (await db.query(`SELECT table_na
 const missing = [...refs].filter((p) => !fs.existsSync(path.join(dir, "storage/post-images", p)));
 console.log(`image paths referenced: ${refs.size}, missing from backup: ${missing.length}`);
 
+const chatRefs = (await db.query(`SELECT image_url FROM "Message" WHERE image_url IS NOT NULL`)).rows.map((r) => r.image_url);
+const evidenceRefs = [];
+const hasSnapshots = (await db.query(`SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='Report' AND column_name='target_snapshot'`)).rowCount > 0;
+if (hasSnapshots) {
+  for (const row of (await db.query(`SELECT id, target_snapshot FROM "Report" WHERE target_snapshot IS NOT NULL`)).rows) {
+    for (const image of row.target_snapshot.images ?? []) {
+      if (image.status !== "copied") continue;
+      if (typeof image.path !== "string" || !image.path.startsWith(`reports/${row.id}/`)) throw new Error("Evidence reference belongs to a different report");
+      evidenceRefs.push(image.path);
+    }
+  }
+}
+const storageFailures = verifyStorageReferences(dir, { "post-images": [...refs], "chat-images": chatRefs, "report-evidence": evidenceRefs });
+console.log(`private image references: chat ${chatRefs.length}, evidence ${evidenceRefs.length}; storage verification failures: ${storageFailures}`);
+
 for (const m of migrations) {
   execFileSync(bin("psql"), [target, "-q", "-v", "ON_ERROR_STOP=1", "-f", path.join(m, "migration.sql")], { stdio: "inherit" });
   console.log(`rehearsed migration ${path.basename(m)}`);
 }
 await db.end();
-const ok = mismatches === 0 && missing.length === 0;
+const ok = mismatches === 0 && missing.length === 0 && storageFailures === 0;
 console.log(ok ? "RESTORE VERIFIED" : "RESTORE CHECK FAILED");
 process.exit(ok ? 0 : 1);

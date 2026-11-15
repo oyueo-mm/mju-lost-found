@@ -21,7 +21,9 @@ const at = new Date("2026-11-15T03:00:00Z");
 const fn = <T>(value: T) => vi.fn(async () => value);
 
 function tx(overrides: Record<string, unknown> = {}) {
+  const gallery = overrides.postImage as { findMany?: () => Promise<unknown[]> } | undefined;
   return {
+    $queryRaw: vi.fn(async (sql: TemplateStringsArray) => sql.join("").includes('"PostImage"') ? await gallery?.findMany?.() ?? [] : []),
     lostPost: { findUnique: fn(null) },
     foundPost: { findUnique: fn(null) },
     postImage: { findMany: fn([]) },
@@ -120,7 +122,7 @@ describe("preserveEvidenceImages", () => {
     expect(copyToEvidence).toHaveBeenNthCalledWith(2, "chat-images", `chat/4/${UUID}.webp`, "reports/42/1.webp");
     expect(snapshot.images).toEqual([
       { index: 0, source: "post", status: "copied", path: "reports/42/0.jpg" },
-      { index: 1, source: "chat", status: "failed", path: null },
+      { index: 1, source: "chat", status: "failed", path: null, retryPath: `chat/4/${UUID}.webp` },
       { index: 2, source: "post", status: "unsupported", path: null },
     ]);
     expect(report.update).toHaveBeenCalledWith({ where: { id: 42 }, data: { targetSnapshot: snapshot } });

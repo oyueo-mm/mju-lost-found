@@ -125,7 +125,7 @@ export async function createReport(reporter: User, input: CreateReportInput): Pr
     // versa (same "creation stays inside the causing domain's own
     // transaction" rule announcement/service.ts's createAnnouncement
     // already follows for its own fan-out).
-    const { report: created, captured } = await prisma.$transaction(async (tx) => {
+    const created = await prisma.$transaction(async (tx) => {
       // Release C (M-1): the target as it is now, in the same transaction
       // as the report row (lib/report/snapshot.ts).
       const captured = await captureTarget(tx, input.targetType, input.targetId);
@@ -148,12 +148,10 @@ export async function createReport(reporter: User, input: CreateReportInput): Pr
         relatedType: "report",
         relatedId: report.id,
       }, "reports.view");
-      return { report, captured };
-    });
-    // Images are copied once the report exists (its id names the evidence
-    // folder) and before answering, so a delete right after the report
-    // can't beat the copy. A failed copy is recorded, never fatal.
-    if (captured?.sources.length) await preserveEvidenceImages(created.id, captured);
+      // Keep captureTarget's locks until Storage has finished copying.
+      if (captured?.sources.length) await preserveEvidenceImages(report.id, captured, tx);
+      return report;
+    }, { timeout: 25000 });
     return { kind: "ok", data: toReportDTO(created) };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {

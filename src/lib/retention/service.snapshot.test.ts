@@ -6,10 +6,13 @@ type Row = { id: number; targetSnapshot: unknown };
 let due: Row[] = [];
 let users: Record<number, { isSuspended: boolean; suspendedUntil: Date | null; _count: { withdrawnIdentities: number } }> = {};
 let recentViews: Record<number, number> = {};
+let withdrawn: unknown[] = [];
+let expired: unknown[] = [];
 const calls: { model: string; method: string; args: unknown }[] = [];
 
-function answer(model: string, method: string, args: { where?: { id?: number; reportId?: number } } | undefined) {
-  if (model === "report" && method === "findMany") return due;
+function answer(model: string, method: string, args: { where?: { id?: number; reportId?: number; NOT?: unknown; status?: unknown } } | undefined) {
+  if (model === "report" && method === "findMany") return args?.where?.NOT ? due : args?.where?.status ? expired : [];
+  if (model === "user" && method === "findMany") return withdrawn;
   if (model === "user" && method === "findUnique") return users[args?.where?.id ?? -1] ?? null;
   if ((model === "adminAccessLog" || model === "identityAccessLog") && method === "count") return model === "adminAccessLog" ? (recentViews[args?.where?.reportId ?? -1] ?? 0) : 0;
   if (method === "findMany") return [];
@@ -54,10 +57,21 @@ beforeEach(() => {
   due = [];
   users = {};
   recentViews = {};
+  withdrawn = [];
+  expired = [];
   purgeReportSnapshot.mockResolvedValue(true);
 });
 
 describe("runRetention: report snapshots (release C)", () => {
+  it("keeps evidence about a sanctioned subject when the reporter has withdrawn", async () => {
+    withdrawn = [{ id: 99, withdrawnAt: new Date("2020-01-01"), ...active }];
+    expired = [{ id: 7, processedAt: new Date("2020-01-01"), createdAt: new Date("2020-01-01"), targetSnapshot: snap(2) }];
+    users = { 2: { ...active, isSuspended: true } };
+    const result = await runRetention(NOW);
+    expect(result.reportSnapshotsDeferred).toBe(1);
+    expect(removeReportEvidence).not.toHaveBeenCalled();
+    expect(calls.some((c) => c.model === "report" && c.method === "delete")).toBe(false);
+  });
   it("asks only for processed reports with a snapshot, processed at least a year ago", async () => {
     await runRetention(NOW);
     const query = calls.find((c) => c.model === "report" && c.method === "findMany" && JSON.stringify(c.args).includes("targetSnapshot"));
