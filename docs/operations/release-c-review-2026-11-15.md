@@ -23,7 +23,7 @@
 
 ## 실제 검증
 
-- 최종 전체 테스트 252개 파일, 2,896/2,896 통과. 새로운 회귀 검사와 기존 트랜잭션 검사 보강을 포함한다.
+- 앱 보완 후 전체 테스트 252개 파일, 2,896/2,896 통과. Production 전용 운영 정책 추가 후 253개 파일, 2,898/2,898 통과. 새로운 회귀 검사와 기존 트랜잭션 검사 보강을 포함한다.
 - 타입 검사, `npx eslint src scripts next.config.ts vitest.config.ts`, 로컬 `npm run build` 통과. 비밀 없는 빌드에서 DB/Storage 설정 부재 경고가 출력되며 실제 런타임 검증과 구분한다.
 - 기존 인수인계의 공격 시나리오 44건/회귀 16건 실행 파일은 저장소에서 확인되지 않아 그 수치를 이번 재실행 결과로 주장하지 않는다.
 - 승인된 Preview 신규 테스트: 방 156, 메시지 457, 신고 76. 기존 계정·시드의 속성/권한은 변경하지 않았다. 실제 `createReport`, `captureTarget`, `preserveEvidenceImages`를 사용했다.
@@ -57,6 +57,10 @@
 - 신규 검토용 신고 76/방 156/메시지 457/증거 사진 1개는 배포된 Preview 수동 검증까지 유지한 후 해당 ID만 정리한다.
 
 ## 수동 검증 및 Production 게이트
+
+2026-11-15 사용자 확인: 배포된 Preview `dpl_5ixfgCtSAkVRhHi3RoXES7JutWv1` (`ebc7362`)에서 원본/스냅샷 구분, 사진 API 200 및 private/no-store, 5분 뒤 새로고침을 모두 통과했다. 이후 DB 읽기 전용 확인에서 신고 76의 `chat_room` 7건과 `chat_image` 8건을 확인했다. 배포 파일에 비밀 환경 파일 0개, Vercel 보호를 유지한 CLI 점검에서 앱 비로그인 이미지 요청 401/관리자 페이지 307, 확인 시점 최근 15분 5xx 로그 0건.
+
+기존 승인 실행기의 제약을 유지하는 `scripts/operations/release-c-production.mjs`를 추가했다. Production만 허용하며 읽기 전용 preflight가 기본이고, 변경에는 `--apply --confirm-production`이 모두 필요하다. 대기 마이그레이션은 릴리스 C 하나만 허용한다. 비공개 증거 버킷 설정과 클라이언트 Storage 읽기 정책 부재를 먼저 검증하며, 마이그레이션에는 가드를 preload한 공식 Prisma CLI를 사용한다. 앱·마이그레이션 SQL은 수동 검증한 커밋과 동일하다. 해당 운영 진입점/정책은 별도 테스트·린트·읽기 전용 Production preflight를 통과했다.
 
 수정본 Preview 배포 후 관리자 계정으로 `/admin/reports/76`에서 다음을 확인한다.
 
