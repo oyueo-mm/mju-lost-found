@@ -2,7 +2,6 @@
 import { readFileSync } from "node:fs";
 import { resolve, relative, isAbsolute } from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import { parse } from "dotenv";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
 import { checkApprovedLaunch } from "./approvalPolicy.mjs";
@@ -27,6 +26,8 @@ const env = { ...process.env, ...parse(readFileSync(".env.operations-production"
   MJU_DB_OPERATION: "approved", MJU_DB_APPROVAL_REFERENCE: reference,
   NODE_ENV: "production", VERCEL: "", VERCEL_ENV: "", VERCEL_DEPLOYMENT_ID: "" };
 assertDatabaseEnvironment(env, { usage: "operation" });
-const guard = fileURLToPath(new URL("./install-guard.mjs", import.meta.url));
+// A file: URL, not a path: on Windows `--import C:\...` is read as a URL with
+// scheme "c:" and the child exits before the guard (or the script) loads.
+const guard = new URL("./install-guard.mjs", import.meta.url).href;
 const result = spawnSync(process.execPath, ["--import", guard, scriptPath, ...args.slice(divider + 2)], { env, stdio: "inherit" });
 process.exit(result.status ?? 1);

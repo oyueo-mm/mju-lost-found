@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { checkApprovedLaunch, STANDING_BACKUP_REFERENCE } from "./approvalPolicy.mjs";
@@ -63,6 +65,15 @@ describe("checkApprovedLaunch -- standing backup approval", () => {
 });
 
 describe("approved-operation.mjs launcher", () => {
+  it("preloads the connection guard by file: URL (a Windows path made every launch fail)", () => {
+    const source = readFileSync("scripts/db/approved-operation.mjs", "utf8");
+    expect(source).toContain('new URL("./install-guard.mjs", import.meta.url).href');
+    expect(source).not.toContain("fileURLToPath");
+    const guard = new URL("./install-guard.mjs", pathToFileURL(resolve("scripts/db/approved-operation.mjs"))).href;
+    const child = spawnSync(process.execPath, ["--import", guard, "-e", "process.exit(0)"], { encoding: "utf8", timeout: 10000 });
+    expect(child.status, child.stderr).toBe(0);
+  });
+
   it("refuses another script under the standing reference before reading any credential", () => {
     const result = spawnSync(process.execPath, ["scripts/db/approved-operation.mjs", "--confirm-production", "--approval-reference", STANDING_BACKUP_REFERENCE, "--", "scripts/deployments/record.mjs", "--db", "production"], { encoding: "utf8", timeout: 10000 });
     expect(result.status).not.toBe(0);
