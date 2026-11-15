@@ -7,7 +7,8 @@ import {POST_IMAGE_REMOTE_PATTERNS} from "../../src/lib/images/optimizationHosts
 const [target,expectedSha,expectedDeployment,baselineFlag]=process.argv.slice(2);
 if(!["production","preview"].includes(target)||!/^([a-f0-9]{40})$/.test(expectedSha??"")||!/^dpl_[A-Za-z0-9]+$/.test(expectedDeployment??""))throw new Error("Usage: release-probes.mjs production|preview <SHA> <deployment>");
 const baseline=baselineFlag==="--baseline-d1";
-if(baselineFlag&&(!baseline||target!=="production"||expectedSha!=="cb3bb71184d1c7d534827cdf7660a15cede81569"))throw new Error("Baseline mode is restricted to the known D1 production commit");
+const searchOnly=baselineFlag==="--search-only";
+if(baselineFlag&&!searchOnly&&(!baseline||target!=="production"||expectedSha!=="cb3bb71184d1c7d534827cdf7660a15cede81569"))throw new Error("Baseline mode is restricted to the known D1 production commit");
 const base=target==="production"?"https://mju-find.vercel.app":"https://mju-lost-found-preview.vercel.app";
 const results=[];
 const check=(name,passed,details={})=>{results.push({name,passed,...details});if(!passed)throw new Error(`Probe failed: ${name}`);};
@@ -28,17 +29,21 @@ async function request(path,image=false){
 }
 try{
   const version=await request("/api/version");check("version",version.status===200&&version.json?.gitSha===expectedSha&&version.json?.deploymentId===expectedDeployment,{version:version.json});
+  if(!searchOnly){
   for(const path of ["/","/login","/api/auth/session","/policy/privacy"]){const r=await request(path);check(`public ${path}`,r.status===200,{status:r.status});}
   for(const path of ["/api/chat","/api/admin/reports","/api/admin/reports/1/evidence/0"]){const r=await request(path);check(`authentication ${path}`,[401,403].includes(r.status),{status:r.status});}
   const maintenance=await request("/api/posts?mode=embedding-maintenance");check(baseline?"D2 maintenance absent in D1":"maintenance authentication",baseline?maintenance.status===400:maintenance.status===401,{status:maintenance.status});
+  }
   for(const mode of ["keyword","semantic","unified","image"]){
     const r=await request(`/api/posts?type=found&mode=${mode}&limit=5${mode==="image"?"":`&q=${encodeURIComponent("검은 지갑")}`}`,mode==="image");
     const rows=r.json?.data;check(`search ${mode}`,r.status===200&&Array.isArray(rows),{status:r.status,ms:r.ms,count:rows?.length,rankHash:Array.isArray(rows)?createHash("sha256").update(JSON.stringify(rows.map(p=>({id:p.id,type:p.type??p.postType,score:p.score??p.aiSimilarity??p.similarity??null})))).digest("hex"):null});
   }
+  if(!searchOnly){
   const listing=await request("/api/posts?type=found&limit=10");const photo=listing.json?.data?.find(p=>p.imageUrl)?.imageUrl;
   check("existing photo available",typeof photo==="string");
   const photoUrl=new URL(photo);check("existing photo origin",photoUrl.protocol==="https:"&&POST_IMAGE_REMOTE_PATTERNS.some(p=>p.hostname===photoUrl.hostname));
   const r=target==="production"?await fetch(`${base}/_next/image?${new URLSearchParams({url:photo,w:"128",q:"75"})}`,{signal:AbortSignal.timeout(60000)}):await fetch(photo,{signal:AbortSignal.timeout(60000)});
   const bytes=(await r.arrayBuffer()).byteLength;check("existing photo display",r.ok&&r.headers.get("content-type")?.startsWith("image/")&&bytes>0,{status:r.status,bytes});
+  }
 }catch(error){console.error(error.message);process.exitCode=1;}
 finally{mkdirSync(".vercel",{recursive:true});writeFileSync(`.vercel/release-probes-${target}-${Date.now()}.json`,JSON.stringify({target,results},null,2));console.log(JSON.stringify({target,results}));}

@@ -17,6 +17,7 @@
 | [백업 snapshot 복구](backup-snapshot-repair-2026-11-16.md) | 경합 재현·공유 snapshot·암호화 실제 복원·예약 실행 검증 |
 | [D-2 구현·Preview 검사](release-d2-review-2026-11-16.md) | 작업 테이블·실행 임대·입력 버전·모델 번들·Preview 결과 |
 | [D-2 배포 전환·롤백](release-d2-transition.md) | 구버전 저장 차단·새 worker 330초 대기·큐 보존·비파괴 검사 |
+| [D-2 Production 최종 결과](release-d2-production-2026-11-16.md) | 현재 Production 8baa381·공존 보완·53개 테이블 복원·성능 비교 |
 | [D-3 상세 계획](release-d3-plan-2026-11-16.md) | Auth.js 연결·private 수신·참여자 권한·읽음 검증·이벤트 합치기, 미구현 |
 | [보안 후속 항목](security-followups.md) | 삭제 이미지 CDN 잔존·백업 snapshot 일관성 문제 |
 | [인수인계](handover.md) | 계정·권한·등록부·현장 상태·미결 사항 전달 |

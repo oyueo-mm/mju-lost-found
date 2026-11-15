@@ -29,6 +29,7 @@ Supabase는 외부 JWT를 third-party auth 또는 imported signing key로 검증
 ## DB·Realtime 접근 제어
 
 1. 신규 Realtime 수신 전용 NOLOGIN 역할을 검토한다. 기존 authenticated 역할의 잔여 권한을 그대로 가진 토큰 발급은 피한다. 새 역할을 Realtime이 실제로 전환할 수 있는지 Preview에서 확인하고 필요한 최소 USAGE/SELECT만 설계한다.
+   NOINHERIT 역할도 PUBLIC에 부여한 권한은 적용받는다. 따라서 역할 이름만으로 Realtime 전용이라고 판단하지 않고 PUBLIC/함수 EXECUTE를 포함한 유효 권한과 Storage 등 다른 API에서 토큰의 권한을 읽기 전용으로 조사한다. 기존 권한 변경이 필요하면 잔여 DB 권한 정리의 별도 승인 범위와 조율하고 임의 REVOKE하지 않는다. [PostgreSQL GRANT](https://www.postgresql.org/docs/current/sql-grant.html).
 2. `realtime.messages` SELECT 정책은 정확한 topic 파싱·Broadcast extension·현재 참여자 판정으로 제한한다. 참가자 표를 직접 광범위하게 노출하지 않는다. 필요하면 고정 search_path·제한된 EXECUTE의 SECURITY DEFINER membership 함수로 기관 역할을 확인한다. anonymous/다른 사용자/기관 일반 MEMBER/권한 해제자를 거부한다.
 3. 클라이언트의 INSERT/Broadcast 송신과 Presence 쓰기는 허용하지 않는다. 실제 메시지·반응·읽음 변경은 기존 인증 API/Server Action에서 저장하고 서버만 private Broadcast한다. 서버 `httpSend`와 브라우저 `private:true` 양쪽이 일치해야 한다.
 4. 새/기존 topic이 공개로 다시 구독되거나 forged public 이벤트가 private 구독에 도착하지 않는지 검사한다. 전체 전환 후 프로젝트의 Allow public access를 OFF로 바꾸는 것을 계획하되, 기존 클라이언트가 끊기는 영향과 타 Realtime 용도를 먼저 조사한다. 이 설정 변경도 D-3 승인 범위에 명시한다.
@@ -65,6 +66,7 @@ Realtime 정책은 매 이벤트마다 DB를 확인하는 방식이 아니며 �
 - 100개 반복 이벤트에서 HTTP 호출 수의 상한·최종 상태 일치를 검사하고 read→GET→read loop가 없음을 검증한다. join/refresh 때 RLS DB 조회 수·토큰 API 비용·정상 메시지 지연을 비교한다.
 - 전체 단위·타입·린트·빌드·기존 16단계, 실제 Preview 브라우저, 새 역할/정책/함수의 백업·복원 검증. Data API는 OFF를 유지한다.
 - 안전한 전환: 먼저 private 경로와 브라우저 재연결/서버 조회 fallback을 Preview에서 검증하고 공개 채널을 닫는 순간의 기존 탭 동작을 리허설한다. Production에서 public/private 이중 송신을 보안 완료 상태로 취급하지 않는다.
+  현재 구형 hook에는 PrivateOnly 거부 후 자동 조회 fallback이 없으므로 오래 열린 기존 탭의 무중단 호환을 보장할 수 없다. 호환 클라이언트를 먼저 배포하고, 작성 중 내용 보존·재접속/업데이트 안내·전환 시 새로고침 필요성을 검증한 뒤 공개 접근을 닫는 시점을 정한다. 보안을 이유로 확인 없이 임시 공개 fallback을 추가하지 않는다.
 - 롤백: private 지원 직전 호환 앱을 확보한다. 문제가 생겨도 공개 접근·클라이언트 송신 권한을 다시 여는 방식으로 복구하지 않는다. 안전한 서버 상태 조회 fallback으로 수신 기능을 유지하며 토큰·메시지·신고 증거를 삭제하지 않는다.
 
 다음 구현 승인을 받을 때 키 등록·환경 비밀 추가·Realtime 전용 역할/정책·Allow public access OFF·안전한 호환 배포를 구체적인 변경 목록으로 함께 검토해야 한다. 현재는 이 설정들을 실행하거나 새로운 유료 서비스를 도입하지 않았다.
