@@ -13,7 +13,7 @@ const deleteFoundPost = vi.fn();
 // Phase 15-2: PUT's own collaborator, mocked wholesale -- never loading
 // the real ~99MB SigLIP model or issuing a real $executeRaw here, same
 // convention as this project's other embedding-adjacent route tests.
-const embedPostImageBestEffort = vi.fn();
+const runImageJob = vi.fn();
 // Phase J-2: PUT also clears this post's cached AI recommendation ranking
 // once its image embedding changes -- mocked here for the same reason
 // (no real prisma call in a route unit test).
@@ -34,7 +34,7 @@ vi.mock("@/lib/posts/aiService", () => ({
   updateLostPost,
   updateFoundPost,
 }));
-vi.mock("@/lib/ai/postEmbedding", () => ({ embedPostImageBestEffort }));
+vi.mock("@/lib/ai/imageJob", () => ({ runImageJob }));
 const findPostRecommendations = vi.fn();
 vi.mock("@/lib/recommendation/service", () => ({ invalidateRecommendationCache, findPostRecommendations }));
 // Legal pre-beta Phase: only consulted for a temporarily hidden post.
@@ -48,6 +48,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  runImageJob.mockResolvedValue({ status: "completed" });
 });
 
 describe("GET /api/posts/[id]", () => {
@@ -217,7 +218,7 @@ describe("PUT /api/posts/[id] (internal: recompute image embedding)", () => {
     const res = await PUT(new NextRequest("http://localhost/api/posts/1?type=lost", { method: "PUT" }), params("1"));
 
     expect(res.status).toBe(401);
-    expect(embedPostImageBestEffort).not.toHaveBeenCalled();
+    expect(runImageJob).not.toHaveBeenCalled();
   });
 
   it("returns 404 for a nonexistent post", async () => {
@@ -227,7 +228,7 @@ describe("PUT /api/posts/[id] (internal: recompute image embedding)", () => {
     const res = await PUT(new NextRequest("http://localhost/api/posts/1?type=lost", { method: "PUT" }), params("1"));
 
     expect(res.status).toBe(404);
-    expect(embedPostImageBestEffort).not.toHaveBeenCalled();
+    expect(runImageJob).not.toHaveBeenCalled();
   });
 
   it("rejects triggering embedding for someone else's post", async () => {
@@ -237,7 +238,7 @@ describe("PUT /api/posts/[id] (internal: recompute image embedding)", () => {
     const res = await PUT(new NextRequest("http://localhost/api/posts/1?type=lost", { method: "PUT" }), params("1"));
 
     expect(res.status).toBe(403);
-    expect(embedPostImageBestEffort).not.toHaveBeenCalled();
+    expect(runImageJob).not.toHaveBeenCalled();
   });
 
   it("computes the embedding from the post's current imageUrl for the owner", async () => {
@@ -249,8 +250,8 @@ describe("PUT /api/posts/[id] (internal: recompute image embedding)", () => {
 
     expect(res.status).toBe(200);
     expect(json.data.embedded).toBe(true);
-    expect(embedPostImageBestEffort).toHaveBeenCalledWith("lost", 1, "https://x/y.jpg");
-    expect(invalidateRecommendationCache).toHaveBeenCalledWith("lost", 1);
+    expect(runImageJob).toHaveBeenCalledWith("lost", 1, true);
+    expect(json.data.jobStatus).toBe("completed");
   });
 
   it("does nothing (but still succeeds) when the post has no image", async () => {
@@ -262,7 +263,7 @@ describe("PUT /api/posts/[id] (internal: recompute image embedding)", () => {
 
     expect(res.status).toBe(200);
     expect(json.data.embedded).toBe(false);
-    expect(embedPostImageBestEffort).not.toHaveBeenCalled();
+    expect(runImageJob).not.toHaveBeenCalled();
     expect(invalidateRecommendationCache).not.toHaveBeenCalled();
   });
 });
@@ -314,7 +315,7 @@ describe("release C (M-1): PUT /api/posts/[id] for a suspended author", () => {
 
     expect(res.status).toBe(403);
     expect(getLostPost).not.toHaveBeenCalled();
-    expect(embedPostImageBestEffort).not.toHaveBeenCalled();
+    expect(runImageJob).not.toHaveBeenCalled();
     expect(invalidateRecommendationCache).not.toHaveBeenCalled();
   });
 });

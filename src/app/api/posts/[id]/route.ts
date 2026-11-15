@@ -1,3 +1,6 @@
+import { runImageJob } from "@/lib/ai/imageJob";
+import { rateLimitFailure, rateLimitFailureResponse } from "@/lib/rateLimit";
+export const maxDuration = 120;
 import { managePost } from "@/lib/posts/management";
 import { NextRequest } from "next/server";
 
@@ -11,8 +14,8 @@ import {
 import { postTypeSchema, updateFoundPostSchema, updateLostPostSchema } from "@/lib/posts/schema";
 import { deleteFoundPost, deleteLostPost, getFoundPost, getLostPost } from "@/lib/posts/service";
 import { updateFoundPost, updateLostPost } from "@/lib/posts/aiService";
-import { embedPostImageBestEffort } from "@/lib/ai/postEmbedding";
-import { findPostRecommendations, invalidateRecommendationCache } from "@/lib/recommendation/service";
+
+import { findPostRecommendations } from "@/lib/recommendation/service";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canAny } from "@/lib/permissions/check";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
@@ -161,17 +164,11 @@ export const PUT = withErrorHandling(
     if (!post) return jsonError(404, "게시물을 찾을 수 없습니다.");
     if (post.author.id !== auth.user.id) return jsonError(403, "본인 게시물만 수정할 수 있습니다.");
 
-    if (post.imageUrl) {
-      await embedPostImageBestEffort(parsedParams.type, parsedParams.id, post.imageUrl);
-      // Phase J-2: AI recommendations now combine this post's image
-      // embedding with its text one (src/lib/recommendation/service.ts), so
-      // a recomputed image embedding invalidates the cached ranking the
-      // same way a recomputed text embedding already does in aiService.ts.
-      // Before this phase the cache was text-only, so this trigger had
-      // nothing to invalidate.
-      await invalidateRecommendationCache(parsedParams.type, parsedParams.id);
-    }
-    return jsonOk({ embedded: Boolean(post.imageUrl) });
+    if (!post.imageUrl) return jsonOk({ embedded: false, jobStatus: "no_image" });
+    const result = await runImageJob(parsedParams.type, parsedParams.id, true);
+    if (result.status === "limited") return rateLimitFailureResponse(rateLimitFailure(result.admission)!);
+    if (result.status === "failed") return jsonError(503, "이미지 분석을 잠시 처리할 수 없습니다. 다시 시도해주세요.");
+    return jsonOk({ embedded: result.status === "completed" || result.status === "reused", jobStatus: result.status });
   },
 );
 

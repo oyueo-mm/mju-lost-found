@@ -1,3 +1,6 @@
+vi.mock("next/server", async () => ({ ...await vi.importActual("next/server"), after: vi.fn() }));
+const drainImageJobs = vi.fn();
+vi.mock("@/lib/ai/imageJob", () => ({ drainImageJobs }));
 import { NextRequest, NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -522,5 +525,22 @@ describe("POST image/AI search -- magic-byte check (release B, H-3)", () => {
     const res = await POST(request("image", JPEG, "image/jpeg"));
     expect(res.status).toBe(200);
     expect(searchPostsByImage).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe("embedding queue maintenance authentication", () => {
+  it("refuses maintenance without its server secret", async () => {
+    vi.stubEnv("CRON_SECRET", "test-maintenance-secret");
+    const res = await GET(new NextRequest("http://localhost/api/posts?mode=embedding-maintenance"));
+    expect(res.status).toBe(401);
+    expect(drainImageJobs).not.toHaveBeenCalled();
+  });
+  it("drains a bounded batch only with the correct secret", async () => {
+    vi.stubEnv("CRON_SECRET", "test-maintenance-secret");
+    const res = await GET(new NextRequest("http://localhost/api/posts?mode=embedding-maintenance", { headers: { authorization: "Bearer test-maintenance-secret" } }));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(drainImageJobs).toHaveBeenCalledWith(8);
   });
 });

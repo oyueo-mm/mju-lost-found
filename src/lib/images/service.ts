@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { isCurrentlySuspended, type ContentActor } from "@/lib/auth/suspension";
 import type { PostType } from "@/lib/posts/schema";
-import { saveImageEmbedding } from "@/lib/ai/vectorSearch";
+
 import { deleteObjectSafely, publicUrlFor } from "./supabaseAdmin";
 import { parseImagePathname } from "./pathname";
 import { sanitizeStoredImage } from "./sanitize";
@@ -283,7 +283,6 @@ export async function deletePostImage(
   if (!image || !belongsToThisPost) return { kind: "not_found" };
 
   let finalImageUrl: string | null = existing.imageUrl;
-  let promoted = false;
 
   await prisma.$transaction(async (tx) => {
     await tx.postImage.delete({ where: { id: imageId } });
@@ -296,7 +295,6 @@ export async function deletePostImage(
     if (next) {
       await tx.postImage.update({ where: { id: next.id }, data: { isPrimary: true } });
       finalImageUrl = next.imageUrl;
-      promoted = true;
     } else {
       finalImageUrl = null;
     }
@@ -310,22 +308,7 @@ export async function deletePostImage(
 
   await deleteObjectSafely(image.imageUrl);
 
-  // Best-effort, matching clearPostImage's own treatment of this exact
-  // side effect. Only cleared when the deleted image was primary AND
-  // nothing was promoted to take its place (the post now truly has no
-  // image) -- if a different existing image was promoted instead, its own
-  // embedding still needs recomputing, which the route layer triggers the
-  // same way setPostImage's attach path already does (an internal PUT
-  // /api/posts/[id] request); clearing the column here first would just be
-  // overwritten by that anyway.
-  if (image.isPrimary && !promoted) {
-    try {
-      await saveImageEmbedding(type, id, null);
-    } catch (error) {
-      console.error(`Failed to clear image embedding for ${type} post ${id}:`, error);
-    }
-  }
-
+  // The database trigger atomically invalidates the old vector and queues the new primary.
   return { kind: "ok", data: { imageUrl: finalImageUrl } };
 }
 
@@ -362,20 +345,7 @@ export async function clearPostImage(
     await tx.postImage.deleteMany({ where: postImageWhere(type, id) });
   });
 
-  // Phase G-4: best-effort, matching setPostImage's own treatment of this
-  // exact side effect (that path delegates it to an internal best-effort
-  // HTTP call; this one calls it directly since it has nothing else to
-  // await either way). The imageUrl column above is the source of truth
-  // for "does this post have an image" -- a transient failure clearing the
-  // (separate, independent) imageEmbedding column must never turn an
-  // already-committed image removal into a reported failure, which is what
-  // an unguarded throw here used to do (withErrorHandling has no
-  // transaction to roll the first write back with regardless).
-  try {
-    await saveImageEmbedding(type, id, null);
-  } catch (error) {
-    console.error(`Failed to clear image embedding for ${type} post ${id}:`, error);
-  }
+  // Vector invalidation is part of the image_url transaction via the job trigger.
 
   // Every image this post had (the cache column's own URL plus every
   // gallery row's URL) gets a best-effort Storage cleanup attempt, deduped

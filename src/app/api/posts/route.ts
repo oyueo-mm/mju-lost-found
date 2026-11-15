@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
+import { timingSafeEqual } from "node:crypto";
+import { drainImageJobs } from "@/lib/ai/imageJob";
+export const maxDuration = 120;
 
 import {
   jsonError,
@@ -43,6 +47,15 @@ async function limitAiSearch(request: NextRequest): Promise<NextResponse | null>
 export const runtime = "nodejs";
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
+  if (request.nextUrl.searchParams.get("mode") === "embedding-maintenance") {
+    const secret = process.env.CRON_SECRET;
+    const actual = Buffer.from(request.headers.get("authorization") ?? "");
+    const expected = Buffer.from(`Bearer ${secret ?? ""}`);
+    if (!secret || actual.length !== expected.length || !timingSafeEqual(actual, expected)) return jsonError(401, "Unauthorized");
+    await drainImageJobs(8);
+    return NextResponse.json({ status: "processed" }, { headers: { "Cache-Control": "no-store" } });
+  }
+  after(async () => { try { await drainImageJobs(1); } catch (error) { console.error("Image job recovery unavailable:", error instanceof Error ? error.name : "Error"); } });
   const query = listQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
   if (!query.success) {
     return jsonError(400, query.error.issues[0]?.message ?? "잘못된 검색 조건입니다.");

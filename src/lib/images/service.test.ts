@@ -446,7 +446,8 @@ describe("deletePostImage", () => {
     const result = await deletePostImage("lost", 1, actor(1), 10);
 
     expect(lostPost.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { imageUrl: null } });
-    expect(saveImageEmbedding).toHaveBeenCalledWith("lost", 1, null);
+    // D-2: trigger-based atomic invalidation is verified by real DB integration; no late write may erase a newer vector.
+    expect(saveImageEmbedding).not.toHaveBeenCalled();
     expect(result).toEqual({ kind: "ok", data: { imageUrl: null } });
   });
 });
@@ -467,7 +468,7 @@ describe("clearPostImage", () => {
 
     expect(result).toEqual({ kind: "ok", data: { imageUrl: null } });
     expect(foundPost.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { imageUrl: null } });
-    expect(saveImageEmbedding).toHaveBeenCalledWith("found", 1, null);
+    expect(saveImageEmbedding).not.toHaveBeenCalled();
     expect(deleteObjectSafely).toHaveBeenCalledWith("https://x/y.jpg");
   });
 

@@ -79,8 +79,8 @@ async function writeCachedRanking(
 // board does not invalidate an existing cache row" accepted staleness
 // trade-off the removed Match domain's cache already had (see
 // schema.prisma's MatchCandidateCache comment).
-export async function invalidateRecommendationCache(sourceType: PostType, sourcePostId: number): Promise<void> {
-  await prisma.matchCandidateCache.deleteMany({ where: { sourceType, sourcePostId } });
+export async function invalidateRecommendationCache(sourceType: PostType, sourcePostId: number, db: Pick<typeof prisma, "matchCandidateCache"> = prisma): Promise<void> {
+  await db.matchCandidateCache.deleteMany({ where: { sourceType, sourcePostId } });
 }
 
 // AI 유사도 척도 통일 Phase ("D3-pool"): the candidate pool is unchanged --

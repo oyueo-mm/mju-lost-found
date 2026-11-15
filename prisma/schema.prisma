@@ -292,6 +292,24 @@ enum OrganizationRequestStatus {
 
 // ---------- User ----------
 
+model ImageEmbeddingJob {
+  postType String @map("post_type")
+  postId Int @map("post_id")
+  ownerId Int @map("owner_id")
+  desiredHash String? @map("desired_hash")
+  completedHash String? @map("completed_hash")
+  generation Int @default(1)
+  state String @default("pending")
+  leaseToken String? @map("lease_token")
+  leaseUntil DateTime? @map("lease_until") @db.Timestamp(3)
+  attempts Int @default(0)
+  nextRunAt DateTime @default(dbgenerated("(now() AT TIME ZONE 'UTC')")) @map("next_run_at") @db.Timestamp(3)
+  lastError String? @map("last_error")
+  updatedAt DateTime @default(dbgenerated("(now() AT TIME ZONE 'UTC')")) @map("updated_at") @db.Timestamp(3)
+  @@id([postType, postId])
+  @@index([state, nextRunAt], map: "ImageEmbeddingJob_pending")
+}
+
 model User {
   institutionOfficer InstitutionOfficer?
   adminPermissions AdminPermissionGrant[]

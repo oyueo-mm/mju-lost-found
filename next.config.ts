@@ -88,6 +88,7 @@ const nextConfig: NextConfig = {
     ],
     "/api/posts!(/**)": ["./models/**"],
     "/api/posts/\\[id\\]!(/**)": ["./models/**"],
+    "/api/posts/\\[id\\]/image!(/**)": ["./models/Xenova/siglip-base-patch16-224/**"],
   },
   images: {
     // 운영 비용 (Hobby: 5,000 image transformations a month): every width

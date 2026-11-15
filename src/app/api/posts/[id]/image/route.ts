@@ -1,4 +1,6 @@
 import { NextRequest, after } from "next/server";
+import { runLatestImageJob } from "@/lib/ai/imageJob";
+export const maxDuration = 120;
 
 import { jsonError, jsonOk, requireUserForApi, withErrorHandling } from "@/lib/posts/http";
 import { SUSPENDED_ACCOUNT_MESSAGE } from "@/lib/posts/response";
@@ -61,20 +63,10 @@ function imageResultToResponse<T>(result: ImageMutationResult<T>) {
 // image-embedding recomputed the same deferred way. See the POST handler's
 // own (original, Phase 15-2/H-5-2) comment for the full ONNX-bundle-size
 // reasoning; unchanged by this phase's route-count fix.
-function triggerEmbeddingRecompute(request: NextRequest, id: number, type: string) {
+function triggerEmbeddingRecompute(_request: NextRequest, id: number, type: "lost" | "found") {
   after(async () => {
-    try {
-      const embedUrl = `${request.nextUrl.origin}/api/posts/${id}?type=${type}`;
-      const embedRes = await fetch(embedUrl, {
-        method: "PUT",
-        headers: { cookie: request.headers.get("cookie") ?? "" },
-      });
-      if (!embedRes.ok) {
-        console.error(`Image embedding trigger responded with ${embedRes.status} for ${type} post ${id}`);
-      }
-    } catch (error) {
-      console.error(`Failed to trigger image embedding for ${type} post ${id}:`, error);
-    }
+    try { await runLatestImageJob(type, id); }
+    catch (error) { console.error("Deferred image embedding failed:", error instanceof Error ? error.name : "Error"); }
   });
 }
 
