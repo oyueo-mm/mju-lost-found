@@ -1,0 +1,18 @@
+{
+  "dateKst": "2026-11-16",
+  "suite": "preview-regression-16",
+  "appCommit": "b062cd7dbd3a111f9c149f7cbfdddcd0fda38c0a",
+  "target": "local Next production build with Preview DB and Storage",
+  "passed": 16,
+  "total": 16,
+  "exitCode": 0,
+  "cleanupOk": true,
+  "allDevelopmentRunCleanupVerified": { "users": 0, "posts": 0, "rooms": 0, "messages": 0, "notifications": 0, "storageObjects": 0 },
+  "unitTestsPassed": 2931,
+  "syntheticFixtures": { "userIds": [365, 366, 367], "lostPostId": 252, "chatRoomId": 160 },
+  "deletedImage": { "storageAbsent": true, "publicCdnStatus": 200 },
+  "stepMilliseconds": [774, 51, 330, 276, 294, 1994, 601, 306, 718, 238, 1415, 2092, 269, 664, 936, 699],
+  "deployedPreviewManualCheck": "User confirmed photos, comments, feedback, thank notes and keyword alerts normal",
+  "productionChanged": false,
+  "remotePush": false
+}
