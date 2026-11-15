@@ -55,7 +55,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     await drainImageJobs(8);
     return NextResponse.json({ status: "processed" }, { headers: { "Cache-Control": "no-store" } });
   }
-  after(async () => { try { await drainImageJobs(1); } catch (error) { console.error("Image job recovery unavailable:", error instanceof Error ? error.name : "Error"); } });
   const query = listQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
   if (!query.success) {
     return jsonError(400, query.error.issues[0]?.message ?? "잘못된 검색 조건입니다.");
@@ -74,6 +73,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       } })
     : await searchPosts(query.data);
   if (admission.unavailable) return admission.unavailable;
+
+  // Rejected/invalid requests must not amplify into queue reads or inference.
+  after(async () => { try { await drainImageJobs(1); } catch (error) { console.error("Image job recovery unavailable:", error instanceof Error ? error.name : "Error"); } });
 
   return NextResponse.json({
     data: result.items,
