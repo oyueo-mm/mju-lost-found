@@ -2,6 +2,8 @@ import type { Dictionary } from "../translate";
 
 // Tiếng Việt. 부분 사전 -- 여기에 없는 키는 한국어로 떨어진다.
 export const vi: Dictionary = {
+  "thanks.error.rateLimited": "Quá nhiều yêu cầu. Vui lòng thử lại sau ít phút.",
+  "thanks.error.unavailable": "Dịch vụ giới hạn yêu cầu tạm thời không khả dụng. Vui lòng thử lại sau.",
   "search.unified.placeholder": "Nhập tên đồ vật hoặc mô tả tình huống",
   "search.sort.relevance": "Liên quan",
   "search.pagination.label": "Trang kết quả tìm kiếm",

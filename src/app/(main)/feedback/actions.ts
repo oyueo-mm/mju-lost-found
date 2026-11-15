@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireActiveUser } from "@/lib/auth/session";
 import { createFeedback } from "@/lib/feedback/service";
 import { createFeedbackSchema } from "@/lib/feedback/schema";
+import { rateLimitMessage } from "@/lib/rateLimit";
 
 export type CreateFeedbackState = { error: string } | { ok: true };
 
@@ -26,6 +27,7 @@ export async function createFeedbackAction(input: {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
 
   const result = await createFeedback(user, parsed.data);
+  if (result.kind === "rate_limited" || result.kind === "rate_limit_unavailable") return { error: rateLimitMessage(result) };
   if (result.kind !== "ok") return { error: "의견을 등록하지 못했습니다." };
 
   revalidatePath("/feedback");

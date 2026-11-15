@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const $queryRaw = vi.fn();
 const $executeRaw = vi.fn();
 const organizationMember = { count: vi.fn() };
-vi.mock("@/lib/db/prisma", () => ({ prisma: { $queryRaw, $executeRaw, organizationMember } }));
+const $transaction = vi.fn(async (fn) => fn({ $queryRaw }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { $queryRaw, $executeRaw, organizationMember, $transaction } }));
 
 const { RATE_LIMITS, checkRateLimit, clientIpFrom, enforceRateLimit, rateLimitTierFor, waitText } = await import("./index");
 
@@ -15,6 +16,7 @@ const keysCalled = () => $queryRaw.mock.calls.map((call) => call[1] as string);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubEnv("AUTH_SECRET", "unit-test-only-salt");
   vi.spyOn(Math, "random").mockReturnValue(0.5); // no pruning unless a test asks for it
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -63,9 +65,9 @@ describe("checkRateLimit", () => {
     expect($queryRaw).not.toHaveBeenCalled();
   });
 
-  it("fails open (allows) if the counter table can't be reached", async () => {
+  it("fails closed if the counter table can't be reached", async () => {
     $queryRaw.mockRejectedValueOnce(new Error("db down"));
-    expect(await checkRateLimit("aiSearch", { userId: 1 })).toEqual({ ok: true });
+    expect(await checkRateLimit("aiSearch", { userId: 1 })).toEqual({ ok: false, reason: "unavailable", retryAfterSeconds: 5 });
   });
 
   it("gives staff higher image-upload and post limits, but not other actions", async () => {
@@ -94,11 +96,12 @@ describe("checkRateLimit", () => {
     const result = await checkRateLimit("postCreate", { userId: 4 });
 
     expect(result.ok).toBe(false);
-    // one decrement per window (hour + day), keyed like the increment
-    expect($executeRaw).toHaveBeenCalledTimes(2);
-    const decremented = $executeRaw.mock.calls.map((call) => call[1]);
-    expect(decremented).toEqual(["postCreate:u:4:3600", "postCreate:u:4:86400"]);
-    expect(($executeRaw.mock.calls[0][0] as string[]).join("?")).toMatch(/"count" - 1/);
+    // All increments are inside a rejected transaction, never compensating
+    // writes that could fail halfway through. Real DB rollback is exercised
+    // by the multi-process Preview verification as well.
+    expect($transaction).toHaveBeenCalledTimes(1);
+    await expect($transaction.mock.results[0].value).rejects.toThrow("Rate limit exceeded");
+    expect($executeRaw).not.toHaveBeenCalled();
   });
 
   it("doesn't decrement anything when the request is allowed", async () => {
@@ -118,6 +121,31 @@ describe("checkRateLimit", () => {
 });
 
 describe("enforceRateLimit", () => {
+  it.each(["aiSearch", "imageUpload", "postCreate"] as const)("returns 503, never 429 or allow, on %s admission failure", async (action) => {
+    $queryRaw.mockRejectedValueOnce(new Error("counter unavailable"));
+    const response = await enforceRateLimit(action, { userId: 9 });
+    expect(response?.status).toBe(503);
+    expect((await response?.json()).code).toBe("RATE_LIMIT_UNAVAILABLE");
+    expect(response?.headers.get("retry-after")).toBe("5");
+  });
+  it("keeps a committed admission when optional cleanup fails", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    $queryRaw.mockResolvedValue([{ count: 1 }]);
+    $executeRaw.mockRejectedValueOnce(new Error("pruning unavailable"));
+    expect(await checkRateLimit("imageUpload", { userId: 7 })).toEqual({ ok: true });
+  });
+  it("never lets cleanup reverse a quota decision", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    $queryRaw.mockResolvedValue([{ count: 100000 }]);
+    expect(await checkRateLimit("aiSearch", { userId: 7 })).toMatchObject({ ok: false, reason: "limited" });
+    expect($executeRaw).not.toHaveBeenCalled();
+  });
+  it("rejects malformed counter results and missing anonymous hashing secret", async () => {
+    $queryRaw.mockResolvedValueOnce([]);
+    expect(await checkRateLimit("imageUpload", { userId: 7 })).toMatchObject({ ok: false, reason: "unavailable" });
+    vi.stubEnv("AUTH_SECRET", "");
+    expect(await checkRateLimit("aiSearch", { ip: "203.0.113.7" })).toMatchObject({ ok: false, reason: "unavailable" });
+  });
   it("returns a 429 with Retry-After and a Korean message when over the limit", async () => {
     $queryRaw.mockResolvedValue([{ count: 10_000 }]);
 
@@ -147,10 +175,20 @@ describe("enforceRateLimit", () => {
 });
 
 describe("clientIpFrom", () => {
-  it("takes the first x-forwarded-for address, falling back to x-real-ip", () => {
-    expect(clientIpFrom(new Headers({ "x-forwarded-for": "198.51.100.1, 10.0.0.1" }))).toBe("198.51.100.1");
-    expect(clientIpFrom(new Headers({ "x-real-ip": "198.51.100.2" }))).toBe("198.51.100.2");
+  it("trusts only a single valid platform address on Vercel", () => {
+    const env = { VERCEL: "1" };
+    expect(clientIpFrom(new Headers({ "x-forwarded-for": "198.51.100.1" }), env)).toBe("198.51.100.1");
+    expect(clientIpFrom(new Headers({ "x-forwarded-for": "198.51.100.1, 10.0.0.1" }), env)).toBeNull();
+    expect(clientIpFrom(new Headers({ "x-real-ip": "198.51.100.2" }), env)).toBeNull();
+    expect(clientIpFrom(new Headers({ "x-forwarded-for": "198.51.100.1" }), {})).toBeNull();
+    expect(clientIpFrom(new Headers({ "x-vercel-forwarded-for": "198.51.100.2", "x-forwarded-for": "198.51.100.1" }), env)).toBe("198.51.100.2");
     expect(clientIpFrom(new Headers())).toBeNull();
+  });
+  it("normalizes equivalent IPv6 and IPv4-mapped addresses", () => {
+    const env = { VERCEL: "1" };
+    expect(clientIpFrom(new Headers({ "x-forwarded-for": "2001:db8:0:0:0:0:0:1" }), env)).toBe("2001:db8::1");
+    expect(clientIpFrom(new Headers({ "x-forwarded-for": "::ffff:198.51.100.1" }), env)).toBe("198.51.100.1");
+    expect(clientIpFrom(new Headers({ "x-forwarded-for": "unknown" }), env)).toBeNull();
   });
 });
 

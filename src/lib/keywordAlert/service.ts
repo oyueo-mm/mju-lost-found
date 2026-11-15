@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { checkRateLimit, rateLimitFailure, type RateLimitFailure } from "@/lib/rateLimit";
 import { KeywordAlertPostType as PrismaKeywordAlertPostType, type User } from "@/generated/prisma/client";
 import { MAX_KEYWORD_ALERTS_PER_USER } from "./config";
 import type { CreateKeywordAlertInput, KeywordAlertPostTypeValue, UpdateKeywordAlertInput } from "./schema";
@@ -78,21 +79,29 @@ export async function listKeywordAlerts(user: User): Promise<KeywordAlertDTO[]> 
 export async function createKeywordAlert(
   user: User,
   input: CreateKeywordAlertInput,
-): Promise<KeywordAlertMutationResult<KeywordAlertDTO>> {
-  const currentCount = await prisma.keywordAlert.count({ where: { userId: user.id } });
-  if (currentCount >= MAX_KEYWORD_ALERTS_PER_USER) return { kind: "too_many" };
+): Promise<KeywordAlertMutationResult<KeywordAlertDTO> | RateLimitFailure> {
+  const limited = rateLimitFailure(await checkRateLimit("keywordCreate", { userId: user.id }));
+  if (limited) return limited;
+  return prisma.$transaction(async (tx) => {
+    // Lock the stable owner row, including when this user has zero alerts.
+    // Every creation route uses this service, so 20 concurrent inserts cannot
+    // all pass a count read made before the first one committed.
+    await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${user.id} FOR UPDATE`;
+    const currentCount = await tx.keywordAlert.count({ where: { userId: user.id } });
+    if (currentCount >= MAX_KEYWORD_ALERTS_PER_USER) return { kind: "too_many" };
 
-  const row = await prisma.keywordAlert.create({
-    data: {
-      userId: user.id,
-      keyword: input.keyword,
-      postType: POST_TYPE_TO_DB[input.postType],
-      campuses: input.campuses,
-      categories: input.categories,
-      excludeKeywords: input.excludeKeywords,
-    },
+    const row = await tx.keywordAlert.create({
+      data: {
+        userId: user.id,
+        keyword: input.keyword,
+        postType: POST_TYPE_TO_DB[input.postType],
+        campuses: input.campuses,
+        categories: input.categories,
+        excludeKeywords: input.excludeKeywords,
+      },
   });
   return { kind: "ok", data: toKeywordAlertDTO(row) };
+  });
 }
 
 export async function updateKeywordAlert(

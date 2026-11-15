@@ -1,4 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Isolate the domain from the shared limiter; dedicated failure tests below
+// verify that no creation occurs on either quota rejection or limiter outage.
+const checkRateLimit = vi.fn<() => Promise<import("@/lib/rateLimit").RateLimitResult>>(async () => ({ ok: true }));
+vi.mock("@/lib/rateLimit", async () => ({
+  ...await vi.importActual<typeof import("@/lib/rateLimit")>("@/lib/rateLimit"), checkRateLimit,
+}));
 import { Prisma } from "@/generated/prisma/client";
 
 const db = {
@@ -19,6 +26,7 @@ const { sendThankNote, setThankNotePublished, hideThankNote, listPublicThankNote
 const user = (id: number) => ({ id, nickname: `u${id}`, isSuspended: false, suspendedUntil: null, withdrawnAt: null });
 beforeEach(() => {
   vi.clearAllMocks();
+  checkRateLimit.mockResolvedValue({ ok: true });
   // lost post 5 by user 10 marked 찾음 from room 1, where 20 returned it; both wrote
   db.lostPost.findUnique.mockResolvedValue({ status: "FOUND" });
   db.postReturn.findFirst.mockResolvedValue({ id: 9, chatRoomId: 1, ownerUserId: 10, finderUserId: 20, revokedAt: null });
@@ -206,4 +214,13 @@ describe("a note whose sender withdrew", () => {
     db.thankNote.findMany.mockResolvedValue([{ id: 3, body: "감사", tags: [], createdAt: new Date(), publishedAt: null, senderUserId: 10, sender: { withdrawnAt: new Date() } }]);
     expect((await thankNotesForRoom(20, 1))[0]).toMatchObject({ role: "received", senderWithdrawn: true, published: false });
   });
+});
+
+
+it.each(["limited", "unavailable"] as const)("blocks creation and notifications on limiter %s", async (reason) => {
+  checkRateLimit.mockResolvedValueOnce({ ok: false, reason, retryAfterSeconds: 5 });
+  const result = await sendThankNote(10, { postType: "lost", postId: 5, body: "Thank you", tags: [] });
+  expect(result).toMatchObject({ ok: false, error: reason === "unavailable" ? "rate_limit_unavailable" : "rate_limited" });
+  expect(db.thankNote.create).not.toHaveBeenCalled();
+  expect(db.notification.create).not.toHaveBeenCalled();
 });

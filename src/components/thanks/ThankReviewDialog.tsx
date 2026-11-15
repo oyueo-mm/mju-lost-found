@@ -54,6 +54,8 @@ export function ThankReviewDialog({
     e === "empty" ? t("thanks.error.empty")
     : e === "too_long" ? t("thanks.error.tooLong", { max: THANK_NOTE_MAX_LENGTH })
     : e === "already_sent" ? t("thanks.error.already")
+    : e === "rate_limited" ? t("thanks.error.rateLimited")
+    : e === "rate_limit_unavailable" ? t("thanks.error.unavailable")
     : t("thanks.error.notEligible");
 
   const open = () => {

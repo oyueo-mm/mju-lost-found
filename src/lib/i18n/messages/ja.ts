@@ -1,6 +1,8 @@
 import type { Dictionary } from "../translate";
 
 export const ja: Dictionary = {
+  "thanks.error.rateLimited": "リクエストが多すぎます。しばらくしてから再試行してください。",
+  "thanks.error.unavailable": "リクエスト制限サービスを一時的に利用できません。しばらくしてから再試行してください。",
   "search.unified.placeholder": "品名や状況を入力してください",
   "search.sort.relevance": "関連度順",
   "search.pagination.label": "検索結果のページ",

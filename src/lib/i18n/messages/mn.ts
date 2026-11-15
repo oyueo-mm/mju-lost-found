@@ -2,6 +2,8 @@ import type { Dictionary } from "../translate";
 
 // Монгол (кирилл). 부분 사전 -- 여기에 없는 키는 한국어로 떨어진다.
 export const mn: Dictionary = {
+  "thanks.error.rateLimited": "Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу.",
+  "thanks.error.unavailable": "Хүсэлтийн хязгаарын үйлчилгээ түр боломжгүй байна. Дараа дахин оролдоно уу.",
   "search.unified.placeholder": "Эд зүйлийн нэр эсвэл нөхцөл байдлыг оруулна уу",
   "search.sort.relevance": "Хамаарлаар",
   "search.pagination.label": "Хайлтын үр дүнгийн хуудас",

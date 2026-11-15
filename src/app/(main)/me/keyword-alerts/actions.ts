@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireReadyUser } from "@/lib/auth/session";
 import { createKeywordAlert, deleteKeywordAlert, updateKeywordAlert } from "@/lib/keywordAlert/service";
 import { createKeywordAlertSchema, updateKeywordAlertSchema } from "@/lib/keywordAlert/schema";
+import { rateLimitMessage } from "@/lib/rateLimit";
 
 export type KeywordAlertActionState = { error: string } | { ok: true };
 
@@ -29,6 +30,7 @@ export async function createKeywordAlertAction(input: {
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "입력값을 확인해주세요." };
 
   const result = await createKeywordAlert(user, parsed.data);
+  if (result.kind === "rate_limited" || result.kind === "rate_limit_unavailable") return { error: rateLimitMessage(result) };
   if (result.kind === "too_many") return { error: "키워드 알림은 최대 20개까지 만들 수 있어요." };
   if (result.kind !== "ok") return { error: "키워드 알림을 추가하지 못했습니다." };
 

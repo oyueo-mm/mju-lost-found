@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { checkRateLimit, rateLimitFailure, type RateLimitFailure } from "@/lib/rateLimit";
 import {
   FeedbackCategory as PrismaFeedbackCategory,
   FeedbackStatus as PrismaFeedbackStatus,
@@ -108,7 +109,9 @@ export type FeedbackMutationResult<T> =
 // client-suppliable -- same "server derives ownership from the session,
 // never trusts a client-passed userId" rule this app already follows
 // everywhere else, e.g. posts/service.ts's create*Post).
-export async function createFeedback(user: User, input: CreateFeedbackInput): Promise<FeedbackMutationResult<FeedbackDTO>> {
+export async function createFeedback(user: User, input: CreateFeedbackInput): Promise<FeedbackMutationResult<FeedbackDTO> | RateLimitFailure> {
+  const limited = rateLimitFailure(await checkRateLimit("feedbackCreate", { userId: user.id }));
+  if (limited) return limited;
   // Phase 12-9 §2: create + admin fan-out in one transaction -- see
   // report/service.ts's createReport's own identical comment.
   const created = await prisma.$transaction(async (tx) => {

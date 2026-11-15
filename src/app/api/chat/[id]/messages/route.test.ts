@@ -1,3 +1,7 @@
+
+const enforceRateLimit = vi.fn(async () => null as import("next/server").NextResponse | null);
+const rateLimitTierFor = vi.fn(async () => "user" as const);
+vi.mock("@/lib/rateLimit", () => ({ enforceRateLimit, rateLimitTierFor }));
 import { NextRequest, NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -38,6 +42,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  enforceRateLimit.mockResolvedValue(null);
   markChatRoomRead.mockResolvedValue({ kind: "ok", data: { lastReadMessageId: null } });
   markMessageNotificationsReadForChatRoom.mockResolvedValue({ kind: "ok", data: { count: 0 } });
   countUnreadMessagesForUser.mockResolvedValue(0);
@@ -120,6 +125,13 @@ describe("GET /api/chat/[id]/messages", () => {
 });
 
 describe("POST /api/chat/[id]/messages", () => {
+  it.each([429, 503])("does not send a message on limiter status %s", async (status) => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    enforceRateLimit.mockResolvedValueOnce(NextResponse.json({ error: "blocked" }, { status }));
+    const res = await POST(new NextRequest("http://localhost/api/chat/1/messages", { method: "POST", body: JSON.stringify({ content: "blocked" }) }), params("1"));
+    expect(res.status).toBe(status);
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
   it("rejects an unauthenticated request", async () => {
     requireUserForApi.mockResolvedValueOnce({ response: jsonError(401, "로그인이 필요합니다.") });
 

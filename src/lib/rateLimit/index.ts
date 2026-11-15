@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isIP } from "node:net";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db/prisma";
@@ -63,6 +64,11 @@ export const RATE_LIMITS = {
       { windowSeconds: DAY, max: 30 },
     ],
   },
+  commentCreate: { user: [{ windowSeconds: MINUTE, max: 10 }, { windowSeconds: DAY, max: 100 }] },
+  feedbackCreate: { user: [{ windowSeconds: HOUR, max: 5 }, { windowSeconds: DAY, max: 20 }] },
+  // Preserve the one-note-per-return policy without reintroducing a daily cap.
+  thankCreate: { user: [{ windowSeconds: MINUTE, max: 10 }] },
+  keywordCreate: { user: [{ windowSeconds: MINUTE, max: 30 }, { windowSeconds: DAY, max: 100 }] },
 } as const satisfies Record<
   string,
   { user: readonly RateLimitRule[]; anonymous?: readonly RateLimitRule[]; staff?: readonly RateLimitRule[] }
@@ -73,26 +79,59 @@ export type RateLimitTier = "user" | "staff";
 // tier only matters for actions that define staff rules; everyone else
 // (and every other action) uses the user rules.
 export type RateLimitSubject = { userId: number; tier?: RateLimitTier } | { ip: string | null };
-export type RateLimitResult = { ok: true } | { ok: false; retryAfterSeconds: number };
+export type RateLimitResult = { ok: true } | { ok: false; reason: "limited" | "unavailable"; retryAfterSeconds: number };
+export type RateLimitFailure = { kind: "rate_limited" | "rate_limit_unavailable"; retryAfterSeconds: number };
+
+export function rateLimitFailure(result: RateLimitResult): RateLimitFailure | null {
+  return result.ok ? null : { kind: result.reason === "unavailable" ? "rate_limit_unavailable" : "rate_limited", retryAfterSeconds: result.retryAfterSeconds };
+}
+
+export function rateLimitMessage(failure: RateLimitFailure): string {
+  return failure.kind === "rate_limit_unavailable"
+    ? "요청 제한 시스템에 일시적인 문제가 있습니다. 잠시 후 다시 시도해주세요."
+    : `요청이 너무 많습니다. ${waitText(failure.retryAfterSeconds)} 후에 다시 시도해주세요.`;
+}
+
+export function rateLimitFailureResponse(failure: RateLimitFailure): NextResponse {
+  if (failure.kind === "rate_limited") return rateLimitedResponse(failure.retryAfterSeconds);
+  return NextResponse.json({ error: rateLimitMessage(failure), code: "RATE_LIMIT_UNAVAILABLE", retryAfterSeconds: failure.retryAfterSeconds }, { status: 503, headers: { "Retry-After": String(failure.retryAfterSeconds), "Cache-Control": "no-store" } });
+}
 
 // An anonymous caller is identified by a salted hash of their IP -- the raw
 // address is never stored.
 function subjectKey(subject: RateLimitSubject): string {
   if ("userId" in subject) return `u:${subject.userId}`;
   const salt = process.env.AUTH_SECRET ?? "";
+  if (!salt) throw new Error("Anonymous rate limit hashing is not configured");
   const hash = createHash("sha256").update(`${salt}:${subject.ip ?? "unknown"}`).digest("hex").slice(0, 32);
   return `ip:${hash}`;
 }
 
 // The first address Vercel records for the request (x-forwarded-for is
 // set by Vercel's edge, not trusted from further upstream).
-export function clientIpFrom(headers: Headers): string | null {
-  const forwarded = headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]?.trim() || null;
-  return headers.get("x-real-ip");
+export function clientIpFrom(headers: Headers, env: Record<string, string | undefined> = process.env): string | null {
+  // Trust the platform only when running on Vercel, not a caller-provided
+  // marker. Direct/self-hosted requests share the conservative unknown bucket.
+  if (env.VERCEL !== "1") return null;
+  const raw = headers.get("x-vercel-forwarded-for") ?? headers.get("x-forwarded-for");
+  if (!raw || raw.includes(",")) return null;
+  const ip = raw.trim();
+  if (!isIP(ip) || ip.includes("%")) return null;
+  // Canonicalize equivalent IPv6 spellings (and mapped IPv4) before hashing.
+  if (isIP(ip) === 4) return ip;
+  const canonical = new URL(`http://[${ip}]/`).hostname.slice(1, -1);
+  const mapped = /^::ffff:([0-9a-f]+):([0-9a-f]+)$/.exec(canonical);
+  if (mapped) {
+    const n = (parseInt(mapped[1], 16) * 65536) + parseInt(mapped[2], 16);
+    return [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join(".");
+  }
+  return canonical;
 }
 
 const PRUNE_PROBABILITY = 0.01;
+class LimitExceeded extends Error {
+  constructor(readonly seconds: number) { super("Rate limit exceeded"); }
+}
 
 export async function checkRateLimit(action: RateLimitAction, subject: RateLimitSubject): Promise<RateLimitResult> {
   const limits = RATE_LIMITS[action] as {
@@ -104,48 +143,47 @@ export async function checkRateLimit(action: RateLimitAction, subject: RateLimit
   if (!rules) return { ok: true };
 
   const now = Date.now();
-  const who = subjectKey(subject);
-  let retryAfterSeconds = 0;
-  const counted: { key: string; windowStart: Date }[] = [];
   try {
-    for (const rule of rules) {
-      const windowMs = rule.windowSeconds * 1000;
-      const windowStart = new Date(Math.floor(now / windowMs) * windowMs);
-      const key = `${action}:${who}:${rule.windowSeconds}`;
-      // One atomic statement per window -- concurrent requests from any
-      // instance each get their own, strictly increasing count.
-      const rows = await prisma.$queryRaw<{ count: number }[]>`
-        INSERT INTO "RateLimitCounter" ("key", "window_start", "count")
-        VALUES (${key}, ${windowStart}, 1)
-        ON CONFLICT ("key", "window_start") DO UPDATE SET "count" = "RateLimitCounter"."count" + 1
-        RETURNING "count"
-      `;
-      counted.push({ key, windowStart });
-      if ((rows[0]?.count ?? 0) > rule.max) {
-        retryAfterSeconds = Math.max(retryAfterSeconds, Math.ceil((windowStart.getTime() + windowMs - now) / 1000));
-      }
-    }
-    // A rejected request must not use up quota. Before, every blocked
-    // retry still counted -- including toward the daily window -- so a
-    // user retrying during a short block could push the daily count over
-    // its cap and stay blocked far past the wait the message announced.
-    if (retryAfterSeconds > 0) {
-      for (const { key, windowStart } of counted) {
-        await prisma.$executeRaw`
-          UPDATE "RateLimitCounter" SET "count" = "count" - 1
-          WHERE "key" = ${key} AND "window_start" = ${windowStart} AND "count" > 0
+    const who = subjectKey(subject);
+    // All windows commit together. Throwing a quota decision rolls back the
+    // entire request, including its daily charge. ON CONFLICT serializes
+    // counters across processes; no application-memory locks are involved.
+    await prisma.$transaction(async (tx) => {
+      let retryAfterSeconds = 0;
+      for (const rule of rules) {
+        const windowMs = rule.windowSeconds * 1000;
+        const windowStart = new Date(Math.floor(now / windowMs) * windowMs);
+        const key = `${action}:${who}:${rule.windowSeconds}`;
+        // One atomic statement per window -- concurrent requests from any
+        // instance each get their own, strictly increasing count.
+        const rows = await tx.$queryRaw<{ count: number }[]>`
+          INSERT INTO "RateLimitCounter" ("key", "window_start", "count")
+          VALUES (${key}, ${windowStart}, 1)
+          ON CONFLICT ("key", "window_start") DO UPDATE SET "count" = "RateLimitCounter"."count" + 1
+          RETURNING "count"
         `;
+        if (!rows[0] || !Number.isSafeInteger(rows[0].count)) throw new Error("Counter result missing");
+        if (rows[0].count > rule.max) {
+          retryAfterSeconds = Math.max(retryAfterSeconds, Math.ceil((windowStart.getTime() + windowMs - now) / 1000));
+        }
       }
-    }
+      if (retryAfterSeconds > 0) throw new LimitExceeded(retryAfterSeconds);
+    }, { maxWait: 2000, timeout: 3000 });
+  } catch (error) {
+    if (error instanceof LimitExceeded) return { ok: false, reason: "limited", retryAfterSeconds: error.seconds };
+    console.error("Rate limit unavailable (request blocked):", error instanceof Error ? error.name : "unknown");
+    return { ok: false, reason: "unavailable", retryAfterSeconds: 5 };
+  }
+  // Maintenance is separate from admission: failure cannot reverse a deny
+  // or turn a committed admission into an ambiguous counter failure.
+  try {
     if (Math.random() < PRUNE_PROBABILITY) {
       await prisma.$executeRaw`DELETE FROM "RateLimitCounter" WHERE "window_start" < now() - interval '2 days'`;
     }
   } catch (error) {
-    // A broken limiter must not take the feature down with it.
-    console.error("Rate limit check failed (allowing the request):", error);
-    return { ok: true };
+    console.error("Rate limit counter cleanup failed:", error instanceof Error ? error.name : "unknown");
   }
-  return retryAfterSeconds > 0 ? { ok: false, retryAfterSeconds } : { ok: true };
+  return { ok: true };
 }
 
 // The actual remaining wait, not a rounded-up bucket: "4분 10초",
@@ -188,16 +226,16 @@ export async function rateLimitTierFor(user: { id: number; isAdmin: boolean; use
     });
     return managed > 0 ? "staff" : "user";
   } catch (error) {
-    // Same as the limiter itself: a lookup failure must not break the
-    // request -- fall back to the regular (lower) limits.
-    console.error("Rate limit tier lookup failed (using user limits):", error);
+    // Tier lookup never grants an elevated limit on failure. Admission
+    // itself still fails closed if its counters cannot be reached.
+    console.error("Rate limit tier lookup failed (using user limits):", error instanceof Error ? error.name : "unknown");
     return "user";
   }
 }
 
-// Convenience for route handlers: null when allowed, a 429 response
-// otherwise.
+// Route handlers: null when allowed, 429 on quota, 503 on counter failure.
 export async function enforceRateLimit(action: RateLimitAction, subject: RateLimitSubject): Promise<NextResponse | null> {
   const result = await checkRateLimit(action, subject);
-  return result.ok ? null : rateLimitedResponse(result.retryAfterSeconds);
+  if (result.ok) return null;
+  return rateLimitFailureResponse(rateLimitFailure(result)!);
 }

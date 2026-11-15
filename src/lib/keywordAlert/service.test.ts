@@ -1,4 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Isolate the domain from the shared limiter; dedicated failure tests below
+// verify that no creation occurs on either quota rejection or limiter outage.
+const checkRateLimit = vi.fn<() => Promise<import("@/lib/rateLimit").RateLimitResult>>(async () => ({ ok: true }));
+vi.mock("@/lib/rateLimit", async () => ({
+  ...await vi.importActual<typeof import("@/lib/rateLimit")>("@/lib/rateLimit"), checkRateLimit,
+}));
 import type { User } from "@/generated/prisma/client";
 import { MAX_KEYWORD_ALERTS_PER_USER } from "./config";
 import type { CreateKeywordAlertInput } from "./schema";
@@ -14,7 +21,7 @@ const keywordAlert = {
 const keywordAlertMatch = { findUnique: vi.fn() };
 
 vi.mock("@/lib/db/prisma", () => ({
-  prisma: { keywordAlert, keywordAlertMatch },
+  prisma: { keywordAlert, keywordAlertMatch, $transaction: async (fn: (tx: unknown) => unknown) => fn({ keywordAlert, $queryRaw: vi.fn(async () => [{ id: 1 }]) }) },
 }));
 vi.mock("@/generated/prisma/client", () => ({
   KeywordAlertPostType: { ALL: "ALL", LOST: "LOST", FOUND: "FOUND" },
@@ -56,6 +63,7 @@ const input: CreateKeywordAlertInput = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  checkRateLimit.mockResolvedValue({ ok: true });
 });
 
 describe("listKeywordAlerts", () => {
@@ -213,4 +221,12 @@ describe("getKeywordAlertMatchForUser", () => {
 
     expect(result).toBeNull();
   });
+});
+
+
+it.each(["limited", "unavailable"] as const)("blocks creation and notifications on limiter %s", async (reason) => {
+  checkRateLimit.mockResolvedValueOnce({ ok: false, reason, retryAfterSeconds: 5 });
+  const result = await createKeywordAlert(user, input);
+  expect(result).toMatchObject({ kind: reason === "unavailable" ? "rate_limit_unavailable" : "rate_limited" });
+  expect(keywordAlert.create).not.toHaveBeenCalled();
 });

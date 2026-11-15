@@ -1,6 +1,8 @@
 import type { Dictionary } from "../translate";
 
 export const fr: Dictionary = {
+  "thanks.error.rateLimited": "Trop de demandes. Veuillez réessayer dans un instant.",
+  "thanks.error.unavailable": "Le service de limitation est temporairement indisponible. Veuillez réessayer.",
   "search.unified.placeholder": "Nom de l’objet ou description de la situation",
   "search.sort.relevance": "Pertinence",
   "search.pagination.label": "Pages de résultats",

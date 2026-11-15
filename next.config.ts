@@ -1,32 +1,10 @@
 import type { NextConfig } from "next";
+import { POST_IMAGE_REMOTE_PATTERNS } from "./src/lib/images/optimizationHosts.mjs";
 import { assertDatabaseEnvironment } from "./src/lib/db/accessPolicy.mjs";
 
 // Next has already loaded its environment files here. Block `next dev` too,
 // even when the operator bypasses npm's predev hook.
 assertDatabaseEnvironment(process.env, { allowMissing: process.env.NODE_ENV !== "development" });
-
-// Bug: Preview DB 복제 후 기존 게시글 이미지가 깨지는 문제 -- 이 hostname을
-// `NEXT_PUBLIC_SUPABASE_URL`(현재 환경 자신의 Supabase project)에서만
-// derive했더니, Production DB를 그대로 복제해 온 PostImage/LostPost/
-// FoundPost.imageUrl 값(Production Supabase project의 절대 URL)이 Preview의
-// remotePatterns에 없는 hostname이 되어 next/image가 전부 400
-// (INVALID_IMAGE_OPTIMIZE_REQUEST)으로 거부했다 -- 파일 자체는 Production
-// Storage에 정상 존재(직접 fetch 시 200), Preview 환경변수도 정상, 순수히
-// 이 remotePattern이 "지금 이 환경 자신의 project"만 허용했던 게 원인.
-//
-// 바로 아래 Vercel Blob 패턴이 이미 세운 것과 같은 전례를 따른다: "이 앱은
-// 배포 시 기존 데이터를 일괄 재작성하지 않는다"는 이유로 마이그레이션
-// 이전(vercel-storage.com) hostname도 여전히 허용 목록에 남겨두는 것과
-// 동일하게, Supabase project ref가 어떤 환경의 것이든(현재 환경 자신의
-// 것이든, DB를 복제해 온 다른 환경의 것이든) 매치하도록 project ref
-// 부분을 와일드카드로 둔다 -- pathname은 여전히 공개 버킷 객체 경로로만
-// 제한되므로(자격증명이 필요한 경로는 매치되지 않음), 이 와일드카드가
-// 넓히는 범위는 "어느 Supabase project의 공개 이미지냐"뿐이다.
-const SUPABASE_STORAGE_PATTERN = {
-  protocol: "https" as const,
-  hostname: "*.supabase.co",
-  pathname: "/storage/v1/object/public/**",
-};
 
 const nextConfig: NextConfig = {
   // Two things Vercel/Next's static file tracer won't discover on its own
@@ -138,18 +116,8 @@ const nextConfig: NextConfig = {
     // one Preview deployment) turns it back on to check the optimized path
     // there.
     unoptimized: process.env.VERCEL_ENV === "preview" && process.env.PREVIEW_IMAGE_OPTIMIZATION !== "on",
-    remotePatterns: [
-      // Scoped to Vercel Blob's own domain suffix only -- not a blanket
-      // `domains`/wildcard-everything allowance. Kept even after Phase 4's
-      // move to Supabase Storage: any post created before that migration
-      // still has a vercel-storage.com imageUrl in the DB, and this app
-      // never bulk-rewrites old data on deploy.
-      {
-        protocol: "https",
-        hostname: "*.public.blob.vercel-storage.com",
-      },
-      SUPABASE_STORAGE_PATTERN,
-    ],
+    remotePatterns: POST_IMAGE_REMOTE_PATTERNS,
+    maximumRedirects: 0,
   },
 };
 

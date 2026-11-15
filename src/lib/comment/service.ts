@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { checkRateLimit, rateLimitFailure, type RateLimitFailure } from "@/lib/rateLimit";
 import { notifyUser } from "@/lib/notification/recipients";
 import { isCurrentlySuspended, type ContentActor } from "@/lib/auth/suspension";
 import { can } from "@/lib/permissions/check";
@@ -143,7 +144,7 @@ export async function createComment(
   type: PostType,
   postId: number,
   input: CreateCommentInput,
-): Promise<CommentMutationResult<CommentDTO>> {
+): Promise<CommentMutationResult<CommentDTO> | RateLimitFailure> {
   if (isCurrentlySuspended(author)) {
     return { kind: "forbidden", reason: "suspended" };
   }
@@ -171,6 +172,8 @@ export async function createComment(
   // Comment.parentId already supports an arbitrary chain and onDelete:
   // Cascade already handles a whole subtree disappearing together (see
   // schema.prisma's own comment on that column, updated for this phase).
+  const limited = rateLimitFailure(await checkRateLimit("commentCreate", { userId: author.id }));
+  if (limited) return limited;
   let parent: { id: number; parentId: number | null; authorUserId: number } | null = null;
   if (input.parentId !== undefined) {
     const parentRow = await prisma.comment.findUnique({

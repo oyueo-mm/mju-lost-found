@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// Isolate the domain from the shared limiter; dedicated failure tests below
+// verify that no creation occurs on either quota rejection or limiter outage.
+const checkRateLimit = vi.fn<() => Promise<import("@/lib/rateLimit").RateLimitResult>>(async () => ({ ok: true }));
+vi.mock("@/lib/rateLimit", async () => ({
+  ...await vi.importActual<typeof import("@/lib/rateLimit")>("@/lib/rateLimit"), checkRateLimit,
+}));
+
 const feedback = {
   create: vi.fn(),
   findMany: vi.fn(),
@@ -57,6 +64,7 @@ const row = (overrides: Partial<Record<string, unknown>> = {}) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  checkRateLimit.mockResolvedValue({ ok: true });
 });
 
 describe("createFeedback", () => {
@@ -286,4 +294,13 @@ describe("updateFeedbackStatus", () => {
       expect(result).toEqual({ kind: "locked" });
     });
   });
+});
+
+
+it.each(["limited", "unavailable"] as const)("blocks creation and notifications on limiter %s", async (reason) => {
+  checkRateLimit.mockResolvedValueOnce({ ok: false, reason, retryAfterSeconds: 5 });
+  const result = await createFeedback(nonAdmin as never, { category: "other", title: "blocked", content: "blocked" });
+  expect(result).toMatchObject({ kind: reason === "unavailable" ? "rate_limit_unavailable" : "rate_limited" });
+  expect(feedback.create).not.toHaveBeenCalled();
+  expect(fanOutToAdmins).not.toHaveBeenCalled();
 });

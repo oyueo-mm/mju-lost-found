@@ -1,3 +1,7 @@
+
+const enforceRateLimit = vi.fn(async () => null as import("next/server").NextResponse | null);
+const rateLimitTierFor = vi.fn(async () => "user" as const);
+vi.mock("@/lib/rateLimit", () => ({ enforceRateLimit, rateLimitTierFor }));
 import { NextRequest, NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -28,9 +32,18 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  enforceRateLimit.mockResolvedValue(null);
 });
 
 describe("POST /api/chat/[id]/upload", () => {
+  it.each([429, 503])("does not issue an upload token on limiter status %s", async (status) => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    getChatRoomForUser.mockResolvedValueOnce({ kind: "ok", data: { id: 1, roomType: "direct" } });
+    enforceRateLimit.mockResolvedValueOnce(NextResponse.json({ error: "blocked" }, { status }));
+    const res = await POST(new NextRequest("http://localhost/api/chat/1/upload", { method: "POST", body: JSON.stringify({ contentType: "image/jpeg" }) }), params("1"));
+    expect(res.status).toBe(status);
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
+  });
   it("rejects an unauthenticated request", async () => {
     requireUserForApi.mockResolvedValueOnce({ response: jsonError(401, "로그인이 필요합니다.") });
 

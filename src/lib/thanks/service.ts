@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { checkRateLimit, rateLimitFailure, type RateLimitFailure } from "@/lib/rateLimit";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { NotificationType, Prisma, ReportStatus, ReportTargetType } from "@/generated/prisma/client";
 import { notifyUser } from "@/lib/notification/recipients";
@@ -66,8 +67,8 @@ export async function thankComposerForRoom(viewerId: number, chatRoomId: number)
 // No daily cap (removed 2026-11-04): every note is tied to its own recorded
 // return, one per post and sender, so someone who got several items back on
 // one day can thank each finder.
-export type SendThankError = "empty" | "too_long" | "already_sent" | "not_eligible";
-export type SendThankResult = { ok: true } | { ok: false; error: SendThankError };
+export type SendThankError = "empty" | "too_long" | "already_sent" | "not_eligible" | "rate_limited" | "rate_limit_unavailable";
+export type SendThankResult = { ok: true } | { ok: false; error: SendThankError; retryAfterSeconds?: number };
 
 export async function sendThankNote(viewerId: number, input: { postType: PostType; postId: number; body: unknown; tags?: unknown }): Promise<SendThankResult> {
   // the message, the 칭찬 태그, or both (never neither)
@@ -78,6 +79,8 @@ export async function sendThankNote(viewerId: number, input: { postType: PostTyp
       const ctx = await loadContext(tx, viewerId, input.postType, input.postId);
       if (ctx?.alreadySent) return { ok: false, error: "already_sent" } as const;
       if (!ctx?.target) return { ok: false, error: "not_eligible" } as const;
+      const limited: RateLimitFailure | null = rateLimitFailure(await checkRateLimit("thankCreate", { userId: viewerId }));
+      if (limited) return { ok: false, error: limited.kind, retryAfterSeconds: limited.retryAfterSeconds } as const;
       const note = await tx.thankNote.create({
         data: { postType: input.postType, postId: input.postId, chatRoomId: ctx.target.chatRoomId, returnId: ctx.target.returnId, senderUserId: viewerId, receiverUserId: ctx.target.receiverId, body: body.body, tags: body.tags },
       });

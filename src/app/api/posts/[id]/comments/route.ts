@@ -4,6 +4,7 @@ import { jsonError, jsonOk, requireUserForApi, withErrorHandling } from "@/lib/p
 import { postTypeSchema } from "@/lib/posts/schema";
 import { createCommentSchema } from "@/lib/comment/schema";
 import { createComment, listCommentsForPost } from "@/lib/comment/service";
+import { rateLimitFailureResponse } from "@/lib/rateLimit";
 
 function parseParams(idParam: string, searchParams: URLSearchParams) {
   const id = Number(idParam);
@@ -47,6 +48,7 @@ export const POST = withErrorHandling(
     }
 
     const created = await createComment(auth.user, parsed.type, parsed.id, result.data);
+    if (created.kind === "rate_limited" || created.kind === "rate_limit_unavailable") return rateLimitFailureResponse(created);
     switch (created.kind) {
       case "ok":
         return jsonOk(created.data, { status: 201 });

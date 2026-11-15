@@ -52,9 +52,15 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     if (limited) return limited;
   }
 
+  const admission = { unavailable: null as NextResponse | null };
   const result = query.data.mode === "unified"
-    ? await searchUnifiedPosts(query.data, { allowSemantic: async () => !await limitAiSearch(request) })
+    ? await searchUnifiedPosts(query.data, { allowSemantic: async () => {
+        const limited = await limitAiSearch(request);
+        if (limited?.status === 503) admission.unavailable = limited;
+        return !limited;
+      } })
     : await searchPosts(query.data);
+  if (admission.unavailable) return admission.unavailable;
 
   return NextResponse.json({
     data: result.items,

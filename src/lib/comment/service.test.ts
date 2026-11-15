@@ -1,4 +1,11 @@
 // Release C (M-1): services take the acting user (id + suspension state).
+
+// Isolate the domain from the shared limiter; dedicated failure tests below
+// verify that no creation occurs on either quota rejection or limiter outage.
+const checkRateLimit = vi.fn<() => Promise<import("@/lib/rateLimit").RateLimitResult>>(async () => ({ ok: true }));
+vi.mock("@/lib/rateLimit", async () => ({
+  ...await vi.importActual<typeof import("@/lib/rateLimit")>("@/lib/rateLimit"), checkRateLimit,
+}));
 const actor = (id: number) => ({ id, isSuspended: false, suspendedUntil: null });
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -68,6 +75,7 @@ const admin = { id: 2, isSuspended: false, suspendedUntil: null, isAdmin: true }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  checkRateLimit.mockResolvedValue({ ok: true });
   user.count.mockResolvedValue(1);
 });
 
@@ -726,4 +734,14 @@ describe("release C (M-1): suspended authors can't edit or delete comments", () 
     expect(comment.update).not.toHaveBeenCalled();
     expect($transaction).not.toHaveBeenCalled();
   });
+});
+
+
+it.each(["limited", "unavailable"] as const)("blocks creation and notifications on limiter %s", async (reason) => {
+  checkRateLimit.mockResolvedValueOnce({ ok: false, reason, retryAfterSeconds: 5 });
+  lostPost.findUnique.mockResolvedValueOnce({ id: 5 });
+  const result = await createComment(actor(1) as never, "lost", 5, { content: "blocked" });
+  expect(result).toMatchObject({ kind: reason === "unavailable" ? "rate_limit_unavailable" : "rate_limited" });
+  expect(comment.create).not.toHaveBeenCalled();
+  expect(notification.create).not.toHaveBeenCalled();
 });

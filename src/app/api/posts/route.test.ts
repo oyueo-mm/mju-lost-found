@@ -57,6 +57,17 @@ beforeEach(() => {
 });
 
 describe("GET /api/posts", () => {
+  it("returns a limiter outage as 503 even for optional unified AI", async () => {
+    searchUnifiedPosts.mockImplementationOnce(async (_input, { allowSemantic }) => {
+      expect(await allowSemantic()).toBe(false);
+      return { items: [], page: 1, limit: 20, total: 0, totalPages: 1, search: { strategy: "keyword-fallback", limited: false } };
+    });
+    enforceRateLimit.mockResolvedValueOnce(jsonError(503, "unavailable"));
+    const response = await GET(new NextRequest("http://localhost/api/posts?mode=unified&type=found&q=wallet"));
+    expect(response.status).toBe(503);
+    expect(searchPostsAI).not.toHaveBeenCalled();
+    expect(searchPostsByImage).not.toHaveBeenCalled();
+  });
   it("keeps short unified searches out of the inference rate-limit path", async () => {
     searchUnifiedPosts.mockResolvedValueOnce({ items: [], page: 1, limit: 20, total: 0, totalPages: 1, search: { strategy: "keyword", limited: false } });
     const res = await GET(new NextRequest("http://localhost/api/posts?mode=unified&type=found&q=지갑"));

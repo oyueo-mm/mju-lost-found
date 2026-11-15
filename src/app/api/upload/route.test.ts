@@ -1,4 +1,8 @@
-import { NextRequest } from "next/server";
+
+const enforceRateLimit = vi.fn(async () => null as import("next/server").NextResponse | null);
+const rateLimitTierFor = vi.fn(async () => "user" as const);
+vi.mock("@/lib/rateLimit", () => ({ enforceRateLimit, rateLimitTierFor }));
+import { NextRequest, NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
 
@@ -63,10 +67,19 @@ async function callAndGetJson(body: unknown) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  enforceRateLimit.mockResolvedValue(null);
   isCurrentlySuspended.mockReturnValue(false);
 });
 
 describe("POST /api/upload", () => {
+  it.each([429, 503])("does not issue an upload token on limiter status %s", async (status) => {
+    getCurrentUser.mockResolvedValueOnce(readyUser);
+    getLostPost.mockResolvedValueOnce({ author: { id: 1 } });
+    enforceRateLimit.mockResolvedValueOnce(NextResponse.json({ error: "blocked" }, { status }));
+    const result = await callAndGetJson({ postType: "lost", postId: 1, contentType: "image/jpeg" });
+    expect(result.status).toBe(status);
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
+  });
   it("rejects an unauthenticated request", async () => {
     getCurrentUser.mockResolvedValueOnce(null);
 
