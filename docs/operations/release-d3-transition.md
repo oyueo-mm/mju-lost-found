@@ -19,7 +19,7 @@ node --env-file=.env.preview.local scripts/operations/release-d3.mjs migrate --a
 node --env-file=.env.preview.local scripts/operations/release-d3.mjs private --kid <VERIFIED_PUBLIC_KID> --apply --confirm-preview
 ```
 
-mode/key 변경은 설정 행을 독점 잠근 뒤 기존 grant를 회수한다. 발급/송신은 같은 행의 shared lock을 먼저 잡아 변경 중 새 grant가 회수에서 빠지는 경쟁을 차단한다. 세션→grant의 잠금 순서를 유지한다. 정상 권한 회수는 이미 승인된 최대 1.5초 HTTP 송신이 끝난 뒤 commit되며, 회수 commit 뒤 새 송신을 허용하지 않는다. 이미 전송 중인 네트워크 패킷은 회수할 수 없다. 클라이언트 payload는 본문 없는 힌트이고 실제 상태는 인증 API로 확인한다.
+mode/key 변경은 설정 행을 독점 잠근 뒤 기존 grant를 회수한다. 발급/송신은 같은 행의 shared lock을 먼저 잡아 변경 중 새 grant가 회수에서 빠지는 경쟁을 차단한다. 세션→grant의 잠금 순서를 유지한다. 정상 권한 회수는 이미 승인된 HTTP 송신이 끝난 뒤 commit되며, 회수 commit 뒤 새 송신을 허용하지 않는다. 개별 HTTP 송신 timeout은 1.5초다. 여러 grant/송신이 얽힌 전체 회수 transaction의 지연이 1.5초 이하라고 주장하지 않으며 실제 부하·lock 대기 측정은 별도 게이트다. 이미 전송 중인 네트워크 패킷은 회수할 수 없다. 클라이언트 payload는 본문 없는 힌트이고 실제 상태는 인증 API로 확인한다.
 
 ## Production 필수 게이트
 
