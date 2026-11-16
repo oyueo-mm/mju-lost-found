@@ -17,13 +17,18 @@
 // the dashboard says so.
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { PREVIEW_ALIAS } from "../../src/lib/devstats/vercelDeployment.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+// The CLI's remembered default scope can differ from the linked project.
+// Use the existing link; do not change login, team membership or permissions.
+const scope=JSON.parse(readFileSync(join(ROOT,".vercel/project.json"),"utf8")).orgId;
+if(!/^team_[A-Za-z0-9]+$/.test(scope??""))throw new Error("Valid linked Vercel team required");
 const run = (args, capture = false) =>
-  spawnSync(["npx", ...args].join(" "), { cwd: ROOT, shell: true, encoding: "utf8", stdio: capture ? ["inherit", "pipe", "inherit"] : "inherit", maxBuffer: 64 * 1024 * 1024 });
+  spawnSync(["npx", ...args,"--scope",scope].join(" "), { cwd: ROOT, shell: true, encoding: "utf8", stdio: capture ? ["inherit", "pipe", "inherit"] : "inherit", maxBuffer: 64 * 1024 * 1024 });
 
 const [target, ...rest] = process.argv.slice(2);
 if (target !== "preview" && target !== "production") {
