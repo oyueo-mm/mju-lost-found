@@ -8,11 +8,12 @@
 | --- | --- |
 | 시작 HEAD | `873247dcda297388dcf96c8ccc804b59ce5e90c8`, 당시 작업 트리 clean |
 | Production 유지 | `8baa381605638ff7bde97446732083f47589c3b3` / `dpl_HTtxjZJDDgka3HjTkRH6ZKQzR7EX`, READY·실제 version 일치 |
-| 새 Preview | `462150fe1817f18e0c7b6af3905edf1e9f374ca6` / `dpl_GrT44RLo9HhUWJ6tQqHH8YP6bGTy`, READY |
-| Preview URL | https://mju-lost-found-preview.vercel.app/ → https://mju-lost-found-vercel-8wl6aod55-oyueo.vercel.app/ |
+| 새 Preview | `2857257cf24708be077ff462d3da1b6f53791f82` / `dpl_GxxGV28xc3GYkBshQMZGZmifB5PN`, READY |
+| Preview URL | https://mju-lost-found-preview.vercel.app/ → https://mju-lost-found-vercel-7qhjpcwa2-oyueo.vercel.app/ |
 | 작업 브랜치 | `fix/release-d3-private-realtime`, 일반 Push 완료. main 병합·강제 Push 없음 |
 | 스키마·복구 커밋 | `dc0275f` |
 | 앱·검증·전환 도구 | `498123e` |
+| 발급 제한 순서 보완 | `2857257`, 제한을 권한/키/config 검사보다 먼저 적용하고 방 DTO 중복 조회 제거 |
 | D-4 분석 문서 | `462150f` |
 | 배포 실행기 scope 보완 | `1f028c6`, 서비스 코드 차이 없음 |
 | 예약 백업 작업 트리 | `ops/backup`의 `89bec61`, 일반 Push 완료 |
@@ -44,7 +45,7 @@ Preview runtime은 **polling**, project/kid NULL, active grant 0이다. public �
 
 | 검사 | 결과 |
 | --- | --- |
-| 전체 단위 | **268개 파일, 3,008/3,008** |
+| 전체 단위 | **268개 파일, 3,009/3,009** |
 | 타입·빌드 | tsc 및 최신 로컬 Next build 통과, 실제 Vercel Preview build READY |
 | 전체 린트 | `npm run lint` 통과. Git 관리 소스 검사도 오류·경고 0. `.vercel`의 Git-ignored 배포 번들/임시 브라우저 산출물만 정식 ignore에 추가했으며 소스·재사용 검사는 제외하지 않음 |
 | 실제 로컬 SQL/RLS | **38개 assertion 통과**: 역할·채널 행·claim·기관/외부 계정·동시 철회·재승인 후 구 토큰·계정/세션 철회·권한 재구축 |
@@ -53,7 +54,7 @@ Preview runtime은 **polling**, project/kid NULL, active grant 0이다. public �
 | 배포된 토큰 API | 올바른 실제 Origin의 익명 POST 401, private/no-store·Vary Cookie 확인 |
 | Preview 비파괴 프로브 | **16/16**, 버전·로그인 경로·인증·사진·검색. 아래 기존 16단계 통합 회귀와 별개 |
 | Preview 오류 로그 | 조회 시 최근 20분 error 0·5xx 0, 조회 한도 각각 200 |
-| 업로드 검사 | 1,168개 파일 중 비밀/env/로컬 진단 등 금지 파일 0 |
+| 업로드 검사 | 1,169개 파일 중 비밀/env/로컬 진단 등 금지 파일 0 |
 | 기존 16단계 통합 회귀 | **D-3 최종 실행 미완료**. 11단계는 실제 회원 private JWT 수신을 요구하도록 강화했으며 키 미등록으로 아직 실행할 수 없음. D-2의 과거 16/16을 D-3 결과로 재사용하지 않음 |
 
 구형 Batch REST가 202를 반환해 처음 작성한 HTTP 코드 기반 검사는 실패했다. [Supabase 실제 소스](https://github.com/supabase/realtime/blob/main/lib/realtime/tenants/batch_broadcast.ex)는 private 메시지를 버린 경우에도 성공 코드를 반환한다. 기준을 단순 완화하지 않고 정상 전달 대조군과 위조 nonce의 실제 미수신을 함께 검사하여 확인했다. 이 대조군은 Node 서버 전용 자격증명만 사용하며 브라우저에 전달하지 않는다. **새 일반 회원 역할의 정상 JWT 수용을 대신하지 않는다.**
@@ -79,13 +80,13 @@ Preview runtime은 **polling**, project/kid NULL, active grant 0이다. public �
 | 조회/재연결 | 이벤트 300ms single-flight·dirty 1회·최근 eventId 128개. 정상 연결 safety poll 60초, 장애 10초→최대 30초, hidden 중 정리. transport reconnect 5초→최대 30초 |
 | 서버 송신 | 현재 권한 grant별 발행, 동시 4개·개별 HTTP 1.5초. 방에 대한 1회 public 송신보다 권한 조회/발행 수가 늘어남. 다중 grant의 철회 lock 지연 실측은 남음 |
 
-정상 visible 탭의 추가 요청은 대략 토큰 40회/시간+안전 조회 60회/시간이다. 여러 탭/네트워크/활동 이벤트에 따라 달라지는 **추정**이며 실제 Production 비용 측정값이 아니다. 현재 Preview의 키 미등록 상태는 10초 polling이므로 정상 private 지연/비용으로 비교하지 않는다. 새 권한 경로에 DB 조회가 추가되지만 검색 모델·768차원 벡터·검색 점수 코드는 변경하지 않았다.
+정상 visible 탭의 추가 요청은 대략 토큰 40회/시간+안전 조회 60회/시간이다. 여러 탭/네트워크/활동 이벤트에 따라 달라지는 **추정**이며 실제 Production 비용 측정값이 아니다. 현재 Preview의 키 미등록 상태는 10초 polling이므로 정상 private 지연/비용으로 비교하지 않는다. 최종 점검에서 키 미설정/polling/비참여자 경로가 요청 제한 전에 반환되는 문제를 보완했다. 유효 세션의 요청 제한을 먼저 적용하고 방 DTO 조회를 제거했으며 최소 권한 SQL을 발급 트랜잭션 안에서도 재검증한다. 검색 모델·768차원 벡터·검색 점수 코드는 변경하지 않았다.
 
-Preview 검색 단일 프로브는 keyword 362ms, semantic 1,036ms, unified 174ms, image 975ms였다. cold/warm 통제 없는 단일 표본으로 성능 개선/악화를 단정하지 않는다. 함수 메타데이터는 D-2와 동일한 artifact 참조 7개/고유 경로 6개다. 채팅 token/messages의 로컬 모델 파일은 0이며 client chunk에 서명 변수 식별자가 없다. 모델 trace 격리는 유지됐다. Vercel API는 함수 압축 byte 크기를 제공하지 않아 정확한 byte/요금 차이는 미측정이다.
+Preview 검색 단일 프로브는 keyword 184ms, semantic 966ms, unified 183ms, image 879ms였다. cold/warm 통제 없는 단일 표본으로 성능 개선/악화를 단정하지 않는다. 함수 메타데이터는 D-2와 동일한 artifact 참조 7개/고유 경로 6개다. 채팅 token/messages의 로컬 모델 파일은 0이며 client chunk에 서명 변수 식별자가 없다. 모델 trace 격리는 유지됐다. Vercel API는 함수 압축 byte 크기를 제공하지 않아 정확한 byte/요금 차이는 미측정이다.
 
 ## 데이터 정리와 발견한 운영 문제
 
-Preview 사용자 **393~407**과 채팅방 **164~168**은 이번 실행의 UUID/소유자/참여자를 기록한 신규 fixture다. 일부 초기 로컬 Origin 정규화 검사 실패 실행도 포함하며 실패를 통과로 숨기지 않았다. 관련 메시지·읽음·알림·카운터·신원·세션을 자기 데이터에 한해 정리했다. 최종 조회에서 해당 User/ChatRoom/Message/Notification/RealtimeSession 잔여 0을 확인했다. 기존 사용자·시드·운영 감사 기록·신고 증거·Storage 원본은 삭제하지 않았다. 이 회차에서 실제 Storage 테스트 사진이나 신고를 새로 만들지 않았다. 로컬 SQL의 1~5 사용자 ID는 별도 throwaway DB에만 존재했다.
+Preview 사용자 **393~410**과 채팅방 **164~169**는 이번 실행의 UUID/소유자/참여자를 기록한 신규 fixture다. 일부 초기 로컬 Origin 정규화 검사 실패 실행도 포함하며 실패를 통과로 숨기지 않았다. 관련 메시지·읽음·알림·카운터·신원·세션을 자기 데이터에 한해 정리했다. 최종 조회에서 해당 User/ChatRoom/Message/Notification/RealtimeSession 잔여 0을 확인했다. 기존 사용자·시드·운영 감사 기록·신고 증거·Storage 원본은 삭제하지 않았다. 이 회차에서 실제 Storage 테스트 사진이나 신고를 새로 만들지 않았다. 로컬 SQL의 1~5 사용자 ID는 별도 throwaway DB에만 존재했다.
 
 기본 Vercel CLI scope로 배포가 `Not authorized`로 거부됐지만 로그인·프로젝트 읽기·기존 Git 작성자는 정상이었다. 연결된 팀을 명시한 재시도는 성공했다. `deploy.mjs`가 검증된 `.vercel/project.json`의 orgId를 항상 넘기도록 보완했고 팀 ID 형태의 읽기 전용 실행과 린트를 통과했다. 계정/권한/자격증명/보호 정책을 변경하지 않았다. 이 운영 도구 수정과 후속 보고는 Preview 서비스 코드와 차이가 없다.
 
