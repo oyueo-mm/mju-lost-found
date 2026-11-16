@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import { RealtimeClient } from "@supabase/realtime-js";
 import sharp from "sharp";
 
 // Both the database and Storage must be Preview. No arbitrary target URL.
@@ -16,6 +17,9 @@ const storageUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 if (new URL(storageUrl).hostname !== `${PREVIEW_DB_PROJECT}.supabase.co`) throw new Error("Preview Storage required");
 const publicKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 if (!publicKey || publicKey === "[SENSITIVE]" || !process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY === "[SENSITIVE]") throw new Error("Preview configuration missing");
+// D3 receive must be proved through the real private channel. Never replace
+// step 11 with a public-channel or polling success to hide missing trust.
+if((!process.env.MJU_REALTIME_PRIVATE_JWK||process.env.MJU_REALTIME_PRIVATE_JWK==="[SENSITIVE]")&&!process.argv.includes("--cleanup-run"))throw new Error("D3 regression requires the approved Preview signing configuration and private mode");
 // A fresh signing secret belongs only to this local child server. No deployed
 // login secret is needed or changed; these cookies cannot log into Vercel.
 process.env.AUTH_SECRET = randomUUID() + randomUUID();
@@ -26,7 +30,7 @@ const { prisma } = await jiti.import("../../src/lib/db/prisma.ts");
 const terms = await jiti.import("../../src/lib/auth/terms.ts");
 const browser = createClient(storageUrl, publicKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const storage = createClient(storageUrl, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
-const base = "http://127.0.0.1:3100";
+const base = "http://localhost:3100";
 const cleanupIndex = process.argv.indexOf("--cleanup-run");
 const saved = cleanupIndex >= 0 ? JSON.parse(readFileSync(process.argv[cleanupIndex + 1], "utf8")) : null;
 const marker = saved?.marker ?? `regression-${randomUUID()}`;
@@ -39,6 +43,7 @@ function save() { writeFileSync(manifest, JSON.stringify({ marker, users: users.
 const must = (ok) => { if (!ok) throw new Error("Assertion failed"); };
 async function api(actor, method, path, body) {
   const headers = actor === null ? {} : { cookie: cookies[actor] };
+  if(method==="POST")headers.origin=new URL(base).origin;
   if (body !== undefined && !(body instanceof FormData)) headers["content-type"] = "application/json";
   const r = await fetch(base + path, { method, headers, body: body instanceof FormData ? body : body === undefined ? undefined : JSON.stringify(body), redirect: "manual", signal: AbortSignal.timeout(120000) });
   const json = r.headers.get("content-type")?.includes("application/json") ? await r.json() : (await r.arrayBuffer(), null);
@@ -79,7 +84,7 @@ try {
       const user = await prisma.user.create({ data: { email: `${marker}-${i}@regression.example.invalid`, name: "Regression fixture", nickname: "Regression fixture", isAdmin: i === 2, privacyConsentAt: new Date(), privacyConsentVersion: terms.CURRENT_PRIVACY_VERSION, termsAcceptedAt: new Date(), termsVersion: terms.CURRENT_TERMS_VERSION, identityConsentVersion: terms.CURRENT_IDENTITY_CONSENT_VERSION } });
       users.push(user);
       save();
-      const jwt = await encode({ token: { sub: String(user.id), userId: user.id, nickname: user.nickname }, secret: process.env.AUTH_SECRET, salt: "authjs.session-token" });
+      const jwt = await encode({ token: { sub: String(user.id), userId: user.id, nickname: user.nickname,realtimeSessionId:randomUUID() }, secret: process.env.AUTH_SECRET, salt: "authjs.session-token" });
       cookies.push(`authjs.session-token=${jwt}`);
       must(String((await api(i, "GET", "/api/auth/session")).json?.user?.id) === String(user.id));
     }
@@ -129,10 +134,13 @@ try {
     const r = await api(1, "POST", "/api/chat", { postType: "lost", postId }); must(r.status === 200 || r.status === 201); roomId = r.data?.id; must(roomId); save();
   });
   await step("11 message send and Realtime receive", async () => {
-    subscriber = createClient(storageUrl, publicKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const issued=await api(0,"POST",`/api/chat/${roomId}/realtime`);
+    must(issued.status===200&&issued.json?.token&&issued.json?.topic?.startsWith("mju-chat:"));
+    subscriber = new RealtimeClient(`${storageUrl}/realtime/v1`,{params:{apikey:publicKey}});
+    await subscriber.setAuth(issued.json.token);
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("Realtime timeout")), 15000);
-      subscriber.channel(`chat-room-${roomId}`).on("broadcast", { event: "message" }, () => { clearTimeout(timer); resolve(); }).subscribe(async status => {
+      subscriber.channel(issued.json.topic,{config:{private:true}}).on("broadcast", { event: "message" }, ({payload}) => { if(!Number.isSafeInteger(payload?.messageId)||typeof payload.eventId!=="string")return;clearTimeout(timer); resolve(); }).subscribe(async status => {
         if (status === "SUBSCRIBED") { try { const r = await api(1, "POST", `/api/chat/${roomId}/messages`, { content: marker }); must(r.status === 200 || r.status === 201); } catch { clearTimeout(timer); reject(new Error("Message failed")); } }
       });
     });
@@ -196,7 +204,7 @@ try {
       if (postId) await deletePostRowInTx(tx, "lost", postId);
       for (const user of users) {
         await tx.notification.deleteMany({ where: { userId: user.id } });
-        await tx.rateLimitCounter.deleteMany({ where: { OR: ["aiSearch", "imageUpload", "postCreate", "chatMessage"].map(a => ({ key: { startsWith: `${a}:u:${user.id}:` } })) } });
+        await tx.rateLimitCounter.deleteMany({ where: { OR: ["aiSearch", "imageUpload", "postCreate", "chatMessage","chatSync","realtimeToken"].map(a => ({ key: { startsWith: `${a}:u:${user.id}:` } })) } });
         await tx.user.delete({ where: { id: user.id } });
       }
     }, { timeout: 10000 });

@@ -26,6 +26,7 @@ export const API_ROUTE_NOTES: Record<string, string> = {
   "GET /api/chat": "내 채팅방 목록",
   "POST /api/chat": "게시글 작성자와 채팅방 열기 (없으면 생성)",
   "GET /api/chat/[id]": "채팅방 정보 조회",
+  "POST /api/chat/[id]/realtime": "채팅 참여자 전용 단기 Realtime 권한 발급 (세션·현재 권한 검증)",
   "GET /api/chat/[id]/messages": "채팅 메시지 조회 (읽음 처리 포함)",
   "POST /api/chat/[id]/messages": "채팅 메시지 보내기",
   "PATCH /api/chat/[id]/messages": "채팅 메시지 수정·공감 표시",

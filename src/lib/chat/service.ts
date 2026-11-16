@@ -877,7 +877,7 @@ export async function listMessages(
   chatRoomId: number,
   requesterId: number,
   before?: number,
-): Promise<ChatMutationResult<{ items: MessageDTO[]; hasMore: boolean }>> {
+): Promise<ChatMutationResult<{ items: MessageDTO[]; hasMore: boolean; readState:{cursors:{userId:number;lastReadMessageId:number}[]}; postStatus:string|null }>> {
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
   const participantIds = await participantIdsOf(room);
@@ -913,16 +913,18 @@ export async function listMessages(
   // environment (this phase's own spec: migration not applied yet) --
   // falling back to "nothing read yet" degrades to an under-informative
   // read indicator, never a broken message list.
-  const counterpartId = [...participantIds].find((id) => id !== requesterId) ?? requesterId;
+  const counterpartIds = [...participantIds].filter(id=>id!==requesterId);
+  let cursors:{userId:number;lastReadMessageId:number}[]=[];
   let counterpartLastRead = 0;
   try {
-    const counterpartRead = await prisma.chatRead.findUnique({
-      where: { chatRoomId_userId: { chatRoomId, userId: counterpartId } },
-      select: { lastReadMessageId: true },
+    const reads = await prisma.chatRead.findMany({
+      where: { chatRoomId,userId:{in:counterpartIds} },
+      select: { userId:true,lastReadMessageId: true },
     });
-    counterpartLastRead = counterpartRead?.lastReadMessageId ?? 0;
+    cursors=reads.map(r=>({userId:r.userId,lastReadMessageId:r.lastReadMessageId??0}));
+    counterpartLastRead=Math.max(0,...cursors.map(c=>c.lastReadMessageId));
   } catch (error) {
-    console.error("Failed to read chat read-cursor:", error);
+    console.error("Chat read-state unavailable:", error instanceof Error?error.name:"Error");
   }
 
   // Phase D-4: one batched query for every message on this page (never
@@ -969,7 +971,7 @@ export async function listMessages(
     reactions: summarizeReactions(reactionsByMessageId.get(m.id) ?? [], requesterId),
   }));
 
-  return { kind: "ok", data: { items, hasMore } };
+  return { kind: "ok", data: { items, hasMore,readState:{cursors},postStatus:room.directLostPost?.status??room.directFoundPost?.status??null } };
 }
 
 // Phase N: replaces markMessagesAsRead()'s bulk-UPDATE-every-unread-
@@ -1000,11 +1002,13 @@ export async function markChatRoomRead(
   });
   if (!latest) return { kind: "ok", data: { lastReadMessageId: null } };
 
-  const read = await prisma.chatRead.upsert({
-    where: { chatRoomId_userId: { chatRoomId, userId: requesterId } },
-    create: { chatRoomId, userId: requesterId, lastReadMessageId: latest.id },
-    update: { lastReadMessageId: latest.id },
-  });
+  const advanced=await prisma.$queryRaw<{last_read_message_id:number}[]>`INSERT INTO "ChatRead"(chat_room_id,user_id,last_read_message_id,updated_at) VALUES(${chatRoomId},${requesterId},${latest.id},(now() AT TIME ZONE 'UTC')) ON CONFLICT(chat_room_id,user_id) DO UPDATE SET last_read_message_id=EXCLUDED.last_read_message_id,updated_at=EXCLUDED.updated_at WHERE COALESCE("ChatRead".last_read_message_id,0)<EXCLUDED.last_read_message_id RETURNING last_read_message_id`;
+  if(!advanced.length){
+    // A second snapshot sees a concurrently committed newer cursor too.
+    const current=await prisma.chatRead.findUnique({where:{chatRoomId_userId:{chatRoomId,userId:requesterId}},select:{lastReadMessageId:true}});
+    return {kind:"ok",data:{lastReadMessageId:current?.lastReadMessageId??null}};
+  }
+  const read={lastReadMessageId:advanced[0].last_read_message_id};
 
   // Best-effort, after the write already committed -- see
   // realtimeAdmin.ts's own comment on why this payload is safe to send on

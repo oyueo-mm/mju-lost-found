@@ -31,7 +31,7 @@ const commentTable = { findUnique: vi.fn() };
 // Phase D-4
 const messageReaction = { deleteMany: vi.fn(), create: vi.fn(), findMany: vi.fn() };
 // Phase N
-const chatRead = { findUnique: vi.fn(), upsert: vi.fn() };
+const chatRead = { findUnique: vi.fn(), findMany:vi.fn().mockResolvedValue([]), upsert: vi.fn() };
 // Phase 12-11: organization-inquiry chat -- who currently manages which
 // org (participantIdsOf/listChatRoomsForUser/countUnreadMessagesForUser),
 // and the org row itself (resolveDetailDTO's org branch,
@@ -256,7 +256,8 @@ beforeEach(() => {
   // same "pre-existing tests don't need their own irrelevant mock" reason
   // as messageReaction.findMany above. Tests that actually care about
   // readByCounterpart override this with their own mockResolvedValueOnce.
-  chatRead.findUnique.mockResolvedValue(null);
+  chatRead.findUnique.mockReset().mockResolvedValue(null);
+  chatRead.findMany.mockReset().mockResolvedValue([]);
   // Phase 12-11: default "this user manages no organizations" / "this org
   // has no managers" for every pre-existing (personal-chat) test in this
   // file -- tests that actually exercise organization-chat behavior
@@ -1096,15 +1097,15 @@ describe("listMessages", () => {
       { id: 1, senderUserId: lostOwner, content: "c1", createdAt: new Date(), readAt: null, hiddenAt: null, sender: { nickname: "n" } },
       { id: 2, senderUserId: lostOwner, content: "c2", createdAt: new Date(), readAt: null, hiddenAt: null, sender: { nickname: "n" } },
     ]);
-    chatRead.findUnique.mockResolvedValueOnce({ lastReadMessageId: 1 });
+    chatRead.findMany.mockResolvedValueOnce([{userId:foundOwner,lastReadMessageId:1}]);
 
     const result = await listMessages(100, lostOwner);
 
     expect(result.kind).toBe("ok");
     if (result.kind !== "ok") return;
-    expect(chatRead.findUnique).toHaveBeenCalledWith({
-      where: { chatRoomId_userId: { chatRoomId: 100, userId: foundOwner } },
-      select: { lastReadMessageId: true },
+    expect(chatRead.findMany).toHaveBeenCalledWith({
+      where: {chatRoomId:100,userId:{in:[foundOwner]}},
+      select: { userId:true,lastReadMessageId: true },
     });
     const byId = new Map(result.data.items.map((m) => [m.id, m.readByCounterpart]));
     expect(byId.get(1)).toBe(true); // id 1 <= cursor 1
@@ -1116,7 +1117,7 @@ describe("listMessages", () => {
     message.findMany.mockResolvedValueOnce([
       { id: 1, senderUserId: lostOwner, content: "c1", createdAt: new Date(), readAt: null, hiddenAt: null, sender: { nickname: "n" } },
     ]);
-    chatRead.findUnique.mockResolvedValueOnce(null);
+    chatRead.findMany.mockResolvedValueOnce([]);
 
     const result = await listMessages(100, lostOwner);
 
@@ -1135,7 +1136,7 @@ describe("listMessages", () => {
     message.findMany.mockResolvedValueOnce([
       { id: 1, senderUserId: lostOwner, content: "c1", createdAt: new Date(), readAt: null, hiddenAt: null, sender: { nickname: "n" } },
     ]);
-    chatRead.findUnique.mockRejectedValueOnce(new Error('The table "public.ChatRead" does not exist'));
+    chatRead.findMany.mockRejectedValueOnce(new Error('The table "public.ChatRead" does not exist'));
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const result = await listMessages(100, lostOwner);
@@ -1340,22 +1341,19 @@ describe("markChatRoomRead", () => {
   it("advances the requester's own cursor to the room's latest message id", async () => {
     chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findFirst.mockResolvedValueOnce({ id: 42 });
-    chatRead.upsert.mockResolvedValueOnce({ lastReadMessageId: 42 });
+    $queryRaw.mockResolvedValueOnce([{last_read_message_id:42}]);
 
     const result = await markChatRoomRead(100, lostOwner);
 
     expect(result).toEqual({ kind: "ok", data: { lastReadMessageId: 42 } });
-    expect(chatRead.upsert).toHaveBeenCalledWith({
-      where: { chatRoomId_userId: { chatRoomId: 100, userId: lostOwner } },
-      create: { chatRoomId: 100, userId: lostOwner, lastReadMessageId: 42 },
-      update: { lastReadMessageId: 42 },
-    });
+    expect($queryRaw.mock.calls.at(-1)!.slice(1)).toEqual([100,lostOwner,42]);
+    expect($queryRaw.mock.calls.at(-1)![0].join(" ")).toContain('COALESCE("ChatRead".last_read_message_id,0)<EXCLUDED.last_read_message_id');
   });
 
   it("broadcasts a content-free 'read' event with the requester's id and new cursor", async () => {
     chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
     message.findFirst.mockResolvedValueOnce({ id: 42 });
-    chatRead.upsert.mockResolvedValueOnce({ lastReadMessageId: 42 });
+    $queryRaw.mockResolvedValueOnce([{last_read_message_id:42}]);
 
     await markChatRoomRead(100, lostOwner);
 
@@ -1366,6 +1364,12 @@ describe("markChatRoomRead", () => {
       event: "read",
       payload: { userId: lostOwner, lastReadMessageId: 42 },
     });
+  });
+  it("does not rewrite or broadcast an unchanged/older cursor",async()=>{
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());message.findFirst.mockResolvedValueOnce({id:42});
+    $queryRaw.mockResolvedValueOnce([]);chatRead.findUnique.mockResolvedValueOnce({lastReadMessageId:50});
+    expect(await markChatRoomRead(100,lostOwner)).toEqual({kind:"ok",data:{lastReadMessageId:50}});
+    expect(after).not.toHaveBeenCalled();expect(broadcastChatEvent).not.toHaveBeenCalled();
   });
 });
 

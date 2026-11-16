@@ -21,6 +21,9 @@ import type { IdentityHints } from "@/lib/identity/googleHints";
 // to number at the Prisma query boundary.
 declare module "@auth/core/types" {
   interface Session {
+    realtimeSessionId?: string;
+    realtimeSessionNeedsRefresh?: boolean;
+    authExpiresAt?: number;
     user: {
       id: string;
       nickname: string | null;
@@ -36,6 +39,8 @@ declare module "@auth/core/types" {
 
 declare module "@auth/core/jwt" {
   interface JWT {
+    realtimeSessionId?: string;
+    realtimeSessionNeedsRefresh?: boolean;
     userId?: number;
     nickname?: string | null;
     rejoinIdentityId?: number;

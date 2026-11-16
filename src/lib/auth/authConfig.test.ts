@@ -7,7 +7,9 @@ type Callbacks = {
   jwt: (args: Record<string, unknown>) => Promise<Record<string, unknown>>;
   session: (args: Record<string, unknown>) => Promise<Record<string, unknown>>;
 };
-let config: { callbacks: Callbacks } | null = null;
+let config: { callbacks: Callbacks; events:{signOut:(message:unknown)=>Promise<void>} } | null = null;
+const revokeChatRealtimeSession=vi.fn();
+vi.mock("@/lib/chat/realtimeSession",()=>({revokeChatRealtimeSession}));
 const googleOptions: unknown[] = [];
 vi.mock("next-auth", () => ({
   default: (c: typeof config) => {
@@ -56,6 +58,26 @@ describe("Google sign-in configuration", () => {
 
     decideSignIn.mockResolvedValueOnce({ allowed: true });
     await expect(config!.callbacks.signIn({ user: { email: "student@mju.ac.kr" }, profile: { email_verified: true } })).resolves.toBe(true);
+  });
+});
+
+describe("Realtime session binding",()=>{
+  it("bootstraps a server-chosen ID and ignores session-update injection",async()=>{
+    const first=await config!.callbacks.jwt({token:{userId:7},trigger:"update",session:{realtimeSessionId:"attacker"}});
+    expect(first.realtimeSessionId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(first.realtimeSessionNeedsRefresh).toBe(true);
+    const next=await config!.callbacks.jwt({token:first,trigger:"update",session:{realtimeSessionId:"replacement"}});
+    expect(next.realtimeSessionId).toBe(first.realtimeSessionId);expect(next.realtimeSessionNeedsRefresh).toBe(false);
+  });
+  it("exposes cookie expiry, rather than a rolling session display expiry",async()=>{
+    const session=await config!.callbacks.session({session:{user:{},expires:"2099-01-01"},token:{userId:7,exp:123,realtimeSessionId:"stable"}});
+    expect(session.authExpiresAt).toBe(123);expect(session.realtimeSessionId).toBe("stable");
+  });
+  it("awaits revocation at Auth.js signout",async()=>{
+    const token={userId:7,realtimeSessionId:"stable",exp:123};
+    await config!.events.signOut({token});expect(revokeChatRealtimeSession).toHaveBeenLastCalledWith(token);
+    revokeChatRealtimeSession.mockRejectedValueOnce(new Error("database unavailable"));
+    await expect(config!.events.signOut({token})).rejects.toThrow("Realtime session revocation unavailable");
   });
 });
 

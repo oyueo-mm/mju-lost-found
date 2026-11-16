@@ -9,6 +9,9 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // Local deployment bundles and scratch diagnostics are Git-ignored output.
+    // All repository source and reusable verification scripts remain checked.
+    ".vercel/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

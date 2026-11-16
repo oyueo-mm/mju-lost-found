@@ -1,4 +1,5 @@
 import { prunePushOutbox } from "@/lib/push/service";
+import { cleanExpiredChatRealtimeGrants } from "@/lib/chat/realtimeGrants";
 import { NextRequest } from "next/server";
 import { z } from "zod";
 
@@ -56,6 +57,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   if (request.headers.get("authorization") !== `Bearer ${secret}`) return jsonError(401, "Unauthorized");
 
   const result = await runRetention();
+  await cleanExpiredChatRealtimeGrants();
   // 운영 통계: the daily DB/Storage size snapshot rides on this same cron.
   const capacity = await recordCapacity();
   // 배포 이력: with a Vercel API token, the day's deployments are kept

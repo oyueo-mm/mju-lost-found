@@ -1,4 +1,6 @@
 import { classifyActor } from "@/lib/metrics/audience";
+import { randomUUID } from "node:crypto";
+import { revokeChatRealtimeSession } from "@/lib/chat/realtimeSession";
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 
@@ -91,6 +93,10 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
     // Users for the same Google account; googleId is recorded alongside it
     // as the more stable identifier for future lookups.
     async jwt({ token, account, user, profile, trigger, session }) {
+      // Existing cookies bootstrap through the normal Auth.js session endpoint.
+      // Never accept a session ID supplied in a session-update request body.
+      token.realtimeSessionNeedsRefresh = !token.realtimeSessionId;
+      token.realtimeSessionId ??= randomUUID();
       // 실명·학과 자동 입력: Auth.js copies the Google name and picture into
       // the token (and from there into /api/auth/session) by default --
       // neither is kept. The name survives only as a form hint, below.
@@ -173,6 +179,9 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
     },
 
     async session({ session, token }) {
+      session.realtimeSessionId = token.realtimeSessionId;
+      session.realtimeSessionNeedsRefresh = token.realtimeSessionNeedsRefresh;
+      session.authExpiresAt = token.exp;
       if (token.userId) {
         session.user.id = String(token.userId);
         session.user.nickname = token.nickname ?? null;
@@ -183,6 +192,16 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
       session.user.image = null;
       if (token.rejoinIdentityId) session.rejoinIdentityId = token.rejoinIdentityId;
       return session;
+    },
+  },
+  events: {
+    async signOut(message) {
+      try {
+        if ("token" in message) await revokeChatRealtimeSession(message.token);
+      } catch {
+        // Auth.js logs event errors; never pass raw database diagnostics.
+        throw new Error("Realtime session revocation unavailable");
+      }
     },
   },
 });

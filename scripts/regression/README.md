@@ -19,7 +19,7 @@ node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scr
 
 16단계는 홈/로그인/버전, 익명 차단, 세션 3개, 동의·신원 준비, 게시글 생성, 사진 업로드·첨부, 게시글 조회, 임베딩 재계산, 키워드·의미·통합·이미지 검색, 채팅방 생성, 메시지·Realtime 수신, 비공개 사진·비참여자 차단, 알림 생성·읽음, 채팅 접근, 관리자 접근·일반 사용자 차단, 게시글·원본 사진 삭제다. 원본의 이미지 검색 502 허용과 실패 시 종료 코드 0 문제를 유지하지 않는다.
 
-모든 생성 데이터는 실행별 UUID와 신규 계정에 귀속한다. 기존 사용자·시드의 신원, 알림 읽음 상태, 권한은 수정하지 않는다. Realtime 수신은 기능 회귀 검사이며 공개 채널의 보안이 해결됐다는 판정이 아니다(D-3 범위).
+모든 생성 데이터는 실행별 UUID와 신규 계정에 귀속한다. 기존 사용자·시드의 신원, 알림 읽음 상태, 권한은 수정하지 않는다. D-3부터 11단계는 서버 발급 토큰과 실제 private 채널로 messageId/eventId 수신을 요구한다. 공개 채널이나 polling으로 이 단계를 대체하지 않는다. 등록된 Preview 서명 설정과 `ChatRealtimeConfig.mode=private`가 필요하며 서명 설정이 없으면 fixture 생성 전에 중단한다. Vercel 민감 변수의 `[SENSITIVE]` 값을 키로 취급하지 않는다. 기존 승인된 로컬 비밀 전달 경로로 자식 프로세스에만 제공하고 값을 출력·커밋하지 않는다.
 
 결과 JSON은 단계별 성공 여부·시간·새 테스트 ID만 출력한다. 실패 시 비정상 종료하며 이후 의존 단계는 실행하지 않는다. 공개 이미지 URL은 CDN 캐시로 남을 수 있어 삭제 전/후 인증된 Storage 목록과 DB 행으로 실제 삭제를 확인하고 공개 응답 상태는 별도로 기록한다.
 
@@ -54,3 +54,19 @@ node --env-file=.env.preview.local scripts/operations/verify-deployed-image-job.
 ```
 
 [배포 전환·롤백 절차](../../docs/operations/release-d2-transition.md)의 `release-probes.mjs`, `release-d2-health.mjs`, `release-logs.mjs`는 Production에서 데이터를 생성하지 않는 별도 검사다. 16단계 자체는 쓰기 검사가 있으므로 **Preview에서만** 실행한다.
+
+## D-3 로컬 RLS·권한 회수와 브라우저 대체 경로
+
+```powershell
+wsl.exe -d Ubuntu -e bash /mnt/c/proj_claude/mju-lost-found-vercel/scripts/regression/realtime-local.sh
+node --env-file=.env.preview.local scripts/regression/realtime-fallback.mjs --confirm-preview
+node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/regression/realtime-denials.mjs --confirm-preview
+```
+
+첫 검사는 기존 WSL PostgreSQL 18 실행 환경에 localhost 전용 throwaway cluster를 만들고 끝나면 제거한다. 채널 행 범위·토큰 claim·기관 관리자/일반 멤버·외부 승인·권한 회수의 동시성·수신 전용 RLS와 백업 권한 재구축을 실제 SQL로 검사한다. 관리형 Realtime 서버의 JWT 검증/캐시 검사를 대신하지 않는다.
+
+두 번째 검사는 현재 빌드와 Preview DB, Python Playwright/Chromium이 필요하다. 로컬 `localhost:3102` 서버에만 적용되는 새 Auth.js 키를 생성한다. 서명키 미설정 시 503/fail-closed, 인증 API polling, 두 탭·visibility 복귀·네트워크 복구·비참여자 차단·세션 소멸을 실제 브라우저로 확인한다. visibility 이벤트는 headless의 OS 탭 상태 대신 명시적으로 전환하며 이 한계를 결과에 기록한다. OS별 실제 background 동작과 hosted private 연결은 별도 검사다.
+
+fixture ID는 `.vercel/realtime-<UUID>.json`에 생성 즉시 기록한다. 해당 계정의 이메일 표식·방 참여자·제목을 재검증한 뒤 자기 방·메시지·알림·요청 카운터·계정만 정리한다. 이 검사에서는 사진·신고·기존 감사 기록을 만들거나 삭제하지 않는다. 정리 실패 시 명세를 보존하고 다른 사용자/방을 추정해서 삭제하지 않는다.
+
+`realtime-denials.mjs`는 Preview 실제 서버의 독립 난수 topic에서 익명/미신뢰 키 구독 거부와 익명 송신의 실제 미수신을 검사한다. 서버 전용 관리자 자격증명을 Node 대조군에만 사용하여 정상 private 송신/수신을 먼저 입증하고, 어떤 브라우저에도 해당 자격증명을 전달하지 않는다. 구형 Batch REST API는 권한 없는 메시지를 버려도 202를 반환하므로 HTTP 코드만으로 성공/실패를 판정하지 않는다. 정상 대조 메시지 수신과 위조 nonce 미수신을 함께 요구한다. 일반 회원의 새 서명키/role 수용 검증은 이 검사와 별도로 남는다. 새 앱 행이나 Storage 파일은 생성하지 않는다.

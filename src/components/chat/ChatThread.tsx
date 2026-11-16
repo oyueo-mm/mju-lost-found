@@ -9,6 +9,7 @@ import { formatAbsoluteTime, formatRelativeTime } from "@/lib/time/relativeTime"
 import { useI18n } from "@/lib/i18n/client";
 import { MessageActionMenu } from "@/components/chat/MessageActionMenu";
 import { useChatRoomRealtime } from "@/components/chat/useChatRoomRealtime";
+import {ChatAccessRevoked,validReadHint,type ReadCursor} from "./synchronizer";
 import { chatPresenceAction } from "@/app/(main)/me/push/actions";
 import { dispatchChatUnreadCount } from "@/components/layout/chatUnreadEvent";
 import { CameraIcon, UserIcon } from "@/components/icons";
@@ -88,7 +89,11 @@ function StatusLine({ event, label, time }: { event: ChatStatusEvent; label: str
   );
 }
 
-export function ChatThread({
+export function ChatThread(props:Parameters<typeof ChatThreadView>[0]){
+  return <ChatThreadView key={`${props.currentUserId}:${props.chatRoomId}`} {...props}/>;
+}
+
+function ChatThreadView({
   chatRoomId,
   currentUserId,
   sendBlockedNotice,
@@ -139,8 +144,8 @@ export function ChatThread({
   const [editDraft, setEditDraft] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
-  // Phase N: the counterpart's read cursor, updated live from realtime
-  // "read" broadcasts -- null means "no live update received yet this
+  // Phase N: the counterpart's read cursor, updated only by authorized API
+  // read-state responses -- null means "no live update received yet this
   // session", in which case each message's own server-computed
   // readByCounterpart (accurate as of the last fetch) is all that's used;
   // see isReadByCounterpart() below. Never regresses (see the realtime
@@ -179,80 +184,41 @@ export function ChatThread({
     tRef.current = t;
   }, [t]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const paginationAbort = useRef<AbortController | null>(null);
+  const mutationEpoch = useRef(0);
+  const postStatus = useRef<string | null | undefined>(undefined);
+  useEffect(() => () => paginationAbort.current?.abort(), []);
 
-    async function loadInitial() {
-      setError(null);
-      try {
-        const res = await fetch(`/api/chat/${chatRoomId}/messages`);
-        const json = await res.json();
-        if (cancelled) return;
-        if (!res.ok) {
-          setError(json.error ?? tRef.current("chatThread.loadFailed"));
-          return;
-        }
-        setMessages(json.data);
-        setHasMore(json.pagination.hasMore);
-        // Phase P-3: this GET call already marks the room read server-side
-        // and now returns this user's fresh total unread count alongside
-        // the messages (see the route's own comment) -- dispatched here so
-        // the header/BottomNav badge (Server Component data, computed once
-        // per layout render -- see Header.tsx) updates immediately.
-        // router.refresh() was tried first (the same pattern
-        // NotificationItem.tsx/MarkAllReadButton use) but real browser
-        // testing showed it does not reliably update this shared layout's
-        // badge while staying on the same /chat/[id] URL -- only an actual
-        // page reload picked it up. This event sidesteps that: the exact
-        // number the server just computed for this user, pushed straight
-        // to the two components that render it, no cache-timing guesswork.
-        if (typeof json.unreadChatCount === "number") dispatchChatUnreadCount(json.unreadChatCount);
-      } catch {
-        if (!cancelled) setError(tRef.current("common.networkError"));
-      }
-    }
-
-    loadInitial();
-    return () => {
-      cancelled = true;
-    };
-  }, [chatRoomId]);
-
-  // Phase N: shared by both realtime handlers below ("message" and
-  // "reaction" broadcasts carry only a bare id -- see realtimeAdmin.ts's
-  // own comment on why -- so both just mean "go re-fetch"). Re-fetches
-  // the latest page through the exact same authorized GET endpoint the
-  // initial load already uses (this is what actually enforces
-  // participant-only access to real message content; the realtime
-  // channel itself grants none), then upserts by id into local state:
-  // a not-yet-seen id is appended, an already-seen id is replaced with
-  // the fresh copy (picking up e.g. a changed reaction summary). This
-  // fetch also re-triggers the server's own "viewing marks read" side
-  // effect (markChatRoomRead), same as it already did on every manual
-  // page load -- appropriate here too, since receiving a live update
-  // means the room is actively open.
-  const syncLatest = useCallback(async () => {
+  // Initial load, realtime hints and fallback all use the hook's one-flight
+  // scheduler. A read hint never becomes UI state without this API response.
+  const syncLatest = useCallback(async (signal: AbortSignal): Promise<ReadCursor[]> => {
+    const epoch=mutationEpoch.current;
     try {
-      const res = await fetch(`/api/chat/${chatRoomId}/messages`);
-      if (!res.ok) return;
-      const json = await res.json();
-      setMessages((prev) => {
-        const byId = new Map((prev ?? []).map((m) => [m.id, m]));
-        for (const m of json.data as MessageItem[]) byId.set(m.id, m);
-        return [...byId.values()].sort((a, b) => a.id - b.id);
+      const res = await fetch('/api/chat/'+chatRoomId+'/messages', {signal,cache:"no-store"});
+      if(res.status===401||res.status===403||res.status===404){
+        if(!signal.aborted){setMessages([]);setError(tRef.current("chatThread.loadFailed"));}
+        throw new ChatAccessRevoked();
+      }
+      if(!res.ok)throw new Error("Chat sync unavailable");
+      const json = await res.json();if(signal.aborted)return [];
+      setError(null);
+      setMessages(prev => {
+        if(epoch!==mutationEpoch.current)return prev;
+        const byId=new Map((prev??[]).map(m=>[m.id,m]));
+        for(const m of json.data as MessageItem[])byId.set(m.id,m);
+        return [...byId.values()].sort((a,b)=>a.id-b.id);
       });
       setHasMore(json.pagination.hasMore);
-      // Phase P-3: same reasoning as loadInitial()'s own event dispatch
-      // above -- a realtime-triggered re-fetch marks the room read too
-      // (this is the "현재 채팅방을 보고 있음 -> 자동으로 읽음 처리" case), so
-      // the badge needs the same fresh count pushed to it immediately.
-      if (typeof json.unreadChatCount === "number") dispatchChatUnreadCount(json.unreadChatCount);
-    } catch {
-      // Silent -- a missed realtime-triggered refresh isn't worth surfacing
-      // as an error banner; the next natural fetch (pagination, a future
-      // event) catches up regardless.
-    }
-  }, [chatRoomId]);
+      if(typeof json.unreadChatCount==="number")dispatchChatUnreadCount(json.unreadChatCount);
+      const cursors:ReadCursor[]=Array.isArray(json.readState?.cursors)?json.readState.cursors.filter(validReadHint):[];
+      if(cursors.length)setOtherUserLastReadId(prev=>Math.max(prev??0,...cursors.map(c=>c.lastReadMessageId)));
+      if(json.postStatus!==undefined){
+        if(postStatus.current!==undefined&&postStatus.current!==json.postStatus)router.refresh();
+        postStatus.current=json.postStatus;
+      }
+      return cursors;
+    }catch(error){if(!signal.aborted&&!(error instanceof ChatAccessRevoked))setError(tRef.current("common.networkError"));throw error;}
+  },[chatRoomId,router]);
 
   // 채팅 웹 푸시: tell the server this room is on screen (visible tab only),
   // every 10 s, and that it no longer is when hidden or left. A push to this
@@ -280,19 +246,9 @@ export function ChatThread({
     };
   }, [chatRoomId, trackPresence]);
 
-  useChatRoomRealtime(chatRoomId, {
-    onMessage: syncLatest,
-    onReaction: syncLatest,
-    // the post was marked done / reopened (here or elsewhere): re-read the room
-    onPostStatus: () => router.refresh(),
-    onRead: (payload) => {
-      // Ignore my own read-cursor advancing -- this event exists so the
-      // *other* participant's client can show "읽음" on messages I sent,
-      // never to tell me anything about my own messages (see
-      // otherUserLastReadId's own comment).
-      if (payload.userId === currentUserId) return;
-      setOtherUserLastReadId((prev) => Math.max(prev ?? 0, payload.lastReadMessageId ?? 0));
-    },
+  const refreshChat=useChatRoomRealtime(chatRoomId,currentUserId, {
+    sync: syncLatest,
+    identityChanged: () => {setMessages([]);router.refresh();},
   });
 
   useEffect(() => {
@@ -349,23 +305,25 @@ export function ChatThread({
   }
 
   async function loadOlder() {
-    if (!messages || messages.length === 0 || loadingMore) return;
+    if (!messages || messages.length === 0 || loadingMore || paginationAbort.current) return;
+    const controller=new AbortController();paginationAbort.current=controller;
     setLoadingMore(true);
     setError(null);
     try {
       const oldestId = messages[0].id;
-      const res = await fetch(`/api/chat/${chatRoomId}/messages?before=${oldestId}`);
+      const res = await fetch(`/api/chat/${chatRoomId}/messages?before=${oldestId}`,{signal:controller.signal,cache:"no-store"});
       const json = await res.json();
+      if(controller.signal.aborted)return;
       if (!res.ok) {
         setError(json.error ?? t("chatThread.loadOlderFailed"));
         return;
       }
-      setMessages((prev) => [...json.data, ...(prev ?? [])]);
+      setMessages(prev=>{const byId=new Map((json.data as MessageItem[]).map(m=>[m.id,m]));for(const m of prev??[])byId.set(m.id,m);return [...byId.values()].sort((a,b)=>a.id-b.id);});
       setHasMore(json.pagination.hasMore);
     } catch {
-      setError(t("common.networkError"));
+      if(!controller.signal.aborted)setError(t("common.networkError"));
     } finally {
-      setLoadingMore(false);
+      if(paginationAbort.current===controller){paginationAbort.current=null;if(!controller.signal.aborted)setLoadingMore(false);}
     }
   }
 
@@ -435,7 +393,9 @@ export function ChatThread({
         setError(json.error ?? t("chatThread.sendFailed"));
         return;
       }
-      setMessages((prev) => [...(prev ?? []), json.data]);
+      mutationEpoch.current++;
+      setMessages((prev) => [...(prev ?? []).filter(m=>m.id!==json.data.id),json.data].sort((a,b)=>a.id-b.id));
+      refreshChat();
       setContent("");
       clearSelectedFile();
       setReplyingTo(null);
@@ -452,7 +412,9 @@ export function ChatThread({
   // comment on why counts are never incremented/decremented optimistically
   // on the client (another participant may have reacted concurrently).
   function handleReactionChange(messageId: number, reactions: ReactionSummary[]) {
+    mutationEpoch.current++;
     setMessages((prev) => (prev ? prev.map((m) => (m.id === messageId ? { ...m, reactions } : m)) : prev));
+    refreshChat();
   }
 
   // Single fetch reused by both MessageActionMenu's emoji picker and the
@@ -511,7 +473,9 @@ export function ChatThread({
         setEditError(json.error ?? t("chatThread.editFailed"));
         return;
       }
+      mutationEpoch.current++;
       setMessages((prev) => (prev ? prev.map((m) => (m.id === messageId ? { ...m, ...json.data } : m)) : prev));
+      refreshChat();
       cancelEditing();
     } catch {
       setEditError(t("common.networkError"));
@@ -533,7 +497,8 @@ export function ChatThread({
     if (!res.ok) {
       throw new Error(json.error ?? t("chatThread.deleteFailed"));
     }
-    await syncLatest();
+    mutationEpoch.current++;
+    refreshChat();
   }
 
   // Phase N: the server-computed flag (accurate as of the last fetch) is

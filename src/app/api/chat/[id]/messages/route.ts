@@ -19,6 +19,7 @@ import {
   toggleMessageReaction,
 } from "@/lib/chat/service";
 import { enforceRateLimit } from "@/lib/rateLimit";
+import { rateLimitTierFor } from "@/lib/rateLimit";
 
 // GET /api/chat/[id]/messages?before= -- oldest-first page of messages,
 // only for a participant (listMessages re-verifies). Mirrors the legacy
@@ -39,6 +40,8 @@ export const GET = withErrorHandling(
     if (!Number.isInteger(id) || !query.success) {
       return jsonError(400, "id 또는 before가 올바르지 않습니다.");
     }
+    const limited=await enforceRateLimit("chatSync",{userId:auth.user.id,tier:await rateLimitTierFor(auth.user)});
+    if(limited)return limited;
 
     const result = await listMessages(id, auth.user.id, query.data.before);
     if (result.kind !== "ok") {
@@ -65,7 +68,9 @@ export const GET = withErrorHandling(
       data: result.data.items,
       pagination: { hasMore: result.data.hasMore },
       unreadChatCount,
-    });
+      readState:result.data.readState,
+      postStatus:result.data.postStatus,
+    },{headers:{"Cache-Control":"private, no-store",Vary:"Cookie"}});
   },
 );
 

@@ -19,6 +19,8 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 export const RATE_LIMITS = {
+  realtimeToken: { user: [{ windowSeconds: MINUTE, max: 30 }, { windowSeconds: HOUR, max: 1000 }], staff: [{ windowSeconds: MINUTE, max: 60 }, { windowSeconds: HOUR, max: 3000 }] },
+  chatSync: { user: [{ windowSeconds: MINUTE, max: 240 }], staff: [{ windowSeconds: MINUTE, max: 720 }] },
   embeddingRecompute: { user: [{ windowSeconds: MINUTE, max: 5 }, { windowSeconds: DAY, max: 50 }], staff: [{ windowSeconds: MINUTE, max: 20 }, { windowSeconds: DAY, max: 500 }] },
   embeddingAutomatic: { user: [{ windowSeconds: 10 * MINUTE, max: 30 }, { windowSeconds: DAY, max: 200 }], staff: [{ windowSeconds: 10 * MINUTE, max: 150 }, { windowSeconds: DAY, max: 1500 }] },
   // Resource IDs are scoped by action; these keys never overlap user budgets.

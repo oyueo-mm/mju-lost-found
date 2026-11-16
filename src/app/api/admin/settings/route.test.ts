@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const runRetention = vi.fn(async () => ({ messagesExpired: 0 }));
+const cleanExpiredChatRealtimeGrants=vi.fn(async()=>{});
+vi.mock("@/lib/chat/realtimeGrants",()=>({cleanExpiredChatRealtimeGrants}));
 vi.mock("@/lib/retention/service", () => ({ runRetention }));
 const setGoogleTestMode = vi.fn();
 vi.mock("@/lib/settings/service", () => ({ setGoogleTestMode }));
@@ -41,6 +43,7 @@ describe("GET /api/admin/settings (retention cron)", () => {
     const res = await call("Bearer s3cret-value");
     expect(res.status).toBe(200);
     expect(runRetention).toHaveBeenCalledTimes(1);
+    expect(cleanExpiredChatRealtimeGrants).toHaveBeenCalledTimes(1);
     // whether this deployment can purge the image cache (no request context
     // outside Vercel)
     expect(String(log.mock.calls.find((c) => c[0] === "retention run")?.[1])).toContain('"imageCachePurge":"unavailable"');
