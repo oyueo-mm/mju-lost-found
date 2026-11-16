@@ -8,12 +8,16 @@ type Denied = { kind: "forbidden" | "unavailable" } | { kind: "limited"; admissi
 type Issued = { kind:"ok"; token:string; topic:string; expiresAt:string; grantId:string };
 export async function issueChatRealtimeGrant(user: CurrentUser, session: { id:string; expiresAt:number }, roomId: number): Promise<Issued|Denied> {
   if (!UUID_PATTERN.test(session.id) || !Number.isSafeInteger(session.expiresAt) || session.expiresAt <= Math.floor(Date.now()/1000)) return {kind:"forbidden"};
+  // Admission also covers polling/missing-key and unauthorized-room requests.
+  // Do not perform a full room DTO lookup before limiting this endpoint.
+  const admission=await checkRateLimit("realtimeToken",{userId:user.id,tier:await rateLimitTierFor(user)});
+  if (!admission.ok) return {kind:"limited",admission};
+  const member=(await prisma.$queryRaw<{allowed:boolean}[]>`SELECT public.mju_chat_member_allowed(${user.id},${roomId}) AS allowed`)[0]?.allowed;
+  if(!member)return {kind:"forbidden"};
   let config;
   try { config=signingConfiguration(); } catch { return {kind:"unavailable"}; }
   const mode=(await prisma.$queryRaw<{mode:string;project_ref:string;signing_kid:string}[]>`SELECT mode,project_ref,signing_kid::text FROM "ChatRealtimeConfig" WHERE id=true`)[0];
   if (mode?.mode!=="private" || mode.project_ref!==config.project || mode.signing_kid!==config.kid.toLowerCase()) return {kind:"unavailable"};
-  const admission=await checkRateLimit("realtimeToken",{userId:user.id,tier:await rateLimitTierFor(user)});
-  if (!admission.ok) return {kind:"limited",admission};
   const now=Math.floor(Date.now()/1000), expiresAt=new Date(Math.min(now+REALTIME_TOKEN_SECONDS,session.expiresAt)*1000);
   const grant=await prisma.$transaction(async tx=>{
     // Runtime transitions lock this singleton exclusively before revoking

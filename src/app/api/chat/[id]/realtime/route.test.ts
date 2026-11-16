@@ -1,15 +1,14 @@
 import {NextRequest} from "next/server";
 import {beforeEach,expect,it,vi} from "vitest";
-const auth=vi.fn(),getCurrentUser=vi.fn(),getChatRoomForUser=vi.fn(),issueChatRealtimeGrant=vi.fn();
+const auth=vi.fn(),getCurrentUser=vi.fn(),issueChatRealtimeGrant=vi.fn();
 vi.mock("@/lib/auth/auth",()=>({auth}));
 vi.mock("@/lib/auth/session",()=>({getCurrentUser}));
-vi.mock("@/lib/chat/service",()=>({getChatRoomForUser}));
 vi.mock("@/lib/chat/realtimeGrants",()=>({issueChatRealtimeGrant}));
 const {POST}=await import("./route");
 const sid="c98a3c0a-92d8-4856-a4ab-998d185190ab";
 const call=(headers:Record<string,string>={origin:"http://localhost"},id="10")=>POST(new NextRequest(`http://localhost/api/chat/${id}/realtime`,{method:"POST",headers}),{params:Promise.resolve({id})});
 beforeEach(()=>{
-  vi.resetAllMocks();getCurrentUser.mockResolvedValue({id:7,isAdmin:false});getChatRoomForUser.mockResolvedValue({kind:"ok"});
+  vi.resetAllMocks();getCurrentUser.mockResolvedValue({id:7,isAdmin:false});
   auth.mockResolvedValue({user:{id:"7"},realtimeSessionId:sid,authExpiresAt:123456});
   issueChatRealtimeGrant.mockResolvedValue({kind:"ok",token:"ephemeral",topic:"mju-chat:grant",expiresAt:"future",grantId:"internal"});
 });
@@ -24,8 +23,9 @@ it("requires a current user and positive room ID",async()=>{
   expect(issueChatRealtimeGrant).not.toHaveBeenCalled();
 });
 it("does not let an administrator bypass participation",async()=>{
-  getCurrentUser.mockResolvedValue({id:7,isAdmin:true});getChatRoomForUser.mockResolvedValue({kind:"forbidden"});
-  expect((await call()).status).toBe(403);expect(issueChatRealtimeGrant).not.toHaveBeenCalled();
+  getCurrentUser.mockResolvedValue({id:7,isAdmin:true});issueChatRealtimeGrant.mockResolvedValue({kind:"forbidden"});
+  expect((await call()).status).toBe(403);
+  expect(issueChatRealtimeGrant).toHaveBeenCalledWith({id:7,isAdmin:true},{id:sid,expiresAt:123456},10);
 });
 it("requires persistent session bootstrap and rejects a mismatched identity",async()=>{
   auth.mockResolvedValueOnce({user:{id:"7"},realtimeSessionNeedsRefresh:true,realtimeSessionId:sid});expect((await call()).status).toBe(409);

@@ -13,7 +13,7 @@ beforeEach(()=>{
   vi.clearAllMocks();allowed=true;active=false;existing=false;capacity=0;
   signingConfiguration.mockReturnValue({project,kid:id});signRealtimeGrant.mockResolvedValue("ephemeral");
   checkRateLimit.mockResolvedValue({ok:true});rateLimitTierFor.mockResolvedValue("user");
-  $queryRaw.mockResolvedValue([{mode:"private",project_ref:project,signing_kid:id}]);
+  $queryRaw.mockImplementation(async(strings:TemplateStringsArray)=>strings.join().includes("mju_chat_member_allowed")?[{allowed:true}]:[{mode:"private",project_ref:project,signing_kid:id}]);
   txQuery.mockImplementation(async(strings:TemplateStringsArray)=>{
     const sql=strings.join("?");
     if(sql.includes('FROM "ChatRealtimeConfig"'))return [{mode:"private",project_ref:project,signing_kid:id}];
@@ -33,9 +33,17 @@ it("caps the JWT to the original cookie expiry and locks admission per user",asy
   expect(txExecute.mock.calls[0][0].join("?")).toContain("pg_advisory_xact_lock(184219,?)");
 });
 it("refuses missing config and quota/backend failures without creating grants",async()=>{
-  $queryRaw.mockResolvedValueOnce([{mode:"polling"}]);expect((await issue()).kind).toBe("unavailable");
+  $queryRaw.mockResolvedValueOnce([{allowed:true}]).mockResolvedValueOnce([{mode:"polling"}]);expect((await issue()).kind).toBe("unavailable");
   for(const reason of ["limited","unavailable"]){checkRateLimit.mockResolvedValueOnce({ok:false,reason,retryAfterSeconds:5});expect(await issue()).toMatchObject({kind:"limited",admission:{reason}});}
   expect($transaction).not.toHaveBeenCalled();
+});
+it("limits requests before missing-key, polling or forbidden-room branches",async()=>{
+  signingConfiguration.mockImplementationOnce(()=>{throw new Error("missing key");});
+  expect((await issue()).kind).toBe("unavailable");expect(checkRateLimit).toHaveBeenCalledTimes(1);
+  checkRateLimit.mockResolvedValueOnce({ok:false,reason:"limited",retryAfterSeconds:30});
+  $queryRaw.mockClear();expect((await issue()).kind).toBe("limited");expect($queryRaw).not.toHaveBeenCalled();
+  $queryRaw.mockResolvedValueOnce([{allowed:false}]);expect((await issue()).kind).toBe("forbidden");
+  expect(checkRateLimit).toHaveBeenCalledTimes(3);
 });
 it("rechecks current membership inside admission rather than trusting the route",async()=>{
   allowed=false;expect((await issue()).kind).toBe("forbidden");expect(signRealtimeGrant).not.toHaveBeenCalled();

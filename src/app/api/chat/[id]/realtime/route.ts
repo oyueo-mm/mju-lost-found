@@ -1,7 +1,6 @@
 import {NextRequest,NextResponse} from "next/server";
 import {auth} from "@/lib/auth/auth";
 import {getCurrentUser} from "@/lib/auth/session";
-import {getChatRoomForUser} from "@/lib/chat/service";
 import {issueChatRealtimeGrant} from "@/lib/chat/realtimeGrants";
 import {rateLimitFailure,rateLimitFailureResponse} from "@/lib/rateLimit";
 const headers={"Cache-Control":"private, no-store, max-age=0",Pragma:"no-cache",Vary:"Cookie"};
@@ -13,7 +12,6 @@ export async function POST(request:NextRequest,{params}:{params:Promise<{id:stri
   try{
     const user=await getCurrentUser();if(!user)return NextResponse.json({error:"Unauthorized"},{status:401,headers});
     const roomId=Number((await params).id);if(!Number.isSafeInteger(roomId)||roomId<1)return NextResponse.json({error:"Invalid room"},{status:400,headers});
-    const room=await getChatRoomForUser(roomId,user.id);if(room.kind!=="ok")return NextResponse.json({error:"Forbidden"},{status:room.kind==="not_found"?404:403,headers});
     const session=await auth();
     if(!session?.realtimeSessionId||session.realtimeSessionNeedsRefresh)return NextResponse.json({code:"session_refresh_required"},{status:409,headers});
     if(String(user.id)!==session.user.id||!session.authExpiresAt)return NextResponse.json({error:"Unauthorized"},{status:401,headers});
