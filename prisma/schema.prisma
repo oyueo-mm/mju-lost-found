@@ -311,6 +311,7 @@ model ImageEmbeddingJob {
 }
 
 model User {
+  realtimeSessions ChatRealtimeSession[]
   institutionOfficer InstitutionOfficer?
   adminPermissions AdminPermissionGrant[]
 
@@ -867,6 +868,7 @@ model MatchCandidateCache {
 // both are NULL (ON DELETE SET NULL) and the room falls back to its
 // postType/postTitle snapshot -- the chat itself is kept.
 model ChatRoom {
+  realtimeGrants ChatRealtimeGrant[]
   activityRole String? @map("activity_role")
   activityOrganizationId Int? @map("activity_organization_id")
   activityAudience String? @map("activity_audience") // immutable event-time member/internal; legacy null = unknown
@@ -2221,6 +2223,41 @@ model ImageEmbeddingRuntime {
   resumeAt DateTime? @db.Timestamp(3) @map("resume_at")
 
   @@map("ImageEmbeddingRuntime")
+}
+
+// Room-scoped, revocable Realtime permissions; no signed JWT/private key stored.
+model ChatRealtimeSession {
+  id String @id @db.Uuid
+  userId Int @map("user_id")
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  expiresAt DateTime @db.Timestamp(3) @map("expires_at")
+  revokedAt DateTime? @db.Timestamp(3) @map("revoked_at")
+  createdAt DateTime @default(now()) @db.Timestamp(3) @map("created_at")
+  grants ChatRealtimeGrant[]
+  @@unique([id,userId])
+  @@map("ChatRealtimeSession")
+}
+model ChatRealtimeGrant {
+  id String @id @default(uuid()) @db.Uuid
+  userId Int @map("user_id")
+  sessionId String @db.Uuid @map("session_id")
+  session ChatRealtimeSession @relation(fields:[sessionId,userId],references:[id,userId],onDelete:Cascade)
+  roomId Int @map("room_id")
+  room ChatRoom @relation(fields:[roomId],references:[id],onDelete:Cascade)
+  clientId String @db.Uuid @map("client_id")
+  expiresAt DateTime @db.Timestamp(3) @map("expires_at")
+  revokedAt DateTime? @db.Timestamp(3) @map("revoked_at")
+  createdAt DateTime @default(now()) @db.Timestamp(3) @map("created_at")
+  @@unique([sessionId,roomId,clientId])
+  // Active-room partial index is maintained by the SQL migration.
+  @@map("ChatRealtimeGrant")
+}
+model ChatRealtimeConfig {
+  id Boolean @id @default(true)
+  mode String @default("polling")
+  projectRef String? @map("project_ref")
+  signingKid String? @db.Uuid @map("signing_kid")
+  @@map("ChatRealtimeConfig")
 }
 
 // ---------- Web push (chat messages only) ----------

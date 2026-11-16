@@ -15,6 +15,7 @@ import "../db/install-guard.mjs";
 import { execFile } from "node:child_process";
 import { withBackupSnapshot } from "./snapshot.mjs";
 import { assertSnapshotObjects, assertSnapshotBytes } from "./storage-snapshot.mjs";
+import { captureRealtimeAuthorization, assertRealtimeAuthorization, realtimeRebuildSql } from "./realtime-authorization.mjs";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -45,7 +46,7 @@ const run = (name, args, signal) => new Promise((resolve, reject) => {
 const db = new Client({ connectionString: url });
 await db.connect();
 const counts = {};
-let migrations, bucketRows, objectRows;
+let migrations, bucketRows, objectRows, realtimeAuthorization;
 try {
   await withBackupSnapshot(db, async (snapshot, signal) => {
     console.log("dumping database with a shared read-only snapshot ...");
@@ -56,6 +57,8 @@ try {
     migrations = (await db.query(`SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY 1`)).rows.map(r => r.migration_name);
     bucketRows = (await db.query("SELECT id, public FROM storage.buckets ORDER BY id")).rows;
     objectRows = (await db.query("SELECT id, bucket_id, name, metadata, updated_at, version FROM storage.objects ORDER BY bucket_id, name")).rows;
+    realtimeAuthorization=await captureRealtimeAuthorization(db);
+    if(realtimeAuthorization)assertRealtimeAuthorization(realtimeAuthorization);
     await run("pg_dump", [url, "--snapshot", snapshot, "-Fc", "-f", path.join(outDir, "db/full.dump")], signal);
     await run("pg_dump", [url, "--snapshot", snapshot, "-Fc", "-n", "public", "-f", path.join(outDir, "db/public.dump")], signal);
     await run("pg_dump", [url, "--snapshot", snapshot, "-s", "-n", "public", "-f", path.join(outDir, "db/public-schema.sql")], signal);
@@ -65,6 +68,10 @@ try {
 }
 for (const f of ["full", "public"]) fs.writeFileSync(path.join(outDir, `db/${f}.toc.txt`), await run("pg_restore", ["--list", path.join(outDir, `db/${f}.dump`)]));
 fs.writeFileSync(path.join(outDir, "db/rowcounts.json"), JSON.stringify({ takenAt: new Date().toISOString(), counts, migrations }, null, 1));
+if(realtimeAuthorization){
+  fs.writeFileSync(path.join(outDir,"db/realtime-authorization.json"),JSON.stringify(realtimeAuthorization,null,2));
+  fs.writeFileSync(path.join(outDir,"db/realtime-rebuild.sql"),realtimeRebuildSql());
+}
 console.log(`row counts: ${Object.keys(counts).length} tables, last migration ${migrations.at(-1)}`);
 
 console.log("downloading storage ...");

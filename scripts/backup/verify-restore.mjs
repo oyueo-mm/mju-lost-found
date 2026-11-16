@@ -15,6 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { verifyStorageReferences } from "./storage-references.mjs";
+import { prepareLocalRealtimeModel, rebuildLocalRealtimeAuthorization, captureRealtimeAuthorization, assertRealtimeAuthorization } from "./realtime-authorization.mjs";
 
 const require = createRequire(path.join(process.cwd(), "package.json"));
 const { Client } = require("pg");
@@ -34,6 +35,11 @@ await db.query(`CREATE SCHEMA IF NOT EXISTS extensions; CREATE EXTENSION IF NOT 
 execFileSync(bin("pg_restore"), ["-d", target, "--no-owner", "--no-privileges", "--exit-on-error", path.join(dir, "db/public.dump")], { stdio: "inherit" });
 
 const expected = JSON.parse(fs.readFileSync(path.join(dir, "db/rowcounts.json"), "utf8")).counts;
+const authorizationFile=path.join(dir,"db/realtime-authorization.json");
+if(fs.existsSync(authorizationFile)) {
+  await rebuildLocalRealtimeAuthorization(db,JSON.parse(fs.readFileSync(authorizationFile,"utf8")),fs.readFileSync(path.join(dir,"db/realtime-rebuild.sql"),"utf8"));
+  console.log("D3 authorization role, receive-only ACL and policy rebuilt and matched");
+} else if(expected.ChatRealtimeConfig!==undefined) throw new Error("D3 backup is missing authorization metadata");
 let mismatches = 0;
 for (const [table, n] of Object.entries(expected)) {
   const got = Number((await db.query(`SELECT count(*) FROM public."${table}"`)).rows[0].count);
@@ -67,8 +73,13 @@ const storageFailures = verifyStorageReferences(dir, { "post-images": [...refs],
 console.log(`private image references: chat ${chatRefs.length}, evidence ${evidenceRefs.length}; storage verification failures: ${storageFailures}`);
 
 for (const m of migrations) {
+  if(path.basename(m)==="20261123000000_chat_realtime_grants")await prepareLocalRealtimeModel(db);
   execFileSync(bin("psql"), [target, "-q", "-v", "ON_ERROR_STOP=1", "-f", path.join(m, "migration.sql")], { stdio: "inherit" });
   console.log(`rehearsed migration ${path.basename(m)}`);
+}
+if(migrations.some(m=>path.basename(m).startsWith("20261123"))){
+  assertRealtimeAuthorization(await captureRealtimeAuthorization(db));
+  console.log("D3 migration rehearsal: receive-only role and policy verified");
 }
 await db.end();
 const ok = mismatches === 0 && missing.length === 0 && storageFailures === 0;
