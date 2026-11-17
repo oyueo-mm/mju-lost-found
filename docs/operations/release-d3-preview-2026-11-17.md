@@ -107,3 +107,9 @@ Preview 사용자 **393~410**과 채팅방 **164~169**는 이번 실행의 UUID/
 11월 17일 정기 백업은 최초 `ENOTFOUND` DNS 오류로 실패했고, 읽기 전용 재시도에서도 `pg_dump` 실패가 기록됐다. 두 번째 실패의 세부 원인은 기존 stderr 억제 로그만으로 확정할 수 없다. 현재 DNS/포트와 공유 snapshot 스키마 진단은 정상이며, 기존 `ops/backup@89bec61` 실행기를 통한 다음 재시도는 **`auto-2026-11-17.tar.enc` 24.7MB 암호화·141개 checksum·53개 테이블 행 수 불일치 0·이미지 참조 134개 누락 0·실제 복원**을 통과했다. 최신 성공은 23:38 KST, lastError는 NULL이며 lastFailureAt와 실패 로그는 보존했다. 정상 백업은 삭제하지 않았고 복구 재실행에서는 retention 삭제를 생략했다. 기존 예약 작업 자체도 당일 검증 파일을 재인식해 skip/종료 코드 0으로 확인했으며 원래 실패 실행 이력은 남겼다. 가드·standing 승인·백업/보존 코드는 변경하지 않았다.
 
 정기 API의 집계 조회에는 11월 17일 03시 KST retention 경로 1회/오류 0과 이미지 작업 잔여 0이 있었다. D-2 maintenance는 기존 normalizeRoute의 허용 정규식 때문에 일반 `GET /api/posts`에 합산된다. 집계만으로 특정 cron의 실행 여부·호출자·결과를 단정하지 않으며 별도 provider 로그 확인을 미검증으로 남긴다. 확인을 위해 Production cron을 수동 호출하지 않았다.
+
+## Standby 절차 재확인과 독립 동시성 보강
+
+사용자는 Preview 신규 Standby 가져오기만 재확인했으며 기존 활성 키 교체·회전·폐기와 Production 설정 변경은 승인하지 않았다. 공식 Studio의 현재 메뉴 이름은 Project Settings → JWT Keys → JWT Signing Keys이고 생성 창의 ES256 (ECC) / Import an existing private key를 확인해 수동 문서를 보완했다. 준비한 같은 로컬 암호화 키를 재사용하며 추가 키를 생성하거나 실제 클립보드를 변경하지 않았다. Standby 키 수용 실패 시 인증 API polling을 유지하고 별도 신뢰 구조를 검토하며 기존 키를 임의 활성화·회전하지 않는다.
+
+독립적으로 수행 가능한 로컬 SQL 검사를 38개에서 **44개 assertion**으로 추가했다. 발급 연결의 config 공유 잠금을 유지한 채 다른 연결의 polling 전환 UPDATE가 `pg_stat_activity`에서 실제 Lock 대기인지 확인하고, 그 대기 도중 새 세션/grant를 생성·commit했다. 전환이 이어서 commit되면 새 grant도 철회되고 수신이 차단되며 private 재활성화에도 되살아나지 않는 것을 통과했다. 에러 시 모든 연결 rollback 후 종료하도록 정리했다. 격리 PostgreSQL 실제 실행 44/44와 변경 스크립트 ESLint가 통과했다. 기존 assertion은 유지했다. 이번 추가는 테스트·문서만 변경했으므로 서비스 재배포·클라우드 DB/설정 변경은 하지 않았고 기존 전체 단위 3,009/3,009 결과와 구분한다. 실제 Standby 서명 토큰 수용과 최종 통합 회귀는 여전히 등록 후 검증 대상이다.

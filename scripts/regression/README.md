@@ -63,7 +63,7 @@ node --env-file=.env.preview.local scripts/regression/realtime-fallback.mjs --co
 node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/regression/realtime-denials.mjs --confirm-preview
 ```
 
-첫 검사는 기존 WSL PostgreSQL 18 실행 환경에 localhost 전용 throwaway cluster를 만들고 끝나면 제거한다. 채널 행 범위·토큰 claim·기관 관리자/일반 멤버·외부 승인·권한 회수의 동시성·수신 전용 RLS와 백업 권한 재구축을 실제 SQL로 검사한다. 관리형 Realtime 서버의 JWT 검증/캐시 검사를 대신하지 않는다.
+첫 검사는 기존 WSL PostgreSQL 18 실행 환경에 localhost 전용 throwaway cluster를 만들고 끝나면 제거한다. 채널 행 범위·토큰 claim·기관 관리자/일반 멤버·외부 승인·권한 회수의 동시성·수신 전용 RLS와 백업 권한 재구축을 실제 SQL로 검사한다. polling 전환과 권한 발급의 경합은 별도 연결과 `pg_stat_activity`의 실제 Lock 대기로 확인하며, 전환 대기 중 생성된 grant도 commit 후 철회되고 private 재활성화로 부활하지 않아야 한다. 현재 총 44개 assertion이다. 관리형 Realtime 서버의 JWT 검증/캐시 검사를 대신하지 않는다.
 
 두 번째 검사는 현재 빌드와 Preview DB, Python Playwright/Chromium이 필요하다. 로컬 `localhost:3102` 서버에만 적용되는 새 Auth.js 키를 생성한다. 서명키 미설정 시 503/fail-closed, 인증 API polling, 두 탭·visibility 복귀·네트워크 복구·비참여자 차단·세션 소멸을 실제 브라우저로 확인한다. visibility 이벤트는 headless의 OS 탭 상태 대신 명시적으로 전환하며 이 한계를 결과에 기록한다. OS별 실제 background 동작과 hosted private 연결은 별도 검사다.
 

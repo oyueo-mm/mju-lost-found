@@ -10,7 +10,7 @@
 
 ## 사용자가 수행할 단계
 
-1. [Preview JWT Signing Keys](https://supabase.com/dashboard/project/swqvlihgupranzfzjevb/settings/jwt)를 연다. 주소의 project ref가 위 Preview ID인지 먼저 확인한다. 메뉴로 찾는 경우 **Project Settings → JWT Signing Keys**다. API Keys의 anon/service_role 값이나 Storage URL signing keys를 선택하지 않는다.
+1. [Preview JWT Signing Keys](https://supabase.com/dashboard/project/swqvlihgupranzfzjevb/settings/jwt)를 연다. 주소의 project ref가 위 Preview ID인지 먼저 확인한다. 현재 Studio 소스의 메뉴 경로는 **Project Settings(톱니바퀴) → JWT Keys → JWT Signing Keys 탭**이다. API Keys의 anon/service_role 값, Legacy JWT Secret 탭이나 Storage URL signing keys를 선택하지 않는다.
 2. **Create standby key**를 선택하고 알고리즘을 **ES256 (ECC)**로 설정한다. **Import an existing private key**를 체크한다. Supabase가 키를 새로 자동 생성하는 기본 모드로 저장하지 않는다. 자동 생성 키의 private 부분은 나중에 추출할 수 없어 앱의 외부 JWT 서명에 사용할 수 없다.
 3. Windows PowerShell에서 다음 명령을 실행한다. 터미널에는 공개 kid와 상태만 나오고 private JWK는 클립보드로만 전달된다.
 
@@ -37,5 +37,7 @@ powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File scripts/operations/
 ```
 
 이 확인으로 실제 standby/in_use 상태를 알 수는 없다. 상태는 대시보드에서 별도로 확인한다. 키를 다시 생성해 재시도하지 않는다.
+
+Standby 상태의 키가 실제 Realtime에서 수용되지 않으면 기존 활성 키는 그대로 보존하고 인증된 API polling을 유지한다. 활성화·회전, 기존 키 이동·폐기, 예약 역할 권한 확대나 공개 채널 재활성화로 우회하지 않는다. 별도 신뢰 제공자 방식 등 대안의 변경 범위와 검증 결과를 먼저 정리하며, 인증 신뢰 설정 변경은 따로 승인되기 전까지 실행하지 않는다.
 
 근거: [Supabase 서명키·외부 키 가져오기 문서](https://supabase.com/docs/guides/auth/signing-keys), [현재 대시보드의 생성/Import 구현](https://github.com/supabase/supabase/blob/master/apps/studio/components/interfaces/JwtSecrets/jwt-secret-keys-table/create-key-dialog.tsx), [Microsoft clipboard 제외 형식](https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-formats#cloud-clipboard-and-clipboard-history-formats).

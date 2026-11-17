@@ -88,6 +88,38 @@ try{
   const testMode=await externalFixture(5,13);
   await db.query(`UPDATE "AppSettings" SET google_test_mode_enabled=false WHERE id=1`);
   must((await scalar(`SELECT revoked_at IS NOT NULL revoked FROM "ChatRealtimeGrant" WHERE id=$1`,[testMode])).revoked,"Test mode revocation failed");
+  // A polling transition must wait for token admission's config lock, then
+  // revoke even a grant inserted after the transition started waiting.
+  const racingSession=randomUUID(),racingGrant=randomUUID();
+  await sender.query("BEGIN");
+  await sender.query(`SELECT mode FROM "ChatRealtimeConfig" WHERE id=true FOR SHARE`);
+  await writer.query("BEGIN; SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='10s'");
+  let switched=false;
+  const transition=writer.query(`UPDATE "ChatRealtimeConfig" SET mode='polling' WHERE id=true`)
+    .then(()=>{switched=true;return null;},error=>error);
+  const waitDeadline=Date.now()+2000;
+  let waiting=false;
+  while(Date.now()<waitDeadline){
+    waiting=(await scalar(`SELECT wait_event_type='Lock' waiting FROM pg_stat_activity WHERE pid=$1`,[writer.processID]))?.waiting===true;
+    if(waiting)break;
+    await new Promise(resolve=>setTimeout(resolve,20));
+  }
+  must(waiting&&!switched,"Mode transition bypassed token admission lock");
+  await sender.query(`INSERT INTO "ChatRealtimeSession"(id,user_id,expires_at) VALUES($1,2,(now() AT TIME ZONE 'UTC')+interval '1 hour')`,[racingSession]);
+  await sender.query(`INSERT INTO "ChatRealtimeGrant"(id,user_id,session_id,room_id,client_id,expires_at) VALUES($1,2,$2,11,$2,(now() AT TIME ZONE 'UTC')+interval '2 min')`,[racingGrant,racingSession]);
+  await sender.query("COMMIT");
+  const transitionError=await transition;
+  if(transitionError)throw transitionError;
+  await writer.query(`UPDATE "ChatRealtimeGrant" SET revoked_at=now() AT TIME ZONE 'UTC' WHERE revoked_at IS NULL`);
+  await writer.query("COMMIT");
+  must(switched,"Mode transition did not resume after admission commit");
+  must((await scalar(`SELECT mode FROM "ChatRealtimeConfig" WHERE id=true`)).mode==="polling","Polling mode not committed");
+  must((await scalar(`SELECT revoked_at IS NOT NULL revoked FROM "ChatRealtimeGrant" WHERE id=$1`,[racingGrant])).revoked,"Concurrent admitted grant escaped transition revocation");
+  const racingClaims={...claims,sub:racingGrant,grant_id:racingGrant,auth_sid:racingSession};
+  await db.query(`INSERT INTO realtime.messages VALUES($1,'broadcast')`,[`mju-chat:${racingGrant}`]);
+  must(await receive(racingClaims,`mju-chat:${racingGrant}`)===0,"Concurrent grant accepted after polling transition");
+  await db.query(`UPDATE "ChatRealtimeConfig" SET mode='private' WHERE id=true`);
+  must(await receive(racingClaims,`mju-chat:${racingGrant}`)===0,"Mode re-enable resurrected a transition-revoked grant");
   // Backup metadata must preserve the actual receive-only privileges, not
   // just table contents. Rebuild removed ACL/policy and compare exactly.
   const expected=await captureRealtimeAuthorization(db);
@@ -95,4 +127,7 @@ try{
   await rebuildLocalRealtimeAuthorization(db,expected);
   must(JSON.stringify(await captureRealtimeAuthorization(db))===JSON.stringify(expected),"Authorization rebuild mismatch");
   console.log(JSON.stringify({suite:"D3 local SQL authorization and revocation",passed:count,hostedRealtimeVerified:false}));
-}finally{await Promise.allSettled([db.end(),sender.end(),writer.end()]);}
+}finally{
+  await Promise.allSettled([db.query("ROLLBACK"),sender.query("ROLLBACK"),writer.query("ROLLBACK")]);
+  await Promise.allSettled([db.end(),sender.end(),writer.end()]);
+}
