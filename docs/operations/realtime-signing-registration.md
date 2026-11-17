@@ -4,7 +4,7 @@
 
 ## 현재 승인·실행 상태
 
-사용자의 최신 답변은 **Preview 신규 키 추가만 승인**이다. Production 키 등록은 승인되지 않았다. Preview도 사용할 수 있는 기존 관리 인증이 없어 실제 키 생성/등록과 민감 변수 추가는 아직 실행하지 않았다. 기존 활성·standby 키는 그대로다. Supabase 연결 안내 후 관리 연결을 기다리는 동안 다른 구현·검증을 진행했다.
+사용자의 승인 범위는 **Preview 신규 키 추가만**이다. Production 키 등록은 승인되지 않았다. 이후 사용자가 대시보드 직접 등록 방식을 선택해 로컬 Preview 키를 생성·DPAPI 암호화 보관하고 서명 쌍 검증까지 완료했다. **클라우드 키 등록과 민감 변수 추가는 아직 실행하지 않았다.** 기존 활성·standby 키는 그대로다. [대시보드 절차](realtime-dashboard-registration.md)를 따른다. 수동 키는 `.vercel/realtime-preview-manual.dpapi`이며 아래 API 자동 등록 경로와 혼용하지 않는다.
 
 `node scripts/operations/register-preview-realtime-key.mjs`는 변경 없는 준비 검사다. 실제 실행은 기존 관리 인증을 가진 Windows 환경에서 `--apply --confirm-preview-only`가 모두 필요하다. 관리 인증이 없으면 키 생성 전에 중단한다. Production 인자는 거부한다. private JWK 체크포인트는 Windows CurrentUser DPAPI로 암호화하여 Git/배포에서 제외된 `.vercel`에만 보관하고, Vercel 등록은 stdin을 사용한다. stdout/명령행/로그에 키를 출력하지 않는다. 불명확한 부분 성공 시 중복 키 생성이나 기존 변수 덮어쓰기를 거부한다. 이 도구의 관리 API 실제 등록 성공은 아직 미검증이다.
 
