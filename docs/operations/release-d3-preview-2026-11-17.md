@@ -99,3 +99,11 @@ Preview 사용자 **393~410**과 채팅방 **164~169**는 이번 실행의 UUID/
 5. 모든 조건과 Production 키의 별도 승인을 충족한 후 최신 Production 백업·실제 복원·rehearsal→승인 실행기 migration→앱 배포→private 확인→public OFF→비파괴/로그 확인 순서로 이어간다. 지금은 Production을 변경하지 않는다.
 
 현재 Production 롤백 대상은 기존 D-2 배포 그대로다. public OFF 이후에는 이를 무조건 재배포해 공개 통신을 복원하지 않는다. D-3 polling 호환 배포와 mode 전환을 먼저 확보하며 새 테이블·메시지·증거를 drop하지 않는다. 구체 명령과 실패 처리 한계는 [전환 절차](release-d3-transition.md)에 있다. [D-4 상세 계획](release-d4-plan-2026-11-16.md)은 작성했으며 구현하지 않았다.
+
+## 대시보드 등록 준비와 후속 운영 확인
+
+사용자가 관리 연동 대신 대시보드 직접 등록 절차를 선택했다. [수동 절차](realtime-dashboard-registration.md)와 Preview-only PowerShell 도구를 추가했다. 로컬 키의 공개 kid는 `c0eb51e4-97b9-4d13-b042-1a820650d257`이다. DPAPI 암호화·복호화·private/public 서명 쌍·기존 파일 재사용·구문·clipboard 제외 형식을 확인했다. 실제 clipboard에는 아직 키를 복사하지 않았다. 공개 JWKS에는 아직 이 키가 없으며 클라우드 설정·배포·기존 키는 변경하지 않았다. 단말의 수동 붙여넣기 이후 실제 등록 검증을 계속한다.
+
+11월 17일 정기 백업은 최초 `ENOTFOUND` DNS 오류로 실패했고, 읽기 전용 재시도에서도 `pg_dump` 실패가 기록됐다. 두 번째 실패의 세부 원인은 기존 stderr 억제 로그만으로 확정할 수 없다. 현재 DNS/포트와 공유 snapshot 스키마 진단은 정상이며, 기존 `ops/backup@89bec61` 실행기를 통한 다음 재시도는 **`auto-2026-11-17.tar.enc` 24.7MB 암호화·141개 checksum·53개 테이블 행 수 불일치 0·이미지 참조 134개 누락 0·실제 복원**을 통과했다. 최신 성공은 23:38 KST, lastError는 NULL이며 lastFailureAt와 실패 로그는 보존했다. 정상 백업은 삭제하지 않았고 복구 재실행에서는 retention 삭제를 생략했다. 기존 예약 작업 자체도 당일 검증 파일을 재인식해 skip/종료 코드 0으로 확인했으며 원래 실패 실행 이력은 남겼다. 가드·standing 승인·백업/보존 코드는 변경하지 않았다.
+
+정기 API의 집계 조회에는 11월 17일 03시 KST retention 경로 1회/오류 0과 이미지 작업 잔여 0이 있었다. D-2 maintenance는 기존 normalizeRoute의 허용 정규식 때문에 일반 `GET /api/posts`에 합산된다. 집계만으로 특정 cron의 실행 여부·호출자·결과를 단정하지 않으며 별도 provider 로그 확인을 미검증으로 남긴다. 확인을 위해 Production cron을 수동 호출하지 않았다.
