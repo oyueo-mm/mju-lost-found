@@ -4,7 +4,9 @@
 
 ## 현재 승인·실행 상태
 
-사용자의 승인 범위는 **Preview 신규 키 추가만**이다. Production 키 등록은 승인되지 않았다. 이후 사용자가 대시보드 직접 등록 방식을 선택해 로컬 Preview 키를 생성·DPAPI 암호화 보관하고 서명 쌍 검증까지 완료했다. **클라우드 키 등록과 민감 변수 추가는 아직 실행하지 않았다.** 기존 활성·standby 키는 그대로다. [대시보드 절차](realtime-dashboard-registration.md)를 따른다. 수동 키는 `.vercel/realtime-preview-manual.dpapi`이며 아래 API 자동 등록 경로와 혼용하지 않는다.
+사용자의 승인 범위는 **Preview 신규 키 추가만**이다. Production 키 등록은 승인되지 않았다. 2026-11-18 사용자가 대시보드에서 Preview `swqvlihgupranzfzjevb`에 공개 kid `c0eb51e4-97b9-4d13-b042-1a820650d257`를 Standby로 가져왔음을 확인했다. 공개 JWKS의 kid/alg/kty/crv/x/y가 기존 로컬 DPAPI 키와 일치했으며 **실제 일반 회원 역할의 private 구독과 서버 이벤트 수신이 성공했다.** 활성 키의 회전·교체·폐기는 하지 않았다. Vercel Preview에만 `MJU_REALTIME_PRIVATE_JWK`를 sensitive 변수로 stdin 등록했고 Production 변수는 변경하지 않았다. [대시보드 절차](realtime-dashboard-registration.md)를 따른다. 수동 키는 `.vercel/realtime-preview-manual.dpapi`이며 아래 API 자동 등록 경로와 혼용하지 않는다.
+
+수동 가져오기 이후에는 `register-preview-realtime-environment.mjs --confirm-preview`로 변경 없는 준비 검사를 수행하고 승인된 경우에만 `--apply`를 사용한다. 고정된 로컬 키·Preview DB/Storage·공개 JWKS를 확인하고 링크된 Vercel 팀에서 Preview 변수만 추가한다. 기존 동명 변수에 대응하는 자신의 등록 기록이 없으면 덮어쓰지 않는다. 실제 등록은 완료됐으므로 재실행으로 새 키를 생성하지 않는다. 실제 대시보드의 Standby 상태는 사용자의 확인이며 관리 API로 기존 키 목록/상태를 추가 조회한 것은 아니다.
 
 `node scripts/operations/register-preview-realtime-key.mjs`는 변경 없는 준비 검사다. 실제 실행은 기존 관리 인증을 가진 Windows 환경에서 `--apply --confirm-preview-only`가 모두 필요하다. 관리 인증이 없으면 키 생성 전에 중단한다. Production 인자는 거부한다. private JWK 체크포인트는 Windows CurrentUser DPAPI로 암호화하여 Git/배포에서 제외된 `.vercel`에만 보관하고, Vercel 등록은 stdin을 사용한다. stdout/명령행/로그에 키를 출력하지 않는다. 불명확한 부분 성공 시 중복 키 생성이나 기존 변수 덮어쓰기를 거부한다. 이 도구의 관리 API 실제 등록 성공은 아직 미검증이다.
 

@@ -8,12 +8,16 @@
 
 ```powershell
 npm ci
-npm run build
 npx vercel env pull .vercel/regression-preview.env --environment preview --yes
-node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/regression/preview.mjs --confirm-preview
+node scripts/regression/build-preview.mjs --confirm-preview
+node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/regression/preview.mjs --confirm-preview --manual-preview-key
 ```
 
 `.env.preview.local`은 기존 비공개 Preview DB/Storage 운영 파일이다. `DATABASE_URL`, `DIRECT_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`가 필요하다. 공개 키는 `NEXT_PUBLIC_SUPABASE_ANON_KEY` 또는 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`로 제공한다. Vercel 다운로드의 `[SENSITIVE]` 자리는 실제 Preview 자격증명이 있는 로컬 파일로 보완해야 한다. 값·쿠키·환경 파일은 출력하거나 커밋하지 않는다. 테스트 전용 AUTH_SECRET은 매 실행 새로 생성하며 배포 환경은 변경하지 않는다.
+
+브라우저 검증은 공개 Supabase URL/키가 **빌드 시점**에 포함돼야 한다. 일반 `.env`에 키가 없는 채 `npm run build`만 실행하면 서버 API는 정상이어도 브라우저 소켓이 열리지 않을 수 있다. 위 전용 빌드는 두 Preview 파일을 메모리에서 읽고 대상 가드를 적용한 뒤 plain Node로 Next를 실행한다. `node --env-file=... next build`는 현재 Next worker가 해당 인자를 NODE_OPTIONS로 전달해 실패하므로 사용하지 않는다. 개인 서명키는 빌드 환경에서 제외한다. 모델 준비는 기존 `npm run download-model` 절차를 사용한다.
+
+`--manual-preview-key`는 이번에 사용자가 등록한 Preview 전용 로컬 DPAPI 파일을 Windows CurrentUser로 복호화하고 공개 JWKS와 비교한 뒤 프로세스 환경으로만 전달한다. 원문·JWT를 출력하거나 평문 파일로 쓰지 않는다. 해당 checkpoint가 없는 다른 머신에서는 등록된 키의 기존 승인 비밀 전달 경로를 사용하고 이 옵션을 생략한다. Production 키·세션 비밀을 복사하지 않는다.
 
 서버는 이 스크립트가 `127.0.0.1:3100`에서 직접 시작한다. 이미 포트가 사용 중이면 중단한다. Production DB나 Storage는 실행 가드가 차단한다. 배포·마이그레이션·Data API 설정 변경은 수행하지 않는다. Preview의 새로운 테스트 데이터 생성/정리가 승인된 상황에서만 실행한다.
 
@@ -61,6 +65,8 @@ node --env-file=.env.preview.local scripts/operations/verify-deployed-image-job.
 wsl.exe -d Ubuntu -e bash /mnt/c/proj_claude/mju-lost-found-vercel/scripts/regression/realtime-local.sh
 node --env-file=.env.preview.local scripts/regression/realtime-fallback.mjs --confirm-preview
 node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/regression/realtime-denials.mjs --confirm-preview
+node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/regression/realtime-private.mjs --confirm-preview
+node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/regression/realtime-fallback.mjs --confirm-preview --private
 ```
 
 첫 검사는 기존 WSL PostgreSQL 18 실행 환경에 localhost 전용 throwaway cluster를 만들고 끝나면 제거한다. 채널 행 범위·토큰 claim·기관 관리자/일반 멤버·외부 승인·권한 회수의 동시성·수신 전용 RLS와 백업 권한 재구축을 실제 SQL로 검사한다. polling 전환과 권한 발급의 경합은 별도 연결과 `pg_stat_activity`의 실제 Lock 대기로 확인하며, 전환 대기 중 생성된 grant도 commit 후 철회되고 private 재활성화로 부활하지 않아야 한다. 현재 총 44개 assertion이다. 관리형 Realtime 서버의 JWT 검증/캐시 검사를 대신하지 않는다.
@@ -70,3 +76,7 @@ node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scr
 fixture ID는 `.vercel/realtime-<UUID>.json`에 생성 즉시 기록한다. 해당 계정의 이메일 표식·방 참여자·제목을 재검증한 뒤 자기 방·메시지·알림·요청 카운터·계정만 정리한다. 이 검사에서는 사진·신고·기존 감사 기록을 만들거나 삭제하지 않는다. 정리 실패 시 명세를 보존하고 다른 사용자/방을 추정해서 삭제하지 않는다.
 
 `realtime-denials.mjs`는 Preview 실제 서버의 독립 난수 topic에서 익명/미신뢰 키 구독 거부와 익명 송신의 실제 미수신을 검사한다. 서버 전용 관리자 자격증명을 Node 대조군에만 사용하여 정상 private 송신/수신을 먼저 입증하고, 어떤 브라우저에도 해당 자격증명을 전달하지 않는다. 구형 Batch REST API는 권한 없는 메시지를 버려도 202를 반환하므로 HTTP 코드만으로 성공/실패를 판정하지 않는다. 정상 대조 메시지 수신과 위조 nonce 미수신을 함께 요구한다. 일반 회원의 새 서명키/role 수용 검증은 이 검사와 별도로 남는다. 새 앱 행이나 Storage 파일은 생성하지 않는다.
+
+`realtime-private.mjs`는 이번 Preview DPAPI 키와 private 모드가 필요하다. 일반 회원/기관 담당자의 실제 구독·수신, 다른 방·변조/만료/타 환경 claims 거부, 회원 WebSocket/REST 발행의 실제 미수신, 갱신·세션 회수·담당자 강등/재승인·탈퇴 뒤 dispatch/reconnect 차단을 검사한다. 자기 계정·방·기관만 UUID 명세에 기록하고 정리한다. 기존 연결의 RLS 캐시가 즉시 다시 평가된다고 가정하지 않으며 서버의 발행 가드가 실제 콜백 실행을 차단하는지도 확인한다. Storage 합성 prefix의 빈 목록/오류 검사는 실제 기존 파일 읽기 검증을 대신하지 않는다. Production으로 잘못된 토큰을 보내는 공격성 검사는 하지 않는다.
+
+마지막 `--private` 명령은 별도 `realtime-private.py`로 실제 Chromium 소켓·두 탭·재연결·초안 보존과 **125초 실제 대기 이후** 토큰 재발급/수신을 검사한다. Phoenix JSON 배열과 realtime-js 2.115 binary broadcast를 구분해 건수만 기록하며 raw frame·JWT·trace는 저장하지 않는다. 기본 fallback 검사와 같은 로컬 포트를 쓰므로 서로 순차 실행한다. 긴 연결 하나의 갱신 검증이지 수시간/OS background 검증은 아니다.

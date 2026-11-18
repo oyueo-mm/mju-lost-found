@@ -10,6 +10,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { RealtimeClient } from "@supabase/realtime-js";
 import sharp from "sharp";
+import {loadApprovedPreviewRealtimeKey} from "../operations/preview-realtime-manual-state.mjs";
 
 // Both the database and Storage must be Preview. No arbitrary target URL.
 if (!process.argv.includes("--confirm-preview") || assertDatabaseEnvironment(process.env, { usage: "operation" }) !== "preview") throw new Error("Explicit Preview environment and --confirm-preview required");
@@ -17,6 +18,7 @@ const storageUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 if (new URL(storageUrl).hostname !== `${PREVIEW_DB_PROJECT}.supabase.co`) throw new Error("Preview Storage required");
 const publicKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 if (!publicKey || publicKey === "[SENSITIVE]" || !process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY === "[SENSITIVE]") throw new Error("Preview configuration missing");
+if(process.argv.includes("--manual-preview-key"))process.env.MJU_REALTIME_PRIVATE_JWK=JSON.stringify(await loadApprovedPreviewRealtimeKey());
 // D3 receive must be proved through the real private channel. Never replace
 // step 11 with a public-channel or polling success to hide missing trust.
 if((!process.env.MJU_REALTIME_PRIVATE_JWK||process.env.MJU_REALTIME_PRIVATE_JWK==="[SENSITIVE]")&&!process.argv.includes("--cleanup-run"))throw new Error("D3 regression requires the approved Preview signing configuration and private mode");
@@ -136,6 +138,10 @@ try {
   await step("11 message send and Realtime receive", async () => {
     const issued=await api(0,"POST",`/api/chat/${roomId}/realtime`);
     must(issued.status===200&&issued.json?.token&&issued.json?.topic?.startsWith("mju-chat:"));
+    for(const path of [`/api/chat/${roomId}/messages`,"/api/admin/reports","/api/admin/reports/1/evidence/0"]){
+      const rejected=await fetch(base+path,{headers:{Authorization:`Bearer ${issued.json.token}`},redirect:"manual",signal:AbortSignal.timeout(10000)});
+      must(rejected.status===401);await rejected.body?.cancel();
+    }
     subscriber = new RealtimeClient(`${storageUrl}/realtime/v1`,{params:{apikey:publicKey}});
     await subscriber.setAuth(issued.json.token);
     await new Promise((resolve, reject) => {
