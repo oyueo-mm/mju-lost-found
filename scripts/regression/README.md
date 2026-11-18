@@ -82,3 +82,14 @@ fixture ID는 `.vercel/realtime-<UUID>.json`에 생성 즉시 기록한다. 해�
 마지막 `--private` 명령은 별도 `realtime-private.py`로 실제 Chromium 소켓·두 탭·재연결·초안 보존과 **125초 실제 대기 이후** 토큰 재발급/수신을 검사한다. Phoenix JSON 배열과 realtime-js 2.115 binary broadcast를 구분해 건수만 기록하며 raw frame·JWT·trace는 저장하지 않는다. 기본 fallback 검사와 같은 로컬 포트를 쓰므로 서로 순차 실행한다. 긴 연결 하나의 갱신 검증이지 수시간/OS background 검증은 아니다.
 
 private 브라우저의 첫 계정에는 realtimeSessionId가 없는 구형 형식의 로컬 테스트 cookie를 사용한다. 최초 token API 409, `/api/auth/session`을 통한 cookie 갱신, 이후 token API 200을 요구하며 실제 배포 세션 비밀이나 Google 계정을 쓰지 않는다. 이 검사는 **cookie 하위 호환성**이며 이미 실행 중인 D-2 JavaScript 화면을 자동 업그레이드한 검증은 아니다.
+
+## D-2 열린 탭 전환 리허설
+
+현재 D-3의 Preview 로컬 빌드를 먼저 준비한다. 이어서 `git archive`로 `8baa381` 소스를 `.vercel/d3-cutover-d2-8baa381`에 풀고 그 폴더에서 `npm ci`와 `node node_modules/prisma/build/index.js generate --schema prisma/schema.prisma`를 실행한다. 기존 설정 파일이나 인증 비밀을 해당 폴더에 복사할 필요는 없다. 저장소 루트로 돌아와 다음을 실행한다.
+
+```powershell
+node scripts/regression/build-preview.mjs --confirm-preview --legacy-cutover
+node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/regression/realtime-fallback.mjs --confirm-preview --legacy-cutover
+```
+
+Chromium에서 D-2 공개 채널의 실제 가입 응답을 확인하고 테스트 초안을 연 상태로 로컬 서버를 같은 주소의 D-3으로 바꾼다. 전환 이후에는 해당 탭에서 구형 채널의 수신만 억제한다. 새 탭에서 같은 로그인 세션, 인증 API polling, 기존 탭을 열린 채로 텍스트를 복사하고 원본 사진을 다시 선택하는 절차를 검사한다. 첨부 파일은 이미지 미리보기까지 확인한다. 새 테스트 채팅방에 보낸 메시지는 생성한 계정과 함께 정리한다. 호스팅 프로젝트에서 공개 채널을 끄는 검증은 별도로 수행한다.
