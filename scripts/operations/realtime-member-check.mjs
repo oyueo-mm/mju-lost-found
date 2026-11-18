@@ -41,7 +41,10 @@ try {
       FROM public."ChatRealtimeGrant" g
       JOIN public."ChatRealtimeSession" s ON s.id = g.session_id AND s.user_id = g.user_id
       JOIN public."ChatRealtimeConfig" c ON c.id = true
-      WHERE g.room_id = $1 AND g.created_at >= ($2::timestamptz AT TIME ZONE 'UTC')
+      WHERE g.room_id = $1
+        -- Reactivating a revoked grant rotates its ID but retains the row's creation time.
+        -- A 120-second maximum token lifetime gives a lower bound on its latest issuance.
+        AND GREATEST(g.created_at, g.expires_at - interval '120 seconds') >= ($2::timestamptz AT TIME ZONE 'UTC')
         AND c.mode = 'private' AND c.project_ref = $3
         AND g.revoked_at IS NULL AND s.revoked_at IS NULL
         AND g.expires_at > (now() AT TIME ZONE 'UTC') AND s.expires_at > (now() AT TIME ZONE 'UTC')
