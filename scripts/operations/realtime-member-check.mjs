@@ -4,16 +4,18 @@ import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { assertDatabaseEnvironment, assertScriptSupabaseAccess, PREVIEW_DB_PROJECT, PRODUCTION_DB_PROJECT } from "../../src/lib/db/accessPolicy.mjs";
 
-const [action, confirmation, roomArg, openedAfter, ...extra] = process.argv.slice(2);
+const [action, confirmation, roomArg, openedAfter, expectedArg, ...extra] = process.argv.slice(2);
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
 const roomId = Number(roomArg);
 const timestamp = openedAfter && new Date(openedAfter);
+const expected = expectedArg?.match(/^--expect-messages=(0|[1-9]\d{0,8})$/);
+const expectedMessages = expected ? Number(expected[1]) : 0;
 if (extra.length || !["inspect", "send"].includes(action) || !["preview", "production"].includes(target) ||
     confirmation !== `--confirm-${target}` || assertScriptSupabaseAccess(process.env) !== target ||
     !/^[1-9]\d{0,9}$/.test(roomArg ?? "") || roomId > 2147483647 ||
     (openedAfter && (!Number.isFinite(timestamp.getTime()) || timestamp.toISOString() !== openedAfter)) ||
-    (action === "send" && !openedAfter)) {
-  throw new Error("Explicit hosted target, room ID and ISO UTC start for dispatch required");
+    (action === "send" && !openedAfter) || (expectedArg && !expected)) {
+  throw new Error("Explicit hosted target, room ID, ISO UTC start for dispatch and valid expected count required");
 }
 
 const project = target === "production" ? PRODUCTION_DB_PROJECT : PREVIEW_DB_PROJECT;
@@ -23,10 +25,10 @@ try {
   await db.connect();
   await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
   const { rows: [room] } = await db.query(`
-    SELECT NOT EXISTS(SELECT 1 FROM public."Message" WHERE chat_room_id = r.id) AS empty
+    SELECT (SELECT count(*)::int FROM public."Message" WHERE chat_room_id = r.id) AS messages
     FROM public."ChatRoom" r WHERE r.id = $1
   `, [roomId]);
-  if (!room?.empty) throw new Error("Target must be an existing empty room");
+  if (room?.messages !== expectedMessages) throw new Error("Existing room or expected message count did not match");
 
   let candidates = [];
   if (timestamp) {
@@ -51,7 +53,7 @@ try {
 
   const grant = candidates.length === 1 ? candidates[0] : undefined;
   if (action === "inspect") {
-    console.log(JSON.stringify({ target, empty: true, activeProbeGrants: timestamp ? candidates.length : undefined,
+    console.log(JSON.stringify({ target, empty: room.messages === 0, existingMessages: room.messages, activeProbeGrants: timestamp ? candidates.length : undefined,
       grantCreatedAt: grant?.created_at, grantExpiresAt: grant?.expires_at, outsiderProbeRoomId: grant?.outsider_room }));
   } else {
     stage = "validate-dispatch";
