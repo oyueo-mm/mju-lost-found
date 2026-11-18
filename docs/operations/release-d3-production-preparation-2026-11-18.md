@@ -4,6 +4,8 @@
 
 **현재 상태** · Production Standby의 JWKS 검증과 Vercel Production 전용 `MJU_REALTIME_PRIVATE_JWK` 민감 변수 등록을 완료했다. 아래 순서는 별도 운영 전환 승인 후 실행한다.
 
+**이번 전환의 승인 범위** · 운영자가 D-3 Production 전환을 승인했다. 기준 시점에 채팅 메시지와 채팅 첨부 참조가 0건이어서 이번에는 24시간 사전 공지를 생략한다. D-3의 재연결 안내와 인증 polling, 초안을 보존하는 구형 탭 이동 절차는 유지한다. 실제 비공개 연결과 갱신 확인, 20분 관찰은 공개 접근 OFF의 필수 조건이다.
+
 Production 프로젝트 `tmifqtyxojtuoejxjrng` 전용 ES256 키의 공개 ID는 `c455ce27-da9f-42e8-ab62-00d443e55979`다. Windows CurrentUser DPAPI에 암호화했고 로컬 서명과 검증, Preview 공개키와의 분리를 확인했다. 등록 전 Production JWKS의 기존 공개키 1개와 Vercel Production 전용 변수 부재를 기준으로 저장했다. 기준은 Git에서 제외된 공개 메타데이터다. 이전 키의 Standby/Active 상태 자체는 JWKS에서 판별할 수 없으므로 대시보드 상태는 운영자가 확인한다.
 
 1. [Production JWT Signing Keys](https://supabase.com/dashboard/project/tmifqtyxojtuoejxjrng/settings/jwt)에서 **Project Settings → JWT Keys → JWT Signing Keys → Create standby key**로 이동한다.
