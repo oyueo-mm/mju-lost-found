@@ -1,10 +1,10 @@
 # D-3 전환·복구 실행 절차
 
-이 문서는 조건부 배포용 실행 절차다. 문서와 명령의 존재 자체는 승인이 아니다. 최신 승인 경계는 [서명키 등록안](realtime-signing-registration.md)을 따른다. 현재 Production은 D-2이고 D-3 운영 변경은 수행하지 않았다.
+이 문서는 조건부 배포용 실행 절차다. 실행 상태와 단계별 승인 범위는 [Production 전환 기록](release-d3-production-preparation-2026-11-18.md)을 참조한다. 현재 Production은 D-3 인증 API polling으로 운영 중이다.
 
 Production 신규 Standby 준비와 Vercel 민감 변수 등록은 [Production 전환 준비 기록](release-d3-production-preparation-2026-11-18.md)을 따른다. 배포, 공개 접근 OFF, 운영 DB 변경은 별도의 전환 승인 범위에서 실행한다.
 
-현재 Production 키는 Vercel에 Production 전용 Secret으로 등록됐다. 아래의 승인 전 필수 절차는 [확정된 실행 순서와 중단 조건](release-d3-production-preparation-2026-11-18.md#승인-후-실행-순서와-중단-조건)에 따른다. 공지는 D-3 앱 배포 24시간 전에 게시하고, 공개 접근 OFF는 비공개 연결·갱신 및 20분 관찰을 통과한 뒤 실행한다.
+현재 Production 키는 Vercel에 Production 전용 Secret으로 등록됐다. [확정된 실행 순서와 중단 조건](release-d3-production-preparation-2026-11-18.md#승인-후-실행-순서와-중단-조건)을 따른다. 이번 전환의 24시간 사전 공지는 사용자의 승인에 따라 생략했다. 공개 접근 OFF는 비공개 연결·갱신 및 20분 관찰을 통과한 뒤 실행한다.
 
 2026-11-18 Preview에서 `Allow public access to channels`를 OFF로 전환했다. 공급자의 `PrivateOnly`, 기존 Standby 키의 private 구독·수신·권한 회수와 갱신은 hosted 검사 45개, Chromium 12개와 통합 회귀 16단계로 확인했다. 구버전 탭은 실제 가입 거부를 받은 상태에서 수동 전환 리허설을 통과했다. [후속 보고](release-d3-standby-2026-11-18.md)를 참조한다.
 
@@ -59,7 +59,7 @@ D-2의 기존 JS에는 private 토큰 발급이나 API 주기 조회가 없다. 
 
 운영 전환 전에는 새 탭으로 이동하는 절차를 안내한다. 작성 중이면 기존 탭을 열어 둔 상태로 같은 대화를 새 탭에서 열고, 작성한 텍스트를 복사하고 원본 사진을 다시 선택한다. 새 탭에서 초안과 사진을 확인한 후 기존 탭을 닫는다. 이미 열린 D-2 화면은 자동 전환되지 않으므로 배포 시 강제 새로고침을 사용하지 않는다. Preview 공개 접근 OFF 이후 D-2 빌드가 실제 공급자의 `PrivateOnly`를 받는 상태에서 같은 전환 절차 5개를 다시 통과했다.
 
-D-3에서는 실시간 연결이 끊기면 채팅 화면에 재연결과 주기적 조회 상태를 표시한다. 같은 화면에서 인증 API로 새 메시지를 조회하고 비공개 연결이 회복되면 안내를 지운다. 배포 직전에는 D-2 탭 사용자가 볼 수 있는 운영 안내 채널에 전환 시점과 새 탭 이동 절차를 먼저 공지한다. 이미 실행 중인 D-2 화면 안에 서버가 새 배너를 표시할 수 있는 경로는 없다. 안내가 전달되기 전에 Production의 공개 채널을 끄는 일정은 잡지 않는다.
+D-3에서는 실시간 연결이 끊기면 채팅 화면에 재연결과 주기적 조회 상태를 표시한다. 같은 화면에서 인증 API로 새 메시지를 조회하고 비공개 연결이 회복되면 안내를 지운다. 이미 실행 중인 D-2 화면 안에 서버가 새 배너를 표시할 수 있는 경로는 없다. 이번 전환에서도 아래 안내 문안과 초안 보존 절차를 사용한다.
 
 안내 문안: “채팅 연결 방식이 업데이트됩니다. 업데이트 이후 열어둔 채팅에 새 메시지가 표시되지 않으면 기존 탭을 둔 채 같은 대화를 새 탭에서 열어주세요. 작성 중인 글은 복사하고 원본 사진은 새 탭에서 다시 선택해주세요. 초안과 사진이 보이는 것을 확인한 뒤 기존 탭을 닫아주세요.”
 
@@ -71,6 +71,6 @@ private/public 차단 이후에는 D-2 앱을 무조건 다시 배포해 공개 
 node scripts/db/approved-operation.mjs --confirm-production --approval-reference RELEASE-D3-POLLING-ROLLBACK -- scripts/operations/release-d3.mjs polling --apply --confirm-production
 ```
 
-새 앱은 갱신 실패 때 소켓을 닫고 인증 API를 제한된 주기로 조회한다. 필요하면 같은 보안 특성을 가진 polling 호환 배포를 보존한 뒤 그 배포로 앱만 되돌린다. 새 테이블/증거를 drop하거나 grant·세션을 복원해 오래된 토큰을 되살리지 않는다. D-2 배포 `dpl_HTtxjZJDDgka3HjTkRH6ZKQzR7EX`는 **public OFF 이전** 기준 롤백으로 보존한다. public OFF 이후의 안전한 polling Production 배포 ID는 실제 조건부 배포가 끝난 뒤 기록해야 하며 현재는 없다.
+새 앱은 갱신 실패 때 소켓을 닫고 인증 API를 제한된 주기로 조회한다. public OFF 이후 앱도 되돌려야 하는 경우 인증 polling에서 검증한 Production 배포 `dpl_9RGngoiirr63Yj2WMcFFMfTqdbVC`를 사용한다. 새 테이블과 증거는 보존하고 회수한 grant와 세션은 비활성 상태로 유지한다. D-2 배포 `dpl_HTtxjZJDDgka3HjTkRH6ZKQzR7EX`는 **public OFF 이전** 기준 롤백으로 보존한다.
 
 DB 장애로 로그아웃 회수 기록 자체가 commit되지 못하면 Auth.js는 쿠키 삭제를 계속할 수 있다. DB 장애 중 서버 송신은 fail-closed지만, 회수 commit이 없는데 즉각 철회됐다고 주장하지 않는다. 최대 120초 토큰 수명과 이 장애 시나리오의 실제 제공자 동작을 별도로 검증하고 남은 위험으로 보고한다.
