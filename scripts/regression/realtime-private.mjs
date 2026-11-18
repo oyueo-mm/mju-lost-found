@@ -4,6 +4,8 @@ import {createJiti} from "jiti";
 import {fileURLToPath} from "node:url";
 import {randomUUID} from "node:crypto";
 import {writeFileSync,mkdirSync} from "node:fs";
+import {execFile} from "node:child_process";
+import {promisify} from "node:util";
 import {RealtimeClient} from "@supabase/realtime-js";
 import {decodeJwt,importJWK,SignJWT} from "jose";
 import {loadApprovedPreviewRealtimeKey} from "../operations/preview-realtime-manual-state.mjs";
@@ -35,14 +37,16 @@ function denialKind(error){
 async function join(token,topic,privateChannel=true){
   const client=new RealtimeClient(`https://${PREVIEW_DB_PROJECT}.supabase.co/realtime/v1`,{params:{apikey:publicKey}});clients.push(client);
   await client.setAuth(token);
-  const observed=[];
-  const channel=client.channel(topic,{config:{private:privateChannel,broadcast:{ack:true}}}).on("broadcast",{event:"message"},({payload})=>observed.push(payload.eventId));
+  const observed=[],receipts=[];
+  const channel=client.channel(topic,{config:{private:privateChannel,broadcast:{ack:true}}})
+    .on("broadcast",{event:"message"},({payload})=>observed.push(payload.eventId))
+    .on("broadcast",{event:"transport_control"},({payload})=>receipts.push(payload.nonce));
   const result=await new Promise(resolve=>{
     const timer=setTimeout(()=>resolve({status:"TIMEOUT"}),15000);
     channel.subscribe((status,error)=>{if(["SUBSCRIBED","CHANNEL_ERROR","TIMED_OUT"].includes(status)){clearTimeout(timer);resolve({status,denial:status==="CHANNEL_ERROR"?denialKind(error):undefined});}});
   });
   if(result.status!=="SUBSCRIBED")await client.disconnect();
-  return {...result,client,channel,observed};
+  return {...result,client,channel,observed,receipts};
 }
 let admin;
 async function authorizedSend(room,issue,eventId){
@@ -58,7 +62,11 @@ async function delivered(receiver,eventId){
   const until=Date.now()+5000;while(!receiver.observed.includes(eventId)&&Date.now()<until)await new Promise(r=>setTimeout(r,50));
   return receiver.observed.includes(eventId);
 }
-async function rejectJoin(name,token,topic){const r=await join(token,topic);must(r.status==="CHANNEL_ERROR",name);}
+async function rejectJoin(name,token,topic){
+  const result=await join(token,topic);
+  if(result.status!=="CHANNEL_ERROR")console.error(JSON.stringify({probe:name,status:result.status,denial:result.denial}));
+  must(result.status==="CHANNEL_ERROR",name);
+}
 async function checkPublicAccess(){
   const result=await join(publicKey,`mju-preview-check:${randomUUID()}`,false);
   await result.client.disconnect();
@@ -83,11 +91,21 @@ try{
   }
   rooms.push(await prisma.chatRoom.create({data:{initiatorUserId:users[0].id,counterpartUserId:users[1].id,postType:"lost",postTitle:marker}}));save();
   const session={id:randomUUID(),expiresAt:Math.floor(Date.now()/1000)+3600};
+  const receiptCutoff=new Date().toISOString();
   const issue=await grants.issueChatRealtimeGrant(users[0],session,rooms[0].id);
   must(issue.kind==="ok","Member grant issued");
   const member=await join(issue.token,issue.topic);
   console.log(JSON.stringify({probe:"approved Standby key member join",status:member.status,denial:member.denial,project:PREVIEW_DB_PROJECT,kid:key.kid,tokenEmitted:false}));
   must(member.status==="SUBSCRIBED","Standby-signed member private join accepted");
+  const receiptProbe=await promisify(execFile)(process.execPath,["scripts/operations/realtime-member-check.mjs","send","--confirm-preview",String(rooms[0].id),receiptCutoff],{encoding:"utf8",timeout:15000,windowsHide:true}).catch(error=>{
+    const stage=/Member receipt check stopped at ([a-z-]+): ([a-zA-Z0-9_]+)/.exec(error.stderr??"");
+    console.error(JSON.stringify({probe:"member receipt dispatch",code:error.code,killed:error.killed,stage:stage?.[1],reason:stage?.[2]}));
+    return null;
+  });
+  const receipt=receiptProbe?JSON.parse(receiptProbe.stdout).expectedReceipt:null;
+  const receiptDeadline=Date.now()+5000;
+  while(receipt&&!member.receipts.includes(receipt)&&Date.now()<receiptDeadline)await new Promise(r=>setTimeout(r,50));
+  must(receipt&&member.receipts.includes(receipt),"Non-persistent operator challenge reaches member connection");
   const publicNamesake=await join(publicKey,issue.topic,false);
   must(["SUBSCRIBED","CHANNEL_ERROR"].includes(publicNamesake.status),"Same-name public probe has a conclusive join result");
   const eventId=randomUUID();
@@ -165,8 +183,8 @@ try{
   await prisma.user.update({where:{id:users[2].id},data:{deletedAt:new Date()}});
   must(!await authorizedSend(rooms[1].id,withdrawn,randomUUID()),"Account withdrawal stops existing-connection dispatch");
   await rejectJoin("Withdrawn account cannot reconnect",withdrawn.token,withdrawn.topic);
-}catch{
-  console.error("Private Realtime verification stopped; no key, token or provider diagnostics emitted");process.exitCode=1;
+}catch(error){
+  console.error(JSON.stringify({probe:"private Realtime verification stopped",errorType:error.name,code:error.code}));process.exitCode=1;
 }finally{
   await Promise.allSettled(clients.map(c=>c.disconnect()));
   try{

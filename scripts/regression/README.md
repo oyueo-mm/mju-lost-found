@@ -112,6 +112,14 @@ node scripts/db/approved-operation.mjs --confirm-production --approval-reference
 node scripts/db/approved-operation.mjs --confirm-production --approval-reference <CHANGE-ID> -- scripts/operations/realtime-transport-control.mjs --confirm-production
 ```
 
+## 기존 참여자의 비저장 수신 확인
+
+로그인한 참여자가 동의해 메시지가 없는 기존 방을 열었을 때만 진행한다. 먼저 `scripts/operations/realtime-member-check.mjs inspect --confirm-production <ROOM-ID>`를 승인 실행기에서 호출해 빈 방인지 확인한다. 비공개 전환 직전의 UTC 시각을 ISO 형식으로 기록한다. 브라우저에서 방을 새로고침한 뒤 같은 스크립트의 `inspect`에 그 시각을 마지막 인자로 전달하면 신규 활성 grant의 개수와 만료만 조회할 수 있다. 대상 grant가 정확히 하나이고 브라우저의 실제 비공개 가입이 확인되면 `send --confirm-production <ROOM-ID> <START-UTC-ISO>`를 승인 실행기로 한 번 호출한다. 이 명령은 채팅방 및 권한을 다시 검사하고 `transport_control` 이벤트의 비밀이 아닌 `nonce`를 반환한다. 서버 응답만으로 회원 수신을 집계하지 않는다.
+
+운영 브라우저에서 개발자 도구의 **Network → Preserve log → WS**를 사용한다. `websocket` 연결의 **Messages**에서 비공개 `phx_join`에 대응하는 수신 `phx_reply`의 `status`가 `ok`인지 확인한다. 수신 `transport_control`의 `nonce`만 운영자에게 전달해 발송 결과와 대조한다. 토큰이 포함될 수 있는 프레임 전체, 토큰 발급 응답, JWT, 쿠키, HAR는 공유하지 않는다. 최초 발급 후 120초 이상 경과해 만료가 연장된 grant와 재가입을 확인한 뒤 수신을 검증한다. Preview 회귀 스크립트는 등록된 일반 회원 토큰으로 이 발송 도구의 수신을 확인한다.
+
+참여 계정이 접근할 수 없는 기존 방이 있을 경우 `inspect`의 `outsiderProbeRoomId`를 사용해 같은 로그인 상태에서 기존 토큰 API에 한 번 요청한다. `403` 및 `access_revoked` 응답을 확인하고 방이나 메시지를 열지 않는다. 실제 권한 확인, 갱신된 연결의 수신, 정상 운영 관찰 20분을 모두 통과한 뒤 공급자 공개 접근을 끈다. `realtime-transport-control`의 `private_only`와 정상 회원의 재접속을 다시 확인한다.
+
 Preview에서 이미 공개 접근을 껐다면 브라우저 명령에 `--expect-public-off`를 추가한다. 이 모드에서는 실제 D-2 소켓의 `PrivateOnly` 가입 응답을 요구하고, 이어지는 새 탭 전환과 초안 보존을 검사한다.
 
 ## Windows Edge 실제 웹 푸시
