@@ -23,15 +23,18 @@ Production은 공개 버전 GET으로 커밋 `8baa381605638ff7bde97446732083f475
 | 검사 | 결과/범위 |
 | --- | --- |
 | Standby 최소 정상 경로 | 4/4, 일반 회원 role의 실제 private join + 서버 gated HTTP 발행/수신 |
-| 실제 Preview private 보안 | **41/41**: 익명·비참여자·다른 방·변조/만료/미래 token·다른 project/issuer·aud/scope·user/room/grant 변조 거부, 직접 WS/REST 송신 미수신과 서버 대조군 정상 수신 |
+| 실제 Preview private 보안 | **43/43**: 익명·비참여자·다른 방·변조/만료/미래 token·다른 project/issuer·aud/scope·user/room/grant 변조 거부, 직접 WS/REST 송신 미수신과 서버 대조군 정상 수신. 동일 이름의 익명 public 채널이 private 이벤트를 받지 못함도 정상 private 대조군과 확인 |
 | 기존 16단계 통합 | **16/16**, 실제 모델 768차원 완료·키워드/의미/통합/이미지 검색·실제 private 수신·사진/알림·관리자 허용/거부. 마지막 재실행은 private JWT 단독의 채팅/관리자/증거 API 401도 포함 |
-| 실제 Chromium private | **9/9**, 163초. token API 200 4회, private broadcast 8회, 여러 탭·네트워크/visibility 복귀·초안 보존·125초 실제 대기 후 재발급/수신·비참여자/인증 소멸 차단 |
+| 실제 Chromium private | 처음 **9/9**, 163초. 구형 Auth.js cookie의 409→세션 cookie 갱신→200을 추가한 후 **10/10**, 145.7초. 각 실행 token API 200 4회, private broadcast 8회. 여러 탭·네트워크/visibility 복귀·초안 보존·125초 실제 대기 후 재발급/수신·비참여자/인증 소멸 차단 |
+| 서명키 장애 대체 경로 | **10/10** 재실행. missing signer 503/fail-closed, 인증 API polling 수신, 두 탭·응답 역전/중복 방지·초안·네트워크·비참여자/세션 소멸 차단 |
 | 전체 단위 | **268개 파일, 3,009/3,009** 재실행 통과 |
 | 타입/린트/빌드 | 전체 lint·tsc 통과, Preview 설정을 포함한 로컬 Next build 통과. 후속 변경 스크립트 lint 재확인 |
 | 이전 로컬 SQL | 전회 **44/44**, config 전환/발급 경합과 철회·재활성화 부활 차단 포함. 이번 hosted 검증과 구분 |
 | Preview read-only health | Data API **503/OFF**, report-evidence private, 신고 snapshot 컬럼 3개, D-2 트리거 7개, 작업 실패 0, Realtime transport 정상 |
 
 Storage 검사는 합성 prefix의 비공개 목록/오류와 별도의 16단계 정상 사진 업로드/열람·비참여자 거부다. 실제 Production으로 잘못된 토큰을 보내는 교차 프로젝트 공격 검사는 하지 않았다. 다른 project/issuer claims의 Preview 거부를 직접 확인했다. private JWT 단독의 DB 접근은 Data API OFF 및 전용 role의 public/storage 실효 테이블 권한 0과 실제 로컬 SQL 거부 검증을 함께 사용한다. Data API를 켜서 시험하지 않는다.
+
+Production의 공개 JWKS만 읽어 Preview kid와 공개 좌표가 어느 쪽도 포함되지 않음을 확인했다. Production으로 JWT를 보내거나 신뢰 설정을 바꾸지 않았다. 이 메타데이터 비교를 전체 Production 검증기/외부 provider 설정의 공격 검사로 과장하지 않는다. 개인 서명키의 보관/복구는 DB dump와 별개이며 현재 로컬 DPAPI는 Windows CurrentUser에 묶인다. Production 신규 키 준비 시 별도 승인된 비밀 복구 절차가 필요하고 현재 파일을 평문으로 내보내거나 키를 임의 교체하지 않는다.
 
 Realtime는 이미 연결된 소켓의 join RLS를 캐시할 수 있다. 따라서 철회 시 소켓이 즉시 사라졌다고 주장하지 않는다. 현재 서버 dispatch가 세션/현재 참여자/grant를 잠금 아래 다시 검사하며, 철회 commit 뒤 실제 발행 콜백이 실행되지 않고 reconnect도 거부됨을 확인했다. 재승인 시 기존 토큰은 거부되고 새 grant/topic이 필요하다. 네트워크에 이미 보낸 패킷의 회수는 보장하지 않는다.
 
@@ -43,7 +46,7 @@ Realtime는 이미 연결된 소켓의 join RLS를 캐시할 수 있다. 따라�
 
 ## 테스트 데이터와 성능
 
-이번 생성 계정 **411~434**, 채팅방 **170~179**, 게시글 **312·313** 및 해당 글/채팅 원본 사진은 각 실행 UUID 명세·실제 소유자/참여자/경로를 확인하여 정리했다. 자체 테스트 기관/멤버십도 정리했다. 기존 사용자·시드·운영 감사·신고 증거는 삭제하지 않았다. 실패한 브라우저 검증의 계정/방도 정리 결과가 true였다. 정상 요청이 남기는 집계 통계는 삭제하지 않았다.
+이번 생성 계정 **411~443**, 채팅방 **170~184**, 게시글 **312·313** 및 해당 글/채팅 원본 사진은 각 실행 UUID 명세·실제 소유자/참여자/경로를 확인하여 정리했다. 최종 읽기 전용 재조회에서 이 User/ChatRoom/LostPost 및 해당 Realtime Session/Grant의 잔여가 각각 0이었다. 자체 테스트 기관/멤버십도 정리했다. 기존 사용자·시드·운영 감사·신고 증거는 삭제하지 않았다. 실패한 브라우저 검증의 계정/방도 정리 결과가 true였다. 정상 요청이 남기는 집계 통계는 삭제하지 않았다.
 
 이미지 원본 Storage의 부재는 확인했지만 공개 CDN GET은 삭제 후에도 200이었다. 기존 별도 보안 개선 항목으로 유지하며, 원본 삭제 실패로 오인하거나 캐시 잔존을 해결했다고 표시하지 않는다.
 
@@ -51,8 +54,17 @@ Realtime는 이미 연결된 소켓의 join RLS를 캐시할 수 있다. 따라�
 
 ## 백업과 남은 배포 게이트
 
-다음 정기 백업 `auto-2026-11-18.tar.enc`의 실제 복원 검증 표식과 최신 성공 **2026-11-18 10:15:49 KST**를 확인했다. lastError는 없고 전일 lastFailureAt는 보존됐다. daily task LastResult 0, `ops/backup@89bec61`은 깨끗하며 backup/watchdog 실행 경로가 전용 worktree를 가리킨다. 다음 watchdog 11월 18일 13:00은 확인 시점에 아직 도래하지 않았다. 백업·예약·보존·접근 가드는 변경하지 않았다. 신규 D-3 역할/정책 복구와 Preview 테이블 56개 복원은 전회 완료 결과이며 이번 Production 정기 백업에는 아직 배포하지 않은 D-3 테이블이 없음을 구분한다.
+다음 정기 백업 `auto-2026-11-18.tar.enc`의 실제 복원 검증 표식과 최신 성공 **2026-11-18 10:15:49 KST**를 확인했다. checksum OK, **53개 테이블 행 수 불일치 0·이미지 참조 134개 누락 0**이다. lastError는 없고 전일 lastFailureAt는 보존됐다. daily task LastResult 0, `ops/backup@89bec61`은 깨끗하며 backup/watchdog 실행 경로가 전용 worktree를 가리킨다. 다음 watchdog 11월 18일 13:00은 확인 시점에 아직 도래하지 않았다. 백업·예약·보존·접근 가드는 변경하지 않았다. 신규 D-3 역할/정책 복구와 Preview 테이블 56개 복원은 전회 완료 결과이며 이번 Production 정기 백업에는 아직 배포하지 않은 D-3 테이블이 없음을 구분한다. 기존 승인 실행기로 이번 Production read-only health도 통과했다(Data API 503/OFF·report-evidence private·작업 실패 0·D-2 트리거 7개·Realtime transport 정상).
 
-Preview 재배포/비파괴 probe/로그 결과는 실제 완료 후 아래에 추가한다. Production 배포는 하지 않는다. 남은 조건은 Production 독립 신규 키의 별도 승인·등록, 구 D-2 장시간 탭의 초안 보존 전환 리허설, 권한 회수 부하/장시간·장애 시나리오, 최종 public OFF 검증이다. 신뢰 키가 검증됐다는 이유만으로 이 조건들을 통과로 간주하지 않는다.
+Production 배포는 하지 않는다. 남은 조건은 Production 독립 신규 키의 별도 승인·등록, 구 D-2 장시간 탭의 초안 보존 전환 리허설, 권한 회수 부하/장시간·장애 시나리오, 최종 public OFF 검증이다. 신뢰 키가 검증됐다는 이유만으로 이 조건들을 통과로 간주하지 않는다.
 
 문제 시 Preview는 기존 `release-d3.mjs polling --apply --confirm-preview`로 인증 API polling에 복귀할 수 있다. 기존 키를 회전하거나 공개 통신으로 우회하지 않는다. Production의 현 D-2 배포는 그대로 보존한다. [전환/롤백 절차](release-d3-transition.md), [D-4 분석 계획](release-d4-plan-2026-11-16.md)을 계속 사용하며 D-4 구현은 하지 않는다.
+
+## Preview 재배포 후 결과
+
+- 앱/검증 커밋: `bb30c7a905662e98e6412271534af89185e627b3`.
+- 배포: **`dpl_EQZvaqSf4GEzper1SMFWaCrMyBAP`**, READY, [고정 Preview](https://mju-lost-found-preview.vercel.app/) / [불변 URL](https://mju-lost-found-vercel-jtgbhdmsd-oyueo.vercel.app/). 기존 배포 실행기로 배포하고 고정 alias와 Preview 배포 이력 1건을 기록했다. Production 배포 이력은 쓰지 않았다.
+- 배포된 버전 commit/ID 일치, 비파괴 프로브 **16/16**, 검색 4종/기존 사진/로그인 경로/익명 관리자·신고 증거 차단 통과. 이는 앞의 실제 쓰기 통합 회귀 16단계와 별개다.
+- Preview 단일 검색 표본: keyword 437ms, semantic 1004ms, unified 261ms, image 1070ms. 콜드/웜/인스턴스 통제 없는 표본이며 검색 품질/요금의 비교 실험은 아니다.
+- 최근 20분 오류/5xx 로그 각각 **0건**(조회 한도 각각 200). 업로드 파일 **1,179개**, `.env`/`.vercel`/DPAPI 등 금지 경로 **0개**. 로컬 client JS 68개에서 개인 서명값 및 `MJU_REALTIME_PRIVATE_JWK` 식별자 각각 0개를 확인했다.
+- 배포 시작 후 보강한 동일 이름 public/private 격리 검사는 테스트 코드만 바꿨다. 후속 보고/테스트 커밋과 앱 배포 사이 서비스 동작 코드 차이는 없다. 새 배포에서 실제 Google OAuth 로그인 상태의 채팅 UI 검증과 기존 D-2 장시간 탭의 실제 전환은 아직 완료로 표시하지 않는다. 로컬 Auth.js 격리 브라우저 + 실제 Preview Realtime 성공을 배포 OAuth 검증으로 바꾸어 기록하지 않는다.

@@ -2,6 +2,8 @@
 
 이 문서는 조건부 배포용 실행 절차다. 문서와 명령의 존재 자체는 승인이 아니다. 최신 승인 경계는 [서명키 등록안](realtime-signing-registration.md)을 따른다. 현재 Production은 D-2이고 D-3 운영 변경은 수행하지 않았다.
 
+2026-11-18 Preview의 Standby 서명키는 실제 일반 회원 private 구독/수신·권한 회수·43개 hosted 검사·실제 Chromium 갱신·16단계 회귀를 통과했다. [후속 보고](release-d3-standby-2026-11-18.md)를 참조한다. Production 신규 키/설정은 변경하지 않았고 아래 장시간 구 JS 탭 전환 게이트는 그대로 남는다. 새 Auth.js cookie bootstrap 성공과 이미 실행 중인 구 JS의 자동 업그레이드는 서로 다른 조건이다.
+
 ## 상태와 기본 순서
 
 `release-d3.mjs`는 checksum이 일치하는 기존 이력과 지정 D-3 6개 migration만 허용한다. 실패 후 rolled-back 이력은 보존하고, 미완료 이력/임의 baseline/다른 migration은 거부한다. Preview의 문서화된 과거 identity migration은 D-2와 같은 정확한 LF/CRLF checksum만 허용한다.

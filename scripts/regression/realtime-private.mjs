@@ -29,11 +29,11 @@ function denialKind(error){
   if(/authoriz|polic|forbidden/i.test(text))return "authorization";
   return "unclassified";
 }
-async function join(token,topic){
+async function join(token,topic,privateChannel=true){
   const client=new RealtimeClient(`https://${PREVIEW_DB_PROJECT}.supabase.co/realtime/v1`,{params:{apikey:publicKey}});clients.push(client);
   await client.setAuth(token);
   const observed=[];
-  const channel=client.channel(topic,{config:{private:true,broadcast:{ack:true}}}).on("broadcast",{event:"message"},({payload})=>observed.push(payload.eventId));
+  const channel=client.channel(topic,{config:{private:privateChannel,broadcast:{ack:true}}}).on("broadcast",{event:"message"},({payload})=>observed.push(payload.eventId));
   const result=await new Promise(resolve=>{
     const timer=setTimeout(()=>resolve({status:"TIMEOUT"}),15000);
     channel.subscribe((status,error)=>{if(["SUBSCRIBED","CHANNEL_ERROR","TIMED_OUT"].includes(status)){clearTimeout(timer);resolve({status,denial:status==="CHANNEL_ERROR"?denialKind(error):undefined});}});
@@ -70,9 +70,13 @@ try{
   const member=await join(issue.token,issue.topic);
   console.log(JSON.stringify({probe:"approved Standby key member join",status:member.status,denial:member.denial,project:PREVIEW_DB_PROJECT,kid:key.kid,tokenEmitted:false}));
   must(member.status==="SUBSCRIBED","Standby-signed member private join accepted");
+  const publicNamesake=await join(publicKey,issue.topic,false);
+  must(["SUBSCRIBED","CHANNEL_ERROR"].includes(publicNamesake.status),"Same-name public probe has a conclusive join result");
   const eventId=randomUUID();
   await authorizedSend(rooms[0].id,issue,eventId);
   must(await delivered(member,eventId),"Server authorized private delivery received");
+  await new Promise(r=>setTimeout(r,500));
+  must(!publicNamesake.observed.includes(eventId),"Same-name anonymous public channel receives no private event");
   const secondTab=await join(issue.token,issue.topic);
   must(secondTab.status==="SUBSCRIBED","Second tab shares signed session topic");
   const directId=randomUUID();

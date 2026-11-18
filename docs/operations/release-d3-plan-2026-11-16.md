@@ -1,5 +1,7 @@
 # D-3 Realtime 인증·비공개 채널 상세 계획
 
+> 이 문서는 최초 분석 시점의 설계 기록이다. 이후 D-3 구현·추가형 Preview migration·사용자 등록 Standby 검증을 진행했으며 최신 실행 상태/배포/남은 게이트는 [2026-11-18 보고](release-d3-standby-2026-11-18.md)를 우선한다. Production은 D-2를 유지한다.
+
 분석·설계만 수행했다. D-3 앱 코드·키·DB 역할/권한/RLS·Realtime 프로젝트 설정은 변경하지 않았다. D-2 이후 별도 구현·Preview·Production 승인이 필요하다. DB 잔여 권한 정리, CSP, Storage 정리는 별도 릴리스다.
 
 ## 확인한 현재 구조와 문제

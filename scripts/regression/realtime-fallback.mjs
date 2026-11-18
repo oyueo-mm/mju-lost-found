@@ -25,7 +25,7 @@ try{
     const user=await prisma.user.create({data:{email:`${marker}-${i}@test.example.invalid`,name:"Synthetic realtime",nickname:`Realtime ${i}`,privacyConsentAt:new Date(),privacyConsentVersion:terms.CURRENT_PRIVACY_VERSION,termsAcceptedAt:new Date(),termsVersion:terms.CURRENT_TERMS_VERSION,identityConsentVersion:terms.CURRENT_IDENTITY_CONSENT_VERSION}});
     users.push(user);save();
     await prisma.userIdentityInfo.create({data:{userId:user.id,realName:"Synthetic",department:"Synthetic",consentVersion:terms.CURRENT_IDENTITY_CONSENT_VERSION,consentedAt:new Date()}});
-    sessions.push(await encode({token:{sub:String(user.id),userId:user.id,nickname:user.nickname,realtimeSessionId:randomUUID()},secret,salt:"authjs.session-token"}));
+    sessions.push(await encode({token:{sub:String(user.id),userId:user.id,nickname:user.nickname,...(privateMode&&i===0?{}:{realtimeSessionId:randomUUID()})},secret,salt:"authjs.session-token"}));
   }
   room=await prisma.chatRoom.create({data:{initiatorUserId:users[0].id,counterpartUserId:users[1].id,postType:"lost",postTitle:marker}});save();
   // The default suite intentionally leaves the signer absent; --private
@@ -33,7 +33,7 @@ try{
   server=spawn(process.execPath,["node_modules/next/dist/bin/next","start","-H","127.0.0.1","-p","3102"],{env:{...process.env,AUTH_SECRET:secret,AUTH_TRUST_HOST:"true",MJU_REALTIME_PRIVATE_JWK:signingKey},stdio:"ignore",windowsHide:true});
   for(let i=0;;i++){try{if((await fetch(base+"/api/version")).ok)break;}catch{}if(i>=29)throw new Error("Local server unavailable");await new Promise(r=>setTimeout(r,1000));}
   const browser=spawn("python",[privateMode?"scripts/regression/realtime-private.py":"scripts/regression/realtime-fallback.py"],{stdio:["pipe","pipe","pipe"],windowsHide:true});
-  browser.stdin.end(JSON.stringify({base,roomId:room.id,cookies:sessions}));
+  browser.stdin.end(JSON.stringify({base,roomId:room.id,cookies:sessions,legacySession:privateMode}));
   let output="";browser.stdout.on("data",b=>output+=b);browser.stderr.resume();
   const status=await new Promise(resolve=>browser.once("close",resolve));
   if(status!==0){try{const failed=JSON.parse(output);console.log(JSON.stringify({completedChecks:failed.completedChecks,errorType:failed.errorType,line:failed.line,counters:failed.counters}));}catch{}throw new Error("Fallback browser verification failed; no private data emitted");}

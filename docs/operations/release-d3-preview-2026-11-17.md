@@ -1,5 +1,7 @@
 # D-3 구현·Preview 진행 보고 — 2026-11-16~17 KST
 
+> 11월 18일 후속 상태: 사용자 등록 Standby 키의 실제 일반 회원 private 구독·수신과 16단계 회귀가 통과했고 Preview를 재배포했다. 최신 수치·배포 ID·남은 게이트는 [Standby 검증 보고](release-d3-standby-2026-11-18.md)를 우선한다. 아래 내용은 당시 결과/실패 기록으로 보존한다. Production은 계속 D-2다.
+
 ## 결론과 배포 상태
 
 **D-3는 아직 완료되지 않았다. Production은 D-2를 유지한다.** 구현·추가형 Preview migration·로컬/일부 실제 제공자 검증·일반 Push·Preview 배포를 진행했다. 정상 회원의 신규 서명키를 통한 private Realtime 검증과 필수 전환 게이트가 남아 있어 Production migration/배포/public OFF를 실행하지 않았다.

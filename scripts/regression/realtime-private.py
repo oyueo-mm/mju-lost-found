@@ -10,6 +10,7 @@ cfg = json.load(sys.stdin)
 base, room = cfg["base"], cfg["roomId"]
 assert base == "http://localhost:3102" and isinstance(room, int)
 checks = []
+counters = {"tokens": 0, "joined": 0, "broadcasts": 0, "sockets": 0, "frames": 0}
 try:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -19,8 +20,15 @@ try:
             ctx.add_cookies([{"name": "authjs.session-token", "value": cookie, "url": base}])
             contexts.append(ctx)
         first, second, outsider = contexts
+        if cfg.get("legacySession"):
+            legacy = first.request.post(f"{base}/api/chat/{room}/realtime", headers={"origin": base})
+            assert legacy.status == 409
+            refreshed = first.request.get(f"{base}/api/auth/session")
+            assert refreshed.status == 200
+            bootstrapped = first.request.post(f"{base}/api/chat/{room}/realtime", headers={"origin": base})
+            assert bootstrapped.status == 200
+            checks.append("legacy Auth.js cookie bootstraps without re-login or session secret changes")
         page = first.new_page()
-        counters = {"tokens": 0, "joined": 0, "broadcasts": 0, "sockets": 0, "frames": 0}
 
         def count_response(response):
             if response.url == f"{base}/api/chat/{room}/realtime" and response.status == 200:

@@ -2,6 +2,8 @@
 
 대상은 **Preview 프로젝트 `swqvlihgupranzfzjevb`만**이다. 새 키를 standby로 가져오는 작업만 승인돼 있다. 기존 키의 Rotate/Activate/Revoke/Delete, Production 변경, Data API 활성화는 하지 않는다.
 
+**2026-11-18 완료 상태:** 사용자가 아래 키를 Standby로 가져왔고 공개키 일치·실제 일반 회원 private 구독/수신·Vercel Preview sensitive 변수 등록까지 확인했다. 아래 절차는 재사용 문서로 남기며 지금 같은 키를 중복 생성/가져오기하거나 기존 키를 회전하지 않는다. [최신 검증 보고](release-d3-standby-2026-11-18.md)를 따른다.
+
 ## 준비한 로컬 도구
 
 `scripts/operations/preview-realtime-manual-key.ps1`은 ES256/P-256 키를 Windows CurrentUser DPAPI로 암호화해 `.vercel/realtime-preview-manual.dpapi`에 보관한다. Git/배포 제외 경로이며 평문 파일·터미널·로그·채팅으로 private JWK를 내보내지 않는다. 같은 파일이 있으면 기존 키를 다시 사용하며 덮어쓰지 않는다.
