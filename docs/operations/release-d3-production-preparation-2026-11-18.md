@@ -72,7 +72,7 @@ Windows에서 직접 WSL 포트에 접속할 수 없어 로컬 루프백과 WSL 
 2. **백업 및 사전 확인**. Production 버전과 직전 READY 롤백 배포, Preview와 소스 동등성, Production 전용 Secret 메타데이터, JWKS를 대조한다. 전용 `ops/backup`에서 기존 승인 실행기로 **새 이름의 최신 암호화 백업**을 만들고 SHA256·실제 격리 복원·이미지 참조·D-3 마이그레이션 리허설을 요구한다. 기존 정기 파일의 재검증 시각만으로 새 백업으로 판정하지 않는다. 권한·체크섬·복원 실패, 관련 5xx, 환경 키 혼선, 안내 미확인 또는 롤백 대상 미확보 시 중단한다.
 3. **DB 마이그레이션**. `release-d3.mjs preflight`에서 예정된 6개만 대기 중임을 확인한다. 승인 실행기로 `migrate --apply --confirm-production`을 실행해 대기가 0이고 `mode=polling`, 전용 역할이 수신 전용, 앱·Storage 콘텐츠 실효 테이블 권한 0임을 확인한다. 잠금이나 migration 실패 시 앱 배포를 중단하고 이력을 확인한다. 기존 콘텐츠와 Storage는 그대로 둔다.
 4. **polling으로 앱 배포**. Preview와 서비스 소스가 일치하는 깨끗한 작업 트리를 기존 `node scripts/deployments/deploy.mjs production --dry-run`으로 배포한다. 여기서 `--dry-run`은 배포 이력 DB 쓰기만 생략하며 실제 배포가 발생한다. 새 배포 ID를 기록하고 인증 API 조회, 기존 게시글 이미지와 채팅 화면 접근을 확인해 같은 빌드를 polling 복구 후보로 보존한다. 직전 D-2 배포는 READY 롤백 대상으로 유지한다.
-5. **비공개 활성화 후 관찰**. 승인 실행기에서 `private --kid c455ce27-da9f-42e8-ab62-00d443e55979 --apply --confirm-production`으로 전환한다. 기존 운영 참여자 계정의 기존 방에서 실제 연결 `SUBSCRIBED`와 토큰 최초 발급 및 2분 이상 뒤 갱신 HTTP 200을 확인한다. 새 테스트 메시지나 테스트 사진은 만들 필요가 없다. 실제 운영 세션 확인을 할 수 없거나 가입·갱신이 실패하면 공개 OFF로 넘어가지 않고 polling으로 복구한다. 권한 거부, Storage, Data API OFF, Vercel 로그를 다시 확인한다.
+5. **비공개 활성화 후 관찰**. 기존 방에 참여 중인 운영자가 비저장 수신 확인에 참여할 수 있을 때 승인 실행기에서 `private --kid c455ce27-da9f-42e8-ab62-00d443e55979 --apply --confirm-production`으로 전환한다. 해당 세션에서 최초 토큰 발급과 실제 비공개 가입을 확인한다. 최초 토큰 만료 뒤 갱신을 확인하고, 갱신된 개별 토픽에 보낸 REST Broadcast가 동일 브라우저에 도착해야 한다. 비참여자의 인증 토큰 요청과 익명의 가입은 거부돼야 한다. 검사에 실패하면 공개 접근 OFF를 중단하고 polling으로 복구한다. Storage, Data API OFF, Vercel 로그를 다시 확인한다.
 6. **공개 접근 OFF**. 앞 단계 통과 후 관련 오류·5xx 없이 **20분 관찰**하고 공지 전달 경로와 polling 복구를 재확인한 뒤, 승인된 시각에만 [Production Realtime 설정](https://supabase.com/dashboard/project/tmifqtyxojtuoejxjrng/realtime/settings)의 **Allow public access to channels**를 OFF로 저장한다. 설정 저장으로 연결이 끊길 수 있다. 운영 참여자의 재가입과 갱신, 앱의 인증 경계·Storage 및 Data API OFF를 확인하고 관련 로그를 다시 본다. Production에서 공격성 가입이나 대량 요청을 수행하지 않는다. [Supabase Realtime 설정](https://supabase.com/docs/guides/realtime/settings)
 7. **복구 및 계속 감시**. 공개 OFF 전 앱 기능이나 데이터 연속성에 영향이 있으면 직전 D-2 배포 `dpl_HTtxjZJDDgka3HjTkRH6ZKQzR7EX`로 되돌릴 수 있다. OFF 뒤 가입·갱신 또는 채팅 경로에 장애가 있으면 받은 승인 아래 `release-d3.mjs polling --apply --confirm-production`을 실행해 인증 API polling으로 복구하고 발급된 grant를 철회한다. 기존 D-2 앱은 이미 열린 탭에서 polling을 지원하지 않으므로 OFF 이후 복구 대상은 위에서 확인한 D-3 빌드다. 앱 데이터·증거·추가형 테이블과 키는 보존한다. DB 접근 장애로 polling 전환 자체가 실패하면 연결 복구와 기존 읽기 경로 확인을 우선하고, 공개 모드 복원은 별도의 운영 결정으로 둔다. [Vercel 롤백 절차](https://vercel.com/docs/cli/rollback)
 
@@ -97,4 +97,21 @@ Windows에서 직접 WSL 포트에 접속할 수 없어 로컬 루프백과 WSL 
 
 동일 소스의 로컬 브라우저와 Preview DB에서 실행한 격리 polling 회귀는 10/10이었다. 새 메시지 수신, 다중 탭, 응답 순서 역전, 초안 보존, 재연결, 비참여자 차단 및 세션 만료를 확인했다. 테스트로 생성한 방과 계정 3개의 정리도 완료했다.
 
-실제 Production 채팅 송수신 검증은 독립된 Google 테스트 계정으로 진행한다. 두 계정으로 격리된 방을 열고, 새로고침 없이 양방향 테스트 메시지가 표시되는지 확인한 뒤 생성한 데이터만 정리한다. 해당 확인까지 현재 인증 polling 모드를 유지한다. 비공개 모드에서 정상 참여자의 수신, 비참여자·익명의 구독 차단, 120초 이후 토큰 갱신 및 별도의 20분 관찰을 통과한 뒤 공개 접근 OFF를 진행한다.
+### Production 비파괴 Realtime 전환 게이트
+
+사용자의 후속 지시에 따라 두 계정으로 메시지와 사진을 주고받는 검증은 생략했다. 현재 배포는 `dpl_9RGngoiirr63Yj2WMcFFMfTqdbVC` (`cbb1a90`)이며 `polling`에서 동작한다. 채팅방 4개, 메시지 0개, 채팅 이미지 참조 0개였다. 사용자·채팅·첨부 데이터와 감사·보안 로그를 수정하지 않았다.
+
+| 확인 범위 | 결과 |
+| --- | --- |
+| Production 실제 익명 경계 | 앱 토큰 API는 HTTP 401 및 `no-store`, 공급자의 비공개 구독은 권한 거부. 합성 토픽에 대한 공개 구독은 허용됐다. |
+| Production 실제 비공개 전송 | 기존 채팅과 무관한 임시 토픽에 기존 서버 SDK로 본문 없는 nonce를 보냈다. 서버 권한으로 가입한 비공개 WebSocket에서 같은 값을 받았다. 앱 DB에 메시지를 추가하지 않았다. |
+| Production 현재 DB 권한 | 기존 방의 학생 참여자 표본 4/4 허용, 비참여자 표본 4/4 거부. 전용 역할의 송신 및 앱·Storage 데이터 권한은 0이다. 마이그레이션 대기 0, 활성 grant 0, Data API OFF다. |
+| Production 공개키 및 설정 | 이전 공개키 집합과 Production Standby 공개키의 일치, Preview와 별개의 키, Vercel Production 민감 변수 등록 메타데이터를 확인했다. |
+| Production 로그 | polling 배포의 최근 20분 error·5xx 각각 0건. 비공개 모드의 관찰 시간은 집계하지 않았다. |
+| Preview 일반 회원 검증 | 공개 구독 `PrivateOnly`, 실제 참여자와 기관 담당자 비공개 수신·비참여자 차단·갱신·권한 회수 등 45/45. 브라우저 12/12, polling 10/10, 통합 회귀 16/16. |
+
+비파괴 점검은 [재사용 스크립트](../../scripts/regression/README.md#호스팅-realtime-비파괴-점검)로 실행했다. 처음에는 서버 키를 일반 소켓에 직접 지정해 Production 가입이 거부됐다. 서비스 SDK의 정상 서버 인증으로 같은 검사를 다시 실행한 결과 두 환경에서 수신했다. 스크립트 구문·린트와 Realtime 단위 검사 29/29도 통과했다.
+
+서버 대조군 수신과 DB 함수 표본은 일반 회원의 실제 소켓에서의 검증과 별개다. Production 앱이 발급한 회원 토큰의 실제 비공개 가입·수신, 비참여자의 인증된 토큰 요청 거부, 120초 이후 새 토큰의 수신 및 비공개 모드의 20분 관찰이 남아 있다. 공개 접근 OFF는 해당 수신과 전환 게이트를 통과한 뒤 진행한다.
+
+최소 변경 절차는 정상 로그인한 기존 참여자가 동의한 빈 방을 이용하는 것이다. 기존 토큰 API의 비공개 권한 발급·갱신에는 Realtime 세션·grant, 요청 제한 카운터와 일반 운영 로그가 남는다. 사용자·채팅방·메시지·첨부를 추가하거나 바꿀 필요 없이, 운영자가 그 세션의 유효한 개별 토픽에만 서버 REST Broadcast로 본문 없는 점검 이벤트를 보낼 수 있다. 앱이 처리하지 않는 점검 이벤트의 수신은 해당 브라우저의 WebSocket 프레임에서 확인한다. 처음 발급된 토큰의 120초가 지난 뒤 수신을 확인해 갱신을 입증하고, 후속 관찰 20분을 별도로 기록한다. 방이나 권한이 유일하게 확인되지 않거나 전환 검증에 실패하면 인증 API polling을 사용한다. JWT·쿠키·토픽은 운영 보고서에 기록하지 않는다. [Supabase REST Broadcast](https://supabase.com/docs/guides/realtime/broadcast)

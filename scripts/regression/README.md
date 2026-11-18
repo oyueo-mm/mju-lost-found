@@ -101,6 +101,17 @@ node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scr
 
 Chromium에서 D-2 공개 채널의 실제 가입 응답을 확인하고 테스트 초안을 연 상태로 로컬 서버를 같은 주소의 D-3으로 바꾼다. 전환 이후에는 해당 탭에서 구형 채널의 수신만 억제한다. 새 탭에서 같은 로그인 세션, 인증 API polling, 기존 탭을 열린 채로 텍스트를 복사하고 원본 사진을 다시 선택하는 절차를 검사한다. 첨부 파일은 이미지 미리보기까지 확인한다. 새 테스트 채팅방에 보낸 메시지는 생성한 계정과 함께 정리한다. 호스팅 프로젝트에서 공개 채널을 끄는 검증은 별도로 수행한다.
 
+## 호스팅 Realtime 비파괴 점검
+
+환경을 확인한 후 아래 운영 스크립트를 사용한다. `realtime-access-control`은 읽기 전용 트랜잭션에서 참여자와 비참여자 표본의 결정 개수 및 역할 ACL만 출력한다. `realtime-transport-control`은 앱 채팅과 무관한 임시 토픽에서 익명 가입 응답 및 서버 권한 소켓의 일회성 이벤트 수신을 확인한다. `anonymousPublic`의 `subscribed`는 공개 허용, `private_only`는 공급자 차단을 의미한다. 두 검사는 실제 회원 토큰의 가입·갱신·수신을 대체하지 않는다.
+
+```powershell
+node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/operations/realtime-access-control.mjs --confirm-preview
+node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/operations/realtime-transport-control.mjs --confirm-preview
+node scripts/db/approved-operation.mjs --confirm-production --approval-reference <CHANGE-ID> -- scripts/operations/realtime-access-control.mjs --confirm-production
+node scripts/db/approved-operation.mjs --confirm-production --approval-reference <CHANGE-ID> -- scripts/operations/realtime-transport-control.mjs --confirm-production
+```
+
 Preview에서 이미 공개 접근을 껐다면 브라우저 명령에 `--expect-public-off`를 추가한다. 이 모드에서는 실제 D-2 소켓의 `PrivateOnly` 가입 응답을 요구하고, 이어지는 새 탭 전환과 초안 보존을 검사한다.
 
 ## Windows Edge 실제 웹 푸시
