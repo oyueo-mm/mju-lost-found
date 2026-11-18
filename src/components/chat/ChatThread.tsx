@@ -122,6 +122,7 @@ function ChatThreadView({
   const [messages, setMessages] = useState<MessageItem[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [usingPolling, setUsingPolling] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [content, setContent] = useState("");
   const [sending, setSending] = useState(false);
@@ -249,6 +250,7 @@ function ChatThreadView({
   const refreshChat=useChatRoomRealtime(chatRoomId,currentUserId, {
     sync: syncLatest,
     identityChanged: () => {setMessages([]);router.refresh();},
+    pollingChanged: setUsingPolling,
   });
 
   useEffect(() => {
@@ -522,6 +524,9 @@ function ChatThreadView({
     // fill, this was just missing the one declaration that lets a flex
     // item respect it.
     <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <div role="status" data-testid="chat-connection-status" className={usingPolling ? "text-sm text-muted-foreground" : "sr-only"}>
+        {usingPolling ? t("chatThread.pollingStatus") : ""}
+      </div>
       {error && (
         <p className="rounded-lg bg-destructive-muted px-4 py-2 text-sm text-destructive">
           {error}

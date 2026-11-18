@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
@@ -9,6 +9,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // The D-2 cutover rehearsal keeps an archived application under .vercel.
+    exclude: [...configDefaults.exclude, ".vercel/**"],
     setupFiles: ["./scripts/db/test-setup.ts"],
   },
 });

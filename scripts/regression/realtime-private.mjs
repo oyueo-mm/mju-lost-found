@@ -13,6 +13,8 @@ const key=await loadApprovedPreviewRealtimeKey();
 process.env.MJU_REALTIME_PRIVATE_JWK=JSON.stringify(key);
 const publicKey=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY??process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 if(!publicKey||publicKey==="[SENSITIVE]")throw new Error("Preview public key required");
+const strictPublicOff=process.argv.includes("--expect-public-off");
+const checkPublicOnly=process.argv.includes("--check-public-only");
 const jiti=createJiti(import.meta.url,{alias:{"@":fileURLToPath(new URL("../../src",import.meta.url))}});
 const {prisma}=await jiti.import("../../src/lib/db/prisma.ts"),terms=await jiti.import("../../src/lib/auth/terms.ts");
 const grants=await jiti.import("../../src/lib/chat/realtimeGrants.ts");
@@ -24,6 +26,7 @@ const must=(ok,name)=>{results.push({name,passed:!!ok});if(!ok)throw new Error("
 let cleanupOk=false;
 function denialKind(error){
   const text=String(error?.message??error??"");
+  if(/\bPrivateOnly\b|only allows private channels/i.test(text))return "private-only";
   if(/signature|JwtSignature|InvalidJWT|JWT.*invalid|invalid.*JWT/i.test(text))return "jwt-validation";
   if(/permission denied|set role|insufficient_privilege/i.test(text))return "database-role";
   if(/authoriz|polic|forbidden/i.test(text))return "authorization";
@@ -56,7 +59,22 @@ async function delivered(receiver,eventId){
   return receiver.observed.includes(eventId);
 }
 async function rejectJoin(name,token,topic){const r=await join(token,topic);must(r.status==="CHANNEL_ERROR",name);}
+async function checkPublicAccess(){
+  const result=await join(publicKey,`mju-preview-check:${randomUUID()}`,false);
+  await result.client.disconnect();
+  return {project:PREVIEW_DB_PROJECT,publicJoin:result.status,denial:result.denial,privateOnly:result.denial==="private-only"};
+}
+if(checkPublicOnly){
+  const result=await checkPublicAccess();
+  console.log(JSON.stringify(result));
+  await prisma.$disconnect();
+  process.exit(result.privateOnly||(!strictPublicOff&&result.publicJoin==="SUBSCRIBED")?0:1);
+}
 try{
+  if(strictPublicOff){
+    const result=await checkPublicAccess();
+    must(result.publicJoin==="CHANNEL_ERROR"&&result.privateOnly,"Provider rejects public join with PrivateOnly");
+  }
   const config=(await prisma.$queryRaw`SELECT mode,project_ref,signing_kid::text FROM "ChatRealtimeConfig" WHERE id=true`)[0];
   must(config?.mode==="private"&&config.project_ref===PREVIEW_DB_PROJECT&&config.signing_kid===key.kid,"Preview private configuration matches approved key");
   for(let i=0;i<3;i++){

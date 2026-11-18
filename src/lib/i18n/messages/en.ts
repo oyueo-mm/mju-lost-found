@@ -4,6 +4,7 @@ import type { Dictionary } from "../translate";
 // (translate.ts 참고) -- 관리자 화면, 약관/개인정보처리방침 같은 법률
 // 문서, 단체 관리 화면처럼 이번 단계의 번역 범위 밖인 문구가 그렇다.
 export const en: Dictionary = {
+  "chatThread.pollingStatus": "Reconnecting to live chat. New messages are checked periodically in the meantime.",
   "search.unified.placeholder": "Search by item name or describe what happened",
   "search.sort.relevance": "Relevance",
   "search.pagination.label": "Search result pages",

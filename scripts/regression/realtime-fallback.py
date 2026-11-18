@@ -23,6 +23,8 @@ try:
         checks.append("authenticated page and composer")
         token = first.request.post(f"{base}/api/chat/{room}/realtime", headers={"origin": base})
         assert token.status == 503 and "no-store" in token.headers["cache-control"]
+        expect(page.get_by_test_id("chat-connection-status")).to_be_visible(timeout=10000)
+        expect(page.get_by_test_id("chat-connection-status")).not_to_be_empty()
         checks.append("missing signer fails closed; authenticated API remains")
         response = second.request.post(f"{base}/api/chat/{room}/messages", data={"content": "D3 incoming fallback proof"})
         assert response.status in (200, 201)

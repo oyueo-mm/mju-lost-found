@@ -2,6 +2,7 @@ import type { Dictionary } from "../translate";
 
 // 中文(简体). 부분 사전 -- 여기에 없는 키는 한국어로 떨어진다.
 export const zh: Dictionary = {
+  "chatThread.pollingStatus": "正在重新连接实时聊天。在此期间会定期检查新消息。",
   "thanks.error.rateLimited": "请求过于频繁，请稍后重试。",
   "thanks.error.unavailable": "请求限制服务暂时不可用，请稍后重试。",
   "search.unified.placeholder": "输入物品名称或描述情况",

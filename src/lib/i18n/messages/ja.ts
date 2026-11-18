@@ -1,6 +1,7 @@
 import type { Dictionary } from "../translate";
 
 export const ja: Dictionary = {
+  "chatThread.pollingStatus": "リアルタイム接続を再試行しています。その間は新着メッセージを定期的に確認します。",
   "thanks.error.rateLimited": "リクエストが多すぎます。しばらくしてから再試行してください。",
   "thanks.error.unavailable": "リクエスト制限サービスを一時的に利用できません。しばらくしてから再試行してください。",
   "search.unified.placeholder": "品名や状況を入力してください",

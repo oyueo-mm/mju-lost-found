@@ -3,7 +3,11 @@ import {useCallback,useEffect,useRef} from "react";
 import {createChatRealtimeClient} from "@/lib/supabase/realtimeBrowser";
 import {ChatAccessRevoked,createChatSynchronizer,validReadHint,type ReadCursor} from "./synchronizer";
 
-type Handlers={sync:(signal:AbortSignal)=>Promise<ReadCursor[]>;identityChanged:()=>void};
+type Handlers={
+  sync:(signal:AbortSignal)=>Promise<ReadCursor[]>;
+  identityChanged:()=>void;
+  pollingChanged:(polling:boolean)=>void;
+};
 export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handlers:Handlers):()=>void{
   const handlersRef=useRef(handlers);useEffect(()=>{handlersRef.current=handlers;});
   const invalidateRef=useRef<()=>void>(()=>{});
@@ -19,13 +23,22 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
       const cursors=await handlersRef.current.sync(signal);
       for(const c of cursors)if(validReadHint(c))confirmed.set(c.userId,Math.max(confirmed.get(c.userId)??0,c.lastReadMessageId));
       failures=0;
-    },error=>{if(error instanceof ChatAccessRevoked){denied=true;void stopTransport();return;}failures=Math.min(failures+1,3);});
+    },error=>{if(error instanceof ChatAccessRevoked){denied=true;handlersRef.current.pollingChanged(false);void stopTransport();return;}failures=Math.min(failures+1,3);});
     invalidateRef.current=()=>sync.invalidate();
     async function stopTransport(abortRequest=true){connected=false;if(abortRequest)request?.abort();if(renew)clearTimeout(renew);const old=client;client=undefined;try{await old?.disconnect();}catch{/* API polling remains available when socket teardown fails. */}}
-    function schedulePoll(){
-      if(poll)clearTimeout(poll);if(disposed||denied||document.visibilityState!=="visible")return;
+    function schedulePoll(reset=false){
+      if(reset&&poll){clearTimeout(poll);poll=undefined;}
+      if(poll||disposed||denied||document.visibilityState!=="visible")return;
       const delay=connected?60000:Math.min(30000,10000*2**failures);
-      poll=setTimeout(()=>{if(disposed||denied)return;sync.invalidate();if(!connected&&Date.now()>=retryAt)void connect();schedulePoll();},delay);
+      poll=setTimeout(()=>{poll=undefined;if(disposed||denied)return;sync.invalidate();if(!connected&&Date.now()>=retryAt)void connect();schedulePoll();},delay);
+    }
+    function enterPolling(){
+      const wasConnected=connected;
+      connected=false;
+      handlersRef.current.pollingChanged(!denied);
+      if(wasConnected&&!denied)sync.invalidate(true);
+      // Repeated join errors must not push the next API refresh into the future.
+      schedulePoll(wasConnected);
     }
     function hint(event:string,payload:unknown){
       if(disposed||denied||document.visibilityState!=="visible"||!payload||typeof payload!=="object")return;
@@ -57,7 +70,7 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
       request?.abort();request=new AbortController();const signal=request.signal;
       try{
         const token=await fetchToken(signal);if(disposed||signal.aborted)return;
-        if(!token){await stopTransport(false);return;}
+        if(!token){enterPolling();await stopTransport(false);return;}
         const old=client;client=undefined;await old?.disconnect();if(disposed||signal.aborted)return;
         const transport=createChatRealtimeClient();client=transport;
         await transport.setAuth(token.token);if(disposed||signal.aborted){await transport.disconnect();return;}
@@ -65,19 +78,25 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
         for(const event of ["message","reaction","read","post_status"])channel=channel.on("broadcast",{event},({payload})=>hint(event,payload));
         channel.subscribe(status=>{
           if(disposed||client!==transport)return;
-          connected=status==="SUBSCRIBED";
-          if(connected){sync.invalidate(true);failures=0;}
-          else if(["CHANNEL_ERROR","TIMED_OUT","CLOSED"].includes(status))retryAt=Date.now()+30000;
-          schedulePoll();
+          if(status==="SUBSCRIBED"){
+            connected=true;
+            handlersRef.current.pollingChanged(false);
+            sync.invalidate(true);
+            failures=0;
+            schedulePoll(true);
+          }else if(["CHANNEL_ERROR","TIMED_OUT","CLOSED"].includes(status)){
+            retryAt=Date.now()+30000;
+            enterPolling();
+          }
         });
         if(renew)clearTimeout(renew);
-        renew=setTimeout(()=>{connected=false;void connect();},Math.max(1000,Date.parse(token.expiresAt)-Date.now()-30000));
-      }catch{if(!signal.aborted){retryAt=Date.now()+30000;await stopTransport(false);}}
+        renew=setTimeout(()=>{void connect();},Math.max(1000,Date.parse(token.expiresAt)-Date.now()-30000));
+      }catch{if(!signal.aborted){retryAt=Date.now()+30000;enterPolling();await stopTransport(false);}}
       finally{connecting=false;schedulePoll();if(signal.aborted&&!disposed&&!denied&&document.visibilityState==="visible")void connect();}
     }
     function visible(){
       if(document.visibilityState==="visible"){denied=false;sync.invalidate(true);void connect();schedulePoll();}
-      else{if(poll)clearTimeout(poll);sync.cancel();void stopTransport();}
+      else{if(poll){clearTimeout(poll);poll=undefined;}sync.cancel();void stopTransport();}
     }
     visible();document.addEventListener("visibilitychange",visible);window.addEventListener("online",visible);
     return()=>{disposed=true;invalidateRef.current=()=>{};sync.dispose();if(poll)clearTimeout(poll);if(renew)clearTimeout(renew);document.removeEventListener("visibilitychange",visible);window.removeEventListener("online",visible);void stopTransport();};

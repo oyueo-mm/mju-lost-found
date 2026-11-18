@@ -1,6 +1,7 @@
 """Real Chromium + hosted Preview Realtime; local-only Auth.js cookies on stdin.
 No trace, screenshots, raw network frames, cookies or JWT are logged.
 """
+import base64
 import json
 import sys
 import time
@@ -91,6 +92,13 @@ try:
             expect(tab.get_by_text("D3 two private tabs", exact=True)).to_be_visible(timeout=8000)
         checks.append("multiple tabs receive authorized private events")
         field.fill("D3 private draft retained")
+        page.locator('input[type="file"]').set_input_files({
+            "name": "connection-fixture.png",
+            "mimeType": "image/png",
+            "buffer": base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jP8sAAAAASUVORK5CYII="),
+        })
+        preview = page.locator('img[src^="blob:"]')
+        expect(preview).to_be_visible()
         page.evaluate("Object.defineProperty(document,'visibilityState',{configurable:true,get:()=> 'hidden'});document.dispatchEvent(new Event('visibilitychange'))")
         response = second.request.post(f"{base}/api/chat/{room}/messages", data={"content": "D3 hidden private update"})
         assert response.ok
@@ -98,6 +106,22 @@ try:
         expect(page.get_by_text("D3 hidden private update", exact=True)).to_be_visible(timeout=15000)
         expect(field).to_have_value("D3 private draft retained")
         checks.append("visibility reconnect catches up without losing unsent draft")
+        token_route = f"**/api/chat/{room}/realtime"
+        status = page.get_by_test_id("chat-connection-status")
+        page.route(token_route, lambda route: route.fulfill(status=503, json={}))
+        page.evaluate("window.dispatchEvent(new Event('online'))")
+        expect(status).to_be_visible(timeout=10000)
+        expect(status).not_to_be_empty()
+        response = second.request.post(f"{base}/api/chat/{room}/messages", data={"content": "D3 polling with selected photo"})
+        assert response.ok
+        expect(page.get_by_text("D3 polling with selected photo", exact=True)).to_be_visible(timeout=35000)
+        expect(field).to_have_value("D3 private draft retained")
+        expect(preview).to_be_visible()
+        checks.append("outage notice and authenticated polling retain draft and photo")
+        page.unroute(token_route)
+        page.evaluate("window.dispatchEvent(new Event('online'))")
+        expect(status).to_be_empty(timeout=15000)
+        checks.append("private recovery clears notice without reloading the page")
         first.set_offline(True)
         page.wait_for_timeout(500)
         first.set_offline(False)

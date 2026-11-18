@@ -7,6 +7,7 @@
 // 작업에서 한국어 카피를 새로 쓰거나 다듬지 않았다(기존 동작 보존).
 // `{name}` 형태의 자리표시자만 지원한다(translate.ts의 interpolate).
 export const ko = {
+  "chatThread.pollingStatus": "실시간 연결을 다시 시도하고 있습니다. 그동안 새 메시지를 주기적으로 확인합니다.",
   "search.unified.placeholder": "물건 이름이나 상황을 입력하세요",
   "search.sort.relevance": "관련도순",
   "search.pagination.label": "검색 결과 페이지",

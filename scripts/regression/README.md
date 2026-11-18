@@ -79,6 +79,13 @@ fixture ID는 `.vercel/realtime-<UUID>.json`에 생성 즉시 기록한다. 해�
 
 `realtime-private.mjs`는 이번 Preview DPAPI 키와 private 모드가 필요하다. 일반 회원/기관 담당자의 실제 구독·수신, 다른 방·변조/만료/타 환경 claims 거부, 회원 WebSocket/REST 발행의 실제 미수신, 갱신·세션 회수·담당자 강등/재승인·탈퇴 뒤 dispatch/reconnect 차단을 검사한다. 자기 계정·방·기관만 UUID 명세에 기록하고 정리한다. 기존 연결의 RLS 캐시가 즉시 다시 평가된다고 가정하지 않으며 서버의 발행 가드가 실제 콜백 실행을 차단하는지도 확인한다. Storage 합성 prefix의 빈 목록/오류 검사는 실제 기존 파일 읽기 검증을 대신하지 않는다. Production으로 잘못된 토큰을 보내는 공격성 검사는 하지 않는다.
 
+Preview 프로젝트의 [Realtime 설정](https://supabase.com/dashboard/project/swqvlihgupranzfzjevb/realtime/settings)에서 **Allow public access to channels**를 OFF로 저장한 후, 공급자가 실제로 거부하는지 다음처럼 확인한다. `--check-public-only`는 임의의 합성 토픽에 한 번 가입을 시도하며 DB 테스트 데이터를 만들지 않는다. `--expect-public-off`가 있으면 공급자의 `PrivateOnly` 거부를 요구한다. 전체 검사에서는 이 확인이 통과한 뒤 일반 회원과 기관 담당자의 실제 private 가입·수신·토큰 권한을 검증한다.
+
+```powershell
+node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/regression/realtime-private.mjs --confirm-preview --check-public-only --expect-public-off
+node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/regression/realtime-private.mjs --confirm-preview --expect-public-off
+```
+
 마지막 `--private` 명령은 별도 `realtime-private.py`로 실제 Chromium 소켓·두 탭·재연결·초안 보존과 **125초 실제 대기 이후** 토큰 재발급/수신을 검사한다. Phoenix JSON 배열과 realtime-js 2.115 binary broadcast를 구분해 건수만 기록하며 raw frame·JWT·trace는 저장하지 않는다. 기본 fallback 검사와 같은 로컬 포트를 쓰므로 서로 순차 실행한다. 긴 연결 하나의 갱신 검증이지 수시간/OS background 검증은 아니다.
 
 private 브라우저의 첫 계정에는 realtimeSessionId가 없는 구형 형식의 로컬 테스트 cookie를 사용한다. 최초 token API 409, `/api/auth/session`을 통한 cookie 갱신, 이후 token API 200을 요구하며 실제 배포 세션 비밀이나 Google 계정을 쓰지 않는다. 이 검사는 **cookie 하위 호환성**이며 이미 실행 중인 D-2 JavaScript 화면을 자동 업그레이드한 검증은 아니다.
