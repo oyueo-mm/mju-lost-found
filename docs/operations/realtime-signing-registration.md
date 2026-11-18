@@ -1,5 +1,7 @@
 # D-3 서명키 등록 승인 경계
 
+> 2026-11-18 후속 승인으로 Production 신규 Standby 키 한 개와 해당 Vercel Production 민감 변수 등록이 허용됐다. 현재 작업과 최신 상태는 [Production 전환 준비](release-d3-production-preparation-2026-11-18.md)를 우선한다. 아래 Preview 단계는 당시 기록이다.
+
 2026-11-16 확인: 두 Supabase 프로젝트는 각각 ES256 공개 JWKS 키를 제공한다. Vercel에는 앱이 사용할 별도 Realtime 서명키 설정이 없다. 기존 Supabase private key를 추출하거나 Auth.js AUTH_SECRET/service_role 키를 새 사용자 토큰의 서명용으로 사용하지 않는다.
 
 ## 현재 승인·실행 상태

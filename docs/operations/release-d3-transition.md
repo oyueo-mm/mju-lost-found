@@ -2,6 +2,8 @@
 
 이 문서는 조건부 배포용 실행 절차다. 문서와 명령의 존재 자체는 승인이 아니다. 최신 승인 경계는 [서명키 등록안](realtime-signing-registration.md)을 따른다. 현재 Production은 D-2이고 D-3 운영 변경은 수행하지 않았다.
 
+Production 신규 Standby 준비와 Vercel 민감 변수 등록은 [Production 전환 준비 기록](release-d3-production-preparation-2026-11-18.md)을 따른다. 배포, 공개 접근 OFF, 운영 DB 변경은 별도의 전환 승인 범위에서 실행한다.
+
 2026-11-18 Preview에서 `Allow public access to channels`를 OFF로 전환했다. 공급자의 `PrivateOnly`, 기존 Standby 키의 private 구독·수신·권한 회수와 갱신은 hosted 검사 45개, Chromium 12개와 통합 회귀 16단계로 확인했다. 구버전 탭은 실제 가입 거부를 받은 상태에서 수동 전환 리허설을 통과했다. [후속 보고](release-d3-standby-2026-11-18.md)를 참조한다.
 
 ## 상태와 기본 순서

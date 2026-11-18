@@ -102,3 +102,13 @@ node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scr
 Chromium에서 D-2 공개 채널의 실제 가입 응답을 확인하고 테스트 초안을 연 상태로 로컬 서버를 같은 주소의 D-3으로 바꾼다. 전환 이후에는 해당 탭에서 구형 채널의 수신만 억제한다. 새 탭에서 같은 로그인 세션, 인증 API polling, 기존 탭을 열린 채로 텍스트를 복사하고 원본 사진을 다시 선택하는 절차를 검사한다. 첨부 파일은 이미지 미리보기까지 확인한다. 새 테스트 채팅방에 보낸 메시지는 생성한 계정과 함께 정리한다. 호스팅 프로젝트에서 공개 채널을 끄는 검증은 별도로 수행한다.
 
 Preview에서 이미 공개 접근을 껐다면 브라우저 명령에 `--expect-public-off`를 추가한다. 이 모드에서는 실제 D-2 소켓의 `PrivateOnly` 가입 응답을 요구하고, 이어지는 새 탭 전환과 초안 보존을 검사한다.
+
+## Windows Edge 실제 웹 푸시
+
+현재 앱의 로컬 빌드와 Windows Edge·Python Playwright, 기존 WSL Ubuntu PostgreSQL 18 및 pgvector가 필요하다. 저장소 루트에서 다음을 실행한다.
+
+```powershell
+wsl.exe -d Ubuntu -e bash /mnt/c/proj_claude/mju-lost-found-vercel/scripts/regression/web-push-device.sh
+```
+
+임시 VAPID, Windows Edge 전용 임시 프로필, 빈 WSL 데이터베이스의 두 계정으로 구독→실제 기기 알림→해제를 검사한다. DB는 Windows 루프백 포트 `55446`에서 전용 WSL Unix 소켓으로만 연결한다. 검증 서버는 루프백 `3105`에서 실행한다. 기존 운영 구독과 발송 대기열을 사용하지 않는다. 결과에는 구독 주소·키·쿠키를 기록하지 않는다. OS 알림 클릭과 모바일 플랫폼별 검증은 별도다.
