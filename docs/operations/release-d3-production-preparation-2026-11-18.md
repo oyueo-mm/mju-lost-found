@@ -75,3 +75,20 @@ Windows에서 직접 WSL 포트에 접속할 수 없어 로컬 루프백과 WSL 
 5. **비공개 활성화 후 관찰**. 승인 실행기에서 `private --kid c455ce27-da9f-42e8-ab62-00d443e55979 --apply --confirm-production`으로 전환한다. 기존 운영 참여자 계정의 기존 방에서 실제 연결 `SUBSCRIBED`와 토큰 최초 발급 및 2분 이상 뒤 갱신 HTTP 200을 확인한다. 새 테스트 메시지나 테스트 사진은 만들 필요가 없다. 실제 운영 세션 확인을 할 수 없거나 가입·갱신이 실패하면 공개 OFF로 넘어가지 않고 polling으로 복구한다. 권한 거부, Storage, Data API OFF, Vercel 로그를 다시 확인한다.
 6. **공개 접근 OFF**. 앞 단계 통과 후 관련 오류·5xx 없이 **20분 관찰**하고 공지 전달 경로와 polling 복구를 재확인한 뒤, 승인된 시각에만 [Production Realtime 설정](https://supabase.com/dashboard/project/tmifqtyxojtuoejxjrng/realtime/settings)의 **Allow public access to channels**를 OFF로 저장한다. 설정 저장으로 연결이 끊길 수 있다. 운영 참여자의 재가입과 갱신, 앱의 인증 경계·Storage 및 Data API OFF를 확인하고 관련 로그를 다시 본다. Production에서 공격성 가입이나 대량 요청을 수행하지 않는다. [Supabase Realtime 설정](https://supabase.com/docs/guides/realtime/settings)
 7. **복구 및 계속 감시**. 공개 OFF 전 앱 기능이나 데이터 연속성에 영향이 있으면 직전 D-2 배포 `dpl_HTtxjZJDDgka3HjTkRH6ZKQzR7EX`로 되돌릴 수 있다. OFF 뒤 가입·갱신 또는 채팅 경로에 장애가 있으면 받은 승인 아래 `release-d3.mjs polling --apply --confirm-production`을 실행해 인증 API polling으로 복구하고 발급된 grant를 철회한다. 기존 D-2 앱은 이미 열린 탭에서 polling을 지원하지 않으므로 OFF 이후 복구 대상은 위에서 확인한 D-3 빌드다. 앱 데이터·증거·추가형 테이블과 키는 보존한다. DB 접근 장애로 polling 전환 자체가 실패하면 연결 복구와 기존 읽기 경로 확인을 우선하고, 공개 모드 복원은 별도의 운영 결정으로 둔다. [Vercel 롤백 절차](https://vercel.com/docs/cli/rollback)
+
+## Production 전환 실행 기록 · polling
+
+사용자 승인에 따라 이번 24시간 공지는 생략했다. D-3 재연결 안내와 인증 polling 및 기존 탭을 유지한 초안 이동 절차는 검증한 빌드 그대로 보존했다. D-2의 이미 열린 화면에는 새 스크립트를 주입할 수 없으므로 구버전 창 자체에 `재연결` UI가 새로 붙는다고 보장하지 않는다.
+
+| 항목 | 확인 결과 |
+| --- | --- |
+| 전환 직전 암호화 백업 | `release-d3-pre-2026-11-18-161329.tar.enc`. 공유 snapshot, 암호화 왕복 SHA256, WSL PG18 격리 복원에서 53개 테이블 행 수 불일치 0 및 이미지 134개 누락 0. 같은 백업에 지정 D-3 6개 리허설 및 수신 전용 권한 검사를 완료했다. |
+| Production DB | `20261123000000`부터 `20261123050000`까지 지정 6개 적용, 대기 0. 신규 세션·grant·설정 테이블의 RLS와 Realtime 수신 전용 권한 확인. 앱·Storage 콘텐츠 실효 권한 0. |
+| 현재 Production 및 polling 복구 대상 | `dpl_9RGngoiirr63Yj2WMcFFMfTqdbVC`, 커밋 `cbb1a90341ac959b27e37f23fe1f461128161adb`, DB 모드 `polling`, 활성 grant 0. Preview와 서비스 소스가 동일하다. |
+| 직전 D-2 롤백 대상 | `dpl_HTtxjZJDDgka3HjTkRH6ZKQzR7EX`, 커밋 `8baa381`, 바로 이전 Production이며 READY. |
+| 비파괴 확인 | 16/16. 버전, 로그인 경로, 익명 조회 차단, 검색 4종 및 기존 이미지 응답 확인. 익명 Realtime 토큰 요청 HTTP 401 및 no-store, 알림·읽지 않은 수 HTTP 401. |
+| 데이터·Storage·운영 | 읽기 전용 확인에서 기존 채팅방 4개, 메시지와 사진 참조 0개, 게시글 이미지 행 134개. 채팅·신고 증거 버킷 비공개, 기존 이미지 응답 정상, Data API OFF, 기존 D-2 작업 오류 0. 첫 최근 20분 로그 조회에서 error 및 5xx 각 0. |
+| 배포 업로드 | 1,186개 파일의 경로 검사에서 금지 파일 0. |
+| 적용 후 암호화 백업 | `release-d3-polling-2026-11-18-162050.tar.enc`. 56개 테이블 행 수 불일치 0, 이미지 134개 누락 0. Production Realtime 수신 전용 역할, ACL 및 정책을 격리 복원에서 재구축해 원본 메타데이터와 대조했다. |
+
+실제 Google 로그인과 인증 채팅·알림 화면은 운영자의 기존 세션으로 확인하도록 요청했다. 새 테스트 계정이나 채팅방은 이 단계에서 만들지 않았다. 비공개 모드와 공개 채널 OFF에는 실제 인증 세션 확인, 실제 정상 참여자 전달·갱신과 20분 관찰이 남아 있다. 앞선 polling 배포의 로그 조회를 비공개 모드 관찰로 집계하지 않는다.
