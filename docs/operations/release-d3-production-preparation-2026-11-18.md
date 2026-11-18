@@ -30,3 +30,19 @@ Supabase 문서상 Standby 키 가져오기와 신규 발급에 쓰는 키 회�
 Windows Edge의 실제 푸시 제공자를 사용해 앱 설정의 구독, 다른 테스트 계정의 메시지 발송, 서비스 워커 알림 수신과 채팅 목적지 확인, 브라우저 구독 해제 **4/4**를 통과했다. 발송 대기열은 1회 시도에서 성공했고 구독 해제 뒤 DB 구독은 0건이었다. 현재 앱 빌드에 기기 전용 임시 VAPID와 격리 WSL PostgreSQL을 연결했다. 임시 Edge 프로필과 DB는 시험 종료 후 정리했다. 기존 사용자 구독이나 실제 Preview·Production 발송 대기열과 섞지 않았다. 이 결과는 실제 기기에서 푸시 전달을 확인한 것이며 Android·iOS와 OS 알림 클릭은 아직 시험하지 않았다.
 
 Windows에서 직접 WSL 포트에 접속할 수 없어 로컬 루프백과 WSL Unix 소켓을 중계했다. 스키마 엔진의 직접 DB 쓰기가 실패해 Prisma가 생성한 빈 스키마 SQL을 검증된 임시 DB 연결에 적용했다. 첫 브라우저 검사도 비동기 알림 조회를 기다리는 방법을 고친 뒤 재검증했다. 단계별 판정과 기존 웹 푸시 정책을 유지했다.
+
+## Standby 등록 후 읽기 전용 점검
+
+운영자가 Production 대시보드에서 `c455ce27-da9f-42e8-ab62-00d443e55979`를 Standby로 가져왔고 기존 활성 키를 그대로 유지했다고 확인했다. `production-realtime-standby.mjs verify`는 로컬 공개 지문과 현재 Production JWKS의 일치, 등록 전 공개키 보존, Preview 키와의 분리를 모두 통과했다. 활성 상태는 운영자 대시보드 확인을 기준으로 기록하며 공개 JWKS 점검은 공개키와 서명 검증 범위다.
+
+| Production 검사 | 결과 |
+| --- | --- |
+| 앱 버전 | D-2 `8baa381`, `dpl_HTtxjZJDDgka3HjTkRH6ZKQzR7EX` 일치 |
+| 인증 경계 | 로그인과 익명 세션 HTTP 200, 익명 채팅·관리자 신고 API HTTP 401 |
+| Storage와 Data API | 신고 증거 버킷 비공개, 신고 스냅샷 컬럼 3개, Data API HTTP 503으로 OFF 확인 |
+| Realtime | 기존 WebSocket transport 열기·닫기 정상 |
+| D-2 작업 | 트리거 7개 유지, 실패 0건 |
+| Vercel 로그 | 최근 20분 오류 0건, 5xx 0건 |
+| Vercel Production 변수 이름 | `MJU_REALTIME_PRIVATE_JWK` 미등록 |
+
+이번 요청은 읽기 전용 점검으로 해석했다. 운영 앱 세션으로 로그인한 확인과 D-3 앱에서 발급한 Production 토큰의 실제 비공개 가입은 배포 단계의 검증으로 남는다. Vercel 변수 등록, Production 배포, 공개 채널 OFF는 이번 점검 범위에 포함하지 않았다.
