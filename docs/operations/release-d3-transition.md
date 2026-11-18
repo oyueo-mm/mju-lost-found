@@ -4,6 +4,8 @@
 
 Production 신규 Standby 준비와 Vercel 민감 변수 등록은 [Production 전환 준비 기록](release-d3-production-preparation-2026-11-18.md)을 따른다. 배포, 공개 접근 OFF, 운영 DB 변경은 별도의 전환 승인 범위에서 실행한다.
 
+현재 Production 키는 Vercel에 Production 전용 Secret으로 등록됐다. 아래의 승인 전 필수 절차는 [확정된 실행 순서와 중단 조건](release-d3-production-preparation-2026-11-18.md#승인-후-실행-순서와-중단-조건)에 따른다. 공지는 D-3 앱 배포 24시간 전에 게시하고, 공개 접근 OFF는 비공개 연결·갱신 및 20분 관찰을 통과한 뒤 실행한다.
+
 2026-11-18 Preview에서 `Allow public access to channels`를 OFF로 전환했다. 공급자의 `PrivateOnly`, 기존 Standby 키의 private 구독·수신·권한 회수와 갱신은 hosted 검사 45개, Chromium 12개와 통합 회귀 16단계로 확인했다. 구버전 탭은 실제 가입 거부를 받은 상태에서 수동 전환 리허설을 통과했다. [후속 보고](release-d3-standby-2026-11-18.md)를 참조한다.
 
 ## 상태와 기본 순서
@@ -37,6 +39,10 @@ mode/key 변경은 설정 행을 독점 잠근 뒤 기존 grant를 회수한다.
 node scripts/db/approved-operation.mjs --confirm-production --approval-reference RELEASE-D3-PREFLIGHT -- scripts/operations/release-d3.mjs preflight
 # 모든 게이트와 키 승인이 완료된 경우에만:
 node scripts/db/approved-operation.mjs --confirm-production --approval-reference RELEASE-D3-MIGRATE -- scripts/operations/release-d3.mjs migrate --apply --confirm-production
+# 실제 Production 배포. --dry-run은 배포 이력 쓰기만 생략한다.
+node scripts/deployments/deploy.mjs production --dry-run
+# polling 상태의 배포를 검증한 다음 Production 비공개 연결을 켠다.
+node scripts/db/approved-operation.mjs --confirm-production --approval-reference RELEASE-D3-PRIVATE -- scripts/operations/release-d3.mjs private --kid c455ce27-da9f-42e8-ab62-00d443e55979 --apply --confirm-production
 ```
 
 서버 mode 변경은 새 메타데이터만 변경한다. 메시지·게시글·사진·사용자 권한·신고 증거를 변경하지 않는다. Realtime 프로젝트 설정 변경은 인증된 관리 도구로 정확히 해당 프로젝트에서 수행하고, Data API OFF와 기존 설정의 불변성을 재확인한다.

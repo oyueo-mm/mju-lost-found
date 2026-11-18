@@ -2,6 +2,8 @@
 
 2026-11-18 사용자가 승인한 운영 변경은 Production Supabase 신규 Standby 키 1개 추가와 해당 키의 Vercel Production 민감 변수 등록이다. 현재 앱은 D-2 `8baa381` 및 `dpl_HTtxjZJDDgka3HjTkRH6ZKQzR7EX`를 유지한다. 새 앱 배포와 공개 채널 중단에는 별도 승인이 필요하다.
 
+**현재 상태** · Production Standby의 JWKS 검증과 Vercel Production 전용 `MJU_REALTIME_PRIVATE_JWK` 민감 변수 등록을 완료했다. 아래 순서는 별도 운영 전환 승인 후 실행한다.
+
 Production 프로젝트 `tmifqtyxojtuoejxjrng` 전용 ES256 키의 공개 ID는 `c455ce27-da9f-42e8-ab62-00d443e55979`다. Windows CurrentUser DPAPI에 암호화했고 로컬 서명과 검증, Preview 공개키와의 분리를 확인했다. 등록 전 Production JWKS의 기존 공개키 1개와 Vercel Production 전용 변수 부재를 기준으로 저장했다. 기준은 Git에서 제외된 공개 메타데이터다. 이전 키의 Standby/Active 상태 자체는 JWKS에서 판별할 수 없으므로 대시보드 상태는 운영자가 확인한다.
 
 1. [Production JWT Signing Keys](https://supabase.com/dashboard/project/tmifqtyxojtuoejxjrng/settings/jwt)에서 **Project Settings → JWT Keys → JWT Signing Keys → Create standby key**로 이동한다.
@@ -46,3 +48,28 @@ Windows에서 직접 WSL 포트에 접속할 수 없어 로컬 루프백과 WSL 
 | Vercel Production 변수 이름 | `MJU_REALTIME_PRIVATE_JWK` 미등록 |
 
 이번 요청은 읽기 전용 점검으로 해석했다. 운영 앱 세션으로 로그인한 확인과 D-3 앱에서 발급한 Production 토큰의 실제 비공개 가입은 배포 단계의 검증으로 남는다. Vercel 변수 등록, Production 배포, 공개 채널 OFF는 이번 점검 범위에 포함하지 않았다.
+
+## Vercel 민감 변수 등록과 최종 점검
+
+후속 승인으로 `production-realtime-standby.mjs register-vercel --confirm-production-key-only --confirm-standby`를 실행했다. Production JWKS와 로컬 키의 지문, 기존 공개키 보존, Preview 공개키와의 분리를 다시 검증하고 Vercel CLI stdin으로 값을 전달했다. Vercel의 복호화 없는 조회에서 동일한 이름의 `sensitive`/`secret` 항목이 **Production 전용 하나와 Preview 전용 하나**로 분리돼 있었다. 브랜치나 사용자 지정 환경에 연결된 항목은 없었다. 개인키나 변수 값을 출력하지 않았다. Vercel 환경 변수 변경은 새 배포부터 적용된다. [Vercel 환경 변수 동작](https://vercel.com/docs/environment-variables/managing-environment-variables)
+
+| 등록 후 확인 | 결과 |
+| --- | --- |
+| Production 배포 | D-2 `8baa381`, `dpl_HTtxjZJDDgka3HjTkRH6ZKQzR7EX` 일치. Vercel 메타데이터에서 같은 프로젝트의 Production `READY` 롤백 대상 확인 |
+| 인증 | 로그인 HTTP 200, 익명 세션 확인, 채팅·관리자 API HTTP 401 |
+| 채팅과 Storage | 채팅방 4개, 메시지·채팅 이미지 참조 0개. 채팅 이미지와 신고 증거 버킷 비공개, 게시글 이미지 버킷 공개 및 기존 이미지 응답 정상 |
+| Realtime 및 데이터 | WebSocket transport 정상, Data API HTTP 503/OFF, D-2 작업 실패 0건 |
+| 오류 | 기존 배포 최근 20분 error·5xx 각각 0건 |
+| DB 변경 전 이력 | 예정된 D-3 마이그레이션 6개만 대기, D-3 설정 테이블 미존재 |
+
+게시글 이미지와 채팅 버킷을 점검하는 `--content-continuity` 옵션을 기존 읽기 전용 점검에 추가했다. 처음에는 Prisma 필드명과 실제 기존 SQL 컬럼명이 달라 조회가 실패했으며 물리 컬럼 `image_url`로 수정해 통과했다. Production에 기존 채팅 메시지나 채팅 사진 참조가 없어 실물 채팅 사진 열람은 Preview 통합 회귀 결과를 사용한다. Production의 실제 D-3 세션 발급과 비공개 가입은 아래 전환에서 확인한다.
+
+## 승인 후 실행 순서와 중단 조건
+
+1. **안내 및 일정**. 기본 안내 채널은 기존 [관리자 공지 등록](https://mju-find.vercel.app/admin/announcements)이다. `settings.manage` 권한의 운영자가 앱 전환 예정 시각을 KST로 확정한 뒤, 최소 24시간 앞서 `채팅 연결 업데이트 안내` 공지를 등록해 활성 이용자의 앱 내 알림으로 전달한다. 사용자에게 기존 채팅 탭을 닫기 전에 같은 대화를 새 탭에서 열어 작성한 글을 복사하고 원본 사진을 다시 선택하도록 안내한다. 공지 본문은 [전환·복구 절차](release-d3-transition.md#장시간-열린-구버전-탭)에 있다. 공지 등록에 따른 사용자 알림 생성은 전환 승인 범위에 포함되는지 확인한 뒤 실행한다. 기존 탭에 즉시 표시되거나 모바일 푸시로 전달된다고 가정하지 않는다. D-3 앱이 공개 토픽에 새 이벤트를 보내지 않으므로 안내 기준 시점은 **공개 OFF가 아니라 앱 배포 시점**이다.
+2. **백업 및 사전 확인**. Production 버전과 직전 READY 롤백 배포, Preview와 소스 동등성, Production 전용 Secret 메타데이터, JWKS를 대조한다. 전용 `ops/backup`에서 기존 승인 실행기로 **새 이름의 최신 암호화 백업**을 만들고 SHA256·실제 격리 복원·이미지 참조·D-3 마이그레이션 리허설을 요구한다. 기존 정기 파일의 재검증 시각만으로 새 백업으로 판정하지 않는다. 권한·체크섬·복원 실패, 관련 5xx, 환경 키 혼선, 안내 미확인 또는 롤백 대상 미확보 시 중단한다.
+3. **DB 마이그레이션**. `release-d3.mjs preflight`에서 예정된 6개만 대기 중임을 확인한다. 승인 실행기로 `migrate --apply --confirm-production`을 실행해 대기가 0이고 `mode=polling`, 전용 역할이 수신 전용, 앱·Storage 콘텐츠 실효 테이블 권한 0임을 확인한다. 잠금이나 migration 실패 시 앱 배포를 중단하고 이력을 확인한다. 기존 콘텐츠와 Storage는 그대로 둔다.
+4. **polling으로 앱 배포**. Preview와 서비스 소스가 일치하는 깨끗한 작업 트리를 기존 `node scripts/deployments/deploy.mjs production --dry-run`으로 배포한다. 여기서 `--dry-run`은 배포 이력 DB 쓰기만 생략하며 실제 배포가 발생한다. 새 배포 ID를 기록하고 인증 API 조회, 기존 게시글 이미지와 채팅 화면 접근을 확인해 같은 빌드를 polling 복구 후보로 보존한다. 직전 D-2 배포는 READY 롤백 대상으로 유지한다.
+5. **비공개 활성화 후 관찰**. 승인 실행기에서 `private --kid c455ce27-da9f-42e8-ab62-00d443e55979 --apply --confirm-production`으로 전환한다. 기존 운영 참여자 계정의 기존 방에서 실제 연결 `SUBSCRIBED`와 토큰 최초 발급 및 2분 이상 뒤 갱신 HTTP 200을 확인한다. 새 테스트 메시지나 테스트 사진은 만들 필요가 없다. 실제 운영 세션 확인을 할 수 없거나 가입·갱신이 실패하면 공개 OFF로 넘어가지 않고 polling으로 복구한다. 권한 거부, Storage, Data API OFF, Vercel 로그를 다시 확인한다.
+6. **공개 접근 OFF**. 앞 단계 통과 후 관련 오류·5xx 없이 **20분 관찰**하고 공지 전달 경로와 polling 복구를 재확인한 뒤, 승인된 시각에만 [Production Realtime 설정](https://supabase.com/dashboard/project/tmifqtyxojtuoejxjrng/realtime/settings)의 **Allow public access to channels**를 OFF로 저장한다. 설정 저장으로 연결이 끊길 수 있다. 운영 참여자의 재가입과 갱신, 앱의 인증 경계·Storage 및 Data API OFF를 확인하고 관련 로그를 다시 본다. Production에서 공격성 가입이나 대량 요청을 수행하지 않는다. [Supabase Realtime 설정](https://supabase.com/docs/guides/realtime/settings)
+7. **복구 및 계속 감시**. 공개 OFF 전 앱 기능이나 데이터 연속성에 영향이 있으면 직전 D-2 배포 `dpl_HTtxjZJDDgka3HjTkRH6ZKQzR7EX`로 되돌릴 수 있다. OFF 뒤 가입·갱신 또는 채팅 경로에 장애가 있으면 받은 승인 아래 `release-d3.mjs polling --apply --confirm-production`을 실행해 인증 API polling으로 복구하고 발급된 grant를 철회한다. 기존 D-2 앱은 이미 열린 탭에서 polling을 지원하지 않으므로 OFF 이후 복구 대상은 위에서 확인한 D-3 빌드다. 앱 데이터·증거·추가형 테이블과 키는 보존한다. DB 접근 장애로 polling 전환 자체가 실패하면 연결 복구와 기존 읽기 경로 확인을 우선하고, 공개 모드 복원은 별도의 운영 결정으로 둔다. [Vercel 롤백 절차](https://vercel.com/docs/cli/rollback)
