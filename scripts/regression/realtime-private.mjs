@@ -133,15 +133,19 @@ try{
   }
   const renewed=await grants.issueChatRealtimeGrant(users[0],session,rooms[0].id);
   must(renewed.kind==="ok"&&renewed.topic===issue.topic,"Renewal reuses session topic");
-  await member.client.setAuth(renewed.token);
+  // The app replaces the transport on renewal and waits for a confirmed join.
+  // setAuth() on a live channel returns after queuing the update, before the
+  // provider's authorization refresh has completed.
+  const renewedMember=await join(renewed.token,renewed.topic);
+  must(renewedMember.status==="SUBSCRIBED","Renewed token rejoins the private channel");
   const renewedId=randomUUID();await authorizedSend(rooms[0].id,renewed,renewedId);
-  must(await delivered(member,renewedId),"Renewed connection receives authorized event");
+  must(await delivered(renewedMember,renewedId),"Renewed connection receives authorized event");
   // Realtime may cache join RLS. The application's dispatch guard must
   // stop future sends to the already-connected topic after revocation.
   await prisma.chatRealtimeSession.update({where:{id:session.id},data:{revokedAt:new Date()}});
   const deniedId=randomUUID();must(!await authorizedSend(rooms[0].id,renewed,deniedId),"Session revocation prevents dispatch to an existing connection");
   await rejectJoin("Revoked session cannot reconnect",renewed.token,renewed.topic);
-  await new Promise(r=>setTimeout(r,500));must(!member.observed.includes(deniedId),"Existing connection receives no post-revocation event");
+  await new Promise(r=>setTimeout(r,500));must(!renewedMember.observed.includes(deniedId),"Existing connection receives no post-revocation event");
   const organization=await prisma.organization.create({data:{name:marker,organizationType:"Synthetic test"}});organizations.push(organization);save();
   const membership=await prisma.organizationMember.create({data:{organizationId:organization.id,userId:users[1].id,role:"LEADER"}});
   rooms.push(await prisma.chatRoom.create({data:{initiatorUserId:users[0].id,organizationId:organization.id,postType:"lost",postTitle:marker}}));save();

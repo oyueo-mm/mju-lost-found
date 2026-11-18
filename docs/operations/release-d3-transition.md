@@ -2,7 +2,7 @@
 
 이 문서는 조건부 배포용 실행 절차다. 문서와 명령의 존재 자체는 승인이 아니다. 최신 승인 경계는 [서명키 등록안](realtime-signing-registration.md)을 따른다. 현재 Production은 D-2이고 D-3 운영 변경은 수행하지 않았다.
 
-2026-11-18 Preview의 Standby 서명키는 실제 일반 회원 private 구독·수신·권한 회수, 43개 hosted 검사, Chromium 갱신과 16단계 회귀를 통과했다. 실제 Google 로그인 검증과 구버전 탭의 수동 전환 리허설도 통과했다. [후속 보고](release-d3-standby-2026-11-18.md)를 참조한다.
+2026-11-18 Preview에서 `Allow public access to channels`를 OFF로 전환했다. 공급자의 `PrivateOnly`, 기존 Standby 키의 private 구독·수신·권한 회수와 갱신은 hosted 검사 45개, Chromium 12개와 통합 회귀 16단계로 확인했다. 구버전 탭은 실제 가입 거부를 받은 상태에서 수동 전환 리허설을 통과했다. [후속 보고](release-d3-standby-2026-11-18.md)를 참조한다.
 
 ## 상태와 기본 순서
 
@@ -39,13 +39,17 @@ node scripts/db/approved-operation.mjs --confirm-production --approval-reference
 
 서버 mode 변경은 새 메타데이터만 변경한다. 메시지·게시글·사진·사용자 권한·신고 증거를 변경하지 않는다. Realtime 프로젝트 설정 변경은 인증된 관리 도구로 정확히 해당 프로젝트에서 수행하고, Data API OFF와 기존 설정의 불변성을 재확인한다.
 
+### Production 신규 키 등록 범위
+
+별도 승인 후 Production `tmifqtyxojtuoejxjrng`을 확인하고, 승인된 로컬 비밀 저장 절차로 Preview와 다른 신규 ES256 키를 생성한다. Production 프로젝트의 **Project Settings → JWT Keys → JWT Signing Keys**에서 **Create standby key → ES256 (ECC) → Import an existing private key**로 가져온다. 공개 `kid`와 좌표를 JWKS로 확인하고 같은 개인키는 Vercel Production 전용 `MJU_REALTIME_PRIVATE_JWK` 민감 변수로 한정해 등록한다. 키는 Standby에 두며 기존 활성 키의 회전·폐기·삭제는 승인 범위에 포함되지 않는다. 키 등록에 대한 승인은 별도의 배포·DB 마이그레이션·Realtime 설정 변경 승인으로 확대하지 않는다. [Supabase 서명키 문서](https://supabase.com/docs/guides/auth/signing-keys)
+
 ## 장시간 열린 구버전 탭
 
 D-2의 기존 JS에는 private 토큰 발급이나 API 주기 조회가 없다. 새 서버 코드를 배포하거나 public 접근을 닫는 것만으로 이미 실행 중인 JS를 자동 업그레이드할 수 없다. 숨김 채널 이름·TTL·서버-only 새 이벤트가 이 문제를 해결한다고 가정하지 않는다. 강제 reload로 작성 중 텍스트/사진 선택을 잃게 해서는 안 된다.
 
 2026-11-18 Chromium에서 D-2 `8baa381` 빌드의 실제 공개 채널 가입을 확인한 뒤, 기존 탭을 유지한 채 같은 로컬 주소의 서버를 D-3으로 전환했다. 구형 채널 이벤트 수신을 테스트 탭에서만 억제하자 기존 메시지 목록은 멈췄지만 텍스트와 선택한 사진 미리보기는 보존됐다. 같은 로그인 세션으로 새 탭을 열어 텍스트를 복사하고 원본 사진을 다시 선택한 뒤, 인증 API polling으로 새 메시지를 받았다. 절차와 실행 방법은 [회귀 검사 문서](../../scripts/regression/README.md#d-2-열린-탭-전환-리허설)에 있다.
 
-운영 전환 전에는 새 탭으로 이동하는 절차를 안내한다. 작성 중이면 기존 탭을 열어 둔 상태로 같은 대화를 새 탭에서 열고, 작성한 텍스트를 복사하고 원본 사진을 다시 선택한다. 새 탭에서 초안과 사진을 확인한 후 기존 탭을 닫는다. 이미 열린 D-2 화면은 자동 전환되지 않으므로 배포 시 강제 새로고침을 사용하지 않는다. 호스팅 환경의 public OFF 검증은 이 로컬 리허설과 별도로 진행한다.
+운영 전환 전에는 새 탭으로 이동하는 절차를 안내한다. 작성 중이면 기존 탭을 열어 둔 상태로 같은 대화를 새 탭에서 열고, 작성한 텍스트를 복사하고 원본 사진을 다시 선택한다. 새 탭에서 초안과 사진을 확인한 후 기존 탭을 닫는다. 이미 열린 D-2 화면은 자동 전환되지 않으므로 배포 시 강제 새로고침을 사용하지 않는다. Preview 공개 접근 OFF 이후 D-2 빌드가 실제 공급자의 `PrivateOnly`를 받는 상태에서 같은 전환 절차 5개를 다시 통과했다.
 
 D-3에서는 실시간 연결이 끊기면 채팅 화면에 재연결과 주기적 조회 상태를 표시한다. 같은 화면에서 인증 API로 새 메시지를 조회하고 비공개 연결이 회복되면 안내를 지운다. 배포 직전에는 D-2 탭 사용자가 볼 수 있는 운영 안내 채널에 전환 시점과 새 탭 이동 절차를 먼저 공지한다. 이미 실행 중인 D-2 화면 안에 서버가 새 배너를 표시할 수 있는 경로는 없다. 안내가 전달되기 전에 Production의 공개 채널을 끄는 일정은 잡지 않는다.
 

@@ -13,7 +13,9 @@ import {loadApprovedPreviewRealtimeKey} from "../operations/preview-realtime-man
 if(!process.argv.includes("--confirm-preview")||assertDatabaseEnvironment(process.env,{usage:"operation"})!=="preview"||assertScriptSupabaseAccess(process.env)!=="preview")throw new Error("Preview confirmation required");
 const privateMode=process.argv.includes("--private");
 const cutoverMode=process.argv.includes("--legacy-cutover");
+const expectPublicOff=process.argv.includes("--expect-public-off");
 if(privateMode&&cutoverMode)throw new Error("Select one browser suite");
+if(expectPublicOff&&!cutoverMode)throw new Error("--expect-public-off requires --legacy-cutover in the browser runner");
 const signingKey=privateMode?JSON.stringify(await loadApprovedPreviewRealtimeKey()):"";
 const marker=`realtime-${randomUUID()}`,users=[];let room,server,cleanupOk=false;
 const manifest=`.vercel/${marker}.json`;
@@ -56,25 +58,30 @@ try{
   await startServer(cutoverMode?".vercel/d3-cutover-d2-8baa381":undefined);
   const suite=cutoverMode?"realtime-cutover":privateMode?"realtime-private":"realtime-fallback";
   const browser=spawn("python",[`scripts/regression/${suite}.py`],{stdio:["pipe","pipe","pipe"],windowsHide:true,timeout:cutoverMode?120000:300000});
-  const config=JSON.stringify({base,roomId:room.id,cookies:sessions,legacySession:privateMode});
-  let output="";browser.stderr.resume();
+  const config=JSON.stringify({base,roomId:room.id,cookies:sessions,legacySession:privateMode,expectPublicOff});
+  let output="",stage;browser.stderr.resume();
   let switchTask;
+  const lines=createInterface({input:browser.stdout});
+  lines.on("line",line=>{
+    const progress=/^stage:(initial|polling|renewal|completed)$/.exec(line);
+    if(progress){stage=progress[1];return;}
+    if(!cutoverMode||line!=="switch-local-server"){output+=line;return;}
+    if(switchTask)return;
+    switchTask=(async()=>{await stopServer();await startServer();browser.stdin.end("switched\n");})().catch(()=>browser.stdin.end("switch-failed\n"));
+  });
   if(cutoverMode){
     browser.stdin.on("error",()=>{});
     browser.stdin.write(config+"\n");
-    const lines=createInterface({input:browser.stdout});
-    lines.on("line",line=>{
-      if(line!=="switch-local-server"){output+=line;return;}
-      if(switchTask)return;
-      switchTask=(async()=>{await stopServer();await startServer();browser.stdin.end("switched\n");})().catch(()=>browser.stdin.end("switch-failed\n"));
-    });
   }else{
     browser.stdin.end(config);
-    browser.stdout.on("data",data=>output+=data);
   }
-  const [status]=await once(browser,"close");
+  const [status,signal]=await once(browser,"close");
   await switchTask;
-  if(status!==0){try{const failed=JSON.parse(output);console.log(JSON.stringify({completedChecks:failed.completedChecks,errorType:failed.errorType,line:failed.line,counters:failed.counters}));}catch{}throw new Error("Browser verification failed; no private data emitted");}
+  if(status!==0){
+    console.log(JSON.stringify({browserExit:status,signal,stage}));
+    try{const failed=JSON.parse(output);console.log(JSON.stringify({completedChecks:failed.completedChecks,errorType:failed.errorType,line:failed.line,counters:failed.counters}));}catch{}
+    throw new Error("Browser verification failed; no private data emitted");
+  }
   const result=JSON.parse(output);if(!result.passed)throw new Error("Browser result missing");console.log(JSON.stringify(result));
 }catch(error){console.error(error.message.startsWith("Browser")?error.message:"Browser setup failed; diagnostics suppressed");process.exitCode=1;}
 finally{

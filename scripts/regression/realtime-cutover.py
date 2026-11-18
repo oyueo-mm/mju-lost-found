@@ -17,6 +17,7 @@ photo = {
     "buffer": base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jP8sAAAAASUVORK5CYII="),
 }
 checks = []
+expect_public_off = config.get("expectPublicOff", False)
 
 try:
     with sync_playwright() as playwright:
@@ -25,7 +26,7 @@ try:
         for context, cookie in zip((member, peer), config["cookies"]):
             context.add_cookies([{"name": "authjs.session-token", "value": cookie, "url": base}])
         old = member.new_page()
-        legacy = {"joined": False, "delivery": True}
+        legacy = {"joined": False, "private_only": False, "delivery": True}
 
         def connect_legacy(socket):
             upstream = socket.connect_to_server()
@@ -39,8 +40,13 @@ try:
                         _, _, topic, event, body = packet
                     else:
                         topic, event, body = packet.get("topic"), packet.get("event"), packet.get("payload")
-                    if (topic, event) == (f"realtime:chat-room-{room}", "phx_reply") and body.get("status") == "ok":
-                        legacy["joined"] = True
+                    if (topic, event) == (f"realtime:chat-room-{room}", "phx_reply") and isinstance(body, dict):
+                        status = body.get("status")
+                        if status == "ok":
+                            legacy["joined"] = True
+                        elif status == "error":
+                            reason = json.dumps(body.get("response", {})).lower()
+                            legacy["private_only"] = "privateonly" in reason or "only allows private channels" in reason
                 socket.send(frame)
 
             upstream.on_message(receive)
@@ -53,17 +59,19 @@ try:
         old.locator('input[type="file"]').set_input_files(photo)
         expect(old.locator('img[src^="blob:"]')).to_be_visible()
         for _ in range(200):
-            if legacy["joined"]:
+            if legacy["joined"] or legacy["private_only"]:
                 break
             old.wait_for_timeout(50)
-        assert legacy["joined"]
+        assert legacy["private_only"] and not legacy["joined"] if expect_public_off else legacy["joined"]
         assert member.request.post(token_url, headers={"origin": base}).status == 404
-        checks.append("D-2 tab has a draft, photo and legacy socket before cutover")
+        checks.append("D-2 composer remains usable after provider rejects its public join" if expect_public_off
+                      else "D-2 tab has a draft, photo and legacy socket before cutover")
 
         print("switch-local-server", flush=True)
         assert sys.stdin.readline().strip() == "switched"
-        # Suppress legacy delivery to this tab only. The provider is untouched.
-        legacy["delivery"] = False
+        if not expect_public_off:
+            # Before the provider policy change, model legacy delivery loss locally.
+            legacy["delivery"] = False
         expect(old_text).to_have_value(draft)
         expect(old.locator('img[src^="blob:"]')).to_be_visible()
         checks.append("server switch and loss of legacy events preserve existing composer")

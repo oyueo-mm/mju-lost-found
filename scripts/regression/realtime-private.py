@@ -60,6 +60,7 @@ try:
 
         page.on("response", count_response)
         page.on("websocket", socket_open)
+        print("stage:initial", flush=True)
         started = time.monotonic()
         page.goto(f"{base}/chat/{room}")
         field = page.locator('input[type="text"]').last
@@ -107,6 +108,7 @@ try:
         expect(field).to_have_value("D3 private draft retained")
         checks.append("visibility reconnect catches up without losing unsent draft")
         token_route = f"**/api/chat/{room}/realtime"
+        print("stage:polling", flush=True)
         status = page.get_by_test_id("chat-connection-status")
         page.route(token_route, lambda route: route.fulfill(status=503, json={}))
         page.evaluate("window.dispatchEvent(new Event('online'))")
@@ -132,6 +134,7 @@ try:
         checks.append("private transport reconnects after network interruption")
         baseline_tokens = counters["tokens"]
         renewal_started = time.monotonic()
+        print("stage:renewal", flush=True)
         # Wait beyond a full 120-second token lifetime, keeping the real page
         # and provider socket alive rather than mocking time or token expiry.
         while time.monotonic() - renewal_started < 125:
@@ -158,6 +161,7 @@ try:
         for ctx in contexts:
             ctx.close()
         browser.close()
+    print("stage:completed", flush=True)
     print(json.dumps({"suite": "D3 real private Chromium", "passed": len(checks), "checks": checks, "elapsedSeconds": elapsed, "tokenResponses": counters["tokens"], "privateBroadcasts": counters["broadcasts"], "osBackgroundVerified": False}))
 except Exception as error:
     print(json.dumps({"completedChecks": checks, "errorType": type(error).__name__, "line": error.__traceback__.tb_lineno, "counters": counters}))
