@@ -54,3 +54,9 @@ Production의 공개 Realtime이 OFF이고 채팅은 인증 polling을 사용한
 - 두 변경을 포함한 Preview `dpl_EKp12SuRrw1fmuatsD9gGwB5F1iY`가 고정 URL에 배포됐다. 단위 테스트 3,013/3,013, 통합 회귀 16/16과 테스트 데이터 정리, 로컬 Chromium 검사 5/5, 호스팅 비파괴 프로브 16/16, 타입 검사·린트·빌드가 통과했다. Chromium 재현 절차는 [회귀 검사 안내](../../scripts/regression/README.md)에 있다.
 - 실제 호스팅의 홈, 로그인, 버전 API, 서비스 워커, robots.txt, sitemap.xml에서 보안 헤더 네 개를 확인했다. 홈 `noindex, nofollow`, robots.txt의 전체 수집 금지, 비어 있는 sitemap도 확인했다. 검색 네 경로의 단일 응답 시간은 198~1,169ms였으며 전후 성능 비교와 실제 검색 엔진 색인은 측정하지 않았다.
 - Production은 D-3 `cd123bf`의 인증 polling 및 공개 채널 차단 상태다. 이번 헤더·UX 변경은 Preview까지 적용했으며 DB 마이그레이션은 필요 없다. Preview 복구는 직전 `dpl_5DCPPR7weezg1dbrfdXkiSaKDTn4`를 고정 URL에 다시 연결한다. CSP Report-Only와 강제 적용은 별도로 검증할 범위다.
+
+## 2026-11-19 명지찾기 및 홈·검색 UX 후속 Preview
+
+- `3bddd74`의 한국어 서비스 표시명은 명지찾기다. 기존 영문 명칭 MJU Find는 다른 언어 및 검색용 대체 이름으로 사용한다. 돋보기와 체크 표시를 앱, 파비콘, 설치 아이콘과 공유 이미지에 반영했다.
+- 등록과 게시판 바로가기에서 분실물을 왼쪽, 습득물을 오른쪽에 배치했다. 등록과 검색의 소분류 항목에 대분류를 먼저 고르라는 안내를 지원 언어 7개에 추가했다. 홈페이지 `WebSite`와 공개 게시판별 제목을 추가하고 Preview 수집 제한을 유지했다.
+- 고정 Preview는 `dpl_9RCXUS7GmdBdvyUz32cCRsx31eTJ`다. 단위 검사 3,013/3,013, 로컬 Chromium 검사 6/6, 호스팅 비파괴 프로브 16/16, 린트와 호스팅 빌드·타입 검사를 통과했다. 실제 응답의 기본 보안 헤더, 서비스 표시명, 사이트 구조화 데이터, 설치 아이콘 설정, 링크 공유 이미지와 두 게시판 canonical을 확인했다. 기존 Preview `dpl_EKp12SuRrw1fmuatsD9gGwB5F1iY`는 UX 복구 대상이다. 이 변경은 Production에 배포하지 않았다.
