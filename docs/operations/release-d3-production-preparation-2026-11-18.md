@@ -151,3 +151,7 @@ Windows에서 직접 WSL 포트에 접속할 수 없어 로컬 루프백과 WSL 
 같은 운영 명령으로 Preview 독립 회원 채널에 보낸 `transport_control`이 WebSocket 바이너리 프레임 안에 돌아온 것을 일치하는 nonce로 확인했다. Preview Realtime 회귀 47/47과 fixture 정리가 통과했다. Production 합성 토픽에서 서버 대조군은 수신했고 익명 비공개 가입은 차단됐으며 공개 가입은 허용됐다. Production 실제 회원 브라우저에는 별도 nonce 대조가 필요하므로 수신을 통과로 기록하지 않았다. [이전 브라우저 기록에서 바이너리 프레임 확인](../../scripts/regression/README.md#기존-참여자의-비저장-수신-확인)
 
 읽기 전용 첫 조회에서는 활성 grant가 0개였다. 11:52 KST 복구 직전에는 1개가 관찰됐고, 복구 후에는 0개였다. 승인 실행기로 인증 API polling을 복구했고 공개 채널은 ON이다. Data API OFF, 메시지 1개, 채팅 이미지 참조 0개를 재확인했다. 새 Production 메시지와 사진은 만들지 않았다.
+
+### 2026-11-19 Console 수신 점검 준비
+
+이전 브라우저 프레임 대조를 종료했다. [DevTools 스니펫](../../scripts/operations/realtime-browser-receipt.js)은 지정된 MJU Find 채팅 탭의 새 Realtime 소켓 수신에서 비공개 가입 결과와 점검 nonce만 Console에 표시한다. 로컬 앱과 호스팅 Preview를 사용해 실제 Chromium에서 polling 화면에 설치하고, 새로고침 없이 비공개에 가입한 뒤 최초 수신과 125초 이상 지난 갱신 연결의 수신을 확인했다. 결과는 6/6이며 Preview 계정과 방을 정리했다. 메시지와 첨부는 생성하지 않았다. Production 모드는 `polling`, 활성 grant는 0개, Data API는 OFF이며, 공개 접근 ON 설정과 기존 배포는 그대로 유지했다. [스니펫 실행과 재현 절차](../../scripts/regression/README.md#console에서-회원-수신-확인)

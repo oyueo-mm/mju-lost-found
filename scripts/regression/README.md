@@ -120,6 +120,18 @@ node scripts/db/approved-operation.mjs --confirm-production --approval-reference
 
 Realtime V2에서는 이 점검 이벤트가 **Binary Message (Opcode 2)**로 도착한다. Chrome DevTools의 Messages 텍스트 필터를 지우고 이벤트 발송 시각의 수신 이진 행을 선택한 뒤 아래의 표시 형식을 **UTF-8**로 바꿔 `transport_control`과 `nonce`를 확인한다. 만료 시각에서 30초를 뺀 시점에 앱이 소켓을 교체하므로, 120초 수명에서는 평상시 약 90초마다 새 WebSocket 행이 생길 수 있다. 연결 간격은 각 Messages의 첫 `phx_join` 행의 시각으로 대조한다. [Chrome WebSocket 안내](https://developer.chrome.com/docs/devtools/network/reference/#frames) · [Supabase Realtime 프로토콜](https://supabase.com/docs/guides/realtime/protocol)
 
+### Console에서 회원 수신 확인
+
+기존 채팅방 탭의 Chrome 또는 Edge DevTools에서 **Sources → Snippets → New snippet**을 연다. [수신 스니펫](../operations/realtime-browser-receipt.js)의 내용을 붙여넣고 `Ctrl+Enter`로 실행한다. Console에 `[MJU Realtime] READY`가 표시되면 새로고침 없이 같은 탭을 유지한다. 이후 새 비공개 가입은 `JOIN OK`, 점검 이벤트 도착은 `RECEIVED`와 nonce로 표시된다. 운영 기록과 대조할 때는 해당 nonce만 공유한다. [Chrome Snippets 실행 절차](https://developer.chrome.com/docs/devtools/javascript/snippets)
+
+스니펫은 지정된 호스트의 채팅 페이지에서, 실행 후 열린 해당 프로젝트의 Realtime WebSocket 수신만 관찰한다. 실제 수신 프레임에서 가입 결과와 점검 nonce를 읽으며 토큰·토픽·원본 프레임을 출력하지 않는다. Console 결과에 토큰 HTTP 상태가 필요하면 Network에서 해당 요청의 상태 코드만 확인한다. 새로고침하면 관찰이 종료되므로 다시 확인할 때에는 스니펫을 재실행한다.
+
+```powershell
+node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/regression/realtime-fallback.mjs --confirm-preview --browser-receipt
+```
+
+위 검사는 로컬 앱 빌드와 호스팅 Preview Realtime을 사용한다. Chromium에서 polling 상태로 채팅방을 연 뒤 스니펫을 실행하고, 동일 탭에서 비공개 가입 및 최초·갱신 후 수신을 검증한다. Preview 전용 계정과 빈 채팅방을 실행별로 생성해 정리하며 채팅 메시지와 첨부는 생성하지 않는다.
+
 참여 계정이 접근할 수 없는 기존 방이 있을 경우 `inspect`의 `outsiderProbeRoomId`를 사용해 같은 로그인 상태에서 기존 토큰 API에 한 번 요청한다. `403` 및 `access_revoked` 응답을 확인하고 방이나 메시지를 열지 않는다. 실제 권한 확인, 갱신된 연결의 수신, 정상 운영 관찰 20분을 모두 통과한 뒤 공급자 공개 접근을 끈다. `realtime-transport-control`의 `private_only`와 정상 회원의 재접속을 다시 확인한다.
 
 Preview에서 이미 공개 접근을 껐다면 브라우저 명령에 `--expect-public-off`를 추가한다. 이 모드에서는 실제 D-2 소켓의 `PrivateOnly` 가입 응답을 요구하고, 이어지는 새 탭 전환과 초안 보존을 검사한다.

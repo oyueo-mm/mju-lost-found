@@ -5,13 +5,15 @@ import {createJiti} from "jiti";
 import {createRequire} from "node:module";
 import {pathToFileURL,fileURLToPath} from "node:url";
 import {randomUUID} from "node:crypto";
-import {spawn} from "node:child_process";
+import {execFile,spawn} from "node:child_process";
 import {writeFileSync} from "node:fs";
 import {createInterface} from "node:readline";
 import {once} from "node:events";
+import {promisify} from "node:util";
 import {loadApprovedPreviewRealtimeKey} from "../operations/preview-realtime-manual-state.mjs";
 if(!process.argv.includes("--confirm-preview")||assertDatabaseEnvironment(process.env,{usage:"operation"})!=="preview"||assertScriptSupabaseAccess(process.env)!=="preview")throw new Error("Preview confirmation required");
-const privateMode=process.argv.includes("--private");
+const receiptMode=process.argv.includes("--browser-receipt");
+const privateMode=process.argv.includes("--private")||receiptMode;
 const cutoverMode=process.argv.includes("--legacy-cutover");
 const expectPublicOff=process.argv.includes("--expect-public-off");
 if(privateMode&&cutoverMode)throw new Error("Select one browser suite");
@@ -56,20 +58,29 @@ try{
   // The default suite intentionally leaves the signer absent; --private
   // uses only the already-imported Preview checkpoint in process memory.
   await startServer(cutoverMode?".vercel/d3-cutover-d2-8baa381":undefined);
-  const suite=cutoverMode?"realtime-cutover":privateMode?"realtime-private":"realtime-fallback";
+  const suite=cutoverMode?"realtime-cutover":receiptMode?"realtime-browser-receipt":privateMode?"realtime-private":"realtime-fallback";
+  const receiptCutoff=new Date().toISOString();
   const browser=spawn("python",[`scripts/regression/${suite}.py`],{stdio:["pipe","pipe","pipe"],windowsHide:true,timeout:cutoverMode?120000:300000});
   const config=JSON.stringify({base,roomId:room.id,cookies:sessions,legacySession:privateMode,expectPublicOff});
   let output="",stage;browser.stderr.resume();
   let switchTask;
+  let receiptTask;
   const lines=createInterface({input:browser.stdout});
   lines.on("line",line=>{
     const progress=/^stage:(initial|polling|renewal|completed)$/.exec(line);
     if(progress){stage=progress[1];return;}
+    if(receiptMode&&line==="operator-receipt"){
+      receiptTask=(async()=>{
+        const result=await promisify(execFile)(process.execPath,["scripts/operations/realtime-member-check.mjs","send","--confirm-preview",String(room.id),receiptCutoff],{timeout:15000,windowsHide:true});
+        browser.stdin.write(JSON.stringify({nonce:JSON.parse(result.stdout).expectedReceipt})+"\n");
+      })().catch(()=>browser.stdin.write("{}\n"));
+      return;
+    }
     if(!cutoverMode||line!=="switch-local-server"){output+=line;return;}
     if(switchTask)return;
     switchTask=(async()=>{await stopServer();await startServer();browser.stdin.end("switched\n");})().catch(()=>browser.stdin.end("switch-failed\n"));
   });
-  if(cutoverMode){
+  if(cutoverMode||receiptMode){
     browser.stdin.on("error",()=>{});
     browser.stdin.write(config+"\n");
   }else{
@@ -77,6 +88,7 @@ try{
   }
   const [status,signal]=await once(browser,"close");
   await switchTask;
+  await receiptTask;
   if(status!==0){
     console.log(JSON.stringify({browserExit:status,signal,stage}));
     try{const failed=JSON.parse(output);console.log(JSON.stringify({completedChecks:failed.completedChecks,errorType:failed.errorType,line:failed.line,counters:failed.counters}));}catch{}
