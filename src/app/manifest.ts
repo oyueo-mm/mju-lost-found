@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { KOREAN_SITE_NAME } from "@/lib/brand";
 
 // Phase 11-5: Next.js App Router's native manifest file convention -- this
 // file alone is what makes /manifest.webmanifest exist and get auto-linked
@@ -17,8 +18,8 @@ import type { MetadataRoute } from "next";
 // values (globals.css), never invented colors.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "명지인을 위한 스마트 분실물 센터 — MJU Find",
-    short_name: "MJU Find",
+    name: KOREAN_SITE_NAME,
+    short_name: KOREAN_SITE_NAME,
     description: "명지대학교 학생을 위한 분실물 등록·검색·연락 서비스",
     start_url: "/",
     display: "standalone",

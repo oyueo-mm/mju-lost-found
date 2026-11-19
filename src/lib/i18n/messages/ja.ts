@@ -244,6 +244,7 @@ export const ja: Dictionary = {
   "form.subcategory": "小分類",
   "form.subcategoryOptional": "（任意）",
   "form.subcategoryNone": "指定しない",
+  "form.subcategorySelectParent": "先に大分類を選択してください",
   "form.categorySuggestion": "「{label}」に近いようです。",
   "form.categorySuggestionApply": "この分類にする",
   "form.categorySuggestionDismiss": "閉じる",

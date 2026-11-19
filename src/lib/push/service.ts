@@ -1,5 +1,6 @@
 import webpush from "web-push";
 
+import { KOREAN_SITE_NAME } from "@/lib/brand";
 import { prisma } from "@/lib/db/prisma";
 import { Prisma } from "@/generated/prisma/client";
 
@@ -16,7 +17,7 @@ import { Prisma } from "@/generated/prisma/client";
 // from this side; the browser/OS may still drop or delay a notification.
 //
 // The notification never carries message text, the post title or a name:
-// "MJU Find / 새로운 채팅 메시지가 도착했어요." and the room's URL.
+// The site name, a generic notification, and the room URL.
 
 export const PUSH_TTL_SECONDS = 3600;
 export const PUSH_MAX_ATTEMPTS = 3;
@@ -41,7 +42,7 @@ export function pushConfig(): PushConfig | null {
   return publicKey && privateKey ? { publicKey, privateKey, subject } : null;
 }
 
-export const PUSH_TEXT = { title: "MJU Find", body: "새로운 채팅 메시지가 도착했어요." } as const;
+export const PUSH_TEXT = { title: KOREAN_SITE_NAME, body: "새로운 채팅 메시지가 도착했어요." } as const;
 export function chatPushPayload(chatRoomId: number) {
   return { title: PUSH_TEXT.title, body: PUSH_TEXT.body, url: `/chat/${chatRoomId}`, tag: `chat-${chatRoomId}` };
 }

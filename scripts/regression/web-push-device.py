@@ -42,7 +42,7 @@ try:
                 const notices = await reg.getNotifications({tag: `chat-${room}`});
                 if (notices.length !== 1) return false;
                 const [notice] = notices;
-                return notice.title === 'MJU Find' && notice.body === '새로운 채팅 메시지가 도착했어요.' &&
+                return notice.title === '명지찾기' && notice.body === '새로운 채팅 메시지가 도착했어요.' &&
                        notice.data?.url === `/chat/${room}`;
             }"""
             received = False

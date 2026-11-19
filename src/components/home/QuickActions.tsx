@@ -3,16 +3,16 @@ import Link from "next/link";
 import { BoxIcon, HandboxIcon, PlusIcon } from "@/components/icons";
 import { getTranslator } from "@/lib/i18n/server";
 
-// 홈 빠른 기능 바로가기 (Soft Card): 찾아보기 두 곳과 등록 두 곳. 탐색은
+// 홈 빠른 기능 바로가기 (Soft Card): 등록 두 곳과 찾아보기 두 곳. 탐색은
 // 흰 카드 + 회색 아이콘, 등록은 연한 파란 카드 + 파란 아이콘으로 한눈에
 // 구분한다. 모바일 2열, 데스크톱 4열. break-keep keeps Korean words whole;
 // overflow-wrap:anywhere still lets a language without spaces (ja, zh) wrap
 // at 320px instead of running past the card.
 const ACTIONS = [
-  { href: "/found", title: "landing.stats.browseFound", desc: "home.quick.found.desc", Icon: HandboxIcon, primary: false },
-  { href: "/lost", title: "landing.stats.browseLost", desc: "home.quick.lost.desc", Icon: BoxIcon, primary: false },
   { href: "/lost/new", title: "landing.registerLost", desc: "home.quick.registerLost.desc", Icon: PlusIcon, primary: true },
   { href: "/found/new", title: "landing.registerFound", desc: "home.quick.registerFound.desc", Icon: PlusIcon, primary: true },
+  { href: "/lost", title: "landing.stats.browseLost", desc: "home.quick.lost.desc", Icon: BoxIcon, primary: false },
+  { href: "/found", title: "landing.stats.browseFound", desc: "home.quick.found.desc", Icon: HandboxIcon, primary: false },
 ] as const;
 
 export async function QuickActions() {

@@ -244,6 +244,7 @@ export const fr: Dictionary = {
   "form.subcategory": "Sous-catégorie",
   "form.subcategoryOptional": "(facultatif)",
   "form.subcategoryNone": "Non précisé",
+  "form.subcategorySelectParent": "Choisissez d’abord une catégorie principale",
   "form.categorySuggestion": "Cela ressemble plutôt à : {label}.",
   "form.categorySuggestionApply": "Utiliser cette catégorie",
   "form.categorySuggestionDismiss": "Ignorer",

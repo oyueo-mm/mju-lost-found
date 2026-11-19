@@ -134,6 +134,21 @@ node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scr
 
 위 검사는 로컬 앱 빌드와 호스팅 Preview Realtime을 사용한다. Chromium에서 polling 상태로 채팅방을 연 뒤 스니펫을 실행하고, 동일 탭에서 비공개 가입 및 최초·갱신 후 수신을 검증한다. Preview 전용 계정과 빈 채팅방을 실행별로 생성해 정리하며 채팅 메시지와 첨부는 생성하지 않는다.
 
+## D-4 기본 헤더와 검색 노출·UX Chromium 검사
+
+Preview용 격리 환경으로 빌드한 뒤 로컬 포트 3106에서 앱을 시작한다. 다른 터미널에서 Chromium 검사를 실행하고 완료 후 로컬 서버를 종료한다.
+
+```powershell
+node scripts/regression/build-preview.mjs --confirm-preview
+node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3106
+```
+
+```powershell
+python scripts/regression/core-headers-and-discovery.py
+```
+
+응답 헤더, Chromium의 로그인 iframe 차단, 모바일 홈 등록 버튼, 소분류의 활성화·초기화 및 Preview 색인 제외를 확인한다. Production sitemap의 URL 범위는 단위 검사로 검증한다.
+
 참여 계정이 접근할 수 없는 기존 방이 있을 경우 `inspect`의 `outsiderProbeRoomId`를 사용해 같은 로그인 상태에서 기존 토큰 API에 한 번 요청한다. `403` 및 `access_revoked` 응답을 확인하고 방이나 메시지를 열지 않는다. 실제 권한 확인, 갱신된 연결의 수신, 정상 운영 관찰 20분을 모두 통과한 뒤 공급자 공개 접근을 끈다. `realtime-transport-control`의 `private_only`와 정상 회원의 재접속을 다시 확인한다.
 
 Preview에서 이미 공개 접근을 껐다면 브라우저 명령에 `--expect-public-off`를 추가한다. 이 모드에서는 실제 D-2 소켓의 `PrivateOnly` 가입 응답을 요구하고, 이어지는 새 탭 전환과 초안 보존을 검사한다.

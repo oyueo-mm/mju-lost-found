@@ -188,6 +188,7 @@ export const zh: Dictionary = {
   "form.subcategory": "小类",
   "form.subcategoryOptional": "（可选）",
   "form.subcategoryNone": "不指定",
+  "form.subcategorySelectParent": "请先选择大类",
   "form.categorySuggestion": "看起来更像“{label}”。",
   "form.categorySuggestionApply": "使用此分类",
   "form.categorySuggestionDismiss": "关闭",

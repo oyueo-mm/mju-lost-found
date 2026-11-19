@@ -1,3 +1,5 @@
+import { KOREAN_SITE_NAME } from "@/lib/brand";
+
 // 다국어(i18n) Phase: 한국어 사전이자 이 앱의 "키 목록" 그 자체다 --
 // translate.ts의 TranslationKey가 이 객체의 키에서 나오므로, 여기에 없는
 // 키를 t()에 넘기면 컴파일이 실패한다(오타 방지). 나머지 언어 사전은
@@ -55,9 +57,9 @@ export const ko = {
   "nav.unreadNotifications": "읽지 않은 알림 {count}개",
 
   // ---------- 브랜드 ----------
-  "brand.name": "MJU Find",
-  "brand.shortName": "MJU Find",
-  "brand.description": "명지인을 위한 스마트 분실물 센터",
+  "brand.name": KOREAN_SITE_NAME,
+  "brand.shortName": KOREAN_SITE_NAME,
+  "brand.description": "명지대학교 분실물·습득물 찾기",
 
   // ---------- Footer ----------
   "footer.tagline": "명지대학교 학생을 위한 분실물 등록·검색·연락 서비스입니다.",
@@ -65,7 +67,7 @@ export const ko = {
   "footer.contact": "운영팀 문의",
   "footer.developerContact": "개발자 문의",
   "footer.copyright":
-    "© {year} MJU Find. 특정 게시물·메시지·사용자에 대한 문의는 해당 화면의 신고 기능을 이용해주세요.",
+    `© {year} ${KOREAN_SITE_NAME}. 특정 게시물·메시지·사용자에 대한 문의는 해당 화면의 신고 기능을 이용해주세요.`,
   "footer.section.service": "서비스",
   "footer.section.community": "커뮤니티",
   "footer.section.guide": "안내",
@@ -198,6 +200,7 @@ export const ko = {
   "form.subcategory": "소분류",
   "form.subcategoryOptional": "(선택)",
   "form.subcategoryNone": "선택 안 함",
+  "form.subcategorySelectParent": "대분류를 먼저 선택하세요",
   "form.categorySuggestion": "{label}에 더 가까워 보여요.",
   "form.categorySuggestionApply": "이 분류로 선택",
   "form.categorySuggestionDismiss": "닫기",
@@ -514,7 +517,7 @@ export const ko = {
   "report.submitting": "제출 중...",
 
   // ---------- 로그인 / 온보딩 ----------
-  "auth.login.title": "MJU Find",
+  "auth.login.title": KOREAN_SITE_NAME,
   "auth.login.subtitle": "로그인하면 분실물·습득물을 등록하고, 채팅과 알림을 이용할 수 있어요.",
   "auth.login.google": "Google 계정으로 로그인",
   "auth.login.domainNotice": "명지대학교 Google 계정(@mju.ac.kr)으로 로그인해 주세요. 관리자 승인을 받은 외부 관계자는 승인된 Google 계정으로 로그인할 수 있어요.",
@@ -599,10 +602,10 @@ export const ko = {
   "push.working": "처리 중...",
   "push.statusOn": "이 기기에서 켜져 있어요",
   "push.statusOff": "이 기기에서 꺼져 있어요",
-  "push.denied": "브라우저에서 알림이 차단되어 있어요. 브라우저(또는 휴대폰) 설정의 사이트 설정 > 알림에서 MJU Find를 허용한 뒤 다시 시도해 주세요.",
+  "push.denied": `브라우저에서 알림이 차단되어 있어요. 브라우저(또는 휴대폰) 설정의 사이트 설정 > 알림에서 ${KOREAN_SITE_NAME}를 허용한 뒤 다시 시도해 주세요.`,
   "push.unsupported": "이 브라우저는 웹 푸시 알림을 지원하지 않아요.",
   "push.inApp": "앱 안의 브라우저(카카오톡·에브리타임 등)에서는 알림을 받을 수 없어요. 메뉴에서 '다른 브라우저로 열기'를 눌러 Chrome이나 Safari에서 열어 주세요.",
-  "push.iosHome": "아이폰에서는 Safari 공유 버튼 → '홈 화면에 추가'로 MJU Find를 추가한 뒤, 홈 화면 아이콘으로 열어 알림을 켜 주세요. (iOS 16.4 이상)",
+  "push.iosHome": `아이폰에서는 Safari 공유 버튼 → '홈 화면에 추가'로 ${KOREAN_SITE_NAME}를 추가한 뒤, 홈 화면 아이콘으로 열어 알림을 켜 주세요. (iOS 16.4 이상)`,
   "push.failed": "알림을 켜지 못했어요. 잠시 후 다시 시도해 주세요.",
   "push.otherDevices": "다른 기기 {count}대에서도 켜져 있어요.",
   "push.limits": "메시지 내용은 알림에 표시하지 않아요. 브라우저·휴대폰 설정(방해 금지 등)에 따라 늦거나 오지 않을 수 있어요.",

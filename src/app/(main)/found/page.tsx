@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { needsSearchApi } from "@/lib/posts/searchIntent";
 import { SearchFilterBar } from "@/components/search/SearchFilterBar";
 import { Pagination } from "@/components/search/Pagination";
@@ -17,6 +18,14 @@ import { getTranslator } from "@/lib/i18n/server";
 import { statusLabelKey } from "@/lib/i18n/labels";
 
 type SearchParams = Record<string, string | string[] | undefined>;
+
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslator();
+  return {
+    title: `${t("board.found.title")} | ${t("brand.name")}`,
+    alternates: { canonical: "/found" },
+  };
+}
 
 export default async function FoundListPage({
   searchParams,
