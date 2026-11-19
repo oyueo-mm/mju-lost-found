@@ -52,3 +52,6 @@ next-env.d.ts
 # verified) -- never committed. The ONNX file alone is ~107MB, over
 # GitHub's 100MB per-file push limit. See docs/AI_MATCHING_ARCHITECTURE.md.
 /models
+
+# Python bytecode from regression scripts
+__pycache__/
