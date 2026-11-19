@@ -10,9 +10,9 @@ const { QuickActions } = await import("./QuickActions");
 const html = renderToStaticMarkup(await QuickActions());
 
 describe("홈 빠른 기능 바로가기", () => {
-  it("browses the two boards first, then the two post forms", () => {
+  it("puts the two register buttons in the first row before board shortcuts", () => {
     const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
-    expect(hrefs).toEqual(["/found", "/lost", "/lost/new", "/found/new"]);
+    expect(hrefs).toEqual(["/lost/new", "/found/new", "/found", "/lost"]);
   });
 
   it("gives every shortcut a title and a short description", () => {

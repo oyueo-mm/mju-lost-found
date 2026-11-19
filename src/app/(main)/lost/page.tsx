@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { needsSearchApi } from "@/lib/posts/searchIntent";
 import { SearchFilterBar } from "@/components/search/SearchFilterBar";
 import { Pagination } from "@/components/search/Pagination";
@@ -17,6 +18,8 @@ import { getTranslator } from "@/lib/i18n/server";
 import { statusLabelKey } from "@/lib/i18n/labels";
 
 type SearchParams = Record<string, string | string[] | undefined>;
+
+export const metadata: Metadata = { alternates: { canonical: "/lost" } };
 
 export default async function LostListPage({
   searchParams,

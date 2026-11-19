@@ -72,31 +72,29 @@ export function CategoryPicker({ value, onChange, required, legacyUnmapped, titl
           </Select>
         </label>
 
-        {value.categoryCode !== null && (
-          <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="font-medium text-foreground">
-              {t("form.subcategory")} <span className="font-normal text-muted-foreground">{t("form.subcategoryOptional")}</span>
-            </span>
-            <Select
-              name="subcategory"
-              value={value.subcategory ?? ""}
-              onChange={(event) => {
-                const next = event.target.value;
-                const subcategory = isSubcategoryCode(next) && parentCategoryOf(next) === value.categoryCode ? next : null;
-                onChange({ categoryCode: value.categoryCode, subcategory });
-              }}
-              disabled={disabled}
-              className={FIELD_CLASS}
-            >
-              <option value="">{t("form.subcategoryNone")}</option>
-              {subcategoriesOf(value.categoryCode).map((code) => (
-                <option key={code} value={code}>
-                  {t(taxonomySubcategoryLabelKey(code))}
-                </option>
-              ))}
-            </Select>
-          </label>
-        )}
+        <label className="flex min-w-0 flex-col gap-1.5">
+          <span className="font-medium text-foreground">
+            {t("form.subcategory")} <span className="font-normal text-muted-foreground">{t("form.subcategoryOptional")}</span>
+          </span>
+          <Select
+            name="subcategory"
+            value={value.subcategory ?? ""}
+            onChange={(event) => {
+              const next = event.target.value;
+              const subcategory = isSubcategoryCode(next) && parentCategoryOf(next) === value.categoryCode ? next : null;
+              onChange({ categoryCode: value.categoryCode, subcategory });
+            }}
+            disabled={disabled || value.categoryCode === null}
+            className={FIELD_CLASS}
+          >
+            <option value="">{t(value.categoryCode === null ? "form.categorySelectPlaceholder" : "form.subcategoryNone")}</option>
+            {value.categoryCode && subcategoriesOf(value.categoryCode).map((code) => (
+              <option key={code} value={code}>
+                {t(taxonomySubcategoryLabelKey(code))}
+              </option>
+            ))}
+          </Select>
+        </label>
       </div>
 
       {legacyUnmapped !== null && value.categoryCode === null && (

@@ -19,7 +19,7 @@ type CategoryFilterSelectsProps = {
 
 // 검색 필터의 대분류 -> 소분류 select 한 쌍. 대분류만 고르면 그 대분류 전체,
 // 소분류까지 고르면 그 소분류로 좁힌다. 대분류를 바꾸면 소분류는 "전체"로
-// 돌아간다. 소분류 select는 대분류를 고른 뒤에만 나타난다.
+// 돌아간다. 대분류를 고르기 전에는 소분류 필터를 비활성화한다.
 export function CategoryFilterSelects({ value, onChange, selectClassName, emptyLabel, subcategoryEmptyLabel }: CategoryFilterSelectsProps) {
   const { t } = useI18n();
   return (
@@ -42,25 +42,24 @@ export function CategoryFilterSelects({ value, onChange, selectClassName, emptyL
         ))}
       </Select>
 
-      {value.categoryCode && (
-        <Select
-          aria-label={t("search.filter.subcategory")}
-          value={value.subcategory ?? ""}
-          onChange={(event) => {
-            const next = event.target.value;
-            const subcategory = isSubcategoryCode(next) && parentCategoryOf(next) === value.categoryCode ? next : null;
-            onChange({ ...value, subcategory });
-          }}
-          className={selectClassName}
-        >
-          <option value="">{subcategoryEmptyLabel ?? t("search.filter.subcategoryAll")}</option>
-          {subcategoriesOf(value.categoryCode).map((code) => (
-            <option key={code} value={code}>
-              {t(taxonomySubcategoryLabelKey(code))}
-            </option>
-          ))}
-        </Select>
-      )}
+      <Select
+        aria-label={t("search.filter.subcategory")}
+        value={value.subcategory ?? ""}
+        disabled={!value.categoryCode}
+        onChange={(event) => {
+          const next = event.target.value;
+          const subcategory = isSubcategoryCode(next) && parentCategoryOf(next) === value.categoryCode ? next : null;
+          onChange({ ...value, subcategory });
+        }}
+        className={selectClassName}
+      >
+        <option value="">{value.categoryCode ? (subcategoryEmptyLabel ?? t("search.filter.subcategoryAll")) : t("form.categorySelectPlaceholder")}</option>
+        {value.categoryCode && subcategoriesOf(value.categoryCode).map((code) => (
+          <option key={code} value={code}>
+            {t(taxonomySubcategoryLabelKey(code))}
+          </option>
+        ))}
+      </Select>
     </>
   );
 }

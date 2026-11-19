@@ -9,6 +9,7 @@ import { getLocale, getTranslator } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/messages";
 import { I18nProvider } from "@/lib/i18n/client";
 import { VisitBeacon } from "@/components/layout/VisitBeacon";
+import { PRODUCTION_HOST } from "@/lib/devstats/vercelDeployment.mjs";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,10 +39,12 @@ export async function generateMetadata(): Promise<Metadata> {
     // production domains (the old ones 308-redirect here), and Vercel kept
     // picking the old one. Any Vercel deployment (Preview included, as
     // before) points link previews at production; local dev uses localhost.
-    metadataBase: new URL(process.env.VERCEL ? "https://mju-find.vercel.app" : "http://localhost:3000"),
+    metadataBase: new URL(process.env.VERCEL ? `https://${PRODUCTION_HOST}` : "http://localhost:3000"),
+    ...(process.env.VERCEL_ENV === "production" ? {} : { robots: { index: false, follow: false } }),
     title,
     description,
     openGraph: {
+      siteName: brandName,
       title,
       description,
     },

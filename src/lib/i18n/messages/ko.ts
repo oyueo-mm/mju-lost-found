@@ -57,7 +57,7 @@ export const ko = {
   // ---------- 브랜드 ----------
   "brand.name": "MJU Find",
   "brand.shortName": "MJU Find",
-  "brand.description": "명지인을 위한 스마트 분실물 센터",
+  "brand.description": "명지대학교 분실물·습득물 찾기",
 
   // ---------- Footer ----------
   "footer.tagline": "명지대학교 학생을 위한 분실물 등록·검색·연락 서비스입니다.",

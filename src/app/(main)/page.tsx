@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { getCurrentUser } from "@/lib/auth/session";
 import { QuickActions } from "@/components/home/QuickActions";
 import { CategoryShortcuts } from "@/components/home/CategoryShortcuts";
@@ -6,6 +7,8 @@ import { Hero } from "@/components/home/landing/Hero";
 import { LandingStats } from "@/components/home/landing/LandingStats";
 import { RecentPostsSections } from "@/components/home/RecentPostsSections";
 import { getTranslator } from "@/lib/i18n/server";
+
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 // Home. Public, no auth gate: the session only decides what follows the
 // first screen.
