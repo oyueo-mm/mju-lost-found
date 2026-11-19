@@ -8,8 +8,10 @@ const [action, confirmation, roomArg, openedAfter, expectedArg, ...extra] = proc
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
 const roomId = Number(roomArg);
 const timestamp = openedAfter && new Date(openedAfter);
-const expected = expectedArg?.match(/^--expect-messages=(0|[1-9]\d{0,8})$/);
-const expectedMessages = expected ? Number(expected[1]) : 0;
+// --min-messages=N: a live test where members may add messages meanwhile.
+const expected = expectedArg?.match(/^--(expect|min)-messages=(0|[1-9]\d{0,8})$/);
+const expectedMessages = expected ? Number(expected[2]) : 0;
+const atLeast = expected?.[1] === "min";
 if (extra.length || !["inspect", "send"].includes(action) || !["preview", "production"].includes(target) ||
     confirmation !== `--confirm-${target}` || assertScriptSupabaseAccess(process.env) !== target ||
     !/^[1-9]\d{0,9}$/.test(roomArg ?? "") || roomId > 2147483647 ||
@@ -28,7 +30,7 @@ try {
     SELECT (SELECT count(*)::int FROM public."Message" WHERE chat_room_id = r.id) AS messages
     FROM public."ChatRoom" r WHERE r.id = $1
   `, [roomId]);
-  if (room?.messages !== expectedMessages) throw new Error("Existing room or expected message count did not match");
+  if (room === undefined || (atLeast ? room.messages < expectedMessages : room.messages !== expectedMessages)) throw new Error("Existing room or expected message count did not match");
 
   let candidates = [];
   if (timestamp) {

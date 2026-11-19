@@ -38,12 +38,16 @@ class Probe:
         self.sockets_closed = 0
         self.navigations = 0
         self.message_gets = 0
+        self.diag = []  # (event, status) of canary diagnostics
         page.on("response", self.on_response)
         page.on("websocket", self.on_socket)
         page.on("framenavigated", lambda f: setattr(self, "navigations", self.navigations + (1 if f == page.main_frame else 0)))
 
     def on_response(self, response):
         url = response.url.split("?")[0]
+        if url == f"{base}/api/chat/{room}/realtime" and response.request.method == "POST" and response.request.headers.get("x-mju-realtime-diag"):
+            self.diag.append((response.request.headers["x-mju-realtime-diag"], response.status))
+            return
         if url == f"{base}/api/chat/{room}/realtime" and response.request.method == "POST":
             key = response.status if response.status in self.tokens else "other"
             self.tokens[key] += 1
@@ -142,6 +146,49 @@ try:
         expect(a.get_by_text(re.compile(r"·\s*읽음$")).first).to_be_visible(timeout=10000)
         checks.append("read status reaches the sender")
 
+        # 3b. private -> polling -> private, as the Production room 52 test
+        for probe in (pa, pb):
+            assert ("subscribed", 204) in probe.diag, "canary diagnostics missing on subscribe"
+        checks.append("canary tabs report their subscription (diagnostic 204)")
+        print("switch-to-polling", flush=True)
+        assert sys.stdin.readline().strip() == "switched", "server switch failed"
+        before204 = (pa.tokens[204], pb.tokens[204])
+        t0 = time.monotonic()
+        # renewal (token expiry - 30 s) meets 204 -> polling, no reload
+        assert pa.wait(lambda: pa.tokens[204] > before204[0] and pb.tokens[204] > before204[1], 150), "tabs did not fall back"
+        timings["privateToPollingSeconds"] = round(time.monotonic() - t0, 1)
+        expect(a.get_by_text(POLLING_TEXT, exact=False)).to_be_visible(timeout=15000)
+        expect(b.get_by_text(POLLING_TEXT, exact=False)).to_be_visible(timeout=15000)
+        reported = lambda: any(e == "polling-mode" and st == 204 for e, st in pa.diag) and any(e == "polling-mode" and st == 204 for e, st in pb.diag)
+        assert pa.wait(reported, 10), f"polling reason not reported a={pa.diag} b={pb.diag} tokens a={pa.tokens} b={pb.tokens}"
+        mp = f"two-member {uuid.uuid4()}"
+        t0 = time.monotonic()
+        send_ui(a, mp)
+        expect(b.get_by_text(mp, exact=True)).to_be_visible(timeout=25000)
+        timings["pollingDeliverySeconds"] = round(time.monotonic() - t0, 1)
+        checks.append("forced polling: both tabs fall back, show the notice, report the reason and still deliver")
+        print("switch-to-private", flush=True)
+        assert sys.stdin.readline().strip() == "switched", "server switch failed"
+        joined_before = (pa.joined, pb.joined)
+        navs = (pa.navigations, pb.navigations)
+        t0 = time.monotonic()
+        assert pa.wait(lambda: pa.joined > joined_before[0] and pb.joined > joined_before[1], 180), "tabs did not return to private"
+        timings["pollingToPrivateReturnSeconds"] = round(time.monotonic() - t0, 1)
+        expect(a.get_by_text(POLLING_TEXT, exact=False)).to_be_hidden(timeout=15000)
+        expect(b.get_by_text(POLLING_TEXT, exact=False)).to_be_hidden(timeout=15000)
+        assert (pa.navigations, pb.navigations) == navs, "a tab reloaded"
+        resubscribed = lambda: sum(1 for e, st in pa.diag if e == "subscribed" and st == 204) >= 2 and sum(1 for e, st in pb.diag if e == "subscribed" and st == 204) >= 2
+        assert pa.wait(resubscribed, 10), f"return not reported a={pa.diag} b={pb.diag}"
+        mr = f"two-member {uuid.uuid4()}"
+        t0 = time.monotonic()
+        send_ui(b, mr)
+        expect(a.get_by_text(mr, exact=True)).to_be_visible(timeout=8000)
+        timings["afterReturnDeliverySeconds"] = round(time.monotonic() - t0, 2)
+        for page in (a, b):
+            for text in (mp, mr):
+                assert page.get_by_text(text, exact=True).count() == 1
+        checks.append("both tabs return to private without a reload and deliver in real time again")
+
         # 4. idle socket mode: no 10 s polling
         gets = pb.message_gets
         b.wait_for_timeout(25000)
@@ -213,6 +260,6 @@ except Exception as error:  # noqa: BLE001 - report the failing line only, no da
     while tb and tb.tb_next:
         tb = tb.tb_next
     result = {"passed": False, "completedChecks": len(checks), "checks": checks, "timings": timings, "errorType": type(error).__name__,
-              "line": tb.tb_lineno if tb else None, "message": str(error)[:160] if isinstance(error, AssertionError) else None}
+              "line": tb.tb_lineno if tb else None, "message": str(error)[:600] if isinstance(error, AssertionError) else None}
 print(json.dumps(result, ensure_ascii=False), flush=True)
 sys.exit(0 if result["passed"] else 1)

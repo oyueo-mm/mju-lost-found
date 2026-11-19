@@ -77,6 +77,22 @@ export async function authorizeChatRealtimeReceipt(user: CurrentUser, sessionId:
   return receipt?.allowed ? "ok" : {kind:"forbidden"};
 }
 
+// Canary-room client state reports (no content): which tab state preceded a
+// silence -- hidden, polling (and why) or subscribed. Fixed vocabulary only.
+export const REALTIME_DIAG_EVENTS = ["subscribed","polling-mode","polling-token","polling-transport","polling-error","hidden-connected","hidden-polling","visible-connected","visible-polling"] as const;
+export type RealtimeDiagEvent = typeof REALTIME_DIAG_EVENTS[number];
+export const isRealtimeDiagEvent = (value: string): value is RealtimeDiagEvent => (REALTIME_DIAG_EVENTS as readonly string[]).includes(value);
+
+export async function authorizeChatRealtimeDiagnostic(user: CurrentUser, roomId: number): Promise<"ok"|Denied> {
+  // Only the designated canary room, only its members; polling mode included
+  // (grants are revoked then, so this cannot depend on an active grant).
+  if (realtimeCanaryRoom() !== roomId) return {kind:"forbidden"};
+  const admission = await checkRateLimit("realtimeToken", {userId:user.id,tier:await rateLimitTierFor(user)});
+  if (!admission.ok) return {kind:"limited",admission};
+  const member=(await prisma.$queryRaw<{allowed:boolean}[]>`SELECT public.mju_chat_member_allowed(${user.id},${roomId}) AS allowed`)[0]?.allowed;
+  return member ? "ok" : {kind:"forbidden"};
+}
+
 // RLS is cached on joined sockets. Re-authorize every outgoing event and send
 // only to still-authorized per-grant topics, never to a shared room topic.
 export async function currentChatRealtimeTopics(roomId:number):Promise<string[]> {

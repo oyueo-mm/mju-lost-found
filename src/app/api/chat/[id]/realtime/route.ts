@@ -2,7 +2,7 @@ import {createHash} from "node:crypto";
 import {NextRequest,NextResponse} from "next/server";
 import {auth} from "@/lib/auth/auth";
 import {getCurrentUser} from "@/lib/auth/session";
-import {authorizeChatRealtimeReceipt,issueChatRealtimeGrant,realtimeCanaryRoom} from "@/lib/chat/realtimeGrants";
+import {authorizeChatRealtimeDiagnostic,authorizeChatRealtimeReceipt,isRealtimeDiagEvent,issueChatRealtimeGrant,realtimeCanaryRoom} from "@/lib/chat/realtimeGrants";
 import {REALTIME_POLLING_RECHECK_SECONDS,UUID_PATTERN} from "@/lib/chat/realtimeToken";
 import {rateLimitFailure,rateLimitFailureResponse} from "@/lib/rateLimit";
 const headers={"Cache-Control":"private, no-store, max-age=0",Pragma:"no-cache",Vary:"Cookie"};
@@ -17,6 +17,20 @@ export async function POST(request:NextRequest,{params}:{params:Promise<{id:stri
     const session=await auth();
     if(!session?.realtimeSessionId||session.realtimeSessionNeedsRefresh)return NextResponse.json({code:"session_refresh_required"},{status:409,headers});
     if(String(user.id)!==session.user.id||!session.authExpiresAt)return NextResponse.json({error:"Unauthorized"},{status:401,headers});
+    const diag=request.headers.get("x-mju-realtime-diag");
+    if(diag!==null){
+      if(!isRealtimeDiagEvent(diag))return new NextResponse(null,{status:400,headers});
+      const allowed=await authorizeChatRealtimeDiagnostic(user,roomId);
+      if(allowed==="ok"){
+        // Participant = short digest of the Auth.js realtime session, never an ID.
+        console.info("Chat realtime diag",diag,"room",roomId,"participant",createHash("sha256").update(session.realtimeSessionId).digest("hex").slice(0,8));
+        return new NextResponse(null,{status:204,headers});
+      }
+      if(allowed.kind==="limited"){
+        const response=rateLimitFailureResponse(rateLimitFailure(allowed.admission)!);for(const [key,value]of Object.entries(headers))response.headers.set(key,value);return response;
+      }
+      return new NextResponse(null,{status:403,headers});
+    }
     const receipt=request.headers.get("x-mju-realtime-receipt");
     if(receipt!==null){
       if(!UUID_PATTERN.test(receipt))return new NextResponse(null,{status:400,headers});

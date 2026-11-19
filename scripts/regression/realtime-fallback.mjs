@@ -19,7 +19,14 @@ const receiptMode=process.argv.includes("--browser-receipt")||appReceipt;
 // suite's signal, proving an open tab joins without a reload.
 const twoMember=process.argv.includes("--two-member");
 const privateMode=process.argv.includes("--private")||receiptMode||twoMember;
-let canaryOverride=null;
+let canaryOverride=null,previewPolling=false;
+async function setPreviewMode(mode){
+  // Preview only (release-d3.mjs re-checks the target); kid from the loaded
+  // Preview signing key, never a Production key.
+  const kid=JSON.parse(signingKey).kid;
+  await promisify(execFile)(process.execPath,["scripts/operations/release-d3.mjs",mode,...(mode==="private"?["--kid",kid]:[]),"--apply","--confirm-preview"],{timeout:60000,windowsHide:true});
+  previewPolling=mode==="polling";
+}
 const cutoverMode=process.argv.includes("--legacy-cutover");
 const expectPublicOff=process.argv.includes("--expect-public-off");
 if(privateMode&&cutoverMode)throw new Error("Select one browser suite");
@@ -67,7 +74,7 @@ try{
   await startServer(cutoverMode?".vercel/d3-cutover-d2-8baa381":undefined);
   const suite=twoMember?"realtime-two-member":cutoverMode?"realtime-cutover":receiptMode?"realtime-browser-receipt":privateMode?"realtime-private":"realtime-fallback";
   const receiptCutoff=new Date().toISOString();
-  const browser=spawn("python",[`scripts/regression/${suite}.py`],{stdio:["pipe","pipe","pipe"],windowsHide:true,timeout:cutoverMode?120000:twoMember?480000:300000});
+  const browser=spawn("python",[`scripts/regression/${suite}.py`],{stdio:["pipe","pipe","pipe"],windowsHide:true,timeout:cutoverMode?120000:twoMember?900000:300000});
   const config=JSON.stringify({base,roomId:room.id,cookies:sessions,legacySession:privateMode,expectPublicOff,appReceipt});
   let output="",stage;browser.stderr.resume();
   let switchTask;
@@ -83,9 +90,21 @@ try{
       })().catch(()=>browser.stdin.write("{}\n"));
       return;
     }
-    if(twoMember&&line==="switch-to-private"){
-      if(switchTask)return;
-      switchTask=(async()=>{await stopServer();canaryOverride=null;await startServer();browser.stdin.write("switched\n");})().catch(()=>browser.stdin.write("switch-failed\n"));
+    // two-member, exactly as the Production room 52 canary:
+    // 1st "switch-to-private" = restart with the canary on this room (the tab
+    //   started in polling because the canary pointed elsewhere);
+    // "switch-to-polling" / later "switch-to-private" = the Preview DB mode
+    //   via release-d3.mjs (grants revoked, same tool as Production). The
+    //   finally block always puts Preview back to private.
+    if(twoMember&&(line==="switch-to-private"||line==="switch-to-polling")){
+      const previous=switchTask;
+      switchTask=(async()=>{
+        await previous;
+        if(line==="switch-to-polling"){await setPreviewMode("polling");}
+        else if(previewPolling){await setPreviewMode("private");}
+        else{await stopServer();canaryOverride=String(room.id);await startServer();}
+        browser.stdin.write("switched\n");
+      })().catch(()=>browser.stdin.write("switch-failed\n"));
       return;
     }
     if(!cutoverMode||line!=="switch-local-server"){output+=line;return;}
@@ -110,6 +129,7 @@ try{
 }catch(error){console.error(error.message.startsWith("Browser")?error.message:"Browser setup failed; diagnostics suppressed");process.exitCode=1;}
 finally{
   server?.kill();
+  if(previewPolling){try{await setPreviewMode("private");}catch{console.error("Preview realtime mode restore failed; run release-d3.mjs private on Preview");process.exitCode=1;}}
   try{
     for(const [i,u]of users.entries())if((await prisma.user.findUnique({where:{id:u.id}}))?.email!==`${marker}-${i}@test.example.invalid`)throw new Error("Fixture ownership differs");
     if(room){const r=await prisma.chatRoom.findUnique({where:{id:room.id}});if(r?.postTitle!==marker||r.initiatorUserId!==users[0].id||r.counterpartUserId!==users[1].id)throw new Error("Room ownership differs");}

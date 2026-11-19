@@ -24,6 +24,10 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
     let client:ReturnType<typeof createChatRealtimeClient>|undefined;
     let poll:ReturnType<typeof setTimeout>|undefined,renew:ReturnType<typeof setTimeout>|undefined;
     let request:AbortController|undefined,connecting=false;
+    // Canary-room only: report state changes (fixed words, no content) so a
+    // silent tab can be told apart from a failing one in the server logs.
+    let diag=false;
+    const report=(event:string)=>{if(!diag)return;void fetch('/api/chat/'+chatRoomId+'/realtime',{method:"POST",credentials:"same-origin",cache:"no-store",keepalive:true,headers:{"x-mju-realtime-diag":event}}).catch(()=>{});};
     const confirmed=new Map<number,number>(),seen=new Set<string>();
     const sync=createChatSynchronizer(async signal=>{
       if(document.visibilityState!=="visible")return;
@@ -39,8 +43,9 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
       const delay=connected?60000:Math.min(30000,10000*2**failures);
       poll=setTimeout(()=>{poll=undefined;if(disposed||denied)return;sync.invalidate();if(!connected&&Date.now()>=retryAt)void connect();schedulePoll();},delay);
     }
-    function enterPolling(){
+    function enterPolling(reason:"mode"|"token"|"transport"|"error"="error"){
       const wasConnected=connected;
+      if(!denied)report("polling-"+reason);
       connected=false;
       handlersRef.current.pollingChanged(!denied);
       if(wasConnected&&!denied)sync.invalidate(true);
@@ -58,12 +63,14 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
       // A forged high cursor is never remembered. Only API results confirm it.
       sync.invalidate();
     }
+    let lastTokenOutcome:"mode"|"token"="token";
     async function fetchToken(signal:AbortSignal,refresh=true):Promise<{token:string;topic:string;expiresAt:string;receiptEnabled?:boolean}|null>{
+      lastTokenOutcome="token";
       const response=await fetch('/api/chat/'+chatRoomId+'/realtime',{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},cache:"no-store",signal});
       // Deliberate polling mode: no token now. Re-check at the server's pace
       // (Retry-After, bounded) so the tab joins once private mode is enabled,
       // without a reload. Foreground/network changes also re-check at once.
-      if(response.status===204){retryAt=Date.now()+pollingRecheckMs(response.headers.get("retry-after"));return null;}
+      if(response.status===204){lastTokenOutcome="mode";retryAt=Date.now()+pollingRecheckMs(response.headers.get("retry-after"));return null;}
       if(response.status===409&&refresh){await fetch("/api/auth/session",{credentials:"same-origin",cache:"no-store",signal});return fetchToken(signal,false);}
       if(response.status===401||response.status===403||response.status===404){
         // A 404 can be the polling-compatible rollback; never use public RT.
@@ -75,6 +82,7 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
       if(typeof value.token!=="string"||typeof value.topic!=="string"||!/^mju-chat:[0-9a-f-]{36}$/i.test(value.topic)||!Number.isFinite(Date.parse(value.expiresAt)))return null;
       if(Date.parse(value.expiresAt)<=Date.now()+5000)return null;
       retryAt=0;
+      if(value.receiptEnabled===true)diag=true;
       return value;
     }
     async function connect(){
@@ -82,7 +90,7 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
       request?.abort();request=new AbortController();const signal=request.signal;
       try{
         const token=await fetchToken(signal);if(disposed||signal.aborted)return;
-        if(!token){enterPolling();await stopTransport(false);return;}
+        if(!token){enterPolling(lastTokenOutcome);await stopTransport(false);return;}
         const old=client;client=undefined;await old?.disconnect();if(disposed||signal.aborted)return;
         const transport=createChatRealtimeClient();client=transport;
         await transport.setAuth(token.token);if(disposed||signal.aborted){await transport.disconnect();return;}
@@ -100,7 +108,7 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
         function transportFailed(){
           if(disposed||client!==transport)return;
           retryAt=Date.now()+30000;
-          enterPolling();
+          enterPolling("transport");
           void stopTransport(false);
         }
         transport.onHeartbeat(status=>{
@@ -110,6 +118,7 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
           if(disposed||client!==transport)return;
           if(status==="SUBSCRIBED"){
             connected=true;
+            report("subscribed");
             handlersRef.current.pollingChanged(false);
             sync.invalidate(true);
             failures=0;
@@ -124,6 +133,7 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
       finally{connecting=false;schedulePoll();if(signal.aborted&&!disposed&&!denied&&document.visibilityState==="visible")void connect();}
     }
     function visible(){
+      report((document.visibilityState==="visible"?"visible-":"hidden-")+(connected?"connected":"polling"));
       if(document.visibilityState==="visible"){denied=false;sync.invalidate(true);void connect();schedulePoll();}
       else{if(poll){clearTimeout(poll);poll=undefined;}sync.cancel();void stopTransport();}
     }

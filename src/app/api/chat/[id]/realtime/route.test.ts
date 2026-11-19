@@ -1,10 +1,10 @@
 import {NextRequest} from "next/server";
 import {beforeEach,expect,it,vi} from "vitest";
 const auth=vi.fn(),getCurrentUser=vi.fn(),issueChatRealtimeGrant=vi.fn();
-const authorizeChatRealtimeReceipt=vi.fn(),realtimeCanaryRoom=vi.fn();
+const authorizeChatRealtimeReceipt=vi.fn(),realtimeCanaryRoom=vi.fn(),authorizeChatRealtimeDiagnostic=vi.fn();
 vi.mock("@/lib/auth/auth",()=>({auth}));
 vi.mock("@/lib/auth/session",()=>({getCurrentUser}));
-vi.mock("@/lib/chat/realtimeGrants",()=>({issueChatRealtimeGrant,authorizeChatRealtimeReceipt,realtimeCanaryRoom}));
+vi.mock("@/lib/chat/realtimeGrants",async(importOriginal)=>{const actual=await importOriginal<typeof import("@/lib/chat/realtimeGrants")>();return {issueChatRealtimeGrant,authorizeChatRealtimeReceipt,realtimeCanaryRoom,authorizeChatRealtimeDiagnostic,isRealtimeDiagEvent:actual.isRealtimeDiagEvent};});
 const {POST}=await import("./route");
 const sid="c98a3c0a-92d8-4856-a4ab-998d185190ab";
 const call=(headers:Record<string,string>={origin:"http://localhost"},id="10")=>POST(new NextRequest(`http://localhost/api/chat/${id}/realtime`,{method:"POST",headers}),{params:Promise.resolve({id})});
@@ -66,6 +66,22 @@ it("advertises receipts only for the designated room, reports a digest, and neve
     expect((await call(receipt)).status).toBe(204);
     expect(log).toHaveBeenCalledWith("Private chat browser receipt",expect.stringMatching(/^[0-9a-f]{64}$/));
     expect(authorizeChatRealtimeReceipt).toHaveBeenCalledWith({id:7,isAdmin:false},sid,10);
+    expect(issueChatRealtimeGrant).not.toHaveBeenCalled();
+  } finally {log.mockRestore();}
+});
+it("accepts only fixed canary diagnostics from members and logs no identity or content",async()=>{
+  const diag=(event:string)=>call({origin:"http://localhost","x-mju-realtime-diag":event});
+  expect((await diag("hello <script>")).status).toBe(400);
+  expect(authorizeChatRealtimeDiagnostic).not.toHaveBeenCalled();
+  authorizeChatRealtimeDiagnostic.mockResolvedValueOnce({kind:"forbidden"}).mockResolvedValueOnce("ok");
+  const log=vi.spyOn(console,"info").mockImplementation(()=>{});
+  try {
+    expect((await diag("hidden-connected")).status).toBe(403);
+    expect(log).not.toHaveBeenCalled();
+    expect((await diag("polling-mode")).status).toBe(204);
+    expect(log).toHaveBeenCalledWith("Chat realtime diag","polling-mode","room",10,"participant",expect.stringMatching(/^[0-9a-f]{8}$/));
+    expect(JSON.stringify(log.mock.calls)).not.toContain(sid);
+    expect(authorizeChatRealtimeDiagnostic).toHaveBeenCalledWith({id:7,isAdmin:false},10);
     expect(issueChatRealtimeGrant).not.toHaveBeenCalled();
   } finally {log.mockRestore();}
 });
