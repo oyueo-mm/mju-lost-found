@@ -88,3 +88,13 @@ A 자동 연결(grant 2), B 두 브라우저 수신 확인 일치, C polling 150
 미확인: 기기 화면의 중복 표시 여부(Production 화면은 보지 않았다. Preview E2E에서 검증), 20:12:55 이후 두 번째 참여자의 토큰 200 로그 1건(로그에 없음. DB grant 2개와 두 참여자의 `subscribed` 진단으로 대체 확인).
 
 현재 Production `dpl_7wsj3uWVS3zXy3NayjJFTQMgtDMy`(`8dd45c6`, canary=52) + DB polling이다. 전체 전환은 사용자 결정을 기다린다.
+
+## 8. 전체 private 전환과 D-3 종료 (2026-11-19 20:32 ~ 11-20 04:09 KST)
+
+- Function Storage 확인: 보존 배포 14개, 함수 번들 합산 약 8.96GB(배포당 약 0.64GB, 팀의 다른 프로젝트 배포 0개). 새 배포 1개 후 약 9.6GB / 10GB로 판단해 진행했다(Hobby는 대시보드 수치를 API로 읽을 수 없다).
+- Production `dpl_AgwysDi1MrMCFVh1AaGccih1dn5C` (`931864c`, 앱 코드 = `8dd45c6`), canary 환경변수 없음, polling 상태에서 프로브 16/16, error·5xx 0.
+- 사전 확인: 공개 Realtime `private_only`, 익명 비공개 가입 거부, Data API 503(OFF).
+- 20:35:28 KST 전체 `private`(kid 일치, Realtime 역할 콘텐츠 권한 0). 직후 5분은 채팅 트래픽이 없었다.
+- 최종 확인(11-20 04:05–04:09, 52번 방, 사용자 PC+휴대폰): 저장 후 0.45~0.55초 안에 상대 동기화, 비행기 모드 중 저장된 메시지를 재연결(토큰 200) 직후 동기화, 복구 후 60초 안전 조회만 남음(실시간 상태), DB 5→8. 최근 1시간 error·5xx·토큰 실패 0. 사용자 화면 확인 4개 항목(양방향 즉시 수신, 비행기 모드 후 동기화, PC 목록 미리보기) 모두 정상.
+- **D-3 완료.** 운영 모드는 전체 private이고, polling fallback은 클라이언트에 유지된다. 즉시 복귀: `release-d3.mjs polling --apply`(배포 불필요). 앱 롤백: `dpl_7wsj3uWVS3zXy3NayjJFTQMgtDMy` → `dpl_HxSWo6BzrNfDTQDwg6NdMBMaYZKw`.
+- 52번 시험 데이터 정리: `cleanup-test-chat-room.mjs`(기본은 점검만, `--apply` 시 한 트랜잭션). 연결된 글 `lost:140`의 제목에 시험 표식이 없어 가드가 중단했다. 사용자가 글을 확인한 뒤 `--post=lost:140`으로 실행한다. 삭제 전 백업은 복원 검증된 `auto-2026-11-20`(04:01)이다.
