@@ -70,3 +70,10 @@ Production의 공개 Realtime이 OFF이고 채팅은 인증 polling을 사용한
 - 롤백: 앱은 `dpl_ADBchXMB69zKRG4QCdXpiqTZonC7`(`cd123bf`, canary 변수 없음, READY)를 우선 대상으로 하고 `dpl_9NmiRUieiMdU1U8a9KoWLFvVz9Rz`는 canary 변수가 붙어 있어 차선이다. DB 변경이 없어 역마이그레이션은 없다.
 - 새 로고 후보 3개(A 분실물 태그, B 물건을 건네는 손, C 교내 지도)는 [docs/design/logo-candidates](../design/logo-candidates/)에만 있으며 앱에는 적용하지 않았다.
 - 주의: vitest는 Git Bash에서 실행하면 모든 스위트가 "failed to find the current suite"로 실패한다(환경 문제). 전체 테스트는 PowerShell에서 실행한다.
+
+## 2026-11-19 대학 행정 서비스형 UI 시범 (Preview 전용)
+
+- 브랜치 `feat/ui-center-header-pilot`, 커밋 `5a2de4f`. 공통 헤더에서 로고를 제거하고 "분실물 센터"만 표시(접근성 이름은 정식 명칭). 홈 제목은 "명지대학교 / 분실물 센터"(모바일 2줄, PC 1줄)와 부제 "교내 분실물과 습득물을 한곳에서 찾아보세요."(7개 언어). 홈 하단에 "교내 협력" 안내(학생지원팀·교목팀·교내 경비실, 기존 운영정책 링크, 공식 지정 표현·협력기관 로고 없음). 푸터의 "공식 서비스가 아님" 고지는 유지.
+- 변경하지 않음: 파비콘·PWA 아이콘·매니페스트·OG 이미지(Production과 해시 동일 확인), SEO 메타데이터, 검색, 카드 배치(왼쪽 분실물·오른쪽 습득물), 소분류 UX, DB·환경변수·Realtime·Data API. 새 로고 후보는 [docs/design/logo-candidates](../design/logo-candidates/)에 보존.
+- Preview `dpl_ApPnCr6gY6iJsfQJ51pQ4Q3oAgEP`(고정 URL 연결). 단위 270파일 3,019개, 타입·린트, 프로브 16/16, `scripts/regression/hosted-ux.py`(1440/390/320 헤더·제목·협력 안내·겹침·가로 스크롤·다른 페이지 헤더) 통과. 전후 비교는 [docs/design/ui-pilot](../design/ui-pilot/). Production은 `dpl_99h6yK3CAQtRhN9F7YMK36DgHrn7`(`23498c4`) 그대로이며 이 시범을 배포하지 않았다.
+- 복구: Preview 고정 URL을 직전 `dpl_8ZVdUpqarWDsuaDEhG12KyPJQbxZ`(`7dc2179`)에 다시 연결한다. 로그인 상태 헤더(알림·프로필)의 시각 검증은 하지 않았다(해당 코드는 변경 없음).
