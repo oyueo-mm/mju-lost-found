@@ -7,7 +7,7 @@ import { hasAnyAdminPermission } from "@/lib/permissions/check";
 import { DesktopNav } from "./DesktopNav";
 import { MobileSearchLink } from "./MobileSearchLink";
 import { NotificationBell } from "./NotificationBell";
-import { LogoMark } from "./Logo";
+import { HEADER_SITE_NAME } from "@/lib/brand";
 import { LinkButton } from "@/components/ui/Button";
 import { getTranslator } from "@/lib/i18n/server";
 import { signOut } from "@/lib/auth/auth";
@@ -71,9 +71,16 @@ export async function Header() {
           1fr 비율로 나눠 가진다. 모바일은 기존 그대로 flex
           justify-between. */}
       <div className="mx-auto flex w-full max-w-4xl wide-board:max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:gap-3 md:grid md:grid-cols-[minmax(min-content,1fr)_auto_minmax(min-content,1fr)] md:gap-2 md:px-6">
-        <Link href="/" className="flex min-w-0 shrink-0 items-center gap-1.5 font-semibold text-foreground sm:gap-2 md:min-w-0 md:justify-self-start">
-          <LogoMark size={32} />
-          <span className="max-w-28 break-keep text-sm leading-tight sm:text-base xl:max-w-none">{t("brand.name")}</span>
+        {/* 대학 행정 서비스형 개편(Preview 시범): 독자 로고 없이 짧은 서비스명만
+            둔다. 화면에는 "분실물 센터"만 보이지만 접근성 이름은 정식 명칭
+            (보이는 글자를 포함하므로 음성 입력 이름과도 일치). 파비콘·PWA
+            아이콘은 별도 파일이라 이 변경과 무관하다. */}
+        <Link
+          href="/"
+          aria-label={t("brand.name")}
+          className="flex min-w-0 shrink-0 items-center text-base font-bold tracking-tight whitespace-nowrap text-foreground sm:text-lg md:min-w-0 md:justify-self-start"
+        >
+          {HEADER_SITE_NAME}
         </Link>
 
         <DesktopNav

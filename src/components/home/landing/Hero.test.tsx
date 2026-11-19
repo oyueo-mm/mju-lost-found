@@ -19,13 +19,17 @@ const at = (needle: string) => {
 };
 
 describe("홈 첫 화면 (Soft Card)", () => {
-  it("leads with a two-line black headline, one short line, then the search", () => {
-    expect(ko["landing.searchHeadline"]).toBe("잃어버린 물건,\n다시 찾을 수 있게.");
-    expect(html).toMatch(/<h1[^>]*><span class="block">잃어버린 물건,<\/span><span class="block">다시 찾을 수 있게\.<\/span><\/h1>/);
+  it("leads with the service name as a black headline (two lines on mobile), one short line, then the search", () => {
+    expect(ko["landing.searchHeadline"]).toBe("명지대학교\n분실물 센터");
+    expect(ko["landing.searchHeadline"].replace("\n", " ")).toBe(ko["brand.name"]);
+    expect(html).toMatch(/<h1[^>]*><span class="block md:inline">명지대학교<\/span> <span class="block md:inline">분실물 센터<\/span><\/h1>/);
     expect(html).toMatch(/<h1[^>]*break-keep/); // never split inside a word
-    expect(at("다시 찾을 수 있게.")).toBeLessThan(at(ko["landing.subtitle"]));
+    expect(html).not.toContain("잃어버린 물건,");
+    expect(at("분실물 센터")).toBeLessThan(at(ko["landing.subtitle"]));
     expect(at(ko["landing.subtitle"])).toBeLessThan(at('data-variant="landing"'));
-    expect(ko["landing.subtitle"]).toBe("명지대 분실물과 습득물을 한곳에서 검색하고, 연락하고, 돌려받으세요.");
+    expect(ko["landing.subtitle"]).toBe("교내 분실물과 습득물을 한곳에서 찾아보세요.");
+    // the subtitle is shown on every screen size (no hidden-on-mobile variant)
+    expect(html).not.toMatch(/<p class="hidden/);
     // no promise that AI finds or returns the item
     expect(ko["landing.subtitle"]).not.toMatch(/찾아드|반드시|보장/);
   });

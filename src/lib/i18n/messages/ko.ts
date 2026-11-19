@@ -689,11 +689,13 @@ export const ko = {
   "form.goToEdit": "게시물 수정 페이지로 이동",
 
   // ---------- 랜딩(로그아웃 방문자) ----------
-  "landing.searchHeadline": "잃어버린 물건,\n다시 찾을 수 있게.",
+  "home.partners.title": "교내 협력",
+  "home.partners.body": "학생지원팀·교목팀·교내 경비실과 협력하는 분실물 서비스",
+  "landing.searchHeadline": "명지대학교\n분실물 센터",
   "landing.registerLost": "분실물 등록하기",
   "landing.registerFound": "습득물 등록하기",
   "landing.searchCta": "잃어버린 물건 찾기",
-  "home.quick.found.desc": "주운 사람이 올린 글 보기", "home.quick.lost.desc": "잃어버린 사람이 올린 글 보기", "home.quick.registerLost.desc": "내 물건을 찾고 있어요", "home.quick.registerFound.desc": "주인을 찾아주세요", "landing.subtitle": "명지대 분실물과 습득물을 한곳에서 검색하고, 연락하고, 돌려받으세요.",
+  "home.quick.found.desc": "주운 사람이 올린 글 보기", "home.quick.lost.desc": "잃어버린 사람이 올린 글 보기", "home.quick.registerLost.desc": "내 물건을 찾고 있어요", "home.quick.registerFound.desc": "주인을 찾아주세요", "landing.subtitle": "교내 분실물과 습득물을 한곳에서 찾아보세요.",
   "landing.features.title": "핵심 기능",
   "landing.features.subtitle": "분실물 찾기부터 채팅까지, 필요한 기능은 다 있습니다.",
   "landing.feature.register.title": "분실물 · 습득물 등록",

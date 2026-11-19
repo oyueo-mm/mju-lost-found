@@ -5,6 +5,7 @@ import { CategoryShortcuts } from "@/components/home/CategoryShortcuts";
 import { LandingHero } from "@/components/home/LandingHero";
 import { Hero } from "@/components/home/landing/Hero";
 import { LandingStats } from "@/components/home/landing/LandingStats";
+import { CampusPartners } from "@/components/home/CampusPartners";
 import { RecentPostsSections } from "@/components/home/RecentPostsSections";
 import { getTranslator } from "@/lib/i18n/server";
 import { ENGLISH_SITE_NAME, KOREAN_SITE_NAME } from "@/lib/brand";
@@ -45,6 +46,7 @@ export default async function Home() {
       <>
         {siteSchema}
         <LandingHero />
+        <CampusPartners />
       </>
     );
   }
@@ -52,7 +54,7 @@ export default async function Home() {
   return (
     <div className="flex flex-col gap-6 md:gap-8">
       {siteSchema}
-      <Hero compact />
+      <Hero />
       <QuickActions />
 
       <section className="flex flex-col gap-3">
@@ -62,6 +64,7 @@ export default async function Home() {
 
       <RecentPostsSections />
       <LandingStats />
+      <CampusPartners />
     </div>
   );
 }
