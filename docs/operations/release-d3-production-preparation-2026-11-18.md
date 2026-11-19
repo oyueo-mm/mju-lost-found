@@ -175,3 +175,9 @@ Production은 `dpl_9RGngoiirr63Yj2WMcFFMfTqdbVC` (`cbb1a90`)의 인증 API polli
 전체 단위 3,011/3,011, 통합 16/16, polling Chromium 11/11, 구형 탭 Chromium 5/5 및 타입·린트·빌드가 통과했다. 기존 웹 푸시 검증 스크립트의 DB 연결 가드 누락을 바로잡았다. Preview 배포 `dpl_5DCPPR7weezg1dbrfdXkiSaKDTn4`와 Production 배포 `dpl_ADBchXMB69zKRG4QCdXpiqTZonC7`는 둘 다 `cd123bf`이며 각 배포의 호스팅 프로브 16개를 통과했다. 직전 `dpl_9RGngoiirr63Yj2WMcFFMfTqdbVC`는 READY 롤백 대상으로 보존했다.
 
 Production에서 Google 제공자 등록, 비로그인 채팅·알림·관리자 API 거부, 데이터·Storage 연속성 및 Data API OFF를 확인했다. 새 배포의 첫 로그 표본은 오류와 5xx 각각 0건이었고 정상 트래픽의 Realtime 토큰 204 응답은 3건이었다. DB는 polling을 유지한다. 공급자의 합성 공개 가입은 아직 허용됐다. 운영자의 공개 접근 OFF 저장 후 `PrivateOnly`, 기존 로그인 세션 기능과 운영 지표를 후속 검증한다. 이번 준비 과정에서 Production 채팅·첨부 데이터를 생성하지 않았다.
+
+### 2026-11-19 Production 공개 접근 차단 완료
+
+운영자가 Production 프로젝트에서 공개 채널 접근을 OFF로 저장했다. 기존 승인 실행기의 합성 토픽 검사에서 공개 가입은 `PrivateOnly`, 익명 비공개 가입은 권한 거부였다. 서버 대조군의 비공개 연결은 수신했다. 앱은 `dpl_ADBchXMB69zKRG4QCdXpiqTZonC7` (`cd123bf`)의 인증 polling이며 활성 grant와 대기 마이그레이션은 0개다. D-3의 운영 범위를 공개 접근 차단 및 인증 polling 유지로 종료하고, 일반 회원 비공개 WebSocket 전환은 별도로 추적한다.
+
+설정 저장 후 비파괴 프로브 16/16을 통과했다. 기존 게시글 사진 응답, 비공개 채팅·증거 버킷, Google 제공자 등록, 비로그인 채팅·알림 API의 401과 로그인 이동, 채팅방 6개·메시지 1개·첨부 0개, Data API OFF 및 기존 JWT 공개키 보존을 확인했다. 최근 성공 로그 표본에는 인증 메시지 GET 200이 3건 있었고 알림 GET 200은 없었다. 최근 오류와 5xx는 각각 0건이었다. 이 확인에는 새 Google OAuth 세션 발급이나 로그인한 브라우저의 알림 렌더링 재검증이 포함되지 않았다. Production에 데이터를 생성하지 않았다. 앱 복구 시 기존 D-3 polling 배포를 보존하고, 공급자 설정 변경이 장애 원인인 경우 같은 공개 접근 설정을 ON으로 되돌리는 절차를 사용한다.
