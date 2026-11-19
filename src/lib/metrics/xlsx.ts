@@ -1,5 +1,7 @@
 import { deflateRawSync } from "node:zlib";
 
+import { KOREAN_SITE_NAME } from "@/lib/brand";
+
 // A small .xlsx / .csv writer for the 운영 통계 export -- just what a report
 // needs (text, numbers, dates, a few styles, column widths, merged title
 // cells, a frozen header), so no spreadsheet library is added to the
@@ -158,12 +160,12 @@ export function buildXlsx(sheets: Sheet[], { title, createdAt }: { title: string
     [
       "docProps/core.xml",
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xmlEscape(title)}</dc:title><dc:creator>MJU Find</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${createdAt.toISOString().slice(0, 19)}Z</dcterms:created></cp:coreProperties>`,
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xmlEscape(title)}</dc:title><dc:creator>${xmlEscape(KOREAN_SITE_NAME)}</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${createdAt.toISOString().slice(0, 19)}Z</dcterms:created></cp:coreProperties>`,
     ],
     [
       "docProps/app.xml",
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>MJU Find</Application></Properties>`,
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>${xmlEscape(KOREAN_SITE_NAME)}</Application></Properties>`,
     ],
     [
       "xl/workbook.xml",

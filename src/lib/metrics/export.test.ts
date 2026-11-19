@@ -183,7 +183,7 @@ describe("운영 통계 내보내기", () => {
     expect(flow.tables[1].rows[22]).toEqual(["22시", 0, 2]);
     expect(flow.tables[2].rows[4]).toEqual(["금", 5, 4]);
     expect(flow.notes.join(" ")).toContain("추정치");
-    expect(toCsv(fakeReport(), "flow")).toContain("# MJU Find 운영 통계 - 방문 시간·이탈");
+    expect(toCsv(fakeReport(), "flow")).toContain("# 명지대학교 분실물 센터 운영 통계 - 방문 시간·이탈");
   });
 
   it("adds 사용자 통계 when a UserReport is given, with its numbers and definitions", async () => {
@@ -217,7 +217,7 @@ describe("운영 통계 내보내기", () => {
     expect(u.tables[2].rows[21]).toEqual(["21시", 3, null, null]); // hourly activity not collected yet
     expect(u.tables[4].rows[2]).toEqual(["활성 회원 중 게시글 등록", 1, 3, 1 / 3]);
     expect(u.notes.join(" ")).toContain("실명·이메일·학과·학번");
-    expect(toCsv(fakeReport(), "users", undefined, users)).toContain("# MJU Find 운영 통계 - 사용자 통계");
+    expect(toCsv(fakeReport(), "users", undefined, users)).toContain("# 명지대학교 분실물 센터 운영 통계 - 사용자 통계");
     expect(datasetsOf(fakeReport()).some((d) => d.key === "users")).toBe(false);
     // Preview / local: the test-data notice heads every file
     expect(toCsv(fakeReport(), "users", undefined, users, "테스트 데이터")).toContain("# 주의: 테스트 데이터");
@@ -251,7 +251,7 @@ describe("운영 통계 내보내기", () => {
     const sheets = toSheets(fakeReport());
     for (const sheet of sheets) {
       const cells = sheet.rows.flat().map((c) => (c && typeof c === "object" ? c.v : c));
-      expect(cells[0]).toContain("MJU Find 운영 통계");
+      expect(cells[0]).toContain("명지대학교 분실물 센터 운영 통계");
       expect(cells.some((v) => typeof v === "string" && v.startsWith("통계 기간: 2026-10-14 ~ 2026-10-16"))).toBe(true);
       expect(cells.some((v) => typeof v === "string" && v.startsWith("생성 일시: 2026-10-16 09:30 (KST)"))).toBe(true);
     }
@@ -280,7 +280,7 @@ describe("운영 통계 내보내기", () => {
 
   it("writes one CSV per data kind, with notes on top and blanks for 미측정", () => {
     const csv = toCsv(fakeReport(), "visits");
-    expect(csv.startsWith("﻿# MJU Find 운영 통계 - 방문 통계")).toBe(true);
+    expect(csv.startsWith("﻿# 명지대학교 분실물 센터 운영 통계 - 방문 통계")).toBe(true);
     expect(csv).toContain("# 통계 기간: 2026-10-14 ~ 2026-10-16 · 집계 단위 일별");
     expect(csv).toContain("# 빈 칸은 미측정");
     expect(csv).toContain("\r\n2026-10-14,,,,,,,,,\r\n");

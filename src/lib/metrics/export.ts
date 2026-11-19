@@ -1,3 +1,4 @@
+import { KOREAN_SITE_NAME } from "@/lib/brand";
 import { FREE_LIMITS_MB, type MetricKey, type VisitSeriesKey } from "./dashboard";
 import { AUDIENCE_NOTICE } from "./operations";
 import {
@@ -945,9 +946,9 @@ export function toSheets(report: Report, label?: string, datasets = datasetsOf(r
       rows.push([{ v: text, s }]);
       merges.push(`A${rows.length}:${columnName(width - 1)}${rows.length}`);
     };
-    wide(`MJU Find 운영 통계 — ${ds.name}`, "title");
+    wide(`${KOREAN_SITE_NAME} 운영 통계 — ${ds.name}`, "title");
     wide(`통계 기간: ${ds.period ?? periodLabel(report, label)}`, "meta");
-    wide(`생성 일시: ${report.generatedAt} (KST) · 출처: MJU Find 관리자 운영 통계`, "meta");
+    wide(`생성 일시: ${report.generatedAt} (KST) · 출처: ${KOREAN_SITE_NAME} 관리자 운영 통계`, "meta");
     if (notice) wide(`주의: ${notice}`, "meta");
     rows.push([]);
     let freezeRows: number | undefined;
@@ -975,7 +976,7 @@ export function toSheets(report: Report, label?: string, datasets = datasetsOf(r
 }
 
 export function toXlsx(report: Report, label?: string, users?: UserReport, notice?: string | null, hourly?: HourlyCells, dayVisits?: DayVisitReport | MultiDayReport, inflow?: InflowReport): Buffer {
-  return buildXlsx(toSheets(report, label, datasetsOf(report, users, hourly, dayVisits, inflow), notice), { title: "MJU Find 운영 통계", createdAt: new Date() });
+  return buildXlsx(toSheets(report, label, datasetsOf(report, users, hourly, dayVisits, inflow), notice), { title: `${KOREAN_SITE_NAME} 운영 통계`, createdAt: new Date() });
 }
 
 // One CSV per data kind: "#" lines (service, period, time, caveats) on top
@@ -986,7 +987,7 @@ export function toCsv(report: Report, key: DatasetKey, label?: string, users?: U
   // "#" lines are written as they are (never quoted), so a reader's comment
   // option skips each one whole even when it holds a comma.
   const meta = [
-    `# MJU Find 운영 통계 - ${ds.name}`,
+    `# ${KOREAN_SITE_NAME} 운영 통계 - ${ds.name}`,
     `# 통계 기간: ${ds.period ?? periodLabel(report, label)}`,
     `# 생성 일시: ${report.generatedAt} (KST)`,
     ...(notice ? [`# 주의: ${notice}`] : []),

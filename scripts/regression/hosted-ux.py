@@ -1,20 +1,31 @@
-"""Read-only visual checks on the fixed Preview. Run with a Preview protection cookie jar."""
+"""Read-only visual checks on a hosted origin (home card order, brand, optional subcategory).
+
+Default: the fixed Preview, which needs a Preview protection cookie jar at
+.vercel/ux-visual-preview.cookies. Set HOSTED_UX_ORIGIN=https://mju-find.vercel.app
+to check the public Production pages instead (no cookies are read or sent).
+"""
 import json
+import os
+from urllib.parse import urlparse
 from http.cookiejar import MozillaCookieJar
 from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
 
-origin = "https://mju-lost-found-preview.vercel.app"
-host = "mju-lost-found-preview.vercel.app"
+origin = os.environ.get("HOSTED_UX_ORIGIN", "https://mju-lost-found-preview.vercel.app").rstrip("/")
+host = urlparse(origin).hostname
+use_cookies = host == "mju-lost-found-preview.vercel.app"
+label = "preview" if use_cookies else "hosted"
 brand = "명지대학교 분실물 센터"
 empty = "잘 모르겠어요 (선택 안 함)"
 jar = MozillaCookieJar(".vercel/ux-visual-preview.cookies")
-jar.load(ignore_discard=True)
+if use_cookies:
+    jar.load(ignore_discard=True)
 with sync_playwright() as p:
     browser = p.chromium.launch()
     for width, height in [(1440, 900), (390, 844), (320, 750)]:
         ctx = browser.new_context(viewport={"width": width, "height": height}, locale="ko-KR")
-        ctx.add_cookies([{"url": origin, "name": c.name, "value": c.value} for c in jar if c.domain == host and c.name == "_vercel_jwt"])
+        if use_cookies:
+            ctx.add_cookies([{"url": origin, "name": c.name, "value": c.value} for c in jar if c.domain == host and c.name == "_vercel_jwt"])
         page = ctx.new_page()
         page.goto(origin)
         assert page.title().startswith(brand)
@@ -24,14 +35,14 @@ with sync_playwright() as p:
         assert [a.get_attribute("href") for a in nav.all()] == ["/lost/new", "/found/new", "/lost", "/found"]
         boxes = [a.bounding_box() for a in nav.all()]
         assert boxes[0]["x"] < boxes[1]["x"] and boxes[2]["x"] < boxes[3]["x"]
-        page.screenshot(path=f".vercel/ux-home-{width}.png")
+        page.screenshot(path=f".vercel/ux-{label}-home-{width}.png")
         page.goto(origin + "/found?categoryCode=electronics")
         sub = page.get_by_role("combobox", name="소분류", exact=True).first
         expect(sub).to_be_visible()
         expect(sub.locator("option").first).to_have_text(empty)
         assert sub.input_value() == "" and not sub.evaluate("s => s.required")
         sub.scroll_into_view_if_needed()
-        page.screenshot(path=f".vercel/ux-subcategory-{width}.png")
-        print(json.dumps({"viewport":width,"home":True,"firstOptionalChoice":True}))
+        page.screenshot(path=f".vercel/ux-{label}-subcategory-{width}.png")
+        print(json.dumps({"origin":origin,"viewport":width,"home":True,"firstOptionalChoice":True}))
         ctx.close()
     browser.close()
