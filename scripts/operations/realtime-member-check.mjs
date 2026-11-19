@@ -49,32 +49,41 @@ try {
         AND g.revoked_at IS NULL AND s.revoked_at IS NULL
         AND g.expires_at > (now() AT TIME ZONE 'UTC') AND s.expires_at > (now() AT TIME ZONE 'UTC')
         AND public.mju_chat_member_allowed(g.user_id, g.room_id)
-      LIMIT 2
+      ORDER BY g.created_at
+      LIMIT 3
     `, [roomId, timestamp, project]));
   }
   await db.query("ROLLBACK");
 
+  // A two-member room has one grant per participant session (at most two
+  // for a 1:1 room). More than two means unexpected sessions: refuse.
   const grant = candidates.length === 1 ? candidates[0] : undefined;
   if (action === "inspect") {
     console.log(JSON.stringify({ target, empty: room.messages === 0, existingMessages: room.messages, activeProbeGrants: timestamp ? candidates.length : undefined,
-      grantCreatedAt: grant?.created_at, grantExpiresAt: grant?.expires_at, outsiderProbeRoomId: grant?.outsider_room }));
+      grantCreatedAt: grant?.created_at, grantExpiresAt: grant?.expires_at, outsiderProbeRoomId: (grant ?? candidates[0])?.outsider_room,
+      grants: timestamp ? candidates.map((g) => ({ createdAt: g.created_at, expiresAt: g.expires_at })) : undefined }));
   } else {
     stage = "validate-dispatch";
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!grant || !key || key === "[SENSITIVE]") throw new Error("One fresh authorized grant and a server credential are required");
-    const nonce = randomUUID();
-    const topic = encodeURIComponent(`mju-chat:${grant.id}`);
+    if (candidates.length < 1 || candidates.length > 2 || !key || key === "[SENSITIVE]") throw new Error("One or two fresh authorized grants and a server credential are required");
+    const expectedReceipts = [];
     stage = "dispatch";
-    const response = await fetch(`https://${project}.supabase.co/realtime/v1/api/broadcast/${topic}/events/transport_control?private=true`, {
-      method: "POST",
-      headers: { apikey: key, "Content-Type": "application/json", Connection: "close" },
-      body: JSON.stringify({ nonce }),
-      redirect: "error",
-      signal: AbortSignal.timeout(5000),
-    });
-    await response.body?.cancel();
-    if (response.status !== 202) throw new Error("Realtime did not accept the event");
-    console.log(JSON.stringify({ target, dispatchAccepted: true, expectedReceipt: nonce }));
+    for (const g of candidates) {
+      const nonce = randomUUID();
+      const topic = encodeURIComponent(`mju-chat:${g.id}`);
+      const response = await fetch(`https://${project}.supabase.co/realtime/v1/api/broadcast/${topic}/events/transport_control?private=true`, {
+        method: "POST",
+        headers: { apikey: key, "Content-Type": "application/json", Connection: "close" },
+        body: JSON.stringify({ nonce }),
+        redirect: "error",
+        signal: AbortSignal.timeout(5000),
+      });
+      await response.body?.cancel();
+      if (response.status !== 202) throw new Error("Realtime did not accept the event");
+      expectedReceipts.push(nonce);
+    }
+    // expectedReceipt kept for the single-grant browser suite (--app-receipt)
+    console.log(JSON.stringify({ target, dispatchAccepted: true, expectedReceipt: expectedReceipts[0], expectedReceipts }));
   }
 } catch (error) {
   await db.query("ROLLBACK").catch(() => {});

@@ -39,3 +39,23 @@
 3. 증거 수집(DevTools 불필요): 승인 실행기 `realtime-member-check.mjs inspect/send`로 두 참여자의 grant와 갱신을 확인하고, 비저장 수신 확인 이벤트를 보낸다. 브라우저가 자동으로 보내는 수신 확인의 SHA-256 다이제스트를 Production 로그에서 대조한다. 메시지 POST 직후 상대 탭의 인증 GET 시각(60초 안전 조회와 구분)도 로그로 확인한다.
 4. fallback 확인: `release-d3.mjs polling --apply`로 두 탭이 polling으로 내려가고, `private` 재적용 후 2분 안에 새로고침 없이 복귀하는지 확인한다.
 5. 전체 전환: canary 환경변수 없이 같은 커밋을 재배포한다. 즉시 복귀 수단은 `release-d3.mjs polling --apply`(배포 불필요)이고, 앱 롤백 대상은 직전 Production이다.
+
+## 5. Production 52번 방 canary (2026-11-19)
+
+사용자가 본인 계정 2개로 만든 시험방 52번에서만 진행했다. 51번 방과 다른 방은 canary 밖이라 계속 polling이었다. 메시지 원문·사용자 ID·토큰은 기록하지 않았다.
+
+- 배포: `dpl_2c2dVUwxKU6kGVq3E1Hpe1zxaZqN` (`b37e8be`, `--realtime-canary-room=52`). 프로브 16/16. 사전 `--dry-run`이 아무것도 배포하지 않는 것을 확인한 뒤 실제 배포했다.
+- 17:25:39 KST `private` 전환. 열려 있던 탭은 배포 전 코드여서 사용자가 한 번 새로고침했다.
+- **통과**
+  - 두 참여자 grant 각 1개 발급(17:26:49, 17:27:04). 120초 수명을 넘겨 연장됨(갱신). 17:34:01 두 탭 갱신 토큰 200.
+  - 비저장 확인 이벤트를 각 grant 토픽에 보냄(17:34:13). **두 브라우저 모두 자동 수신 확인**, 로그 다이제스트 일치.
+  - 17:33:20 B→A 저장(201) 후 1초 안에 양쪽 탭이 인증 API로 동기화. 사용자가 양방향 즉시 표시 확인. DB 메시지 2건.
+  - 숨김→복귀 시 grant 재활성화.
+  - 비참여자·익명: 표본 비참여자 7/7 거부(`realtime-access-control.mjs`), 익명 비공개 가입 `authorization_denied`, 익명 공개 가입 `private_only`, 서버 대조군 수신(`realtime-transport-control.mjs`). 비로그인 토큰 401, 메시지 401, 다른 출처 토큰 403.
+- **미검증: polling 강제 → 자동 복귀**
+  - 18:36:24 polling(활성 grant 즉시 0), 18:40:26 private 재전환. 3분 30초 동안 새 grant 0개.
+  - 로그(10분 창 46행, 잘림 없음)상 52번 방의 마지막 요청은 18:35:43이다. polling 전환 이전에 와야 할 18:36:43의 60초 안전 조회부터 없고, 18:38 이후에는 배포 전체 요청이 0건이었다. 앱은 어떤 상태에서도 10~60초마다 요청하므로, 두 탭이 숨김 상태(창이 가려짐·최소화·잠금)였다고 판단한다. 같은 현상이 17:35~17:40에도 있었다. 기능 실패의 증거는 아니지만 Production에서 복귀를 관측하지 못했다. 같은 동작은 Preview E2E에서 129.8초로 통과했다.
+  - 지시에 따라 18:44:51 polling으로 복구했다. 모드 polling, 활성 grant 0, 대기 마이그레이션 0, 프로브 16/16, 최근 20분 error·5xx 0.
+- 현재 Production: `dpl_2c2dVUwxKU6kGVq3E1Hpe1zxaZqN` + DB polling → 전 방 polling. 새 클라이언트는 polling 탭마다 120초에 한 번 토큰 API를 재확인한다(204). 앱 롤백 대상은 `dpl_HxSWo6BzrNfDTQDwg6NdMBMaYZKw`(`35168f0`).
+- 도구 보완: `realtime-member-check.mjs send`가 1:1 방의 grant 2개에 각각 확인 이벤트를 보낸다. `realtime-receipt-logs.mjs`는 수신 확인 다이제스트를 건수로만 대조한다. `vercel logs` 조회는 약 50행 제한과 수 분의 반영 지연이 있어 짧은 창으로 반복 조회해야 한다.
+- 시험 데이터: 52번 방(사용자 생성 글 1개, 방 1개, 메시지 2개). 정리 방법은 별도 승인 후 결정한다.
