@@ -21,11 +21,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// 브랜드명 통일 Phase: 브라우저 제목/설명이 "MJU Find | [현재 locale의
-// 서비스 설명]" 형식이 되어야 하므로, 정적 `metadata` 객체 대신 요청마다
-// locale을 읽어 조립하는 generateMetadata()로 바꿨다 -- 이 레이아웃이
-// 이미 getLocale()로 동적 렌더링임을 감수하고 있으므로 새로 정적 렌더링을
-// 포기하는 페이지는 없다(RootLayout 자체 주석 참고).
+// Localize the browser title and metadata using the same locale as the page.
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslator();
   const brandName = t("brand.name");

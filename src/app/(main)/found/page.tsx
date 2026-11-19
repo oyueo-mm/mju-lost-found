@@ -19,7 +19,13 @@ import { statusLabelKey } from "@/lib/i18n/labels";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
-export const metadata: Metadata = { alternates: { canonical: "/found" } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslator();
+  return {
+    title: `${t("board.found.title")} | ${t("brand.name")}`,
+    alternates: { canonical: "/found" },
+  };
+}
 
 export default async function FoundListPage({
   searchParams,

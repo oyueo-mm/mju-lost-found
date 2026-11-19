@@ -87,7 +87,7 @@ export function CategoryPicker({ value, onChange, required, legacyUnmapped, titl
             disabled={disabled || value.categoryCode === null}
             className={FIELD_CLASS}
           >
-            <option value="">{t(value.categoryCode === null ? "form.categorySelectPlaceholder" : "form.subcategoryNone")}</option>
+            <option value="">{t(value.categoryCode === null ? "form.subcategorySelectParent" : "form.subcategoryNone")}</option>
             {value.categoryCode && subcategoriesOf(value.categoryCode).map((code) => (
               <option key={code} value={code}>
                 {t(taxonomySubcategoryLabelKey(code))}

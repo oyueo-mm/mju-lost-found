@@ -19,7 +19,13 @@ import { statusLabelKey } from "@/lib/i18n/labels";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
-export const metadata: Metadata = { alternates: { canonical: "/lost" } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslator();
+  return {
+    title: `${t("board.lost.title")} | ${t("brand.name")}`,
+    alternates: { canonical: "/lost" },
+  };
+}
 
 export default async function LostListPage({
   searchParams,

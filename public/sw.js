@@ -6,7 +6,7 @@
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
-const FALLBACK = { title: "MJU Find", body: "새로운 채팅 메시지가 도착했어요.", url: "/chat", tag: "chat" };
+const FALLBACK = { title: "명지찾기", body: "새로운 채팅 메시지가 도착했어요.", url: "/chat", tag: "chat" };
 
 function readPayload(event) {
   try {

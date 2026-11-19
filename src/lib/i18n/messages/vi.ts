@@ -189,6 +189,7 @@ export const vi: Dictionary = {
   "form.subcategory": "Danh mục con",
   "form.subcategoryOptional": "(không bắt buộc)",
   "form.subcategoryNone": "Không chọn",
+  "form.subcategorySelectParent": "Hãy chọn danh mục chính trước",
   "form.categorySuggestion": "Có vẻ giống {label} hơn.",
   "form.categorySuggestionApply": "Chọn danh mục này",
   "form.categorySuggestionDismiss": "Bỏ qua",

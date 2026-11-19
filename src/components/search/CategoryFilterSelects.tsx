@@ -53,7 +53,7 @@ export function CategoryFilterSelects({ value, onChange, selectClassName, emptyL
         }}
         className={selectClassName}
       >
-        <option value="">{value.categoryCode ? (subcategoryEmptyLabel ?? t("search.filter.subcategoryAll")) : t("form.categorySelectPlaceholder")}</option>
+        <option value="">{value.categoryCode ? (subcategoryEmptyLabel ?? t("search.filter.subcategoryAll")) : t("form.subcategorySelectParent")}</option>
         {value.categoryCode && subcategoriesOf(value.categoryCode).map((code) => (
           <option key={code} value={code}>
             {t(taxonomySubcategoryLabelKey(code))}

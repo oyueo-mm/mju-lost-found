@@ -11,8 +11,8 @@ import { getTranslator } from "@/lib/i18n/server";
 const ACTIONS = [
   { href: "/lost/new", title: "landing.registerLost", desc: "home.quick.registerLost.desc", Icon: PlusIcon, primary: true },
   { href: "/found/new", title: "landing.registerFound", desc: "home.quick.registerFound.desc", Icon: PlusIcon, primary: true },
-  { href: "/found", title: "landing.stats.browseFound", desc: "home.quick.found.desc", Icon: HandboxIcon, primary: false },
   { href: "/lost", title: "landing.stats.browseLost", desc: "home.quick.lost.desc", Icon: BoxIcon, primary: false },
+  { href: "/found", title: "landing.stats.browseFound", desc: "home.quick.found.desc", Icon: HandboxIcon, primary: false },
 ] as const;
 
 export async function QuickActions() {

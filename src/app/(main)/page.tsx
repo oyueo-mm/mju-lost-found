@@ -7,8 +7,20 @@ import { Hero } from "@/components/home/landing/Hero";
 import { LandingStats } from "@/components/home/landing/LandingStats";
 import { RecentPostsSections } from "@/components/home/RecentPostsSections";
 import { getTranslator } from "@/lib/i18n/server";
+import { ENGLISH_SITE_NAME, KOREAN_SITE_NAME } from "@/lib/brand";
+import { PRODUCTION_HOST } from "@/lib/devstats/vercelDeployment.mjs";
 
 export const metadata: Metadata = { alternates: { canonical: "/" } };
+
+const siteData = JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: KOREAN_SITE_NAME,
+  alternateName: ENGLISH_SITE_NAME,
+  url: `https://${PRODUCTION_HOST}/`,
+}).replace(/</g, "\\u003c");
+
+const siteSchema = <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: siteData }} />;
 
 // Home. Public, no auth gate: the session only decides what follows the
 // first screen.
@@ -29,11 +41,17 @@ export const metadata: Metadata = { alternates: { canonical: "/" } };
 export default async function Home() {
   const [user, t] = await Promise.all([getCurrentUser(), getTranslator()]);
   if (!user) {
-    return <LandingHero />;
+    return (
+      <>
+        {siteSchema}
+        <LandingHero />
+      </>
+    );
   }
 
   return (
     <div className="flex flex-col gap-6 md:gap-8">
+      {siteSchema}
       <Hero compact />
       <QuickActions />
 

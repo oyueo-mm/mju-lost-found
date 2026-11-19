@@ -190,6 +190,7 @@ export const mn: Dictionary = {
   "form.subcategory": "Дэд ангилал",
   "form.subcategoryOptional": "(заавал биш)",
   "form.subcategoryNone": "Сонгохгүй",
+  "form.subcategorySelectParent": "Эхлээд үндсэн ангиллаа сонгоно уу",
   "form.categorySuggestion": "{label} ангилалд илүү ойр харагдаж байна.",
   "form.categorySuggestionApply": "Үүнийг сонгох",
   "form.categorySuggestionDismiss": "Хаах",
