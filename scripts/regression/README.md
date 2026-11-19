@@ -130,6 +130,8 @@ Realtime V2에서는 이 점검 이벤트가 **Binary Message (Opcode 2)**로 �
 node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/regression/realtime-fallback.mjs --confirm-preview --browser-receipt
 ```
 
+앱이 자동으로 수신을 보고하는 경로는 같은 명령의 `--app-receipt`로 검증한다. 실행에서 생성한 Preview 방만 수신 확인 대상으로 선택한다. Chromium은 토큰 요청 실패 뒤 인증 polling 상태에서 시작하여, 비공개 채널의 일회성 이벤트마다 같은 세션의 수신 확인 응답을 받는다. 최초 연결과 최초 토큰 수명보다 긴 125초 이후를 각각 확인한다. 별도 브라우저 설정이나 콘솔 조작이 필요 없다.
+
 위 검사는 로컬 앱 빌드와 호스팅 Preview Realtime을 사용한다. Chromium에서 polling 상태로 채팅방을 연 뒤 스니펫을 실행하고, 동일 탭에서 비공개 가입 및 최초·갱신 후 수신을 검증한다. Preview 전용 계정과 빈 채팅방을 실행별로 생성해 정리하며 채팅 메시지와 첨부는 생성하지 않는다.
 
 참여 계정이 접근할 수 없는 기존 방이 있을 경우 `inspect`의 `outsiderProbeRoomId`를 사용해 같은 로그인 상태에서 기존 토큰 API에 한 번 요청한다. `403` 및 `access_revoked` 응답을 확인하고 방이나 메시지를 열지 않는다. 실제 권한 확인, 갱신된 연결의 수신, 정상 운영 관찰 20분을 모두 통과한 뒤 공급자 공개 접근을 끈다. `realtime-transport-control`의 `private_only`와 정상 회원의 재접속을 다시 확인한다.

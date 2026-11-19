@@ -1,9 +1,10 @@
 import {NextRequest} from "next/server";
 import {beforeEach,expect,it,vi} from "vitest";
 const auth=vi.fn(),getCurrentUser=vi.fn(),issueChatRealtimeGrant=vi.fn();
+const authorizeChatRealtimeReceipt=vi.fn(),realtimeCanaryRoom=vi.fn();
 vi.mock("@/lib/auth/auth",()=>({auth}));
 vi.mock("@/lib/auth/session",()=>({getCurrentUser}));
-vi.mock("@/lib/chat/realtimeGrants",()=>({issueChatRealtimeGrant}));
+vi.mock("@/lib/chat/realtimeGrants",()=>({issueChatRealtimeGrant,authorizeChatRealtimeReceipt,realtimeCanaryRoom}));
 const {POST}=await import("./route");
 const sid="c98a3c0a-92d8-4856-a4ab-998d185190ab";
 const call=(headers:Record<string,string>={origin:"http://localhost"},id="10")=>POST(new NextRequest(`http://localhost/api/chat/${id}/realtime`,{method:"POST",headers}),{params:Promise.resolve({id})});
@@ -47,6 +48,24 @@ it("signals deliberate polling with an empty, uncacheable 204",async()=>{
   issueChatRealtimeGrant.mockResolvedValueOnce({kind:"polling"});
   const res=await call();expect(res.status).toBe(204);expect(await res.text()).toBe("");
   expect(res.headers.get("cache-control")).toContain("no-store");
+});
+it("advertises receipts only for the designated room, reports a digest, and never issues a token for a receipt",async()=>{
+  realtimeCanaryRoom.mockReturnValue(10);
+  expect(await (await call()).json()).toMatchObject({receiptEnabled:true});
+  issueChatRealtimeGrant.mockClear();
+  const receipt={origin:"http://localhost","x-mju-realtime-receipt":sid};
+  expect((await call({...receipt,"x-mju-realtime-receipt":"bad"})).status).toBe(400);
+  expect(authorizeChatRealtimeReceipt).not.toHaveBeenCalled();
+  authorizeChatRealtimeReceipt.mockResolvedValueOnce({kind:"forbidden"}).mockResolvedValueOnce("ok");
+  const log=vi.spyOn(console,"info").mockImplementation(()=>{});
+  try {
+    expect((await call(receipt)).status).toBe(403);
+    expect(log).not.toHaveBeenCalled();
+    expect((await call(receipt)).status).toBe(204);
+    expect(log).toHaveBeenCalledWith("Private chat browser receipt",expect.stringMatching(/^[0-9a-f]{64}$/));
+    expect(authorizeChatRealtimeReceipt).toHaveBeenCalledWith({id:7,isAdmin:false},sid,10);
+    expect(issueChatRealtimeGrant).not.toHaveBeenCalled();
+  } finally {log.mockRestore();}
 });
 it("fails closed on unexpected database errors without leaking diagnostics",async()=>{
   issueChatRealtimeGrant.mockRejectedValueOnce(new Error("sensitive connection details"));const res=await call();expect(res.status).toBe(503);expect(await res.text()).not.toContain("sensitive");

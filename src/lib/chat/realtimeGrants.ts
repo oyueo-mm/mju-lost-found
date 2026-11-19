@@ -6,6 +6,13 @@ import { realtimeTopic, signRealtimeGrant, signingConfiguration, REALTIME_TOKEN_
 
 type Denied = { kind: "forbidden" | "unavailable" | "polling" } | { kind: "limited"; admission: Exclude<RateLimitResult,{ok:true}> };
 type Issued = { kind:"ok"; token:string; topic:string; expiresAt:string; grantId:string };
+
+export function realtimeCanaryRoom(): number | null {
+  const value = process.env.MJU_REALTIME_CANARY_ROOM_ID;
+  if (value === undefined) return null;
+  return /^[1-9]\d{0,9}$/.test(value) && Number(value) <= 2147483647 ? Number(value) : 0;
+}
+
 export async function issueChatRealtimeGrant(user: CurrentUser, session: { id:string; expiresAt:number }, roomId: number): Promise<Issued|Denied> {
   if (!UUID_PATTERN.test(session.id) || !Number.isSafeInteger(session.expiresAt) || session.expiresAt <= Math.floor(Date.now()/1000)) return {kind:"forbidden"};
   // Admission also covers polling/missing-key and unauthorized-room requests.
@@ -14,6 +21,8 @@ export async function issueChatRealtimeGrant(user: CurrentUser, session: { id:st
   if (!admission.ok) return {kind:"limited",admission};
   const member=(await prisma.$queryRaw<{allowed:boolean}[]>`SELECT public.mju_chat_member_allowed(${user.id},${roomId}) AS allowed`)[0]?.allowed;
   if(!member)return {kind:"forbidden"};
+  const canaryRoom = realtimeCanaryRoom();
+  if (canaryRoom !== null && roomId !== canaryRoom) return {kind:"polling"};
   const mode=(await prisma.$queryRaw<{mode:string;project_ref:string;signing_kid:string}[]>`SELECT mode,project_ref,signing_kid::text FROM "ChatRealtimeConfig" WHERE id=true`)[0];
   if(mode?.mode==="polling")return {kind:"polling"};
   let config;
@@ -50,9 +59,29 @@ export async function issueChatRealtimeGrant(user: CurrentUser, session: { id:st
   } catch { return {kind:"unavailable"}; }
 }
 
+export async function authorizeChatRealtimeReceipt(user: CurrentUser, sessionId: string, roomId: number): Promise<"ok"|Denied> {
+  if (realtimeCanaryRoom() !== roomId || !UUID_PATTERN.test(sessionId)) return {kind:"forbidden"};
+  const admission = await checkRateLimit("realtimeToken", {userId:user.id,tier:await rateLimitTierFor(user)});
+  if (!admission.ok) return {kind:"limited",admission};
+  const [receipt] = await prisma.$queryRaw<{allowed:boolean}[]>`
+    SELECT EXISTS (
+      SELECT 1 FROM "ChatRealtimeGrant" g
+      JOIN "ChatRealtimeSession" s ON s.id=g.session_id AND s.user_id=g.user_id
+      JOIN "ChatRealtimeConfig" c ON c.id=true
+      WHERE c.mode='private' AND g.user_id=${user.id} AND g.room_id=${roomId}
+        AND g.session_id=${sessionId}::uuid AND g.revoked_at IS NULL AND s.revoked_at IS NULL
+        AND g.expires_at>(now() AT TIME ZONE 'UTC') AND s.expires_at>(now() AT TIME ZONE 'UTC')
+        AND public.mju_chat_member_allowed(g.user_id,g.room_id)
+    ) AS allowed
+  `;
+  return receipt?.allowed ? "ok" : {kind:"forbidden"};
+}
+
 // RLS is cached on joined sockets. Re-authorize every outgoing event and send
 // only to still-authorized per-grant topics, never to a shared room topic.
 export async function currentChatRealtimeTopics(roomId:number):Promise<string[]> {
+  const canaryRoom = realtimeCanaryRoom();
+  if (canaryRoom !== null && canaryRoom !== roomId) return [];
   const rows=await prisma.$queryRaw<{id:string}[]>`SELECT g.id FROM "ChatRealtimeGrant" g JOIN "ChatRealtimeSession" s ON s.id=g.session_id AND s.user_id=g.user_id JOIN "ChatRealtimeConfig" c ON c.id=true WHERE g.room_id=${roomId} AND c.mode='private' AND g.revoked_at IS NULL AND s.revoked_at IS NULL AND g.expires_at>(now() AT TIME ZONE 'UTC') AND s.expires_at>(now() AT TIME ZONE 'UTC') AND public.mju_chat_member_allowed(g.user_id,g.room_id)`;
   return rows.map(r=>realtimeTopic(r.id));
 }

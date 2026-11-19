@@ -51,7 +51,7 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
       // A forged high cursor is never remembered. Only API results confirm it.
       sync.invalidate();
     }
-    async function fetchToken(signal:AbortSignal,refresh=true):Promise<{token:string;topic:string;expiresAt:string}|null>{
+    async function fetchToken(signal:AbortSignal,refresh=true):Promise<{token:string;topic:string;expiresAt:string;receiptEnabled?:boolean}|null>{
       const response=await fetch('/api/chat/'+chatRoomId+'/realtime',{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},cache:"no-store",signal});
       // A deliberate polling mode has no token to retry. Foreground and network
       // changes can still recheck it through the normal lifecycle callback.
@@ -80,6 +80,24 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
         await transport.setAuth(token.token);if(disposed||signal.aborted){await transport.disconnect();return;}
         let channel=transport.channel(token.topic,{config:{private:true}});
         for(const event of ["message","reaction","read","post_status"])channel=channel.on("broadcast",{event},({payload})=>hint(event,payload));
+        if(token.receiptEnabled===true){
+          const receipts=new Set<string>();
+          channel=channel.on("broadcast",{event:"transport_control"},({payload})=>{
+            const nonce=payload?.nonce;
+            if(disposed||denied||client!==transport||!connected||typeof nonce!=="string"||!/^[0-9a-f-]{36}$/i.test(nonce)||receipts.has(nonce)||receipts.size>=4)return;
+            receipts.add(nonce);
+            void fetch('/api/chat/'+chatRoomId+'/realtime',{method:"POST",credentials:"same-origin",headers:{"x-mju-realtime-receipt":nonce},cache:"no-store",signal}).catch(()=>{});
+          });
+        }
+        function transportFailed(){
+          if(disposed||client!==transport)return;
+          retryAt=Date.now()+30000;
+          enterPolling();
+          void stopTransport(false);
+        }
+        transport.onHeartbeat(status=>{
+          if(["timeout","error","disconnected"].includes(status))transportFailed();
+        });
         channel.subscribe(status=>{
           if(disposed||client!==transport)return;
           if(status==="SUBSCRIBED"){
@@ -89,8 +107,7 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
             failures=0;
             schedulePoll(true);
           }else if(["CHANNEL_ERROR","TIMED_OUT","CLOSED"].includes(status)){
-            retryAt=Date.now()+30000;
-            enterPolling();
+            transportFailed();
           }
         });
         if(renew)clearTimeout(renew);

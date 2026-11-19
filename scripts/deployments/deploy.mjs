@@ -36,12 +36,21 @@ if (target !== "preview" && target !== "production") {
   process.exit(2);
 }
 const alias = rest.includes("--alias");
-const recordArgs = rest.filter((a) => a !== "--alias");
+const canaryFlags = rest.filter((arg) => arg === "--realtime-canary-room" || arg.startsWith("--realtime-canary-room="));
+const canaryRoom = canaryFlags[0]?.slice("--realtime-canary-room=".length);
+if (canaryFlags.length > 1 || (canaryRoom !== undefined && (!/^[1-9]\d{0,9}$/.test(canaryRoom) || Number(canaryRoom) > 2147483647))) {
+  throw new Error("The Realtime canary room must be one positive room ID");
+}
+const recordArgs = rest.filter((a) => a !== "--alias" && !a.startsWith("--realtime-canary-room="));
 
 const status = spawnSync("git", ["status", "--porcelain"], { cwd: ROOT, encoding: "utf8" }).stdout.trim();
 if (status) console.warn("주의: 커밋하지 않은 변경이 있습니다. 배포는 gitDirty로 기록되고 커밋과 정확히 일치하지 않을 수 있습니다.");
 
-const deploy = run(["vercel", "deploy", "--yes", ...(target === "production" ? ["--prod"] : [])], true);
+const deploy = run([
+  "vercel", "deploy", "--yes",
+  ...(target === "production" ? ["--prod"] : []),
+  ...(canaryRoom ? ["--env", `MJU_REALTIME_CANARY_ROOM_ID=${canaryRoom}`] : []),
+], true);
 process.stdout.write(deploy.stdout ?? "");
 const url = /https:\/\/[a-z0-9-]+-[a-z0-9]{9}-oyueo\.vercel\.app/.exec(deploy.stdout ?? "")?.[0];
 if (!url) {

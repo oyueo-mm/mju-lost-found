@@ -12,7 +12,8 @@ import {once} from "node:events";
 import {promisify} from "node:util";
 import {loadApprovedPreviewRealtimeKey} from "../operations/preview-realtime-manual-state.mjs";
 if(!process.argv.includes("--confirm-preview")||assertDatabaseEnvironment(process.env,{usage:"operation"})!=="preview"||assertScriptSupabaseAccess(process.env)!=="preview")throw new Error("Preview confirmation required");
-const receiptMode=process.argv.includes("--browser-receipt");
+const appReceipt=process.argv.includes("--app-receipt");
+const receiptMode=process.argv.includes("--browser-receipt")||appReceipt;
 const privateMode=process.argv.includes("--private")||receiptMode;
 const cutoverMode=process.argv.includes("--legacy-cutover");
 const expectPublicOff=process.argv.includes("--expect-public-off");
@@ -27,7 +28,7 @@ const {prisma}=await jiti.import("../../src/lib/db/prisma.ts"),terms=await jiti.
 const require=createRequire(import.meta.url);const {encode}=await import(pathToFileURL(require.resolve("@auth/core/jwt")));
 const secret=randomUUID()+randomUUID(),base="http://localhost:3102",sessions=[];
 async function startServer(cwd=process.cwd()){
-  server=spawn(process.execPath,["node_modules/next/dist/bin/next","start","-H","127.0.0.1","-p","3102"],{cwd,env:{...process.env,AUTH_SECRET:secret,AUTH_TRUST_HOST:"true",MJU_REALTIME_PRIVATE_JWK:signingKey},stdio:"ignore",windowsHide:true});
+  server=spawn(process.execPath,["node_modules/next/dist/bin/next","start","-H","127.0.0.1","-p","3102"],{cwd,env:{...process.env,AUTH_SECRET:secret,AUTH_TRUST_HOST:"true",MJU_REALTIME_PRIVATE_JWK:signingKey,...(appReceipt?{MJU_REALTIME_CANARY_ROOM_ID:String(room.id)}:{})},stdio:"ignore",windowsHide:true});
   server.once("error",()=>{});
   for(let i=0;i<30;i++){
     if(server.exitCode!==null||server.signalCode!==null)break;
@@ -61,7 +62,7 @@ try{
   const suite=cutoverMode?"realtime-cutover":receiptMode?"realtime-browser-receipt":privateMode?"realtime-private":"realtime-fallback";
   const receiptCutoff=new Date().toISOString();
   const browser=spawn("python",[`scripts/regression/${suite}.py`],{stdio:["pipe","pipe","pipe"],windowsHide:true,timeout:cutoverMode?120000:300000});
-  const config=JSON.stringify({base,roomId:room.id,cookies:sessions,legacySession:privateMode,expectPublicOff});
+  const config=JSON.stringify({base,roomId:room.id,cookies:sessions,legacySession:privateMode,expectPublicOff,appReceipt});
   let output="",stage;browser.stderr.resume();
   let switchTask;
   let receiptTask;

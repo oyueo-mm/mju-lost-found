@@ -1,11 +1,11 @@
-import {beforeEach,expect,it,vi} from "vitest";
+import {afterEach,beforeEach,expect,it,vi} from "vitest";
 const $queryRaw=vi.fn(),$executeRaw=vi.fn(),txQuery=vi.fn(),txExecute=vi.fn();
 const $transaction=vi.fn(async(fn:(tx:unknown)=>unknown)=>fn({$queryRaw:txQuery,$executeRaw:txExecute}));
 vi.mock("@/lib/db/prisma",()=>({prisma:{$queryRaw,$executeRaw,$transaction}}));
 const checkRateLimit=vi.fn(),rateLimitTierFor=vi.fn(),signRealtimeGrant=vi.fn(),signingConfiguration=vi.fn();
 vi.mock("@/lib/rateLimit",()=>({checkRateLimit,rateLimitTierFor}));
 vi.mock("./realtimeToken",async()=>({...await vi.importActual<typeof import("./realtimeToken")>("./realtimeToken"),signRealtimeGrant,signingConfiguration}));
-const {issueChatRealtimeGrant,withAuthorizedChatRealtimeTopic,cleanExpiredChatRealtimeGrants}=await import("./realtimeGrants");
+const {issueChatRealtimeGrant,withAuthorizedChatRealtimeTopic,cleanExpiredChatRealtimeGrants,authorizeChatRealtimeReceipt}=await import("./realtimeGrants");
 const sid="c98a3c0a-92d8-4856-a4ab-998d185190ab",id="b4c4033b-c716-4a55-875b-ad526474ce44",project="swqvlihgupranzfzjevb";
 const user={id:7,isAdmin:false,userType:"STUDENT"} as Parameters<typeof issueChatRealtimeGrant>[0];
 let allowed=true,active=false,existing=false,capacity=0;
@@ -26,6 +26,27 @@ beforeEach(()=>{
   });
 });
 const issue=(seconds=3600)=>issueChatRealtimeGrant(user,{id:sid,expiresAt:Math.floor(Date.now()/1000)+seconds},10);
+afterEach(()=>vi.unstubAllEnvs());
+it("restricts issuance to the configured room and keeps unauthorized rooms forbidden",async()=>{
+  vi.stubEnv("MJU_REALTIME_CANARY_ROOM_ID","11");
+  expect(await issue()).toEqual({kind:"polling"});
+  $queryRaw.mockResolvedValueOnce([{allowed:false}]);
+  expect(await issue()).toEqual({kind:"forbidden"});
+  vi.stubEnv("MJU_REALTIME_CANARY_ROOM_ID","malformed");
+  expect(await issue()).toEqual({kind:"polling"});
+  expect($transaction).not.toHaveBeenCalled();
+});
+it("accepts a receipt only with an active session and room grant in the canary",async()=>{
+  expect(await authorizeChatRealtimeReceipt(user,sid,10)).toEqual({kind:"forbidden"});
+  expect($queryRaw).not.toHaveBeenCalled();
+  vi.stubEnv("MJU_REALTIME_CANARY_ROOM_ID","10");
+  $queryRaw.mockResolvedValueOnce([{allowed:false}]).mockResolvedValueOnce([{allowed:true}]);
+  expect(await authorizeChatRealtimeReceipt(user,sid,10)).toEqual({kind:"forbidden"});
+  expect(await authorizeChatRealtimeReceipt(user,sid,10)).toBe("ok");
+  expect($queryRaw.mock.lastCall?.[0].join("?")).toContain("mju_chat_member_allowed");
+  expect($executeRaw).not.toHaveBeenCalled();
+  expect($transaction).not.toHaveBeenCalled();
+});
 it("caps the JWT to the original cookie expiry and locks admission per user",async()=>{
   const result=await issue(60);expect(result.kind).toBe("ok");
   expect(signRealtimeGrant).toHaveBeenCalledWith(expect.objectContaining({id,userId:7,roomId:10,sessionId:sid,expiresAt:expect.any(Date)}));
