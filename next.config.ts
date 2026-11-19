@@ -7,6 +7,17 @@ import { assertDatabaseEnvironment } from "./src/lib/db/accessPolicy.mjs";
 assertDatabaseEnvironment(process.env, { allowMissing: process.env.NODE_ENV !== "development" });
 
 const nextConfig: NextConfig = {
+  async headers() {
+    return [{
+      source: "/:path*",
+      headers: [
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        { key: "X-Frame-Options", value: "DENY" },
+        { key: "Permissions-Policy", value: "geolocation=(), microphone=(), payment=(), usb=()" },
+      ],
+    }];
+  },
   // Two things Vercel/Next's static file tracer won't discover on its own
   // for src/lib/ai/embedding.ts's TransformersEmbeddingProvider -- both
   // confirmed missing by a real Vercel deployment (Phase 6), not guessed:

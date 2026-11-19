@@ -1,6 +1,6 @@
 # D-4 CSP·보안 응답 헤더 구현 계획
 
-분석·설계만 수행했다. D-4 앱 코드·Production 설정은 변경하지 않았다. D-4 구현은 별도 승인 범위에서 진행한다. D-3 공개 차단이 보류된 현재는 Production의 인증 polling과 Preview의 private Realtime을 기준으로 각각 검증한다. XSS/CSRF 집중 감사(E), 고아 파일 정리(D-5), 기존 DB 잔여 권한 정리는 포함하지 않는다. [D-3 종결 기록](release-d3-production-preparation-2026-11-18.md#2026-11-19-자율-검증-종결-판단--d-3-보류)
+Production의 공개 Realtime이 OFF이고 채팅은 인증 polling을 사용한다. 이번 D-4 구현은 기본 헤더 4개와 Preview 검증으로 진행한다. 기존 모바일 사진 촬영 경로를 위해 camera 정책은 추가하지 않았다. CSP Report-Only, 보고 API와 enforcement는 별도 검증이 필요하다. XSS/CSRF 집중 감사(E), 고아 파일 정리(D-5), 기존 DB 잔여 권한 정리는 이번 범위에서 제외한다. [D-3 종결 기록](release-d3-production-preparation-2026-11-18.md#2026-11-19-production-공개-접근-차단-완료)
 
 ## 현재 코드와 운영 기준
 
