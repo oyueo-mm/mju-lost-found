@@ -1,6 +1,7 @@
 """Browser API fallback tests. Reads local-only fixture cookies from stdin."""
 import json
 import sys
+import time
 from playwright.sync_api import sync_playwright, expect
 
 cfg = json.load(sys.stdin)
@@ -28,7 +29,9 @@ try:
         checks.append("missing signer fails closed; authenticated API remains")
         response = second.request.post(f"{base}/api/chat/{room}/messages", data={"content": "D3 incoming fallback proof"})
         assert response.status in (200, 201)
+        posted_at = time.monotonic()
         expect(page.get_by_text("D3 incoming fallback proof", exact=True)).to_be_visible(timeout=35000)
+        delivery_seconds = round(time.monotonic() - posted_at, 2)
         checks.append("incoming message arrives through bounded polling")
         other_tab = first.new_page()
         other_tab.goto(f"{base}/chat/{room}")
@@ -112,7 +115,8 @@ try:
         for ctx in contexts:
             ctx.close()
         browser.close()
-    print(json.dumps({"suite": "D3 isolated browser API fallback", "passed": len(checks), "checks": checks, "hostedPrivateRealtimeVerified": False}))
+    print(json.dumps({"suite": "D3 isolated browser API fallback", "passed": len(checks), "checks": checks,
+                      "deliverySecondsAfterPost": delivery_seconds, "hostedPrivateRealtimeVerified": False}))
     
 except Exception as error:
     import traceback

@@ -155,3 +155,15 @@ Windows에서 직접 WSL 포트에 접속할 수 없어 로컬 루프백과 WSL 
 ### 2026-11-19 Console 수신 점검 준비
 
 이전 브라우저 프레임 대조를 종료했다. [DevTools 스니펫](../../scripts/operations/realtime-browser-receipt.js)은 지정된 MJU Find 채팅 탭의 새 Realtime 소켓 수신에서 비공개 가입 결과와 점검 nonce만 Console에 표시한다. 로컬 앱과 호스팅 Preview를 사용해 실제 Chromium에서 polling 화면에 설치하고, 새로고침 없이 비공개에 가입한 뒤 최초 수신과 125초 이상 지난 갱신 연결의 수신을 확인했다. 결과는 6/6이며 Preview 계정과 방을 정리했다. 메시지와 첨부는 생성하지 않았다. Production 모드는 `polling`, 활성 grant는 0개, Data API는 OFF이며, 공개 접근 ON 설정과 기존 배포는 그대로 유지했다. [스니펫 실행과 재현 절차](../../scripts/regression/README.md#console에서-회원-수신-확인)
+
+### 2026-11-19 자율 검증 종결 판단 · D-3 보류
+
+Production은 `dpl_9RGngoiirr63Yj2WMcFFMfTqdbVC` (`cbb1a90`)의 인증 API polling을 유지한다. 대기 마이그레이션과 활성 Realtime grant는 0개였고, 공급자가 합성 공개 토픽 가입을 허용했다. 기존 채팅방 6개, 메시지 1개, 채팅 첨부 참조 0개와 비공개 채팅·신고 증거 버킷, 공개 게시글 이미지, Data API OFF, 기존 JWT 공개키 상태를 읽기 전용으로 확인했다. 회원 계정으로의 수신과 갱신을 입증할 승인된 Production 자동 브라우저 세션을 찾지 못했다. 기존 스크립트는 localhost 전용 임시 Auth.js 세션을 쓰며, Edge 푸시 검사도 격리된 로컬 프로필을 사용한다. 개인 브라우저 프로필이나 실제 사용자 인증정보에는 접근하지 않았다.
+
+현재 브라우저 가입과 서버 Broadcast 사용처는 채팅이다. 메시지의 생성·수정·숨김, 반응, 읽음, 연결 게시글의 반납·찾음 상태를 전달한다. 게시글·채팅·신고 증거의 Storage와 웹 푸시는 별도 경로다. 저장소에서 Postgres Changes나 별도 Presence 채널 소비자를 찾지 못했다. Production에서 `supabase_realtime` 게시 테이블 0개, `public`·`storage`의 직접 Broadcast 트리거 0개, `realtime.messages`의 D-3 수신 정책 1개를 확인했다. D-2 구형 탭은 공개 채팅 토픽을 사용한다. 장시간 열린 실제 구형 탭과 저장소 밖 소비자 현황은 관리 연결 없이 확인하지 못했다.
+
+공개 OFF와 인증 polling의 조합은 현재 앱에서 가능한 운영 대안이다. 다만 Production `private_only` 변경은 Supabase 프로젝트 관리 권한 `realtime_config_write`를 요구한다. 기존 승인 실행 환경과 연결된 도구에 이 작업을 수행할 관리 연결을 찾지 못했다. 공개 ON 상태에서는 공급자 차원의 비인증 공개 가입이 가능하다. D-3 완료로 처리하지 않고, 보호 경계 변경과 이후 `PrivateOnly`·오류·연결 관찰을 보류한다. 다른 작업으로 넘어갈 때 Production polling과 Preview private를 각각 현재 기준으로 사용한다. [Supabase 설정 API](https://supabase.com/docs/reference/api/v1-update-realtime-config) · [D-4 보안 헤더 계획](release-d4-plan-2026-11-16.md)
+
+현재 D-3 polling의 정상 전면 탭은 메시지 GET을 약 10초마다, 토큰 POST를 약 30초마다 시도한다. 전면 탭 하나를 한 시간 유지하면 정기 호출의 단순 환산은 약 360 GET과 120 POST다. 정상 private 연결은 안전 조회 60초 및 토큰 갱신 약 90초를 사용하며, 갱신 재가입과 채팅 이벤트에서 추가 조회한다. 토큰 실패 재시도와 메시지 오류 백오프는 최대 주기와 응답 시간에 영향을 준다. polling의 정상 표시 지연은 다음 조회까지 약 0~10초에 API 처리 시간을 더한 값이며, 조회 오류 후에는 주기가 최대 30초로 늘어난다. 백그라운드에서는 주기 조회가 멈추고 복귀 시 동기화한다. 실제 총 요청량과 비용은 전면 탭 수, 재시도, 채팅 빈도에 따라 달라지며 Production 부하 시험은 수행하지 않았다.
+
+이번 자동 검증에서 호스팅 Preview의 공개 가입은 `PrivateOnly`로 거부됐다. 같은 설정에서 최초 및 갱신 이후의 회원 이벤트 수신 6/6, 인증 polling과 접근 경계 10/10, 구형 D-2 탭 전환 5/5를 통과했다. 격리 polling 표본은 전송 성공 응답 후 표시까지 9.72초였으며 Production 성능 계측으로 사용하지 않는다. 구형 탭은 초안을 유지하지만 새 메시지를 받으려면 D-3 탭을 열어야 한다. 생성한 Preview 계정과 방의 정리는 모두 성공했다. 최근 Production 로그 표본의 error는 0건, 5xx 10건은 모두 polling 중 토큰 API의 예상 HTTP 503이었다. Production에서는 채팅 또는 첨부 데이터를 생성하거나 서비스 설정·배포를 바꾸지 않았다. 같은 수동 브라우저 검증을 반복 요청하지 않고 이 상태에서 D-3를 보류한다.
