@@ -23,10 +23,12 @@ npm run build
 ## Preview
 
 ```text
-node scripts/deployments/deploy.mjs preview --alias --dry-run
+node scripts/deployments/deploy.mjs preview --alias --record-dry-run
 ```
 
-실제 Preview 배포와 고정 Preview 별칭 연결을 수행합니다. `--dry-run`은 이 스크립트의 **배포 후 DB 이력 recorder에 전달되는 옵션**이며 배포 자체를 생략하지 않습니다. 이 옵션을 빼면 recorder는 기본적으로 Preview DB의 DeploymentRecord를 기록합니다. 기존 앱 런타임의 자동 이력·통계 기록은 별개입니다.
+실제 Preview 배포와 고정 Preview 별칭 연결을 수행합니다. `--record-dry-run`은 배포 후 DB 이력 recorder만 쓰기 없이 실행합니다. 이 옵션을 빼면 recorder는 기본적으로 Preview DB의 DeploymentRecord를 기록합니다. 기존 앱 런타임의 자동 이력·통계 기록은 별개입니다.
+
+**2026-11-19 변경:** 예전에는 `--dry-run`이 recorder에만 전달되어 `deploy.mjs production --dry-run`이 **실제 Production 배포**를 수행했습니다. 이제 `--dry-run`은 Vercel과 DB를 전혀 호출하지 않고 수행할 계획만 출력합니다. 알 수 없는 옵션은 오류로 거부합니다. 과거 보고서의 `--dry-run` 표기는 당시 의미(이력 쓰기만 생략)입니다.
 
 현재 연결된 프로젝트와 CLI 로그인 상태를 먼저 확인합니다. Preview 빌드 성공뿐 아니라 승인된 등록부 선택, 실제 UTM 수집·DB 집계·통계 조회와 QR 파일 내용까지 검증합니다. 비로그인 테스트 브라우저와 관리자 브라우저를 구분하고 자동화 탐지에 의해 방문 비콘이 제외됐는지도 기록합니다. 테스트 계정·글이 필요하면 Preview에만 만들고 식별 가능한 범위만 정리합니다.
 
@@ -35,10 +37,11 @@ node scripts/deployments/deploy.mjs preview --alias --dry-run
 Preview와 동일 실행 코드임을 확인하고 운영 반영이 승인된 작업에서만 기존 CLI의 `production` 대상 배포를 수행합니다. 이전 Production ID·URL·별칭·커밋, DB/환경변수 메타데이터를 먼저 기록합니다. GitHub 브랜치는 fast-forward 가능한 경우에만 동기화하고 강제 Push하지 않습니다. Git 연동 여부는 현재 프로젝트 설정에서 다시 확인합니다.
 
 ```text
-node scripts/deployments/deploy.mjs production --dry-run
+node scripts/deployments/deploy.mjs production --dry-run          # 계획만 출력, 배포하지 않음
+node scripts/deployments/deploy.mjs production --record-dry-run   # 실제 배포, 이력 쓰기만 생략
 ```
 
-이 명령은 **실제 Production 배포**입니다. 이번 작업에서 실행할 명령이 아닙니다. `--db both --confirm-production`은 DB 쓰기 범위를 넓히므로 필요와 영향이 확인되지 않은 상태에서 추가하지 않습니다. 배포 후 `/api/version`, 주요 페이지, 관리자 권한, 실제 OAuth 복귀와 UTM, 새 집계의 측정 시작일을 확인합니다. 새 측정 코드의 시작일은 환경별 첫 일반 세션이 기록되기 전에는 미측정일 수 있습니다.
+두 번째 명령은 **실제 Production 배포**입니다. 이번 작업에서 실행할 명령이 아닙니다. `--db both --confirm-production`은 DB 쓰기 범위를 넓히므로 필요와 영향이 확인되지 않은 상태에서 추가하지 않습니다. 배포 후 `/api/version`, 주요 페이지, 관리자 권한, 실제 OAuth 복귀와 UTM, 새 집계의 측정 시작일을 확인합니다. 새 측정 코드의 시작일은 환경별 첫 일반 세션이 기록되기 전에는 미측정일 수 있습니다.
 
 ## 롤백
 

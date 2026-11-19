@@ -48,6 +48,8 @@ it("signals deliberate polling with an empty, uncacheable 204",async()=>{
   issueChatRealtimeGrant.mockResolvedValueOnce({kind:"polling"});
   const res=await call();expect(res.status).toBe(204);expect(await res.text()).toBe("");
   expect(res.headers.get("cache-control")).toContain("no-store");
+  // open tabs re-check later, so enabling private mode reaches them without a reload
+  expect(res.headers.get("retry-after")).toBe("120");
 });
 it("advertises receipts only for the designated room, reports a digest, and never issues a token for a receipt",async()=>{
   realtimeCanaryRoom.mockReturnValue(10);

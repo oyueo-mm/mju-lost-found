@@ -39,8 +39,9 @@ mode/key 변경은 설정 행을 독점 잠근 뒤 기존 grant를 회수한다.
 node scripts/db/approved-operation.mjs --confirm-production --approval-reference RELEASE-D3-PREFLIGHT -- scripts/operations/release-d3.mjs preflight
 # 모든 게이트와 키 승인이 완료된 경우에만:
 node scripts/db/approved-operation.mjs --confirm-production --approval-reference RELEASE-D3-MIGRATE -- scripts/operations/release-d3.mjs migrate --apply --confirm-production
-# 실제 Production 배포. --dry-run은 배포 이력 쓰기만 생략한다.
-node scripts/deployments/deploy.mjs production --dry-run
+# 실제 Production 배포. (2026-11-19부터 --dry-run은 배포 자체를 하지 않는다.
+# 배포 이력 DB 쓰기만 생략하려면 --record-dry-run을 쓴다.)
+node scripts/deployments/deploy.mjs production --record-dry-run
 # polling 상태의 배포를 검증한 다음 Production 비공개 연결을 켠다.
 node scripts/db/approved-operation.mjs --confirm-production --approval-reference RELEASE-D3-PRIVATE -- scripts/operations/release-d3.mjs private --kid c455ce27-da9f-42e8-ab62-00d443e55979 --apply --confirm-production
 ```

@@ -4,6 +4,10 @@ import { PREVIEW_DB_PROJECT, PRODUCTION_DB_PROJECT } from "@/lib/db/accessPolicy
 
 export const REALTIME_ROLE = "mju_chat_realtime";
 export const REALTIME_TOKEN_SECONDS = 120;
+// How long a tab told "polling" (HTTP 204) waits before asking again. Before
+// this, a 204 stopped all re-checks until the tab was hidden/shown, so a tab
+// opened in polling mode never joined after the mode became private.
+export const REALTIME_POLLING_RECHECK_SECONDS = 120;
 export const REALTIME_SCOPE = "mju.chat.receive.v1";
 export const REALTIME_AUDIENCE = "mju-realtime";
 export const realtimeTopic = (grantId: string) => `mju-chat:${grantId}`;

@@ -14,7 +14,12 @@ import {loadApprovedPreviewRealtimeKey} from "../operations/preview-realtime-man
 if(!process.argv.includes("--confirm-preview")||assertDatabaseEnvironment(process.env,{usage:"operation"})!=="preview"||assertScriptSupabaseAccess(process.env)!=="preview")throw new Error("Preview confirmation required");
 const appReceipt=process.argv.includes("--app-receipt");
 const receiptMode=process.argv.includes("--browser-receipt")||appReceipt;
-const privateMode=process.argv.includes("--private")||receiptMode;
+// --two-member: two real member browsers + an outsider. Starts in polling
+// (canary pointed at another room => 204) and switches to private on the
+// suite's signal, proving an open tab joins without a reload.
+const twoMember=process.argv.includes("--two-member");
+const privateMode=process.argv.includes("--private")||receiptMode||twoMember;
+let canaryOverride=null;
 const cutoverMode=process.argv.includes("--legacy-cutover");
 const expectPublicOff=process.argv.includes("--expect-public-off");
 if(privateMode&&cutoverMode)throw new Error("Select one browser suite");
@@ -28,7 +33,7 @@ const {prisma}=await jiti.import("../../src/lib/db/prisma.ts"),terms=await jiti.
 const require=createRequire(import.meta.url);const {encode}=await import(pathToFileURL(require.resolve("@auth/core/jwt")));
 const secret=randomUUID()+randomUUID(),base="http://localhost:3102",sessions=[];
 async function startServer(cwd=process.cwd()){
-  server=spawn(process.execPath,["node_modules/next/dist/bin/next","start","-H","127.0.0.1","-p","3102"],{cwd,env:{...process.env,AUTH_SECRET:secret,AUTH_TRUST_HOST:"true",MJU_REALTIME_PRIVATE_JWK:signingKey,...(appReceipt?{MJU_REALTIME_CANARY_ROOM_ID:String(room.id)}:{})},stdio:"ignore",windowsHide:true});
+  server=spawn(process.execPath,["node_modules/next/dist/bin/next","start","-H","127.0.0.1","-p","3102"],{cwd,env:{...process.env,AUTH_SECRET:secret,AUTH_TRUST_HOST:"true",MJU_REALTIME_PRIVATE_JWK:signingKey,...(appReceipt?{MJU_REALTIME_CANARY_ROOM_ID:String(room.id)}:canaryOverride?{MJU_REALTIME_CANARY_ROOM_ID:canaryOverride}:{})},stdio:"ignore",windowsHide:true});
   server.once("error",()=>{});
   for(let i=0;i<30;i++){
     if(server.exitCode!==null||server.signalCode!==null)break;
@@ -58,10 +63,11 @@ try{
   room=await prisma.chatRoom.create({data:{initiatorUserId:users[0].id,counterpartUserId:users[1].id,postType:"lost",postTitle:marker}});save();
   // The default suite intentionally leaves the signer absent; --private
   // uses only the already-imported Preview checkpoint in process memory.
+  if(twoMember)canaryOverride="2147483647";
   await startServer(cutoverMode?".vercel/d3-cutover-d2-8baa381":undefined);
-  const suite=cutoverMode?"realtime-cutover":receiptMode?"realtime-browser-receipt":privateMode?"realtime-private":"realtime-fallback";
+  const suite=twoMember?"realtime-two-member":cutoverMode?"realtime-cutover":receiptMode?"realtime-browser-receipt":privateMode?"realtime-private":"realtime-fallback";
   const receiptCutoff=new Date().toISOString();
-  const browser=spawn("python",[`scripts/regression/${suite}.py`],{stdio:["pipe","pipe","pipe"],windowsHide:true,timeout:cutoverMode?120000:300000});
+  const browser=spawn("python",[`scripts/regression/${suite}.py`],{stdio:["pipe","pipe","pipe"],windowsHide:true,timeout:cutoverMode?120000:twoMember?480000:300000});
   const config=JSON.stringify({base,roomId:room.id,cookies:sessions,legacySession:privateMode,expectPublicOff,appReceipt});
   let output="",stage;browser.stderr.resume();
   let switchTask;
@@ -77,11 +83,16 @@ try{
       })().catch(()=>browser.stdin.write("{}\n"));
       return;
     }
+    if(twoMember&&line==="switch-to-private"){
+      if(switchTask)return;
+      switchTask=(async()=>{await stopServer();canaryOverride=null;await startServer();browser.stdin.write("switched\n");})().catch(()=>browser.stdin.write("switch-failed\n"));
+      return;
+    }
     if(!cutoverMode||line!=="switch-local-server"){output+=line;return;}
     if(switchTask)return;
     switchTask=(async()=>{await stopServer();await startServer();browser.stdin.end("switched\n");})().catch(()=>browser.stdin.end("switch-failed\n"));
   });
-  if(cutoverMode||receiptMode){
+  if(cutoverMode||receiptMode||twoMember){
     browser.stdin.on("error",()=>{});
     browser.stdin.write(config+"\n");
   }else{
@@ -92,7 +103,7 @@ try{
   await receiptTask;
   if(status!==0){
     console.log(JSON.stringify({browserExit:status,signal,stage}));
-    try{const failed=JSON.parse(output);console.log(JSON.stringify({completedChecks:failed.completedChecks,errorType:failed.errorType,line:failed.line,counters:failed.counters}));}catch{}
+    try{const failed=JSON.parse(output);console.log(JSON.stringify({completedChecks:failed.completedChecks,checks:failed.checks,errorType:failed.errorType,line:failed.line,message:failed.message,timings:failed.timings,counters:failed.counters}));}catch{}
     throw new Error("Browser verification failed; no private data emitted");
   }
   const result=JSON.parse(output);if(!result.passed)throw new Error("Browser result missing");console.log(JSON.stringify(result));

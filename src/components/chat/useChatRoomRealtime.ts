@@ -3,6 +3,13 @@ import {useCallback,useEffect,useRef} from "react";
 import {createChatRealtimeClient} from "@/lib/supabase/realtimeBrowser";
 import {ChatAccessRevoked,createChatSynchronizer,validReadHint,type ReadCursor} from "./synchronizer";
 
+// A 204 (polling mode) Retry-After, clamped so a bad header can neither
+// hammer the token API nor park the tab in polling for good.
+export function pollingRecheckMs(retryAfter:string|null):number{
+  const seconds=Number(retryAfter);
+  return (Number.isFinite(seconds)&&seconds>0?Math.min(600,Math.max(30,seconds)):120)*1000;
+}
+
 type Handlers={
   sync:(signal:AbortSignal)=>Promise<ReadCursor[]>;
   identityChanged:()=>void;
@@ -53,9 +60,10 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
     }
     async function fetchToken(signal:AbortSignal,refresh=true):Promise<{token:string;topic:string;expiresAt:string;receiptEnabled?:boolean}|null>{
       const response=await fetch('/api/chat/'+chatRoomId+'/realtime',{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},cache:"no-store",signal});
-      // A deliberate polling mode has no token to retry. Foreground and network
-      // changes can still recheck it through the normal lifecycle callback.
-      if(response.status===204){retryAt=Infinity;return null;}
+      // Deliberate polling mode: no token now. Re-check at the server's pace
+      // (Retry-After, bounded) so the tab joins once private mode is enabled,
+      // without a reload. Foreground/network changes also re-check at once.
+      if(response.status===204){retryAt=Date.now()+pollingRecheckMs(response.headers.get("retry-after"));return null;}
       if(response.status===409&&refresh){await fetch("/api/auth/session",{credentials:"same-origin",cache:"no-store",signal});return fetchToken(signal,false);}
       if(response.status===401||response.status===403||response.status===404){
         // A 404 can be the polling-compatible rollback; never use public RT.

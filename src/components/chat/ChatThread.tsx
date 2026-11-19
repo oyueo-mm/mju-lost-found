@@ -190,6 +190,25 @@ function ChatThreadView({
   const postStatus = useRef<string | null | undefined>(undefined);
   useEffect(() => () => paginationAbort.current?.abort(), []);
 
+  // From lg the room list (a Server Component: last message, unread count)
+  // sits beside this thread. When a sync brings a message from the other
+  // side that is newer than any seen so far, refresh it -- at most every
+  // 10 s, never on the first load, never on phones (list is another page).
+  const newestSeenId = useRef<number | null>(null);
+  const lastListRefresh = useRef(0);
+  const refreshListOnNewIncoming = useCallback((batch: MessageItem[]) => {
+    const newest = batch.reduce((max, m) => Math.max(max, m.id), 0);
+    const previous = newestSeenId.current;
+    newestSeenId.current = Math.max(previous ?? 0, newest);
+    if (previous === null || newest <= previous) return;
+    if (!batch.some((m) => m.id > previous && m.senderUserId !== currentUserId)) return;
+    if (!window.matchMedia("(min-width: 1024px)").matches) return;
+    const now = Date.now();
+    if (now - lastListRefresh.current < 10_000) return;
+    lastListRefresh.current = now;
+    router.refresh();
+  }, [currentUserId, router]);
+
   // Initial load, realtime hints and fallback all use the hook's one-flight
   // scheduler. A read hint never becomes UI state without this API response.
   const syncLatest = useCallback(async (signal: AbortSignal): Promise<ReadCursor[]> => {
@@ -203,6 +222,7 @@ function ChatThreadView({
       if(!res.ok)throw new Error("Chat sync unavailable");
       const json = await res.json();if(signal.aborted)return [];
       setError(null);
+      refreshListOnNewIncoming(json.data as MessageItem[]);
       setMessages(prev => {
         if(epoch!==mutationEpoch.current)return prev;
         const byId=new Map((prev??[]).map(m=>[m.id,m]));
@@ -219,7 +239,7 @@ function ChatThreadView({
       }
       return cursors;
     }catch(error){if(!signal.aborted&&!(error instanceof ChatAccessRevoked))setError(tRef.current("common.networkError"));throw error;}
-  },[chatRoomId,router]);
+  },[chatRoomId,router,refreshListOnNewIncoming]);
 
   // 채팅 웹 푸시: tell the server this room is on screen (visible tab only),
   // every 10 s, and that it no longer is when hidden or left. A push to this

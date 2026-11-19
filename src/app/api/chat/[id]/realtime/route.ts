@@ -3,7 +3,7 @@ import {NextRequest,NextResponse} from "next/server";
 import {auth} from "@/lib/auth/auth";
 import {getCurrentUser} from "@/lib/auth/session";
 import {authorizeChatRealtimeReceipt,issueChatRealtimeGrant,realtimeCanaryRoom} from "@/lib/chat/realtimeGrants";
-import {UUID_PATTERN} from "@/lib/chat/realtimeToken";
+import {REALTIME_POLLING_RECHECK_SECONDS,UUID_PATTERN} from "@/lib/chat/realtimeToken";
 import {rateLimitFailure,rateLimitFailureResponse} from "@/lib/rateLimit";
 const headers={"Cache-Control":"private, no-store, max-age=0",Pragma:"no-cache",Vary:"Cookie"};
 export const runtime="nodejs";
@@ -32,7 +32,9 @@ export async function POST(request:NextRequest,{params}:{params:Promise<{id:stri
       return new NextResponse(null,{status:403,headers});
     }
     const issued=await issueChatRealtimeGrant(user,{id:session.realtimeSessionId,expiresAt:session.authExpiresAt},roomId);
-    if(issued.kind==="polling")return new NextResponse(null,{status:204,headers});
+    // Deliberate polling: tell open tabs when to re-check, so a later switch
+    // to private (or a canary widening) reaches them without a reload.
+    if(issued.kind==="polling")return new NextResponse(null,{status:204,headers:{...headers,"Retry-After":String(REALTIME_POLLING_RECHECK_SECONDS)}});
     if(issued.kind==="limited"){
       const response=rateLimitFailureResponse(rateLimitFailure(issued.admission)!);for(const [key,value]of Object.entries(headers))response.headers.set(key,value);return response;
     }

@@ -35,13 +35,41 @@ if (target !== "preview" && target !== "production") {
   console.error("usage: deploy.mjs preview [--alias] | production  [--db both|production --confirm-production]");
   process.exit(2);
 }
+// --dry-run used to be forwarded to the recorder only, so
+// `deploy.mjs production --dry-run` really deployed to Production. It now means
+// what it says: print the plan and exit without calling Vercel or any database.
+// The recorder's own "write nothing" mode is --record-dry-run.
+const KNOWN = new Set(["--alias", "--dry-run", "--record-dry-run", "--confirm-production", "--db"]);
+for (let i = 0; i < rest.length; i++) {
+  const a = rest[i];
+  if (a === "--db") { i++; continue; }
+  if (!KNOWN.has(a) && !a.startsWith("--realtime-canary-room=")) {
+    console.error(`unknown option: ${a}`);
+    process.exit(2);
+  }
+}
+const dryRun = rest.includes("--dry-run");
 const alias = rest.includes("--alias");
 const canaryFlags = rest.filter((arg) => arg === "--realtime-canary-room" || arg.startsWith("--realtime-canary-room="));
 const canaryRoom = canaryFlags[0]?.slice("--realtime-canary-room=".length);
 if (canaryFlags.length > 1 || (canaryRoom !== undefined && (!/^[1-9]\d{0,9}$/.test(canaryRoom) || Number(canaryRoom) > 2147483647))) {
   throw new Error("The Realtime canary room must be one positive room ID");
 }
-const recordArgs = rest.filter((a) => a !== "--alias" && !a.startsWith("--realtime-canary-room="));
+const recordArgs = rest
+  .filter((a) => a !== "--alias" && a !== "--dry-run" && !a.startsWith("--realtime-canary-room="))
+  .map((a) => (a === "--record-dry-run" ? "--dry-run" : a));
+
+if (dryRun) {
+  console.log(JSON.stringify({
+    dryRun: true,
+    wouldDeploy: target,
+    alias: alias && target === "preview",
+    realtimeCanaryRoom: canaryRoom ?? null,
+    recorderArgs: recordArgs,
+    note: "Nothing was deployed or recorded. Remove --dry-run to deploy.",
+  }, null, 2));
+  process.exit(0);
+}
 
 const status = spawnSync("git", ["status", "--porcelain"], { cwd: ROOT, encoding: "utf8" }).stdout.trim();
 if (status) console.warn("주의: 커밋하지 않은 변경이 있습니다. 배포는 gitDirty로 기록되고 커밋과 정확히 일치하지 않을 수 있습니다.");

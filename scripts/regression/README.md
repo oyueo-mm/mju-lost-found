@@ -162,3 +162,12 @@ wsl.exe -d Ubuntu -e bash /mnt/c/proj_claude/mju-lost-found-vercel/scripts/regre
 ```
 
 임시 VAPID, Windows Edge 전용 임시 프로필, 빈 WSL 데이터베이스의 두 계정으로 구독→실제 기기 알림→해제를 검사한다. DB는 Windows 루프백 포트 `55446`에서 전용 WSL Unix 소켓으로만 연결한다. 검증 서버는 루프백 `3105`에서 실행한다. 기존 운영 구독과 발송 대기열을 사용하지 않는다. 결과에는 구독 주소·키·쿠키를 기록하지 않는다. OS 알림 클릭과 모바일 플랫폼별 검증은 별도다.
+
+## D-3 2인 실시간 채팅 E2E (`--two-member`)
+
+```powershell
+node scripts/regression/build-preview.mjs --confirm-preview
+node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/regression/realtime-fallback.mjs --confirm-preview --two-member
+```
+
+Preview DB에 격리 회원 3명(A·B·비참여자 C)과 방 1개를 만들고 끝나면 정리한다. 로컬 서버는 처음에 다른 방을 canary로 지정해 토큰 API가 204(polling)를 주게 시작하고, 브라우저가 신호하면 canary 없이 재시작한다. 검사 9개: ① polling으로 열린 탭이 새로고침 없이 private에 가입(재확인 간격 120초) ② A↔B UI 송신이 새로고침 없이 표시 ③ 중복 없음 ④ 읽음 반영 ⑤ 연결 중 10초 polling 없음 ⑥ 앱 내 이동 시 소켓 종료·뒤로 가기 재진입 시 재구독과 누락분 보정 ⑦ 오프라인→온라인 복구 후 재가입·누락분 보정 ⑧ PC(lg) 목록에 새 메시지 반영 ⑨ 비참여자 토큰·메시지·가입 차단. 출력은 통과 여부·지연 시간·건수만이며 메시지 원문·쿠키·JWT는 출력하지 않는다. 토큰 갱신(125초)·서명키 부재 fail-closed·변조/만료/권한 회수 거부는 위의 `--private`, 기본 fallback, `realtime-private.mjs`, `realtime-denials.mjs`가 담당한다.
