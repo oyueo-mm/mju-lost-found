@@ -118,6 +118,8 @@ node scripts/db/approved-operation.mjs --confirm-production --approval-reference
 
 운영 브라우저에서 개발자 도구의 **Network → Preserve log → WS**를 사용한다. `websocket` 연결의 **Messages**에서 비공개 `phx_join`에 대응하는 수신 `phx_reply`의 `status`가 `ok`인지 확인한다. 수신 `transport_control`의 `nonce`만 운영자에게 전달해 발송 결과와 대조한다. 토큰이 포함될 수 있는 프레임 전체, 토큰 발급 응답, JWT, 쿠키, HAR는 공유하지 않는다. 최초 발급 후 120초 이상 경과해 만료가 연장된 grant와 재가입을 확인한 뒤 수신을 검증한다. Preview 회귀 스크립트는 등록된 일반 회원 토큰으로 이 발송 도구의 수신을 확인한다.
 
+Realtime V2에서는 이 점검 이벤트가 **Binary Message (Opcode 2)**로 도착한다. Chrome DevTools의 Messages 텍스트 필터를 지우고 이벤트 발송 시각의 수신 이진 행을 선택한 뒤 아래의 표시 형식을 **UTF-8**로 바꿔 `transport_control`과 `nonce`를 확인한다. 만료 시각에서 30초를 뺀 시점에 앱이 소켓을 교체하므로, 120초 수명에서는 평상시 약 90초마다 새 WebSocket 행이 생길 수 있다. 연결 간격은 각 Messages의 첫 `phx_join` 행의 시각으로 대조한다. [Chrome WebSocket 안내](https://developer.chrome.com/docs/devtools/network/reference/#frames) · [Supabase Realtime 프로토콜](https://supabase.com/docs/guides/realtime/protocol)
+
 참여 계정이 접근할 수 없는 기존 방이 있을 경우 `inspect`의 `outsiderProbeRoomId`를 사용해 같은 로그인 상태에서 기존 토큰 API에 한 번 요청한다. `403` 및 `access_revoked` 응답을 확인하고 방이나 메시지를 열지 않는다. 실제 권한 확인, 갱신된 연결의 수신, 정상 운영 관찰 20분을 모두 통과한 뒤 공급자 공개 접근을 끈다. `realtime-transport-control`의 `private_only`와 정상 회원의 재접속을 다시 확인한다.
 
 Preview에서 이미 공개 접근을 껐다면 브라우저 명령에 `--expect-public-off`를 추가한다. 이 모드에서는 실제 D-2 소켓의 `PrivateOnly` 가입 응답을 요구하고, 이어지는 새 탭 전환과 초안 보존을 검사한다.

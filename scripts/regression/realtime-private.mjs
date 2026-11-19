@@ -34,8 +34,14 @@ function denialKind(error){
   if(/authoriz|polic|forbidden/i.test(text))return "authorization";
   return "unclassified";
 }
-async function join(token,topic,privateChannel=true){
-  const client=new RealtimeClient(`https://${PREVIEW_DB_PROJECT}.supabase.co/realtime/v1`,{params:{apikey:publicKey}});clients.push(client);
+async function join(token,topic,privateChannel=true,observeFrame){
+  const transport=observeFrame ? class extends WebSocket {
+    constructor(url,protocols){
+      super(url,protocols);
+      this.addEventListener("message",({data})=>observeFrame(data));
+    }
+  }:undefined;
+  const client=new RealtimeClient(`https://${PREVIEW_DB_PROJECT}.supabase.co/realtime/v1`,{params:{apikey:publicKey},transport});clients.push(client);
   await client.setAuth(token);
   const observed=[],receipts=[];
   const channel=client.channel(topic,{config:{private:privateChannel,broadcast:{ack:true}}})
@@ -47,6 +53,15 @@ async function join(token,topic,privateChannel=true){
   });
   if(result.status!=="SUBSCRIBED")await client.disconnect();
   return {...result,client,channel,observed,receipts};
+}
+function readBinaryReceipt(data){
+  if(!(data instanceof ArrayBuffer))return null;
+  const frame=Buffer.from(data);
+  // Realtime V2 user broadcast kind and JSON payload encoding.
+  if(frame.length<5||frame[0]!==4||frame[4]!==1)return null;
+  const eventStart=5+frame[1],eventEnd=eventStart+frame[2],payloadStart=eventEnd+frame[3];
+  if(payloadStart>=frame.length||frame.toString("utf8",eventStart,eventEnd)!=="transport_control")return null;
+  try{return JSON.parse(frame.toString("utf8",payloadStart))?.nonce??null;}catch{return null;}
 }
 let admin;
 async function authorizedSend(room,issue,eventId){
@@ -94,7 +109,11 @@ try{
   const receiptCutoff=new Date().toISOString();
   const issue=await grants.issueChatRealtimeGrant(users[0],session,rooms[0].id);
   must(issue.kind==="ok","Member grant issued");
-  const member=await join(issue.token,issue.topic);
+  const binaryReceipts=new Set();
+  const member=await join(issue.token,issue.topic,true,frame=>{
+    const nonce=readBinaryReceipt(frame);
+    if(nonce)binaryReceipts.add(nonce);
+  });
   console.log(JSON.stringify({probe:"approved Standby key member join",status:member.status,denial:member.denial,project:PREVIEW_DB_PROJECT,kid:key.kid,tokenEmitted:false}));
   must(member.status==="SUBSCRIBED","Standby-signed member private join accepted");
   const receiptProbe=await promisify(execFile)(process.execPath,["scripts/operations/realtime-member-check.mjs","send","--confirm-preview",String(rooms[0].id),receiptCutoff],{encoding:"utf8",timeout:15000,windowsHide:true}).catch(error=>{
@@ -106,6 +125,7 @@ try{
   const receiptDeadline=Date.now()+5000;
   while(receipt&&!member.receipts.includes(receipt)&&Date.now()<receiptDeadline)await new Promise(r=>setTimeout(r,50));
   must(receipt&&member.receipts.includes(receipt),"Non-persistent operator challenge reaches member connection");
+  must(binaryReceipts.has(receipt),"Member receipt nonce arrives inside a binary Realtime V2 frame");
   const publicNamesake=await join(publicKey,issue.topic,false);
   must(["SUBSCRIBED","CHANNEL_ERROR"].includes(publicNamesake.status),"Same-name public probe has a conclusive join result");
   const eventId=randomUUID();
