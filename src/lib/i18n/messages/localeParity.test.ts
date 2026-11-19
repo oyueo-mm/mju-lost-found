@@ -33,7 +33,7 @@ describe("locale dictionary parity", () => {
       (Object.keys(en) as Array<keyof typeof en>)
         .filter((key) => {
           const englishValue = en[key];
-          return typeof englishValue === "string" && dictionary[key] === englishValue && /[A-Za-z]/.test(englishValue);
+          return typeof englishValue === "string" && dictionary[key] === englishValue && /[A-Za-z가-힣]/.test(englishValue);
         })
         .sort();
 

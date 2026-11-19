@@ -256,7 +256,7 @@ export function SearchFilterBar({ basePath, showTypeFilter = false, statusOption
                 }}
                 selectClassName={chipClass(Boolean(categoryFilter.categoryCode || categoryFilter.legacyCategory))}
                 emptyLabel={t("search.filter.category")}
-                subcategoryEmptyLabel={t("search.filter.subcategory")}
+                subcategoryEmptyLabel={t("form.subcategoryNone")}
               />
 
               <EventPeriodFilter

@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="128" height="128" role="img" aria-label="교내 지도">
+  <rect width="64" height="64" rx="16" fill="#433885"/>
+  <g fill="none" stroke="#fff" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round" color="#fff"><path d="m7 18 15-6 19 7 14-6v32l-14 6-19-7-15 6zM22 12v32m19-25v32"/><circle cx="33" cy="30" r="4" fill="currentColor" stroke="none"/></g>
+</svg>

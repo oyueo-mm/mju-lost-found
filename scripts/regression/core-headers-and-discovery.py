@@ -45,11 +45,11 @@ with sync_playwright() as playwright:
 
     expect(page.locator('meta[name="robots"]')).to_have_attribute("content", "noindex, nofollow")
     assert "명지대학교 분실물·습득물 찾기" in page.title()
-    assert page.title().startswith("명지찾기")
+    assert page.title().startswith("명지대학교 분실물 센터")
     manifest = context.request.get(BASE + "/manifest.webmanifest").json()
-    assert manifest["short_name"] == "명지찾기"
+    assert manifest["short_name"] == "명지대학교 분실물 센터"
     structured = page.locator('script[type="application/ld+json"]').text_content()
-    assert json.loads(structured)["name"] == "명지찾기"
+    assert json.loads(structured)["name"] == "명지대학교 분실물 센터"
     assert json.loads(structured)["alternateName"] == "MJU Find"
     assert "Disallow: /" in context.request.get(BASE + "/robots.txt").text()
     assert "<loc>" not in context.request.get(BASE + "/sitemap.xml").text()
@@ -61,7 +61,7 @@ with sync_playwright() as playwright:
 
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(BASE + "/found")
-    assert "습득물" in page.title() and "명지찾기" in page.title()
+    assert "습득물" in page.title() and "명지대학교 분실물 센터" in page.title()
     canonical = urlparse(page.locator('link[rel="canonical"]').get_attribute("href"))
     assert canonical.path == "/found" and canonical.hostname in ("localhost", "mju-find.vercel.app")
     category = page.locator('select[aria-label="카테고리"]').first

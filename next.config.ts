@@ -8,6 +8,8 @@ assertDatabaseEnvironment(process.env, { allowMissing: process.env.NODE_ENV !== 
 
 const nextConfig: NextConfig = {
   async headers() {
+    // D-4 headers are still under Preview review.
+    if (process.env.VERCEL_ENV === "production") return [];
     return [{
       source: "/:path*",
       headers: [

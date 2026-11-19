@@ -1,4 +1,4 @@
-﻿import { formatEffectiveDate } from "@/lib/auth/terms";
+import { formatEffectiveDate } from "@/lib/auth/terms";
 import Link from "next/link";
 import { PRIVACY_POLICY_EFFECTIVE_DATE } from "@/lib/policy/privacyPolicy";
 import { PRIVACY_CONTACT_TEAM, SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/contact";
@@ -246,7 +246,7 @@ const SECTIONS: Section[] = [
           <a href={SUPPORT_MAILTO} className="break-all font-medium text-primary hover:opacity-80">{SUPPORT_EMAIL}</a>
           )으로 연락해주세요.
         </p>
-        <p className="mt-2">MJU Find는 학생들이 자체 운영하는 서비스이며, 명지대학교 공식 서비스나 학교 공식 부서가 아닙니다.</p>
+        <p className="mt-2">명지대학교 분실물 센터는 학생들이 자체 운영하는 서비스이며, 명지대학교 공식 서비스나 학교 공식 부서가 아닙니다.</p>
       </>
     ),
   },

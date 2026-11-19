@@ -87,7 +87,7 @@ describe("개인정보처리방침: 이용 통계", () => {
   });
 
   it("names the actual student-run privacy contact without inventing a phone or a school department", () => {
-    expect(section(7)).toContain("MJU Find 운영팀");
+    expect(section(7)).toContain("명지대학교 분실물 센터 운영팀");
     expect(section(7)).toContain("학생들이 자체 운영하는 서비스");
     expect(section(7)).toContain("학교 공식 부서가 아닙니다");
     expect(html).not.toContain('href="tel:');

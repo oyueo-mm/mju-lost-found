@@ -29,7 +29,7 @@ const ok = vi.fn<(sub: unknown, payload: string) => Promise<{ statusCode: number
 
 describe("chat push payload", () => {
   it("carries no message text, title or name -- only the room link", () => {
-    expect(chatPushPayload(7)).toEqual({ title: "명지찾기", body: "새로운 채팅 메시지가 도착했어요.", url: "/chat/7", tag: "chat-7" });
+    expect(chatPushPayload(7)).toEqual({ title: "명지대학교 분실물 센터", body: "새로운 채팅 메시지가 도착했어요.", url: "/chat/7", tag: "chat-7" });
   });
 });
 

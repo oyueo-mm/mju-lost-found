@@ -73,7 +73,7 @@ export async function Header() {
       <div className="mx-auto flex w-full max-w-4xl wide-board:max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:gap-3 md:grid md:grid-cols-[minmax(min-content,1fr)_auto_minmax(min-content,1fr)] md:gap-2 md:px-6">
         <Link href="/" className="flex min-w-0 shrink-0 items-center gap-1.5 font-semibold text-foreground sm:gap-2 md:min-w-0 md:justify-self-start">
           <LogoMark size={32} />
-          <span className="whitespace-nowrap text-sm sm:text-base">{t("brand.name")}</span>
+          <span className="max-w-28 break-keep text-sm leading-tight sm:text-base xl:max-w-none">{t("brand.name")}</span>
         </Link>
 
         <DesktopNav

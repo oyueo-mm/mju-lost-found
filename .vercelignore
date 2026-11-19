@@ -18,6 +18,7 @@
 
 # Local QA servers, fixtures, snapshots and generated browser artifacts.
 .vercel
+docs/design/logo-candidates
 .next
 # Local JVM crash diagnostics may contain machine details; never deploy them.
 hs_err_pid*.log

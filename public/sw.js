@@ -1,12 +1,12 @@
-/* MJU Find service worker -- chat web push only (no caching, no offline).
+/* 명지대학교 분실물 센터 service worker -- chat web push only (no caching, no offline).
  * A push carries { title, body, url, tag } and never message text. Clicking
- * the notification focuses an open MJU Find tab on that chat room, or opens
+ * the notification focuses an open 명지대학교 분실물 센터 tab on that chat room, or opens
  * it (signing in first if needed brings the user back there). */
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
-const FALLBACK = { title: "명지찾기", body: "새로운 채팅 메시지가 도착했어요.", url: "/chat", tag: "chat" };
+const FALLBACK = { title: "명지대학교 분실물 센터", body: "새로운 채팅 메시지가 도착했어요.", url: "/chat", tag: "chat" };
 
 function readPayload(event) {
   try {
