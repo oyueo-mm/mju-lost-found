@@ -66,3 +66,25 @@
 - Production 브라우저 자동 E2E는 Production 로그인 세션(Production 인증 비밀 또는 실제 계정)이 필요해 수행하지 않았다. 같은 시나리오를 Preview에서 자동 재현했다. `--two-member` 12/12: canary 방, DB 모드 private→polling→private(`release-d3.mjs`), 양쪽 polling 전환 82.6초, polling 중 전달 10.8초, 새로고침 없는 private 복귀 108.8초, 복귀 후 1.52초, 진단 `subscribed→polling-mode→subscribed`.
 - `realtime-canary-cycle.mjs`: 승인 실행기 아래에서 A 연결 대기 → B 확인 이벤트 → C polling(150초) → D private 복귀 대기(4분) → E 확인 이벤트 순서로 진행하고 항상 polling으로 끝낸다. Preview에서 실패 경로(즉시 polling 복구)를 확인했다.
 - 배포: Preview `dpl_8QFiNCRzAc8mKTAuGDe2Vns1fH46`, Production `dpl_7wsj3uWVS3zXy3NayjJFTQMgtDMy`(둘 다 `8dd45c6`, Production canary=52, DB polling). 프로브 16/16. 브랜치 HEAD = Production 커밋이므로 전체 전환 시 누락되는 수정이 없다.
+
+## 7. Production 재검증 결과 (2026-11-19, 52번 방)
+
+### 19:45–19:50 일괄 사이클 (`realtime-canary-cycle.mjs`)
+A 자동 연결(grant 2), B 두 브라우저 수신 확인 일치, C polling 150초간 발급 0·두 탭 `polling-mode`, D 복귀 24초·두 탭 `subscribed`, E 수신 확인 일치, 종료 polling. D 복귀 직전 두 탭에 `hidden-polling`(19:50:37)→`visible-polling`(19:50:43)이 기록됐다. 이 복귀는 **화면 복귀에 의한 자동 재연결**로 기록한다(사용자가 다른 작업을 병행했다).
+
+### 20:10–20:17 타이머 복귀·메시지 정합성 (`realtime-canary-timer.mjs`, exit 0)
+로그는 `--since/--until` 구간 조회(구간별 14~35행, 잘림 없음)로 대조했다.
+
+| 확인 | 결과 | 근거 |
+|---|---|---|
+| 120초 타이머 복귀 | **통과** | 20:11:02 private 전환 후 두 탭이 20:12:58에 `subscribed`(약 116초). 그 사이 hidden/visible 진단이 없고, 두 탭 모두 10초 polling 조회를 끊김 없이 계속했다(화면 표시 상태). DB 새 grant 2개. |
+| private 중 메시지 | **통과** | 20:13:09 POST 201 → 0.5초 뒤 상대 탭 GET. 20:13:22 POST 201 → 0.5초 뒤 GET. |
+| 연결 중 polling 억제 | 통과 | 20:12:58~20:14:25 사이 조회는 60초 안전 조회(20:13:58)뿐이었다. |
+| polling 강제 → fallback | 통과 | 20:13:25 polling. 20:14:25 두 탭 갱신 시 204와 `polling-mode` 이후 10초 주기 조회. 20:16:25 두 탭 120초 재확인 204. |
+| polling 중 메시지 | 통과 | 20:16:55 POST 201 → 다음 10초 조회(20:17:05)에 두 탭 동기화. |
+| 저장 정합성 | 통과 | DB 2 → 5(private 2 + polling 1). 로그의 POST 201 3건과 일치. |
+| 종료 상태 | 통과 | 모드 polling, 활성 grant 0, 대기 마이그레이션 0. |
+
+미확인: 기기 화면의 중복 표시 여부(Production 화면은 보지 않았다. Preview E2E에서 검증), 20:12:55 이후 두 번째 참여자의 토큰 200 로그 1건(로그에 없음. DB grant 2개와 두 참여자의 `subscribed` 진단으로 대체 확인).
+
+현재 Production `dpl_7wsj3uWVS3zXy3NayjJFTQMgtDMy`(`8dd45c6`, canary=52) + DB polling이다. 전체 전환은 사용자 결정을 기다린다.
