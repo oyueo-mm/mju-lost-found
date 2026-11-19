@@ -2,7 +2,7 @@
 
 Production의 공개 Realtime이 OFF이고 채팅은 인증 polling을 사용한다. 이번 D-4 구현은 기본 헤더 4개와 Preview 검증으로 진행한다. 기존 모바일 사진 촬영 경로를 위해 camera 정책은 추가하지 않았다. CSP Report-Only, 보고 API와 enforcement는 별도 검증이 필요하다. XSS/CSRF 집중 감사(E), 고아 파일 정리(D-5), 기존 DB 잔여 권한 정리는 이번 범위에서 제외한다. [D-3 종결 기록](release-d3-production-preparation-2026-11-18.md#2026-11-19-production-공개-접근-차단-완료)
 
-## 현재 코드와 운영 기준
+## 변경 전 Production 기준과 호환성
 
 - `next.config.ts`에는 전역 보안 headers가 없다. Production `/api/version`에서 CSP/Report-Only/nosniff/Referrer-Policy/Permissions-Policy/X-Frame-Options는 없고, Vercel HSTS `max-age=63072000; includeSubDomains; preload`는 이미 있다. HTML·API·이미지·service worker를 각각 다시 조사하여 경로별 기준을 고정한다.
 - `src/proxy.ts`는 세 경로의 동의 화면 return path만 처리한다. CSP를 추가할 경우 기존 LANDING_HEADER 삭제·검증과 matcher 동작을 보존해야 한다.
@@ -46,3 +46,11 @@ Production의 공개 Realtime이 OFF이고 채팅은 인증 polling을 사용한
 - 롤백은 D-3의 안전한 인증/비공개 채널 앱을 보존한 채 D-4 헤더/보고 경로만 이전 설정으로 복구한다. Realtime 공개 접근이나 기존 보안 가드를 다시 열지 않는다.
 
 근거: 설치된 `node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md` 및 [Next CSP 가이드](https://nextjs.org/docs/app/guides/content-security-policy). 구현 전 해당 설치 버전 문서를 기준으로 다시 확인한다.
+
+## 2026-11-19 기본 헤더 및 UX Preview 검증
+
+- `fix/release-d4-core-headers`의 `4ee7d1e`에서 `nosniff`, `strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `Permissions-Policy: geolocation=(), microphone=(), payment=(), usb=()`를 적용했다. 헤더는 Next.js 설정에서 반환하며 요청별 DB 작업은 추가하지 않는다.
+- `feat/category-and-discoverability`의 `869d52f`에서 소분류 표시·초기화, 홈 등록 버튼 배치, MJU Find의 한국어 서비스 설명, 공개 홈과 두 게시판의 canonical 및 sitemap을 추가했다. Preview는 검색 엔진 수집과 색인 대상에서 제외하도록 설정했다.
+- 두 변경을 포함한 Preview `dpl_EKp12SuRrw1fmuatsD9gGwB5F1iY`가 고정 URL에 배포됐다. 단위 테스트 3,013/3,013, 통합 회귀 16/16과 테스트 데이터 정리, 로컬 Chromium 검사 5/5, 호스팅 비파괴 프로브 16/16, 타입 검사·린트·빌드가 통과했다. Chromium 재현 절차는 [회귀 검사 안내](../../scripts/regression/README.md)에 있다.
+- 실제 호스팅의 홈, 로그인, 버전 API, 서비스 워커, robots.txt, sitemap.xml에서 보안 헤더 네 개를 확인했다. 홈 `noindex, nofollow`, robots.txt의 전체 수집 금지, 비어 있는 sitemap도 확인했다. 검색 네 경로의 단일 응답 시간은 198~1,169ms였으며 전후 성능 비교와 실제 검색 엔진 색인은 측정하지 않았다.
+- Production은 D-3 `cd123bf`의 인증 polling 및 공개 채널 차단 상태다. 이번 헤더·UX 변경은 Preview까지 적용했으며 DB 마이그레이션은 필요 없다. Preview 복구는 직전 `dpl_5DCPPR7weezg1dbrfdXkiSaKDTn4`를 고정 URL에 다시 연결한다. CSP Report-Only와 강제 적용은 별도로 검증할 범위다.
