@@ -77,3 +77,9 @@ Production의 공개 Realtime이 OFF이고 채팅은 인증 polling을 사용한
 - 변경하지 않음: 파비콘·PWA 아이콘·매니페스트·OG 이미지(Production과 해시 동일 확인), SEO 메타데이터, 검색, 카드 배치(왼쪽 분실물·오른쪽 습득물), 소분류 UX, DB·환경변수·Realtime·Data API. 새 로고 후보는 [docs/design/logo-candidates](../design/logo-candidates/)에 보존.
 - Preview `dpl_ApPnCr6gY6iJsfQJ51pQ4Q3oAgEP`(고정 URL 연결). 단위 270파일 3,019개, 타입·린트, 프로브 16/16, `scripts/regression/hosted-ux.py`(1440/390/320 헤더·제목·협력 안내·겹침·가로 스크롤·다른 페이지 헤더) 통과. 전후 비교는 [docs/design/ui-pilot](../design/ui-pilot/). Production은 `dpl_99h6yK3CAQtRhN9F7YMK36DgHrn7`(`23498c4`) 그대로이며 이 시범을 배포하지 않았다.
 - 복구: Preview 고정 URL을 직전 `dpl_8ZVdUpqarWDsuaDEhG12KyPJQbxZ`(`7dc2179`)에 다시 연결한다. 로그인 상태 헤더(알림·프로필)의 시각 검증은 하지 않았다(해당 코드는 변경 없음).
+
+## 2026-11-19 UI 시범 최종 채택 및 Production 반영
+
+- 사용자가 Preview 디자인을 최종 채택하고 추가 변경 없이 Production 반영을 승인했다. 배포 전 로그인 상태 헤더를 `scripts/regression/logged-in-header.mjs`(로컬 빌드 + Preview DB의 격리 테스트 회원 1명·미확인 알림 1건, 종료 시 정리)로 1440/390/320px에서 검증했다. 이름·검색·알림(배지)·프로필이 모두 표시되고 겹침과 가로 스크롤이 없다. 부수 관찰: 1536px 미만의 데스크톱 프로필 아이콘 링크는 접근성 이름이 없다(이번 변경 이전부터의 동작).
+- Production `dpl_HxSWo6BzrNfDTQDwg6NdMBMaYZKw` (`35168f0`, 브랜치 `feat/ui-center-header-pilot`)를 DB·환경변수 변경 없이 배포했다. 환경변수 키 집합이 직전과 동일하고 canary 변수는 없다. 직전 Production `dpl_99h6yK3CAQtRhN9F7YMK36DgHrn7`(`23498c4`)는 READY 롤백 대상이다. 배포 이력 기록은 기본값(Preview DB)만 썼고 Production DB에는 쓰지 않았다.
+- 배포 후 검증: 비파괴 프로브 16/16, 1440/390/320px 홈·게시판·검색 헤더·소분류 검사, 아이콘·매니페스트·OG 이미지 크기 동일, 제목·canonical·OG 정식 명칭 유지, 최근 error·5xx 0건.
