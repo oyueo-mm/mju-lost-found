@@ -74,3 +74,12 @@ node scripts/db/approved-operation.mjs --confirm-production --approval-reference
 새 앱은 갱신 실패 때 소켓을 닫고 인증 API를 제한된 주기로 조회한다. public OFF 이후 앱도 되돌려야 하는 경우 인증 polling에서 검증한 Production 배포 `dpl_9RGngoiirr63Yj2WMcFFMfTqdbVC`를 사용한다. 새 테이블과 증거는 보존하고 회수한 grant와 세션은 비활성 상태로 유지한다. D-2 배포 `dpl_HTtxjZJDDgka3HjTkRH6ZKQzR7EX`는 **public OFF 이전** 기준 롤백으로 보존한다.
 
 DB 장애로 로그아웃 회수 기록 자체가 commit되지 못하면 Auth.js는 쿠키 삭제를 계속할 수 있다. DB 장애 중 서버 송신은 fail-closed지만, 회수 commit이 없는데 즉각 철회됐다고 주장하지 않는다. 최대 120초 토큰 수명과 이 장애 시나리오의 실제 제공자 동작을 별도로 검증하고 남은 위험으로 보고한다.
+
+## 인증 polling 유지 후 공개 접근 차단
+
+운영 결정에 따라 Production 비공개 WebSocket 전환은 후속 과제로 분리한다. 기존 운영 앱의 `polling` 상태에서 공개 접근 차단만 수행한다. 기존 저장소와 라이브 DB 조사에서는 채팅 외 Realtime 사용처를 찾지 못했다. 저장소 밖의 소비자와 실제로 열려 있는 D-2 탭은 관리 관측이 필요하다. D-2 탭에서는 기존 초안을 보존하고 D-3를 새 탭에서 열어 이동하는 절차를 적용한다.
+
+- 앱이 `polling`으로 설정됐을 때 인증된 참여자의 토큰 API는 본문 없는 HTTP `204`를 반환한다. 새 브라우저 코드는 주기적인 토큰 재시도를 멈추고 기존 메시지 polling을 계속한다. 페이지 재진입·탭 복귀·네트워크 복구 시 한 번 다시 확인할 수 있다. 이전 D-3 자바스크립트는 `204`를 JSON으로 읽는 데 실패한 뒤 기존 조회 대체 경로를 계속 사용하므로 새 탭이 오래된 스크립트를 교체할 때까지 토큰 요청은 남을 수 있다. 서명 설정이나 백엔드의 실제 장애는 계속 `503`이다.
+- 최신 polling 앱 배포, 직전 READY polling 롤백 대상, DB 모드·Data API OFF·Storage·채팅 및 알림 기준을 확인한 뒤 [Production Realtime 설정](https://supabase.com/dashboard/project/tmifqtyxojtuoejxjrng/realtime/settings)에서 **Allow public access to channels**만 OFF로 저장한다. 이 변경으로 기존 소켓 연결이 끊길 수 있다. [Supabase Realtime 설정](https://supabase.com/docs/guides/realtime/settings)
+- 전환 직후 기존 `realtime-transport-control.mjs --confirm-production`을 승인 실행기로 실행한다. `anonymousPublic`이 `private_only`여야 한다. 오류·5xx 및 인증 조회 경계를 확인하고 기존 로그인 세션의 채팅·알림·사진을 데이터 생성 없이 점검한다. 토큰 상태, 키, Production Data API와 Storage 설정은 그대로 유지한다. 일반 회원의 비공개 WebSocket 수신을 이 경로의 배포 게이트에 포함하지 않는다.
+- 공급자 설정 직후 기존 기능 장애가 확인되면 같은 화면에서 공개 접근을 ON으로 되돌리고 사전·사후 프로브를 대조한다. 앱 변경이 원인이면 직전의 D-3 polling 배포 `dpl_9RGngoiirr63Yj2WMcFFMfTqdbVC`를 되돌림 대상으로 사용한다. 공개 접근이 OFF인 상태에서는 D-2로 되돌리는 경로를 사용하지 않는다. DB 데이터를 수정하거나 JWT 키를 변경하지 않는다.

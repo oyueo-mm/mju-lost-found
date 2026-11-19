@@ -33,9 +33,14 @@ it("caps the JWT to the original cookie expiry and locks admission per user",asy
   expect(txExecute.mock.calls[0][0].join("?")).toContain("pg_advisory_xact_lock(184219,?)");
 });
 it("refuses missing config and quota/backend failures without creating grants",async()=>{
-  $queryRaw.mockResolvedValueOnce([{allowed:true}]).mockResolvedValueOnce([{mode:"polling"}]);expect((await issue()).kind).toBe("unavailable");
+  $queryRaw.mockResolvedValueOnce([{allowed:true}]).mockResolvedValueOnce([]);expect((await issue()).kind).toBe("unavailable");
   for(const reason of ["limited","unavailable"]){checkRateLimit.mockResolvedValueOnce({ok:false,reason,retryAfterSeconds:5});expect(await issue()).toMatchObject({kind:"limited",admission:{reason}});}
   expect($transaction).not.toHaveBeenCalled();
+});
+it("reports deliberate polling without loading the signing key or creating grants",async()=>{
+  $queryRaw.mockResolvedValueOnce([{allowed:true}]).mockResolvedValueOnce([{mode:"polling"}]);
+  expect(await issue()).toEqual({kind:"polling"});
+  expect(signingConfiguration).not.toHaveBeenCalled();expect($transaction).not.toHaveBeenCalled();
 });
 it("limits requests before missing-key, polling or forbidden-room branches",async()=>{
   signingConfiguration.mockImplementationOnce(()=>{throw new Error("missing key");});
@@ -65,6 +70,8 @@ it("does not dispatch a removed grant; authorizes only while row locks are held"
 });
 it("rejects a runtime switch or key change between initial lookup and admission",async()=>{
   txQuery.mockResolvedValueOnce([{mode:"polling",project_ref:project,signing_kid:id}]);
+  expect((await issue()).kind).toBe("polling");
+  txQuery.mockResolvedValueOnce([{mode:"private",project_ref:project,signing_kid:sid}]);
   expect((await issue()).kind).toBe("unavailable");expect(signRealtimeGrant).not.toHaveBeenCalled();
   expect(txExecute).not.toHaveBeenCalled();
 });

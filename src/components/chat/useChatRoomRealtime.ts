@@ -53,6 +53,9 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
     }
     async function fetchToken(signal:AbortSignal,refresh=true):Promise<{token:string;topic:string;expiresAt:string}|null>{
       const response=await fetch('/api/chat/'+chatRoomId+'/realtime',{method:"POST",credentials:"same-origin",headers:{"content-type":"application/json"},cache:"no-store",signal});
+      // A deliberate polling mode has no token to retry. Foreground and network
+      // changes can still recheck it through the normal lifecycle callback.
+      if(response.status===204){retryAt=Infinity;return null;}
       if(response.status===409&&refresh){await fetch("/api/auth/session",{credentials:"same-origin",cache:"no-store",signal});return fetchToken(signal,false);}
       if(response.status===401||response.status===403||response.status===404){
         // A 404 can be the polling-compatible rollback; never use public RT.
@@ -63,6 +66,7 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
       if(value.userId!==currentUserId||value.roomId!==chatRoomId){denied=true;handlersRef.current.identityChanged();return null;}
       if(typeof value.token!=="string"||typeof value.topic!=="string"||!/^mju-chat:[0-9a-f-]{36}$/i.test(value.topic)||!Number.isFinite(Date.parse(value.expiresAt)))return null;
       if(Date.parse(value.expiresAt)<=Date.now()+5000)return null;
+      retryAt=0;
       return value;
     }
     async function connect(){

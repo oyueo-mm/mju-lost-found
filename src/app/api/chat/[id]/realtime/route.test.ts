@@ -43,6 +43,11 @@ it("distinguishes quota, counter failure, revoked access and missing signing con
     issueChatRealtimeGrant.mockResolvedValueOnce(issued);const res=await call();expect(res.status).toBe(status);expect(res.headers.get("cache-control")).toContain("no-store");
   }
 });
+it("signals deliberate polling with an empty, uncacheable 204",async()=>{
+  issueChatRealtimeGrant.mockResolvedValueOnce({kind:"polling"});
+  const res=await call();expect(res.status).toBe(204);expect(await res.text()).toBe("");
+  expect(res.headers.get("cache-control")).toContain("no-store");
+});
 it("fails closed on unexpected database errors without leaking diagnostics",async()=>{
   issueChatRealtimeGrant.mockRejectedValueOnce(new Error("sensitive connection details"));const res=await call();expect(res.status).toBe(503);expect(await res.text()).not.toContain("sensitive");
 });

@@ -4,7 +4,7 @@ import type { CurrentUser } from "@/lib/auth/session";
 import { checkRateLimit, rateLimitTierFor, type RateLimitResult } from "@/lib/rateLimit";
 import { realtimeTopic, signRealtimeGrant, signingConfiguration, REALTIME_TOKEN_SECONDS, UUID_PATTERN } from "./realtimeToken";
 
-type Denied = { kind: "forbidden" | "unavailable" } | { kind: "limited"; admission: Exclude<RateLimitResult,{ok:true}> };
+type Denied = { kind: "forbidden" | "unavailable" | "polling" } | { kind: "limited"; admission: Exclude<RateLimitResult,{ok:true}> };
 type Issued = { kind:"ok"; token:string; topic:string; expiresAt:string; grantId:string };
 export async function issueChatRealtimeGrant(user: CurrentUser, session: { id:string; expiresAt:number }, roomId: number): Promise<Issued|Denied> {
   if (!UUID_PATTERN.test(session.id) || !Number.isSafeInteger(session.expiresAt) || session.expiresAt <= Math.floor(Date.now()/1000)) return {kind:"forbidden"};
@@ -14,9 +14,10 @@ export async function issueChatRealtimeGrant(user: CurrentUser, session: { id:st
   if (!admission.ok) return {kind:"limited",admission};
   const member=(await prisma.$queryRaw<{allowed:boolean}[]>`SELECT public.mju_chat_member_allowed(${user.id},${roomId}) AS allowed`)[0]?.allowed;
   if(!member)return {kind:"forbidden"};
+  const mode=(await prisma.$queryRaw<{mode:string;project_ref:string;signing_kid:string}[]>`SELECT mode,project_ref,signing_kid::text FROM "ChatRealtimeConfig" WHERE id=true`)[0];
+  if(mode?.mode==="polling")return {kind:"polling"};
   let config;
   try { config=signingConfiguration(); } catch { return {kind:"unavailable"}; }
-  const mode=(await prisma.$queryRaw<{mode:string;project_ref:string;signing_kid:string}[]>`SELECT mode,project_ref,signing_kid::text FROM "ChatRealtimeConfig" WHERE id=true`)[0];
   if (mode?.mode!=="private" || mode.project_ref!==config.project || mode.signing_kid!==config.kid.toLowerCase()) return {kind:"unavailable"};
   const now=Math.floor(Date.now()/1000), expiresAt=new Date(Math.min(now+REALTIME_TOKEN_SECONDS,session.expiresAt)*1000);
   const grant=await prisma.$transaction(async tx=>{
@@ -24,6 +25,7 @@ export async function issueChatRealtimeGrant(user: CurrentUser, session: { id:st
     // grants. Hold the shared lock through admission so a concurrent insert
     // cannot escape a mode/key transition's revocation snapshot.
     const lockedMode=(await tx.$queryRaw<{mode:string;project_ref:string;signing_kid:string}[]>`SELECT mode,project_ref,signing_kid::text FROM "ChatRealtimeConfig" WHERE id=true FOR SHARE`)[0];
+    if(lockedMode?.mode==="polling")return "polling" as const;
     if(lockedMode?.mode!=="private"||lockedMode.project_ref!==config.project||lockedMode.signing_kid!==config.kid.toLowerCase())return "unavailable" as const;
     // Serialize only transient grant admission; no content/user row mutations.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(184219,${user.id})`;
@@ -39,7 +41,7 @@ export async function issueChatRealtimeGrant(user: CurrentUser, session: { id:st
     }
     return (await tx.$queryRaw<{id:string}[]>`INSERT INTO "ChatRealtimeGrant" AS g(id,user_id,session_id,room_id,client_id,expires_at) VALUES(${randomUUID()}::uuid,${user.id},${session.id}::uuid,${roomId},${session.id}::uuid,${expiresAt}) ON CONFLICT(session_id,room_id,client_id) DO UPDATE SET id=CASE WHEN g.revoked_at IS NOT NULL THEN EXCLUDED.id ELSE g.id END,expires_at=EXCLUDED.expires_at,revoked_at=NULL RETURNING id`)[0]??null;
   });
-  if(grant==="unavailable")return {kind:"unavailable"};
+  if(grant==="unavailable"||grant==="polling")return {kind:grant};
   if(grant==="capacity")return {kind:"limited",admission:{ok:false,reason:"limited",retryAfterSeconds:120}};
   if(!grant)return {kind:"forbidden"};
   try {

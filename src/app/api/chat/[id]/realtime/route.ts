@@ -16,6 +16,7 @@ export async function POST(request:NextRequest,{params}:{params:Promise<{id:stri
     if(!session?.realtimeSessionId||session.realtimeSessionNeedsRefresh)return NextResponse.json({code:"session_refresh_required"},{status:409,headers});
     if(String(user.id)!==session.user.id||!session.authExpiresAt)return NextResponse.json({error:"Unauthorized"},{status:401,headers});
     const issued=await issueChatRealtimeGrant(user,{id:session.realtimeSessionId,expiresAt:session.authExpiresAt},roomId);
+    if(issued.kind==="polling")return new NextResponse(null,{status:204,headers});
     if(issued.kind==="limited"){
       const response=rateLimitFailureResponse(rateLimitFailure(issued.admission)!);for(const [key,value]of Object.entries(headers))response.headers.set(key,value);return response;
     }

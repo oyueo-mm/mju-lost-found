@@ -1,5 +1,6 @@
 // Actual browser/provider push on this Windows device with an empty local DB.
 // No hosted credentials, shared outbox sweep, exported endpoints or payloads.
+import "../db/install-guard.mjs";
 import {spawn,spawnSync} from "node:child_process";
 import {once} from "node:events";
 import {createServer} from "node:net";

@@ -106,6 +106,22 @@ try:
         assert outsider.request.get(f"{base}/api/chat/{room}/messages").status == 403
         assert outsider.request.post(f"{base}/api/chat/{room}/realtime", headers={"origin": base}).status == 403
         checks.append("outsider cannot read or obtain realtime authority")
+        quiet_requests = []
+        token_path = f"{base}/api/chat/{room}/realtime"
+
+        def deliberate_polling(route):
+            quiet_requests.append(route.request.method)
+            route.fulfill(status=204)
+
+        page.route(token_path, deliberate_polling)
+        page.evaluate("window.dispatchEvent(new Event('online'))")
+        response = second.request.post(f"{base}/api/chat/{room}/messages", data={"content": "D3 deliberate polling proof"})
+        assert response.ok
+        expect(page.get_by_text("D3 deliberate polling proof", exact=True)).to_be_visible(timeout=35000)
+        page.wait_for_timeout(32000)
+        assert quiet_requests == ["POST"]
+        page.unroute(token_path, deliberate_polling)
+        checks.append("intentional polling keeps messages current without repeating token requests")
         # Removing the local test cookie exercises expiry/401 without using a
         # deployed authentication secret or touching any real user's session.
         first.clear_cookies()
