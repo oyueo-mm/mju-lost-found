@@ -60,3 +60,13 @@ Production의 공개 Realtime이 OFF이고 채팅은 인증 polling을 사용한
 - `3bddd74`는 임시 한국어 표시명 '명지찾기'와 돋보기·체크 로고를 도입했다. 이는 승인되지 않은 임의 변경이었으며 `23498c4`에서 승인된 서비스명 **명지대학교 분실물 센터**(`src/lib/brand.ts`)로 교체하고 기존 로고·설치 아이콘을 복구했다. 영문 명칭 MJU Find는 구조화 데이터의 대체 이름(`alternateName`)으로만 남긴다. 새 로고 후보 3개는 [docs/design/logo-candidates](../design/logo-candidates/)에 있으며 최종 승인 전에는 앱에 적용하지 않는다.
 - 등록과 게시판 바로가기에서 분실물을 왼쪽, 습득물을 오른쪽에 배치했다. 등록과 검색의 소분류 항목에 대분류를 먼저 고르라는 안내를 지원 언어 7개에 추가했다. 홈페이지 `WebSite`와 공개 게시판별 제목을 추가하고 Preview 수집 제한을 유지했다.
 - 고정 Preview는 `dpl_9RCXUS7GmdBdvyUz32cCRsx31eTJ`다. 단위 검사 3,013/3,013, 로컬 Chromium 검사 6/6, 호스팅 비파괴 프로브 16/16, 린트와 호스팅 빌드·타입 검사를 통과했다. 실제 응답의 기본 보안 헤더, 서비스 표시명, 사이트 구조화 데이터, 설치 아이콘 설정, 링크 공유 이미지와 두 게시판 canonical을 확인했다. 기존 Preview `dpl_EKp12SuRrw1fmuatsD9gGwB5F1iY`는 UX 복구 대상이다. 이 변경은 Production에 배포하지 않았다.
+
+## 2026-11-19 UX 릴리스 인수인계(Codex → Claude Code)와 Production 현황
+
+- Codex가 사용 한도로 중단된 시점의 실제 상태를 조회했다. Production은 이미 `dpl_99h6yK3CAQtRhN9F7YMK36DgHrn7`(`23498c4`, 14:36 KST, 서비스명 명지대학교 분실물 센터·기존 로고 복구)였고 전 별칭에 연결돼 있다. 이 배포 환경변수에 `MJU_REALTIME_CANARY_ROOM_ID`는 없다. 직전 Production `dpl_9NmiRUieiMdU1U8a9KoWLFvVz9Rz`(`346813f`)만 51번 방 canary 변수를 갖고 있다. `--realtime-canary-room=51`은 D-3 제한 비공개 시험용 옵션이며 UX 배포에는 쓰지 않는다.
+- Production의 D-4 보안 헤더는 `next.config.ts`에서 의도적으로 꺼져 있다(`VERCEL_ENV === "production"`이면 빈 배열). 실제 응답에도 HSTS 외 네 헤더가 없다. Preview에서만 적용·검증됐고 Production 승격은 별도 승인 대상이다.
+- Production 읽기 전용 검증: 비파괴 프로브 16/16, 최근 20분 error·5xx 0건, 3개 뷰포트(1440/390/320) 시각 검사(`HOSTED_UX_ORIGIN=https://mju-find.vercel.app python scripts/regression/hosted-ux.py`), 매니페스트·아이콘·canonical·sitemap·WebSite 구조화 데이터 확인. 홈 카드는 분실물 왼쪽·습득물 오른쪽, 소분류 첫 항목은 '잘 모르겠어요 (선택 안 함)'이며 필수가 아니다.
+- `7dc2179`: 관리자 통계 내보내기 제목·XLSX 속성의 'MJU Find'를 서비스명으로 통일했다(영문명은 `alternateName`에만 유지). 단위 3,016/3,016, 타입·린트, 로컬 Preview 빌드, 16단계 통합 회귀 통과, 회귀 테스트 데이터(사용자 561–563, 글 320, 채팅방 239) 정리 확인. Preview `dpl_8ZVdUpqarWDsuaDEhG12KyPJQbxZ`에 연결했고 프로브 16/16·보안 헤더 4종·3개 뷰포트 검사를 통과했다. **이 변경은 Production에 배포하지 않았다**(관리자 내보내기 문구뿐이며 다음 릴리스에 포함).
+- 롤백: 앱은 `dpl_ADBchXMB69zKRG4QCdXpiqTZonC7`(`cd123bf`, canary 변수 없음, READY)를 우선 대상으로 하고 `dpl_9NmiRUieiMdU1U8a9KoWLFvVz9Rz`는 canary 변수가 붙어 있어 차선이다. DB 변경이 없어 역마이그레이션은 없다.
+- 새 로고 후보 3개(A 분실물 태그, B 물건을 건네는 손, C 교내 지도)는 [docs/design/logo-candidates](../design/logo-candidates/)에만 있으며 앱에는 적용하지 않았다.
+- 주의: vitest는 Git Bash에서 실행하면 모든 스위트가 "failed to find the current suite"로 실패한다(환경 문제). 전체 테스트는 PowerShell에서 실행한다.
