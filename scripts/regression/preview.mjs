@@ -94,6 +94,14 @@ try {
   await step("04 identity and consent readiness", async () => {
     for (const user of users) await prisma.userIdentityInfo.create({ data: { userId: user.id, realName: "Synthetic test", department: "Synthetic department", consentVersion: terms.CURRENT_IDENTITY_CONSENT_VERSION, consentedAt: new Date() } });
     must((await api(0, "POST", "/api/chat", { postType: "lost", postId: 2147483647 })).json?.code !== "identity_required");
+    for (const path of ["/lost/new", "/found/new"]) {
+      const response = await fetch(base + path, { headers: { cookie: cookies[0], "accept-language": "ko" }, redirect: "manual" });
+      must(response.ok);
+      const markup = await response.text();
+      const field = /<select\b([^>]*\bname="subcategory"[^>]*)>([\s\S]*?)<\/select>/.exec(markup);
+      must(field && !/\brequired\b/.test(field[1]) && /^<option\b[^>]*value=""[^>]*>잘 모르겠어요 \(선택 안 함\)<\/option>/.test(field[2]));
+      must(markup.includes("(선택)"));
+    }
   });
   await step("05 create post", async () => {
     const r = await api(0, "POST", "/api/posts", { type: "lost", title: marker, description: "Isolated regression fixture, removed after verification.", category: "기타", location: "Synthetic test", campus: "인문캠퍼스", lostDate: new Date().toISOString().slice(0, 10) });
