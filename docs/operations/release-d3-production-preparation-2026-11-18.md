@@ -167,3 +167,11 @@ Production은 `dpl_9RGngoiirr63Yj2WMcFFMfTqdbVC` (`cbb1a90`)의 인증 API polli
 현재 D-3 polling의 정상 전면 탭은 메시지 GET을 약 10초마다, 토큰 POST를 약 30초마다 시도한다. 전면 탭 하나를 한 시간 유지하면 정기 호출의 단순 환산은 약 360 GET과 120 POST다. 정상 private 연결은 안전 조회 60초 및 토큰 갱신 약 90초를 사용하며, 갱신 재가입과 채팅 이벤트에서 추가 조회한다. 토큰 실패 재시도와 메시지 오류 백오프는 최대 주기와 응답 시간에 영향을 준다. polling의 정상 표시 지연은 다음 조회까지 약 0~10초에 API 처리 시간을 더한 값이며, 조회 오류 후에는 주기가 최대 30초로 늘어난다. 백그라운드에서는 주기 조회가 멈추고 복귀 시 동기화한다. 실제 총 요청량과 비용은 전면 탭 수, 재시도, 채팅 빈도에 따라 달라지며 Production 부하 시험은 수행하지 않았다.
 
 이번 자동 검증에서 호스팅 Preview의 공개 가입은 `PrivateOnly`로 거부됐다. 같은 설정에서 최초 및 갱신 이후의 회원 이벤트 수신 6/6, 인증 polling과 접근 경계 10/10, 구형 D-2 탭 전환 5/5를 통과했다. 격리 polling 표본은 전송 성공 응답 후 표시까지 9.72초였으며 Production 성능 계측으로 사용하지 않는다. 구형 탭은 초안을 유지하지만 새 메시지를 받으려면 D-3 탭을 열어야 한다. 생성한 Preview 계정과 방의 정리는 모두 성공했다. 최근 Production 로그 표본의 error는 0건, 5xx 10건은 모두 polling 중 토큰 API의 예상 HTTP 503이었다. Production에서는 채팅 또는 첨부 데이터를 생성하거나 서비스 설정·배포를 바꾸지 않았다. 같은 수동 브라우저 검증을 반복 요청하지 않고 이 상태에서 D-3를 보류한다.
+
+### 2026-11-19 인증 polling 유지 및 공개 채널 OFF 준비 완료
+
+후속 운영 결정에 따라 D-3 완료 기준을 인증 polling 운영과 공급자 공개 접근 OFF로 변경했다. Production private WebSocket 전환은 별도 과제로 남긴다. `cd123bf`에서 의도된 polling을 토큰 API의 HTTP 204로 분리하고, 새 브라우저 코드가 반복 토큰 확인을 멈추도록 변경했다. 기존 D-3 탭은 메시지 polling을 계속 사용할 수 있다. 구형 D-2 탭 이동 절차와 provider 설정 ON 복구는 [전환 절차](release-d3-transition.md#인증-polling-유지-후-공개-접근-차단)를 따른다.
+
+전체 단위 3,011/3,011, 통합 16/16, polling Chromium 11/11, 구형 탭 Chromium 5/5 및 타입·린트·빌드가 통과했다. 기존 웹 푸시 검증 스크립트의 DB 연결 가드 누락을 바로잡았다. Preview 배포 `dpl_5DCPPR7weezg1dbrfdXkiSaKDTn4`와 Production 배포 `dpl_ADBchXMB69zKRG4QCdXpiqTZonC7`는 둘 다 `cd123bf`이며 각 배포의 호스팅 프로브 16개를 통과했다. 직전 `dpl_9RGngoiirr63Yj2WMcFFMfTqdbVC`는 READY 롤백 대상으로 보존했다.
+
+Production에서 Google 제공자 등록, 비로그인 채팅·알림·관리자 API 거부, 데이터·Storage 연속성 및 Data API OFF를 확인했다. 새 배포의 첫 로그 표본은 오류와 5xx 각각 0건이었고 정상 트래픽의 Realtime 토큰 204 응답은 3건이었다. DB는 polling을 유지한다. 공급자의 합성 공개 가입은 아직 허용됐다. 운영자의 공개 접근 OFF 저장 후 `PrivateOnly`, 기존 로그인 세션 기능과 운영 지표를 후속 검증한다. 이번 준비 과정에서 Production 채팅·첨부 데이터를 생성하지 않았다.
