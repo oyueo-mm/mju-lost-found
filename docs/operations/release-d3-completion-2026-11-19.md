@@ -59,3 +59,10 @@
 - 현재 Production: `dpl_2c2dVUwxKU6kGVq3E1Hpe1zxaZqN` + DB polling → 전 방 polling. 새 클라이언트는 polling 탭마다 120초에 한 번 토큰 API를 재확인한다(204). 앱 롤백 대상은 `dpl_HxSWo6BzrNfDTQDwg6NdMBMaYZKw`(`35168f0`).
 - 도구 보완: `realtime-member-check.mjs send`가 1:1 방의 grant 2개에 각각 확인 이벤트를 보낸다. `realtime-receipt-logs.mjs`는 수신 확인 다이제스트를 건수로만 대조한다. `vercel logs` 조회는 약 50행 제한과 수 분의 반영 지연이 있어 짧은 창으로 반복 조회해야 한다.
 - 시험 데이터: 52번 방(사용자 생성 글 1개, 방 1개, 메시지 2개). 정리 방법은 별도 승인 후 결정한다.
+
+## 6. 재검증 준비 (2026-11-19 19:35 KST)
+
+- 진단 보강(`96e8a73`): canary 방 탭만 고정 단어(`subscribed`, `polling-mode|token|transport|error`, `hidden-*`, `visible-*`)를 기존 토큰 경로로 보고한다. 서버는 해당 방 참여자일 때만 세션 다이제스트 8자리와 함께 기록한다(메시지·사용자 ID 없음). 요청 0건이 "숨김"인지 "실패"인지 로그로 구분된다. `realtime-diag-logs.mjs`로 조회한다.
+- Production 브라우저 자동 E2E는 Production 로그인 세션(Production 인증 비밀 또는 실제 계정)이 필요해 수행하지 않았다. 같은 시나리오를 Preview에서 자동 재현했다. `--two-member` 12/12: canary 방, DB 모드 private→polling→private(`release-d3.mjs`), 양쪽 polling 전환 82.6초, polling 중 전달 10.8초, 새로고침 없는 private 복귀 108.8초, 복귀 후 1.52초, 진단 `subscribed→polling-mode→subscribed`.
+- `realtime-canary-cycle.mjs`: 승인 실행기 아래에서 A 연결 대기 → B 확인 이벤트 → C polling(150초) → D private 복귀 대기(4분) → E 확인 이벤트 순서로 진행하고 항상 polling으로 끝낸다. Preview에서 실패 경로(즉시 polling 복구)를 확인했다.
+- 배포: Preview `dpl_8QFiNCRzAc8mKTAuGDe2Vns1fH46`, Production `dpl_7wsj3uWVS3zXy3NayjJFTQMgtDMy`(둘 다 `8dd45c6`, Production canary=52, DB polling). 프로브 16/16. 브랜치 HEAD = Production 커밋이므로 전체 전환 시 누락되는 수정이 없다.
