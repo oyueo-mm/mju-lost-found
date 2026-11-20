@@ -1,8 +1,10 @@
-import { runImageJob } from "@/lib/ai/imageJob";
-import { rateLimitFailure, rateLimitFailureResponse } from "@/lib/rateLimit";
+import { requeueImageJob } from "@/lib/ai/imageJobQueue";
+import { kickEmbeddingJobs } from "@/lib/ai/imageJobKick";
+import { EMBEDDING_INPUT_FIELDS } from "@/lib/ai/postEmbedding";
+import { checkRateLimit, rateLimitFailure, rateLimitFailureResponse, rateLimitTierFor } from "@/lib/rateLimit";
 export const maxDuration = 120;
 import { managePost } from "@/lib/posts/management";
-import { NextRequest } from "next/server";
+import { NextRequest, after } from "next/server";
 
 import {
   jsonError,
@@ -21,11 +23,21 @@ import { canAny } from "@/lib/permissions/check";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { SUSPENDED_ACCOUNT_MESSAGE } from "@/lib/posts/response";
 
-// PATCH conditionally triggers embedPostBestEffort() -- real ONNX Runtime
-// inference (@huggingface/transformers, a native addon) that cannot run on
-// the Edge runtime. Pinned for the whole file for simplicity even though
-// GET/DELETE don't need it.
+// Function Storage C-2: this route runs no model. Text edits and image
+// recompute requests are queued in the database and drained by the
+// model-carrying /api/posts function (src/lib/ai/textJob.ts, imageJob.ts).
+// Node.js runtime for Prisma and node:crypto.
 export const runtime = "nodejs";
+
+// Ask /api/posts to drain now. Failure is safe: the job stays queued for
+// the request-time recovery or the daily cron.
+function triggerEmbeddingDrain(request: NextRequest) {
+  after(async () => {
+    const result = await kickEmbeddingJobs(request.nextUrl.origin);
+    if (result === "failed") console.error("Embedding drain request failed; the queued job will be recovered later");
+  });
+}
+const changesEmbeddingText = (input: object) => EMBEDDING_INPUT_FIELDS.some((field) => field in input);
 
 // LostPost and FoundPost each have their own autoincrement id sequence
 // (separate tables, see schema.prisma) -- the same id can legitimately
@@ -120,6 +132,7 @@ export const PATCH = withErrorHandling(
         return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
       }
       const result = await updateLostPost(parsedParams.id, auth.user, parsed.data);
+      if (result.kind === "ok" && changesEmbeddingText(parsed.data)) triggerEmbeddingDrain(request);
       return postMutationResultToResponse(result);
     }
 
@@ -128,13 +141,15 @@ export const PATCH = withErrorHandling(
       return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");
     }
     const result = await updateFoundPost(parsedParams.id, auth.user, parsed.data);
+    if (result.kind === "ok" && changesEmbeddingText(parsed.data)) triggerEmbeddingDrain(request);
     return postMutationResultToResponse(result);
   },
 );
 
-// Owner-requested recompute of the DB's current image through the shared job
-// controller. Image attachment calls the same controller directly in after();
-// no origin/Host-derived HTTP callback or forwarded cookie remains.
+// Owner-requested recompute of the DB's current image. Function Storage C-2:
+// re-arms the durable job (no inference here) and asks /api/posts to drain;
+// callers poll until embedded. The request itself spends the owner's manual
+// recompute budget, the worker the usual automatic one.
 export const PUT = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const auth = await requireUserForApi();
@@ -155,10 +170,11 @@ export const PUT = withErrorHandling(
     if (post.author.id !== auth.user.id) return jsonError(403, "본인 게시물만 수정할 수 있습니다.");
 
     if (!post.imageUrl) return jsonOk({ embedded: false, jobStatus: "no_image" });
-    const result = await runImageJob(parsedParams.type, parsedParams.id, true);
-    if (result.status === "limited") return rateLimitFailureResponse(rateLimitFailure(result.admission)!);
-    if (result.status === "failed") return jsonError(503, "이미지 분석을 잠시 처리할 수 없습니다. 다시 시도해주세요.");
-    return jsonOk({ embedded: result.status === "completed" || result.status === "reused", jobStatus: result.status });
+    const admission = await checkRateLimit("embeddingRecompute", { userId: auth.user.id, tier: await rateLimitTierFor(auth.user) });
+    if (!admission.ok) return rateLimitFailureResponse(rateLimitFailure(admission)!);
+    const status = await requeueImageJob(parsedParams.type, parsedParams.id);
+    if (status === "pending") triggerEmbeddingDrain(request);
+    return jsonOk({ embedded: status === "reused", jobStatus: status });
   },
 );
 

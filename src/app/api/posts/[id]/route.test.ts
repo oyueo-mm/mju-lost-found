@@ -10,13 +10,16 @@ const updateLostPost = vi.fn();
 const updateFoundPost = vi.fn();
 const deleteLostPost = vi.fn();
 const deleteFoundPost = vi.fn();
-// Phase 15-2: PUT's own collaborator, mocked wholesale -- never loading
-// the real ~99MB SigLIP model or issuing a real $executeRaw here, same
-// convention as this project's other embedding-adjacent route tests.
-const runImageJob = vi.fn();
-// Phase J-2: PUT also clears this post's cached AI recommendation ranking
-// once its image embedding changes -- mocked here for the same reason
-// (no real prisma call in a route unit test).
+// Phase 15-2 / Function Storage C-2: PUT's collaborator is now the queue-side
+// requeue (no model, no inference); mocked wholesale -- no real $executeRaw
+// in a route unit test.
+const requeueImageJob = vi.fn();
+// Function Storage C-2: edits and recompute requests ask /api/posts to drain.
+const kickEmbeddingJobs = vi.fn();
+const checkRateLimit = vi.fn();
+const rateLimitTierFor = vi.fn();
+// Phase J-2: the route itself must never clear the recommendation cache --
+// the worker does that only after the new vector is saved.
 const invalidateRecommendationCache = vi.fn();
 
 // See route.test.ts for why this is a full mock rather than importActual.
@@ -34,12 +37,24 @@ vi.mock("@/lib/posts/aiService", () => ({
   updateLostPost,
   updateFoundPost,
 }));
-vi.mock("@/lib/ai/imageJob", () => ({ runImageJob }));
+vi.mock("@/lib/ai/imageJobQueue", () => ({ requeueImageJob }));
+vi.mock("@/lib/ai/imageJobKick", () => ({ kickEmbeddingJobs }));
+vi.mock("@/lib/rateLimit", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/rateLimit")>()), checkRateLimit, rateLimitTierFor }));
 const findPostRecommendations = vi.fn();
 vi.mock("@/lib/recommendation/service", () => ({ invalidateRecommendationCache, findPostRecommendations }));
 // Legal pre-beta Phase: only consulted for a temporarily hidden post.
 const getCurrentUser = vi.fn();
 vi.mock("@/lib/auth/session", () => ({ getCurrentUser }));
+// after() needs a real request scope; capture callbacks and flush explicitly
+// (same pattern as image/route.test.ts).
+const { after, flushAfterCallbacks, resetAfterCallbacks } = vi.hoisted(() => {
+  let afterCallbacks: Array<() => unknown> = [];
+  const after = vi.fn((callback: () => unknown) => { afterCallbacks.push(callback); });
+  async function flushAfterCallbacks() { const callbacks = afterCallbacks.splice(0); await Promise.all(callbacks.map((cb) => cb())); }
+  function resetAfterCallbacks() { afterCallbacks = []; }
+  return { after, flushAfterCallbacks, resetAfterCallbacks };
+});
+vi.mock("next/server", async (importOriginal) => ({ ...(await importOriginal<typeof import("next/server")>()), after }));
 
 const { GET, PATCH, PUT, DELETE } = await import("./route");
 
@@ -48,7 +63,11 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
-  runImageJob.mockResolvedValue({ status: "completed" });
+  resetAfterCallbacks();
+  requeueImageJob.mockResolvedValue("pending");
+  kickEmbeddingJobs.mockResolvedValue("sent");
+  checkRateLimit.mockResolvedValue({ ok: true });
+  rateLimitTierFor.mockResolvedValue("user");
 });
 
 describe("GET /api/posts/[id]", () => {
@@ -206,19 +225,68 @@ describe("PATCH /api/posts/[id]", () => {
     expect(res.status).toBe(200);
     expect(updateLostPost).toHaveBeenCalledWith(1, sessionUser, expect.any(Object));
   });
+
+  // Function Storage C-2: the DB trigger queues the text job; the route only
+  // asks /api/posts to drain it, after the response.
+  it("asks /api/posts to drain after a successful text edit (no inference here)", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    updateFoundPost.mockResolvedValueOnce({ kind: "ok", data: { id: 1, title: "new" } });
+
+    const res = await PATCH(new NextRequest("http://localhost/api/posts/1?type=found", { method: "PATCH", body: JSON.stringify({ description: "새 설명" }) }), params("1"));
+
+    expect(res.status).toBe(200);
+    expect(kickEmbeddingJobs).not.toHaveBeenCalled();
+    await flushAfterCallbacks();
+    expect(kickEmbeddingJobs).toHaveBeenCalledWith("http://localhost");
+    expect(invalidateRecommendationCache).not.toHaveBeenCalled();
+  });
+
+  it("sends no drain request for a status-only edit", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    updateLostPost.mockResolvedValueOnce({ kind: "ok", data: { id: 1 } });
+
+    await PATCH(new NextRequest("http://localhost/api/posts/1?type=lost", { method: "PATCH", body: JSON.stringify({ status: "찾음" }) }), params("1"));
+    await flushAfterCallbacks();
+
+    expect(kickEmbeddingJobs).not.toHaveBeenCalled();
+  });
+
+  it("sends no drain request when the edit is refused", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    updateLostPost.mockResolvedValueOnce({ kind: "forbidden", reason: "not_owner" });
+
+    await PATCH(new NextRequest("http://localhost/api/posts/1?type=lost", { method: "PATCH", body: JSON.stringify({ title: "x" }) }), params("1"));
+    await flushAfterCallbacks();
+
+    expect(kickEmbeddingJobs).not.toHaveBeenCalled();
+  });
+
+  it("logs, never throws, when the drain request fails (the job stays queued)", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    updateLostPost.mockResolvedValueOnce({ kind: "ok", data: { id: 1 } });
+    kickEmbeddingJobs.mockResolvedValueOnce("failed");
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await PATCH(new NextRequest("http://localhost/api/posts/1?type=lost", { method: "PATCH", body: JSON.stringify({ title: "new" }) }), params("1"));
+    await flushAfterCallbacks();
+
+    expect(res.status).toBe(200);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("Embedding drain request failed"));
+    error.mockRestore();
+  });
 });
 
 // Phase 15-2, internal-only: triggered by POST /api/posts/[id]/image
 // after a successful image attach (see that route's own comment for why
 // this indirection exists). Same auth/ownership gate as PATCH/DELETE.
-describe("PUT /api/posts/[id] (internal: recompute image embedding)", () => {
+describe("PUT /api/posts/[id] (owner/tool: recompute image embedding)", () => {
   it("rejects an unauthenticated request", async () => {
     requireUserForApi.mockResolvedValueOnce({ response: jsonError(401, "로그인이 필요합니다.") });
 
     const res = await PUT(new NextRequest("http://localhost/api/posts/1?type=lost", { method: "PUT" }), params("1"));
 
     expect(res.status).toBe(401);
-    expect(runImageJob).not.toHaveBeenCalled();
+    expect(requeueImageJob).not.toHaveBeenCalled();
   });
 
   it("returns 404 for a nonexistent post", async () => {
@@ -228,7 +296,7 @@ describe("PUT /api/posts/[id] (internal: recompute image embedding)", () => {
     const res = await PUT(new NextRequest("http://localhost/api/posts/1?type=lost", { method: "PUT" }), params("1"));
 
     expect(res.status).toBe(404);
-    expect(runImageJob).not.toHaveBeenCalled();
+    expect(requeueImageJob).not.toHaveBeenCalled();
   });
 
   it("rejects triggering embedding for someone else's post", async () => {
@@ -238,10 +306,10 @@ describe("PUT /api/posts/[id] (internal: recompute image embedding)", () => {
     const res = await PUT(new NextRequest("http://localhost/api/posts/1?type=lost", { method: "PUT" }), params("1"));
 
     expect(res.status).toBe(403);
-    expect(runImageJob).not.toHaveBeenCalled();
+    expect(requeueImageJob).not.toHaveBeenCalled();
   });
 
-  it("computes the embedding from the post's current imageUrl for the owner", async () => {
+  it("re-arms the durable job for the owner and asks /api/posts to drain (no inference here)", async () => {
     requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
     getLostPost.mockResolvedValueOnce({ id: 1, imageUrl: "https://x/y.jpg", author: { id: sessionUser.id } });
 
@@ -249,9 +317,40 @@ describe("PUT /api/posts/[id] (internal: recompute image embedding)", () => {
     const json = await res.json();
 
     expect(res.status).toBe(200);
-    expect(json.data.embedded).toBe(true);
-    expect(runImageJob).toHaveBeenCalledWith("lost", 1, true);
-    expect(json.data.jobStatus).toBe("completed");
+    expect(json.data.embedded).toBe(false);
+    expect(json.data.jobStatus).toBe("pending");
+    expect(requeueImageJob).toHaveBeenCalledWith("lost", 1);
+    expect(checkRateLimit).toHaveBeenCalledWith("embeddingRecompute", { userId: sessionUser.id, tier: "user" });
+    expect(kickEmbeddingJobs).not.toHaveBeenCalled(); // deferred to after()
+    await flushAfterCallbacks();
+    expect(kickEmbeddingJobs).toHaveBeenCalledWith("http://localhost");
+    expect(invalidateRecommendationCache).not.toHaveBeenCalled();
+  });
+
+  it("reports an already current embedding without a drain request", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    getLostPost.mockResolvedValueOnce({ id: 1, imageUrl: "https://x/y.jpg", author: { id: sessionUser.id } });
+    requeueImageJob.mockResolvedValueOnce("reused");
+
+    const res = await PUT(new NextRequest("http://localhost/api/posts/1?type=lost", { method: "PUT" }), params("1"));
+    const json = await res.json();
+
+    expect(json.data).toEqual({ embedded: true, jobStatus: "reused" });
+    await flushAfterCallbacks();
+    expect(kickEmbeddingJobs).not.toHaveBeenCalled();
+  });
+
+  it("refuses beyond the owner's manual recompute budget without touching the job", async () => {
+    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
+    getLostPost.mockResolvedValueOnce({ id: 1, imageUrl: "https://x/y.jpg", author: { id: sessionUser.id } });
+    checkRateLimit.mockResolvedValueOnce({ ok: false, reason: "limited", retryAfterSeconds: 30 });
+
+    const res = await PUT(new NextRequest("http://localhost/api/posts/1?type=lost", { method: "PUT" }), params("1"));
+
+    expect(res.status).toBe(429);
+    expect(requeueImageJob).not.toHaveBeenCalled();
+    await flushAfterCallbacks();
+    expect(kickEmbeddingJobs).not.toHaveBeenCalled();
   });
 
   it("does nothing (but still succeeds) when the post has no image", async () => {
@@ -263,7 +362,7 @@ describe("PUT /api/posts/[id] (internal: recompute image embedding)", () => {
 
     expect(res.status).toBe(200);
     expect(json.data.embedded).toBe(false);
-    expect(runImageJob).not.toHaveBeenCalled();
+    expect(requeueImageJob).not.toHaveBeenCalled();
     expect(invalidateRecommendationCache).not.toHaveBeenCalled();
   });
 });
@@ -315,7 +414,7 @@ describe("release C (M-1): PUT /api/posts/[id] for a suspended author", () => {
 
     expect(res.status).toBe(403);
     expect(getLostPost).not.toHaveBeenCalled();
-    expect(runImageJob).not.toHaveBeenCalled();
+    expect(requeueImageJob).not.toHaveBeenCalled();
     expect(invalidateRecommendationCache).not.toHaveBeenCalled();
   });
 });

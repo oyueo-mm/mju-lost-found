@@ -101,12 +101,19 @@ const nextConfig: NextConfig = {
       "./node_modules/onnxruntime-node/bin/napi-v6/linux/x64/**",
     ],
     "/api/posts!(/**)": ["./models/**"],
-    "/api/posts/\\[id\\]!(/**)": ["./models/**"],
+    // Function Storage C-2: /api/posts/[id] (edit, recompute) queues text and
+    // image jobs instead of embedding (src/lib/ai/textJob.ts), so it carries
+    // no model either. Only /api/posts above loads the models.
     // Function Storage C-1: the photo route (/api/posts/[id]/image) no longer
     // embeds images itself (src/lib/ai/imageJobKick.ts), so it carries no model.
   },
   outputFileTracingExcludes: {
     "/api/posts/**/image": ["./models/jhgan/**/*"],
+    // Function Storage C-2: [id] still imports aiService.ts (update logic),
+    // whose embedding modules name process.cwd()/models, so the tracer pulls
+    // both models in by itself. No [id] code path loads a model any more
+    // (edits and recompute requests are queued), so drop them here.
+    "/api/posts/\\[id\\]!(/**)": ["./models/**/*"],
   },
   images: {
     // 운영 비용 (Hobby: 5,000 image transformations a month): every width

@@ -33,3 +33,7 @@ export async function kickImageJobs(fallbackOrigin: string, env: NodeJS.ProcessE
     return "failed";
   }
 }
+
+// Function Storage C-2: the same drain also runs queued text jobs
+// (src/lib/ai/textJob.ts), so a post edit uses this very request.
+export const kickEmbeddingJobs = kickImageJobs;

@@ -1,4 +1,4 @@
-// Adapted from the historical 16-step audit/regress.mjs. Never use seed users.
+// Adapted from the historical 16-step audit/regress.mjs (+08b text queue, C-2). Never use seed users.
 import "../db/install-guard.mjs";
 import { assertDatabaseEnvironment, PREVIEW_DB_PROJECT } from "../../src/lib/db/accessPolicy.mjs";
 import { createJiti } from "jiti";
@@ -45,7 +45,7 @@ function save() { writeFileSync(manifest, JSON.stringify({ marker, users: users.
 const must = (ok) => { if (!ok) throw new Error("Assertion failed"); };
 async function api(actor, method, path, body) {
   const headers = actor === null ? {} : { cookie: cookies[actor] };
-  if(method==="POST")headers.origin=new URL(base).origin;
+  if(method==="POST"||method==="PATCH")headers.origin=new URL(base).origin;
   if (body !== undefined && !(body instanceof FormData)) headers["content-type"] = "application/json";
   const r = await fetch(base + path, { method, headers, body: body instanceof FormData ? body : body === undefined ? undefined : JSON.stringify(body), redirect: "manual", signal: AbortSignal.timeout(120000) });
   const json = r.headers.get("content-type")?.includes("application/json") ? await r.json() : (await r.arrayBuffer(), null);
@@ -139,6 +139,21 @@ try {
     must(completed);
     const vector=(await prisma.$queryRaw`SELECT vector_dims(p."imageEmbedding") AS dimensions,j.state,j.desired_hash=j.completed_hash AS current FROM "LostPost" p JOIN "ImageEmbeddingJob" j ON j.post_type='lost' AND j.post_id=p.id WHERE p.id=${postId}`)[0];
     must(vector?.dimensions===768&&vector.state==="completed"&&vector.current===true);
+  });
+  await step("08b text edit re-embedding through the queue", async () => {
+    // Function Storage C-2: /api/posts/[id] carries no model. The edit's DB
+    // trigger queues the text job and the route's drain request alone (no
+    // other request from here) must replace the vector with the edited text's.
+    const before=(await prisma.$queryRaw`SELECT embedding::text AS v FROM "LostPost" WHERE id=${postId}`)[0]?.v;
+    must(before);
+    must((await api(0,"PATCH",`/api/posts/${postId}?type=lost`,{description:"Isolated regression fixture, edited to verify queued text re-embedding."})).status===200);
+    let job;
+    for(let i=0;i<60;i++){
+      job=(await prisma.$queryRaw`SELECT j.state,j.generation,j.completed_generation,p.embedding::text AS v,vector_dims(p.embedding) AS dims FROM "LostPost" p JOIN "TextEmbeddingJob" j ON j.post_type='lost' AND j.post_id=p.id WHERE p.id=${postId}`)[0];
+      if(job?.state==="completed"||job?.state==="failed")break;
+      await new Promise(resolve=>setTimeout(resolve,1000));
+    }
+    must(job?.state==="completed"&&job.completed_generation===job.generation&&job.dims===768&&job.v!==before);
   });
   await step("09 keyword, semantic, unified, image search", async () => {
     for (const mode of ["keyword", "semantic", "unified"]) {
@@ -235,7 +250,7 @@ try {
     cleanupOk = true;
   } catch { console.error("Fixture cleanup failed; preserve run IDs for operator review"); process.exitCode = 1; }
   server?.kill(); await prisma.$disconnect();
-  console.log(JSON.stringify({ suite: "preview-regression-16", passed: results.filter(r => r.passed).length, total: 16, executed: results.length, cleanupOk, fixtures: { userIds: users.map(u => u.id), postId, roomId }, results }, null, 2));
+  console.log(JSON.stringify({ suite: "preview-regression-17", passed: results.filter(r => r.passed).length, total: 17, executed: results.length, cleanupOk, fixtures: { userIds: users.map(u => u.id), postId, roomId }, results }, null, 2));
 }
 // Imported inference runtimes can keep native worker threads alive in Node.
 // All operations and cleanup above have finished before this explicit exit.

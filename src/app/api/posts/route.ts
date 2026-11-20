@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { drainImageJobs, recoverImageJobsAfterRequest } from "@/lib/ai/imageJob";
+import { drainTextJobs, recoverTextJobsAfterRequest } from "@/lib/ai/textJob";
 export const maxDuration = 120;
 
 import {
@@ -52,7 +53,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     const actual = Buffer.from(request.headers.get("authorization") ?? "");
     const expected = Buffer.from(`Bearer ${secret ?? ""}`);
     if (!secret || actual.length !== expected.length || !timingSafeEqual(actual, expected)) return jsonError(401, "Unauthorized");
-    await drainImageJobs(8);
+    // Function Storage C-2: text jobs share this drain. One queue failing
+    // must not keep the other from running; both stay durable for retry.
+    const outcomes = await Promise.allSettled([drainImageJobs(8), drainTextJobs(8)]);
+    for (const outcome of outcomes) if (outcome.status === "rejected") console.error("Embedding drain unavailable:", outcome.reason instanceof Error ? outcome.reason.name : "Error");
+    if (outcomes.every((outcome) => outcome.status === "rejected")) return jsonError(503, "Embedding drain unavailable");
     return NextResponse.json({ status: "processed" }, { headers: { "Cache-Control": "no-store" } });
   }
   const query = listQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
@@ -76,6 +81,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Rejected/invalid requests must not amplify into queue reads or inference.
   after(async () => { try { await recoverImageJobsAfterRequest(); } catch (error) { console.error("Image job recovery unavailable:", error instanceof Error ? error.name : "Error"); } });
+  after(async () => { try { await recoverTextJobsAfterRequest(); } catch (error) { console.error("Text job recovery unavailable:", error instanceof Error ? error.name : "Error"); } });
 
   return NextResponse.json({
     data: result.items,

@@ -2,6 +2,10 @@ vi.mock("next/server", async () => ({ ...await vi.importActual("next/server"), a
 const drainImageJobs = vi.fn();
 const recoverImageJobsAfterRequest = vi.fn();
 vi.mock("@/lib/ai/imageJob", () => ({ drainImageJobs, recoverImageJobsAfterRequest }));
+// Function Storage C-2: text jobs share the maintenance drain and the recovery.
+const drainTextJobs = vi.fn();
+const recoverTextJobsAfterRequest = vi.fn();
+vi.mock("@/lib/ai/textJob", () => ({ drainTextJobs, recoverTextJobsAfterRequest }));
 import { NextRequest, NextResponse, after } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -536,12 +540,14 @@ describe("embedding queue maintenance authentication", () => {
     expect(res.status).toBe(400);
     expect(after).not.toHaveBeenCalled();
     expect(drainImageJobs).not.toHaveBeenCalled();
+    expect(drainTextJobs).not.toHaveBeenCalled();
   });
   it("refuses maintenance without its server secret", async () => {
     vi.stubEnv("CRON_SECRET", "test-maintenance-secret");
     const res = await GET(new NextRequest("http://localhost/api/posts?mode=embedding-maintenance"));
     expect(res.status).toBe(401);
     expect(drainImageJobs).not.toHaveBeenCalled();
+    expect(drainTextJobs).not.toHaveBeenCalled();
   });
   it("drains a bounded batch only with the correct secret", async () => {
     vi.stubEnv("CRON_SECRET", "test-maintenance-secret");
@@ -549,5 +555,28 @@ describe("embedding queue maintenance authentication", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(drainImageJobs).toHaveBeenCalledWith(8);
+    expect(drainTextJobs).toHaveBeenCalledWith(8);
+  });
+  it("still drains text jobs when the image drain fails, and the reverse", async () => {
+    vi.stubEnv("CRON_SECRET", "test-maintenance-secret");
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const auth = { headers: { authorization: "Bearer test-maintenance-secret" } };
+    drainImageJobs.mockRejectedValueOnce(new Error("image down"));
+    expect((await GET(new NextRequest("http://localhost/api/posts?mode=embedding-maintenance", auth))).status).toBe(200);
+    expect(drainTextJobs).toHaveBeenCalledTimes(1);
+    drainTextJobs.mockRejectedValueOnce(new Error("text down"));
+    expect((await GET(new NextRequest("http://localhost/api/posts?mode=embedding-maintenance", auth))).status).toBe(200);
+    expect(drainImageJobs).toHaveBeenCalledTimes(2);
+    expect(error).toHaveBeenCalledWith("Embedding drain unavailable:", "Error");
+    error.mockRestore();
+  });
+  it("answers 503 when both drains are unavailable", async () => {
+    vi.stubEnv("CRON_SECRET", "test-maintenance-secret");
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    drainImageJobs.mockRejectedValueOnce(new Error("down"));
+    drainTextJobs.mockRejectedValueOnce(new Error("down"));
+    const res = await GET(new NextRequest("http://localhost/api/posts?mode=embedding-maintenance", { headers: { authorization: "Bearer test-maintenance-secret" } }));
+    expect(res.status).toBe(503);
+    error.mockRestore();
   });
 });

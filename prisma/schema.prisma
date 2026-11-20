@@ -310,6 +310,24 @@ model ImageEmbeddingJob {
   @@index([state, nextRunAt], map: "ImageEmbeddingJob_pending")
 }
 
+// Function Storage C-2: queued by DB triggers when title/description/
+// category/location really change; drained by /api/posts (src/lib/ai/textJob.ts).
+model TextEmbeddingJob {
+  postType String @map("post_type")
+  postId Int @map("post_id")
+  generation Int @default(1)
+  completedGeneration Int? @map("completed_generation")
+  state String @default("pending")
+  leaseToken String? @map("lease_token")
+  leaseUntil DateTime? @map("lease_until") @db.Timestamp(3)
+  attempts Int @default(0)
+  nextRunAt DateTime @default(dbgenerated("(now() AT TIME ZONE 'UTC')")) @map("next_run_at") @db.Timestamp(3)
+  lastError String? @map("last_error")
+  updatedAt DateTime @default(dbgenerated("(now() AT TIME ZONE 'UTC')")) @map("updated_at") @db.Timestamp(3)
+  @@id([postType, postId])
+  @@index([state, nextRunAt], map: "TextEmbeddingJob_pending")
+}
+
 model User {
   realtimeSessions ChatRealtimeSession[]
   institutionOfficer InstitutionOfficer?

@@ -5,14 +5,13 @@ import { after } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { recordDaily } from "@/lib/metrics/record";
 import { isCurrentlySuspended, type ContentActor } from "@/lib/auth/suspension";
-import { EMBEDDING_INPUT_FIELDS, embedPostBestEffort } from "@/lib/ai/postEmbedding";
+import { embedPostBestEffort } from "@/lib/ai/postEmbedding";
 import { getEmbeddingProvider } from "@/lib/ai/embedding";
 import { queryEmbedding } from "@/lib/ai/queryEmbedding";
 import { getImageEmbeddingProvider } from "@/lib/ai/imageEmbedding";
 import { findCandidateCosinesForQuery, findPostsByImageQuery, findPostsBySemanticQuery } from "@/lib/ai/vectorSearch";
 import { aiSimilarity, candidatePool, rankByAiSimilarity } from "@/lib/ai/rankFusion";
 import { cosineFromNormalizedScore } from "@/lib/ai/matching";
-import { invalidateRecommendationCache } from "@/lib/recommendation/service";
 import { validateOrganizationPosting } from "@/lib/organization/service";
 import { notifyKeywordAlertSubscribers } from "@/lib/keywordAlert/matcher";
 import { Prisma, type User } from "@/generated/prisma/client";
@@ -208,12 +207,11 @@ export async function updateLostPost(
   // that gap recompute against the old vector and re-cache it. See
   // createLostPost's own comment for why after() (not a bare
   // fire-and-forget promise) is what makes this safe on Vercel.
-  if (EMBEDDING_INPUT_FIELDS.some((field) => field in rest)) {
-    after(async () => {
-      await embedPostBestEffort("lost", row.id, row);
-      await invalidateRecommendationCache("lost", row.id);
-    });
-  }
+  // Function Storage C-2: no inline re-embedding here any more. A real change
+  // of title/description/category/location queues a TextEmbeddingJob in the
+  // same DB transaction (trigger), and the PATCH route asks /api/posts to
+  // drain it. The worker saves the new vector and only then invalidates the
+  // recommendation cache, keeping the "embed, then invalidate" order above.
   // open chat rooms of the post re-read its state
   if (status !== undefined) after(() => broadcastPostStatus("lost", id));
   return { kind: "ok", data: toLostPostDTO(row) };
@@ -329,12 +327,7 @@ export async function updateFoundPost(
   // moved together into after(), same relative order, same failure
   // handling.
   if (!row) return { kind: "forbidden", reason: "custody_managed" };
-  if (EMBEDDING_INPUT_FIELDS.some((field) => field in rest)) {
-    after(async () => {
-      await embedPostBestEffort("found", row.id, row);
-      await invalidateRecommendationCache("found", row.id);
-    });
-  }
+  // Function Storage C-2: see updateLostPost -- text jobs are queued by the DB trigger.
   if (!row) return { kind: "forbidden", reason: "custody_managed" };
   if (status !== undefined) after(() => broadcastPostStatus("found", id));
   return { kind: "ok", data: toFoundPostDTO(row) };

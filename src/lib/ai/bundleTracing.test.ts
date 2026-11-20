@@ -12,13 +12,15 @@ const includes = nextConfig.outputFileTracingIncludes ?? {};
 
 describe("AI files in the function bundles", () => {
   // Function Storage C-1: the photo route hands image embedding to the queue
-  // (src/lib/ai/imageJobKick.ts), so only the two inference routes carry models.
-  it("models only for the two inference routes, never the photo route, comments or commentId", () => {
+  // (src/lib/ai/imageJobKick.ts). C-2: so does /api/posts/[id] for edits and
+  // recompute requests (src/lib/ai/textJob.ts). Only /api/posts carries models.
+  it("models only for /api/posts itself, never [id], the photo route, comments or commentId", () => {
     const modelKeys = Object.entries(includes)
       .filter(([, globs]) => globs.some((g) => g.includes("models/")))
       .map(([key]) => key)
       .sort();
-    expect(modelKeys).toEqual(["/api/posts!(/**)", "/api/posts/\\[id\\]!(/**)"]);
+    expect(modelKeys).toEqual(["/api/posts!(/**)"]);
+    expect(Object.keys(includes).some((key) => key.includes("[id]"))).toBe(false);
     expect(Object.keys(includes).some((key) => key.includes("image"))).toBe(false);
   });
 
@@ -47,8 +49,18 @@ describe("AI files in the function bundles", () => {
     expect(Object.keys(pkg.dependencies ?? {})).toContain("onnxruntime-common");
   });
 
-  it("excludes the text model only from the image mutation worker", () => {
-    expect(nextConfig.outputFileTracingExcludes).toEqual({ "/api/posts/**/image": ["./models/jhgan/**/*"] });
+  it("excludes the text model from the image mutation worker, and every model from [id] (C-2)", () => {
+    expect(nextConfig.outputFileTracingExcludes).toEqual({
+      "/api/posts/**/image": ["./models/jhgan/**/*"],
+      "/api/posts/\\[id\\]!(/**)": ["./models/**/*"],
+    });
+  });
+
+  // Function Storage C-2: guard against a future [id] change that runs a model
+  // again while the bundle excludes it.
+  it("the [id] route source has no inference entry point", () => {
+    const route = readFileSync(path.join(process.cwd(), "src/app/api/posts/[id]/route.ts"), "utf8");
+    for (const banned of ["runImageJob", "embedPostBestEffort", "getEmbeddingProvider", "getImageEmbeddingProvider", "@/lib/ai/imageJob\"", "@/lib/ai/textJob"]) expect(route).not.toContain(banned);
   });
 
   it("the unused GPU providers are deleted before every build", () => {

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import type { PostType } from "@/lib/posts/schema";
@@ -7,8 +7,8 @@ import { checkRateLimit, rateLimitTierFor, type RateLimitResult } from "@/lib/ra
 import { getImageEmbeddingProvider, IMAGE_EMBEDDING_DIMENSIONS } from "./imageEmbedding";
 import { invalidateRecommendationCache } from "@/lib/recommendation/service";
 
-export const IMAGE_JOB_MODEL = "image-v1:4649052661e53c7000355844105f8a1792088239:";
-export const imageInputHash = (url: string) => createHash("sha256").update(IMAGE_JOB_MODEL + url).digest("hex");
+import { imageInputHash } from "./imageJobQueue";
+export { IMAGE_JOB_MODEL, imageInputHash } from "./imageJobQueue";
 type Job = { post_type: PostType; post_id: number; owner_id: number; desired_hash: string | null; completed_hash: string | null; generation: number; lease_token: string | null; lease_valid?: boolean; attempts: number; state: string };
 export type ImageJobResult = { status: "completed" | "reused" | "in_progress" | "pending" | "no_image" | "stale" | "failed" } | { status: "limited"; admission: Exclude<RateLimitResult, { ok: true }> };
 const table = (type: PostType) => type === "lost" ? Prisma.sql`"LostPost"` : Prisma.sql`"FoundPost"`;

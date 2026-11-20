@@ -538,7 +538,7 @@ describe("updateLostPost", () => {
     expect(validateOrganizationPosting).not.toHaveBeenCalled();
   });
 
-  it("re-embeds when an embedding-relevant field (title) changes", async () => {
+  it("writes an embedding-relevant field (title) change and leaves re-embedding to the queue", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
     lostPost.update.mockResolvedValueOnce({
       id: 1,
@@ -555,16 +555,23 @@ describe("updateLostPost", () => {
       user: { id: 1, nickname: "닉네임" },
     });
 
-    await updateLostPost(1, actor(1), { title: "새 제목" });
+    const result = await updateLostPost(1, actor(1), { title: "새 제목" });
     await flushAfterCallbacks();
 
-    expect(embedPostBestEffort).toHaveBeenCalledWith("lost", 1, expect.objectContaining({ title: "새 제목" }));
+    expect(result.kind).toBe("ok");
+    expect(lostPost.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ title: "새 제목" }) }));
+    // Function Storage C-2: no inline re-embedding (or cache invalidation) on
+    // update any more -- the DB trigger queues a TextEmbeddingJob for this
+    // field change and /api/posts embeds it (src/lib/ai/textJob.test.ts,
+    // scripts/operations/verify-text-jobs.mjs).
+    expect(embedPostBestEffort).not.toHaveBeenCalled();
+    expect(matchCandidateCache.deleteMany).not.toHaveBeenCalled();
   });
 
   // Phase P-5: 미상 <-> known transitions must round-trip through a plain
   // update, same as any other field edit -- location re-embeds (it's an
   // EMBEDDING_INPUT_FIELDS member); lostAt does not (it never was).
-  it("updates location from a known value to null (known -> 위치 미상) and re-embeds", async () => {
+  it("updates location from a known value to null (known -> 위치 미상) without inline re-embedding", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
     lostPost.update.mockResolvedValueOnce({
       id: 1,
@@ -589,10 +596,14 @@ describe("updateLostPost", () => {
     expect(lostPost.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ location: null }) }),
     );
-    expect(embedPostBestEffort).toHaveBeenCalledWith("lost", 1, expect.objectContaining({ location: null }));
+    // Function Storage C-2: no inline re-embedding (or cache invalidation) on
+    // update any more -- the DB trigger queues a TextEmbeddingJob for this
+    // field change and /api/posts embeds it (src/lib/ai/textJob.test.ts,
+    // scripts/operations/verify-text-jobs.mjs).
+    expect(embedPostBestEffort).not.toHaveBeenCalled();
   });
 
-  it("updates location from null to a real value (위치 미상 -> known) and re-embeds", async () => {
+  it("updates location from null to a real value (위치 미상 -> known) without inline re-embedding", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
     lostPost.update.mockResolvedValueOnce({
       id: 1,
@@ -614,11 +625,12 @@ describe("updateLostPost", () => {
 
     expect(result.kind).toBe("ok");
     if (result.kind === "ok") expect(result.data.location).toBe("학생회관 2층");
-    expect(embedPostBestEffort).toHaveBeenCalledWith(
-      "lost",
-      1,
-      expect.objectContaining({ location: "학생회관 2층" }),
-    );
+    expect(lostPost.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ location: "학생회관 2층" }) }));
+    // Function Storage C-2: no inline re-embedding (or cache invalidation) on
+    // update any more -- the DB trigger queues a TextEmbeddingJob for this
+    // field change and /api/posts embeds it (src/lib/ai/textJob.test.ts,
+    // scripts/operations/verify-text-jobs.mjs).
+    expect(embedPostBestEffort).not.toHaveBeenCalled();
   });
 
   it("updates lostAt from a known value to null (known -> 시간 미상) without triggering a re-embed", async () => {
@@ -655,7 +667,7 @@ describe("updateLostPost", () => {
   // match candidates should be (see match/candidates.ts's own comment) --
   // the stale cache row must be cleared, not left to serve outdated
   // candidates forever.
-  it("invalidates this post's cached match candidates when it re-embeds", async () => {
+  it("does not clear cached match candidates before the queued vector is saved", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1 });
     lostPost.update.mockResolvedValueOnce({
       id: 1,
@@ -675,9 +687,11 @@ describe("updateLostPost", () => {
     await updateLostPost(1, actor(1), { title: "새 제목" });
     await flushAfterCallbacks();
 
-    expect(matchCandidateCache.deleteMany).toHaveBeenCalledWith({
-      where: { sourceType: "lost", sourcePostId: 1 },
-    });
+    // Function Storage C-2: the text worker invalidates the cache in the same
+    // transaction that saves the new vector (src/lib/ai/textJob.test.ts),
+    // keeping "embed, then invalidate"; the update itself must not clear it
+    // early, or a lookup could re-cache against the old vector.
+    expect(matchCandidateCache.deleteMany).not.toHaveBeenCalled();
   });
 
   it("does not re-embed for a status-only update (no embedding-relevant field changed)", async () => {
@@ -734,7 +748,7 @@ describe("updateLostPost", () => {
     expect(embedPostBestEffort).not.toHaveBeenCalled();
   });
 
-  it("re-embeds when a category change also changes the legacy category", async () => {
+  it("writes a category change that also changes the legacy category (queued for re-embedding)", async () => {
     lostPost.findUnique.mockResolvedValueOnce({ id: 1, userId: 1, category: "카드" });
     lostPost.update.mockResolvedValueOnce({
       id: 1,
@@ -759,7 +773,11 @@ describe("updateLostPost", () => {
     expect(lostPost.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { category: "지갑", categoryCode: "wallet", subcategory: "wallet.card_wallet" } }),
     );
-    expect(embedPostBestEffort).toHaveBeenCalledTimes(1);
+    // Function Storage C-2: no inline re-embedding (or cache invalidation) on
+    // update any more -- the DB trigger queues a TextEmbeddingJob for this
+    // field change and /api/posts embeds it (src/lib/ai/textJob.test.ts,
+    // scripts/operations/verify-text-jobs.mjs).
+    expect(embedPostBestEffort).not.toHaveBeenCalled();
   });
 
   // No "image-only update -> no re-embed" test here: image changes never
@@ -835,7 +853,7 @@ describe("updateLostPost", () => {
   // handling exactly (see updateLostPost's own tests above) -- one
   // representative case here confirms the symmetry, not a full duplicate
   // of every LostPost scenario.
-  it("updates a FoundPost's location and foundAt to null (위치/시간 미상) and only re-embeds for location", async () => {
+  it("updates a FoundPost's location and foundAt to null (위치/시간 미상) without inline re-embedding", async () => {
     foundPost.findUnique.mockResolvedValueOnce({ id: 2, userId: 1 });
     foundPost.update.mockResolvedValueOnce({
       id: 2,
@@ -860,7 +878,12 @@ describe("updateLostPost", () => {
       expect(result.data.location).toBeNull();
       expect(result.data.foundAt).toBeNull();
     }
-    expect(embedPostBestEffort).toHaveBeenCalledWith("found", 2, expect.objectContaining({ location: null }));
+    expect(foundPost.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ location: null, foundAt: null }) }));
+    // Function Storage C-2: no inline re-embedding (or cache invalidation) on
+    // update any more -- the DB trigger queues a TextEmbeddingJob for this
+    // field change and /api/posts embeds it (src/lib/ai/textJob.test.ts,
+    // scripts/operations/verify-text-jobs.mjs).
+    expect(embedPostBestEffort).not.toHaveBeenCalled();
   });
 
   describe("상태 변경 이력", () => {
