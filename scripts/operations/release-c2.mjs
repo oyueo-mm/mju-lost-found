@@ -11,8 +11,11 @@ import { spawnSync } from "node:child_process";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
 
 const NEW = "20261124000000_text_embedding_jobs";
+// revoke-inherited: Production's residual default ACL also hands service_role
+// TRUNCATE/REFERENCES/TRIGGER/MAINTAIN on the new table. The app reaches it
+// only as the owner, so every non-owner entry is removed (minimum privileges).
 const [action, ...flags] = process.argv.slice(2);
-if (action !== "migrate") throw new Error("Usage: release-c2.mjs migrate [--apply --confirm-<target>]");
+if (!["migrate", "revoke-inherited"].includes(action)) throw new Error("Usage: release-c2.mjs migrate|revoke-inherited [--apply --confirm-<target>]");
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
 if (!["preview", "production"].includes(target)) throw new Error("Hosted target required");
 const apply = flags.includes("--apply");
@@ -27,8 +30,29 @@ async function pendingState() {
   const applied = new Set(rows.filter((r) => r.applied && !r.rolled_back).map((r) => r.migration_name));
   return { pending: local.filter((n) => !applied.has(n)), unresolved: rows.filter((r) => !r.applied && !r.rolled_back).map((r) => r.migration_name) };
 }
+async function inherited() {
+  await db.query("BEGIN READ ONLY");
+  const rows = (await db.query(`SELECT a.grantee::regrole::text AS grantee,a.privilege_type FROM pg_class c, aclexplode(c.relacl) a WHERE c.oid='public."TextEmbeddingJob"'::regclass AND a.grantee<>c.relowner AND a.grantee<>0 ORDER BY 1,2`)).rows;
+  await db.query("ROLLBACK");
+  return rows;
+}
 try {
   await db.connect();
+  if (action === "revoke-inherited") {
+    const before = await inherited();
+    console.log(JSON.stringify({ target, apply, before }));
+    if (apply && before.length) {
+      const roles = [...new Set(before.map((r) => r.grantee))];
+      if (roles.some((r) => !/^[a-z_]+$/.test(r))) throw new Error("Unexpected grantee name");
+      await db.query("BEGIN");
+      await db.query("SET LOCAL lock_timeout = '5s'");
+      for (const role of roles) await db.query(`REVOKE ALL ON TABLE public."TextEmbeddingJob" FROM ${role}`);
+      await db.query("COMMIT");
+      const after = await inherited();
+      console.log(JSON.stringify({ target, after }));
+      if (after.length) throw new Error("Inherited privileges remain");
+    }
+  } else {
   const before = await pendingState();
   console.log(JSON.stringify({ target, apply, before }));
   if (before.unresolved.length) throw new Error("Unresolved migration row; stop");
@@ -40,7 +64,9 @@ try {
     console.log(JSON.stringify({ target, after }));
     if (after.pending.length || after.unresolved.length) throw new Error("C-2 migration incomplete");
   }
+  }
 } catch (error) {
+  await db.query("ROLLBACK").catch(() => {});
   console.error("C-2 operation stopped:", error.message);
   process.exitCode = 1;
 } finally {
