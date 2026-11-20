@@ -59,3 +59,61 @@
 ## 7. 필요한 승인
 - Preview 마이그레이션과 Preview 배포: 상시 허용 범위다(배포 1회 목표).
 - Production 마이그레이션(새 테이블·트리거·REVOKE)과 Production 배포: 각각 별도 승인이 필요하다.
+
+## 8. 실행 기록 — Preview 구현·배포·검증 (2026-11-21, `perf/function-storage-c2`)
+
+상태: **Preview만 반영. Production DB 마이그레이션·권한 변경·배포는 하지 않았다(미승인).**
+
+### 구현
+- 마이그레이션 `20261124000000_text_embedding_jobs`(추가형): `TextEmbeddingJob` 테이블과 트리거 4개(수정 2, 삭제 정리 2), RLS ON, 정책 없음. PUBLIC·anon·authenticated의 테이블·함수 권한은 명시적으로 REVOKE한다(해당 역할이 없으면 건너뛴다).
+- 트리거는 제목·설명·분류·장소가 **실제로 바뀐 경우에만** generation을 올리고 `pending`·attempts 0으로 재무장한다. 생성(INSERT)은 기존대로 `/api/posts`가 인라인으로 임베딩한다.
+- `src/lib/ai/textJob.ts`: lease claim(150초), attempts<5, 실패 시 10초 backoff를 적용한다. 커밋 시 post→job 순서로 잠근다. 같은 generation·유효 lease·같은 텍스트일 때만 벡터 저장, 추천 캐시 무효화, 완료 표시를 한 트랜잭션으로 처리한다. 늦게 끝난 결과는 버리고 이전 벡터를 유지한다.
+- `/api/posts`: maintenance drain이 이미지·텍스트 큐를 각각 처리한다(한쪽 실패가 다른 쪽을 막지 않고, 둘 다 실패하면 503). 요청 시 복구도 텍스트를 포함한다(인스턴스당 15초 1회).
+- `/api/posts/[id]`
+  - PATCH: 텍스트 필드가 바뀌면 `after()`에서 drain을 요청한다.
+  - PUT: 수동 재계산 한도를 확인한 뒤 이미지 작업을 재무장하고 drain을 요청한다. 응답은 비동기 `pending`이다. UI 호출자는 없다.
+  - 인라인 추론은 없다.
+- 번들: 처음에는 `[id]`의 include만 빼고 exclude를 추가했지만 Vercel 번들이 그대로였다(Preview `dpl_7gWQjJTD…`, 539.4MB). 원인은 Turbopack이 embedding 모듈의 `process.cwd()/models` 경로를 import한 모든 함수에 trace하기 때문이다. 수정 로직을 `src/lib/posts/updateService.ts`로, `EMBEDDING_INPUT_FIELDS`를 `src/lib/ai/embeddingFields.ts`로 분리해 `[id]`가 embedding 모듈을 import하지 않게 했다(로컬 trace 모델 파일 7→0). `bundleTracing.test.ts`가 import를 지킨다.
+
+### 결과 (Preview `dpl_9qJhtm4t2Y1T8XV96DAFXSuo4tKi`, `191ae82`)
+| 항목 | C-1 Preview `dpl_DfQFL4LB…` | C-2 Preview |
+|---|---|---|
+| 함수 번들 합계 | 539.4MB(6개) | **308.8MB(5개), -230.6MB(-42.8%)** |
+| `/api/posts/[id]` | 230.8MB | 30.9MB(사진 경로와 같은 함수로 합쳐짐) |
+| `/api/posts` | 230.8MB | 230.8MB(모델은 여기만) |
+
+### 검증
+- 로컬 마이그레이션 리허설 30/30(`scripts/regression/text-job-migration-local.sh`, WSL PG18): Supabase 역할과 **Production식 잔여 default ACL을 재현**(새 테이블에 권한이 새는 것을 먼저 확인)한 상태에서 REVOKE 효과, RLS, 트리거, 롤백, 재적용을 확인했다.
+- Preview 권한(`text-job-privileges.mjs`): anon·authenticated 권한·ACL 없음, 함수 EXECUTE 없음, 실제 읽기 시도 42501 거부, RLS ON, 정책 0, 트리거 4. Preview public 스키마 default ACL은 없다.
+- 단위 274파일 3,047개, 타입, 린트 통과. 계약이 바뀐 기존 테스트(aiService 6개, `[id]` PUT 1개)는 새 계약(인라인 임베딩·캐시 무효화 없음, 큐 재무장)으로 바꿨고, 검사는 늘렸다.
+- Preview 큐 통합 22/22(`verify-text-jobs.mjs`, 별도 프로세스 worker, 실제 SQL)
+  - 동시 4개 → 추론 1회
+  - 수정 중 늦은 결과 폐기
+  - 실패 → backoff → 재시도
+  - 크래시 lease 만료 회수
+  - 5회 한도 뒤 새 수정이 재무장
+  - 이전 배포의 인라인 쓰기 허용
+  - 삭제 정리
+- 로컬 회귀 17/17(신규 08b: PATCH 후 kick만으로 새 벡터, 1.3초). 분리 전후 빌드 모두 통과.
+- 호스팅 Preview
+  - 텍스트 7/7(`verify-text-kick.mjs`): 동시 3회 kick → claim 1회, 768차원, 0.9~2.8초. 정확한 텍스트로 의미 검색 시 새 배포와 이전 인라인 배포 모두 1위·score 1(같은 벡터). kick 없이 대기 → 요청 시 복구 1.3초.
+  - 이미지 kick 8/8(`verify-image-kick.mjs`).
+- 검색 동일성 26/26(`compare-search-deployments.mjs`): 키워드·의미·통합 × 분실·습득 × 질의 4개, 이미지 2건. 순위와 표시 점수 해시가 같다(429는 스크립트의 한도 초과로 재시도 처리).
+- 기존 벡터 보존(`text-vector-snapshot.mjs`): 분실 115·습득 174개의 텍스트·이미지 벡터 digest가 마이그레이션·배포·검증 전후로 같다.
+- 프로브 16/16, error·5xx 0, 이미지·텍스트 큐 적체 0. Realtime private(활성 grant 0), Data API 503.
+- 시험 데이터(Preview, 모두 정리 확인): 사용자 620~632, 글 343~358, Storage 객체(이미지 kick 4개). manifest는 `.vercel/text-jobs-*`, `text-kick-*`, `image-kick-*`, `regression-*`.
+
+### 롤백 절차
+1. 앱(먼저)
+   - Preview: `npx vercel alias set https://mju-lost-found-vercel-fxzahtewv-oyueo.vercel.app mju-lost-found-preview.vercel.app`(C-1 `dpl_DfQFL4LB…`).
+   - Production(반영 후): `npx vercel rollback <C-1 dpl_5r8gc7wQ… URL> --yes`.
+   - 테이블이 남아 있어도 이전 코드는 인라인 임베딩을 계속한다. 트리거가 넣는 작업은 처리되지 않고 남을 뿐이다(무해, 재배포 시 처리).
+2. DB(필요할 때만, 앱 롤백 후): `scripts/fixtures/text-job-rollback/rollback.sql` 실행, 이어서 `_prisma_migrations`에서 해당 행 삭제. 로컬 리허설에서 검증했다. 게시글·벡터는 건드리지 않는다. Production 실행은 별도 승인을 받는다.
+
+### Production 반영 시 위험과 순서
+- **순서: 백업 → 마이그레이션 → 권한 검사 → 앱 배포.** 앱이 먼저 나가면 drain이 테이블 없음으로 실패하고(로그만 남고 503은 아님), 그동안 수정 글의 텍스트 재임베딩이 일어나지 않는다.
+- Production public 스키마의 잔여 default ACL 때문에 새 테이블이 anon·authenticated 권한을 물려받는다. 마이그레이션의 REVOKE로 제거되며, 적용 직후 `text-job-privileges.mjs`로 확인해야 한다(Production 권한 변경 승인 범위).
+- 대량 수정(분류 일괄 변경 스크립트 등)은 작업을 한꺼번에 만든다. 처리량은 kick당 8건, 요청 복구 15초당 1건, 일일 cron이라 쌓일 수 있다. 처리 전까지는 이전 벡터를 유지한다.
+- PUT은 비동기로 바뀌었다(UI 호출 없음, 운영 도구는 완료까지 폴링).
+- 수정 후 새 벡터 반영에 함수 간 요청 1회가 더해진다(호스팅 0.9~2.8초).
+- 마이그레이션 파일은 LF 그대로 적용됐다. 다른 체크아웃에서 CRLF로 바뀌면 Prisma 체크섬이 달라 보일 수 있으니 같은 작업 트리에서 적용한다.
