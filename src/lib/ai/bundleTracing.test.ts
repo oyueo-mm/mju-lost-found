@@ -11,13 +11,15 @@ import nextConfig from "../../../next.config";
 const includes = nextConfig.outputFileTracingIncludes ?? {};
 
 describe("AI files in the function bundles", () => {
-  it("models only for the three inference routes, never comments or commentId", () => {
+  // Function Storage C-1: the photo route hands image embedding to the queue
+  // (src/lib/ai/imageJobKick.ts), so only the two inference routes carry models.
+  it("models only for the two inference routes, never the photo route, comments or commentId", () => {
     const modelKeys = Object.entries(includes)
       .filter(([, globs]) => globs.some((g) => g.includes("models/")))
       .map(([key]) => key)
       .sort();
-    expect(modelKeys).toEqual(["/api/posts!(/**)", "/api/posts/\\[id\\]!(/**)", "/api/posts/\\[id\\]/image!(/**)"]);
-    expect(includes["/api/posts/\\[id\\]/image!(/**)"]).toEqual(["./models/Xenova/siglip-base-patch16-224/**"]);
+    expect(modelKeys).toEqual(["/api/posts!(/**)", "/api/posts/\\[id\\]!(/**)"]);
+    expect(Object.keys(includes).some((key) => key.includes("image"))).toBe(false);
   });
 
   it("the CPU onnxruntime for linux/x64 only (no arm64, no other platform)", () => {

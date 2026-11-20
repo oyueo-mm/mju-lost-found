@@ -1,5 +1,5 @@
 import { NextRequest, after } from "next/server";
-import { runLatestImageJob } from "@/lib/ai/imageJob";
+import { kickImageJobs } from "@/lib/ai/imageJobKick";
 export const maxDuration = 120;
 
 import { jsonError, jsonOk, requireUserForApi, withErrorHandling } from "@/lib/posts/http";
@@ -63,10 +63,14 @@ function imageResultToResponse<T>(result: ImageMutationResult<T>) {
 // image-embedding recomputed the same deferred way. See the POST handler's
 // own (original, Phase 15-2/H-5-2) comment for the full ONNX-bundle-size
 // reasoning; unchanged by this phase's route-count fix.
-function triggerEmbeddingRecompute(_request: NextRequest, id: number, type: "lost" | "found") {
+// Function Storage C-1: this route no longer runs the image model itself.
+// The DB trigger has already queued the job for the new image_url; ask the
+// model-carrying /api/posts function to drain it (imageJobKick.ts). A failed
+// kick leaves the job pending for the request-time recovery / daily cron.
+function triggerEmbeddingRecompute(request: NextRequest) {
   after(async () => {
-    try { await runLatestImageJob(type, id); }
-    catch (error) { console.error("Deferred image embedding failed:", error instanceof Error ? error.name : "Error"); }
+    const result = await kickImageJobs(request.nextUrl.origin);
+    if (result === "failed") console.error("Image job drain request failed; the queued job will be recovered later");
   });
 }
 
@@ -109,7 +113,7 @@ export const POST = withErrorHandling(
         ? await attachPostImages(parsedParams.type, parsedParams.id, auth.user, parsed.data)
         : await setPostImage(parsedParams.type, parsedParams.id, auth.user, parsed.data);
 
-    if (result.kind === "ok") triggerEmbeddingRecompute(request, parsedParams.id, parsedParams.type);
+    if (result.kind === "ok") triggerEmbeddingRecompute(request);
 
     return imageResultToResponse(result);
   },
@@ -138,7 +142,7 @@ export const DELETE = withErrorHandling(
         return jsonError(400, "imageId가 올바르지 않습니다.");
       }
       const result = await deletePostImage(parsed.type, parsed.id, auth.user, imageId);
-      if (result.kind === "ok") triggerEmbeddingRecompute(request, parsed.id, parsed.type);
+      if (result.kind === "ok") triggerEmbeddingRecompute(request);
       return imageResultToResponse(result);
     }
 
@@ -176,7 +180,7 @@ export const PATCH = withErrorHandling(
     }
 
     const result = await reorderPostImages(parsedParams.type, parsedParams.id, auth.user, parsed.data.imageIds);
-    if (result.kind === "ok") triggerEmbeddingRecompute(request, parsedParams.id, parsedParams.type);
+    if (result.kind === "ok") triggerEmbeddingRecompute(request);
 
     return imageResultToResponse(result);
   },

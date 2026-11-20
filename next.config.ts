@@ -102,7 +102,8 @@ const nextConfig: NextConfig = {
     ],
     "/api/posts!(/**)": ["./models/**"],
     "/api/posts/\\[id\\]!(/**)": ["./models/**"],
-    "/api/posts/\\[id\\]/image!(/**)": ["./models/Xenova/siglip-base-patch16-224/**"],
+    // Function Storage C-1: the photo route (/api/posts/[id]/image) no longer
+    // embeds images itself (src/lib/ai/imageJobKick.ts), so it carries no model.
   },
   outputFileTracingExcludes: {
     "/api/posts/**/image": ["./models/jhgan/**/*"],

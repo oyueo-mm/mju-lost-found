@@ -15,8 +15,9 @@ const reorderPostImages = vi.fn();
 // embedding-related directly, so the only new thing to mock/assert here
 // is the global fetch call itself, never a model/AI collaborator.
 const fetchMock = vi.fn();
-const runLatestImageJob = vi.fn();
-vi.mock("@/lib/ai/imageJob", () => ({ runLatestImageJob }));
+// Function Storage C-1: the route only asks /api/posts to drain the queued job.
+const kickImageJobs = vi.fn();
+vi.mock("@/lib/ai/imageJobKick", () => ({ kickImageJobs }));
 
 // Phase H-5-2: the internal embedding-trigger fetch now runs inside
 // next/server's after() instead of being awaited directly -- see route.ts's
@@ -104,7 +105,7 @@ describe("POST /api/posts/[id]/image", () => {
     );
 
     expect(res.status).toBe(400);
-    expect(runLatestImageJob).not.toHaveBeenCalled();
+    expect(kickImageJobs).not.toHaveBeenCalled();
   });
 
   it("rejects changing someone else's post image", async () => {
@@ -120,7 +121,7 @@ describe("POST /api/posts/[id]/image", () => {
     );
 
     expect(res.status).toBe(403);
-    expect(runLatestImageJob).not.toHaveBeenCalled();
+    expect(kickImageJobs).not.toHaveBeenCalled();
   });
 
   it("attaches the image for the owner", async () => {
@@ -180,7 +181,7 @@ describe("POST /api/posts/[id]/image", () => {
     );
     await flushAfterCallbacks();
 
-    expect(runLatestImageJob).toHaveBeenCalledWith("lost", 1);
+    expect(kickImageJobs).toHaveBeenCalledWith("http://localhost");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -202,17 +203,17 @@ describe("POST /api/posts/[id]/image", () => {
 
     expect(res.status).toBe(200); // the attach response is ready immediately...
     expect(after).toHaveBeenCalledTimes(1); // ...with the embedding trigger only *registered*...
-    expect(runLatestImageJob).not.toHaveBeenCalled(); // ...not yet run.
+    expect(kickImageJobs).not.toHaveBeenCalled(); // ...not yet run.
 
     await flushAfterCallbacks();
-    expect(runLatestImageJob).toHaveBeenCalledWith("lost", 1);
+    expect(kickImageJobs).toHaveBeenCalledWith("http://localhost");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("still returns the successful attach response even if the (deferred) embedding trigger request fails", async () => {
     requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
     setPostImage.mockResolvedValueOnce({ kind: "ok", data: { imageUrl: "https://x/y.jpg" } });
-    runLatestImageJob.mockRejectedValueOnce(new Error("network error"));
+    kickImageJobs.mockResolvedValueOnce("failed");
 
     const res = await POST(
       new NextRequest("http://localhost/api/posts/1/image?type=lost", {
@@ -328,10 +329,10 @@ describe("DELETE /api/posts/[id]/image", () => {
         }),
         params("1"),
       );
-      expect(runLatestImageJob).not.toHaveBeenCalled();
+      expect(kickImageJobs).not.toHaveBeenCalled();
 
       await flushAfterCallbacks();
-      expect(runLatestImageJob).toHaveBeenCalledWith("lost", 1);
+      expect(kickImageJobs).toHaveBeenCalledWith("http://localhost");
     expect(fetchMock).not.toHaveBeenCalled();
     });
   });
@@ -422,10 +423,10 @@ describe("PATCH /api/posts/[id]/image (reorder)", () => {
       }),
       params("1"),
     );
-    expect(runLatestImageJob).not.toHaveBeenCalled();
+    expect(kickImageJobs).not.toHaveBeenCalled();
 
     await flushAfterCallbacks();
-    expect(runLatestImageJob).toHaveBeenCalledWith("lost", 1);
+    expect(kickImageJobs).toHaveBeenCalledWith("http://localhost");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
