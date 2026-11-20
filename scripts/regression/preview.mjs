@@ -117,6 +117,16 @@ try {
     must((await api(null, "GET", `/post/${postId}?type=lost`)).status === 200);
   });
   await step("08 image embedding recompute", async () => {
+    // Function Storage C-1: the attach's own deferred work must finish the
+    // queued job by itself -- no PUT and no /api/posts request from here --
+    // proving the photo route's kick reaches the model-carrying function.
+    let queued;
+    for(let i=0;i<90;i++){
+      queued=(await prisma.$queryRaw`SELECT j.state,(j.desired_hash=j.completed_hash) AS current,vector_dims(p."imageEmbedding") AS dimensions FROM "ImageEmbeddingJob" j JOIN "LostPost" p ON p.id=j.post_id WHERE j.post_type='lost' AND j.post_id=${postId}`)[0];
+      if(queued?.state==="completed"||queued?.state==="failed")break;
+      await new Promise(resolve=>setTimeout(resolve,1000));
+    }
+    must(queued?.state==="completed"&&queued.current===true&&queued.dimensions===768);
     // The attach after() may already own the lease. Wait for actual completion,
     // never accept in_progress/pending as a successful embedding test.
     let completed=false;
