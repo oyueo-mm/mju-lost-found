@@ -92,3 +92,17 @@
   - kick 없이 5초 동안 pending 유지(유실 없음), 이후 일반 검색 요청의 복구 경로로 완료(2.2~3.5초).
   - 정리: 사용자 618·619, 글 339~342, Storage 객체 삭제, 남은 작업 0, 큐 적체 0.
   - 같은 시간 Preview 로그 error·5xx 0.
+
+### C-1 Production 반영 (2026-11-20 18:24 KST, 사용자 승인)
+- 배포: `node scripts/deployments/deploy.mjs production --record-dry-run`(실제 배포, Production DB 이력 쓰기 생략). **`dpl_5r8gc7wQAmwriBH7Tz63n5gSLjgm`** (`381b944`, `mju-lost-found-vercel-8yefiiabm-oyueo.vercel.app`). 직전 Production과 앱 코드 차이는 C-1 세 파일(`next.config.ts`, 사진 경로, `imageJobKick.ts`)뿐이다. DB·Storage·환경 변수·JWT 키 변경 없음.
+- 롤백 대상: 직전 Production `dpl_AgwysDi1MrMCFVh1AaGccih1dn5C`(`931864c`, READY). `npx vercel rollback https://<dpl_AgwysDi… URL> --yes`. DB 변경이 없으므로 앱 롤백만으로 복귀한다. 롤백 중 쌓인 작업은 큐에 남고, 이전 배포의 요청 시 복구가 처리한다.
+- 번들: 배포당 0.640GB → **0.539GB**. 보존 7개 합계 4.28GB.
+- 검증:
+  - 공개 프로브 16/16(버전·SHA, 인증 401, maintenance 401, 키워드·의미·통합·이미지 검색, 기존 사진 표시).
+  - 이미지 검색: 이전·새 Production을 2회 비교, rankHash 4건 모두 동일.
+  - 큐(읽기 전용, `image-job-status.mjs`): 사진 글 80개(found 78, lost 2) 모두 임베딩, 미완료 작업 0, 오류 0.
+  - Realtime `private`, 활성 grant 0. Data API 503(OFF). error·5xx 0.
+- 남은 확인: Production 실제 사진 등록. 로그인 세션이 필요해 사용자 계정으로 시험 글 1건이 필요하다. 확인 방법: `image-job-status.mjs --since=<등록 시각>`에서 새 글이 `job_completed_current`이면 통과. 로그에서 `POST /api/posts/[id]/image` 직후 배포 고유 주소의 `GET /api/posts`가 200이고 `Image job drain request failed`가 없어야 한다.
+
+### Preview 미임베딩 글 1건(별도 조사 대상)
+- Preview lost:182: 2026-11-03 작성(사진 포함), 텍스트 임베딩 있음, 이미지 임베딩 없음, 작업 기록 없음. 작업 큐 마이그레이션(Preview 2026-11-15)과 C-1(2026-11-20)보다 먼저 생긴 상태다. 당시 인라인 이미지 임베딩이 실패한 것으로 보이지만 원인은 확정하지 않았다. 처리 여부는 별도로 정한다(PUT 재분석은 작성자 권한이라 운영 도구로 진행해야 한다). C-1과의 인과는 단정하지 않는다.
