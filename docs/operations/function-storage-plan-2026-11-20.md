@@ -104,5 +104,15 @@
   - Realtime `private`, 활성 grant 0. Data API 503(OFF). error·5xx 0.
 - 남은 확인: Production 실제 사진 등록. 로그인 세션이 필요해 사용자 계정으로 시험 글 1건이 필요하다. 확인 방법: `image-job-status.mjs --since=<등록 시각>`에서 새 글이 `job_completed_current`이면 통과. 로그에서 `POST /api/posts/[id]/image` 직후 배포 고유 주소의 `GET /api/posts`가 200이고 `Image job drain request failed`가 없어야 한다.
 
+### C-1 Production 실제 사진 등록 검증 (2026-11-21 00:08 KST, 사용자 시험 글 lost:142)
+- 읽기 전용으로 확인했다(`image-job-status.mjs --since=… --post=lost:142`, 승인 실행기 `C1-PROD-VERIFY-2026-11-21`, BEGIN READ ONLY). 공개 이미지 검색은 저장하지 않는 일반 요청이다.
+- 사진 첨부: `POST /api/posts/142/image` 200, PostImage 1개, 이 글의 Production Storage 경로(webp).
+- 큐: 트리거가 작업을 만들고 `completed`, attempts 1, generation 1, 현재 해시와 일치, 오류 없음.
+- kick: 첨부 직후 배포 고유 주소(`…-8yefiiabm-oyueo.vercel.app`)의 `GET /api/posts` 200(15:08:23.08 UTC). 함수 오류 로그 없음.
+- 임베딩: 이미지 768차원, 텍스트 768차원. 첨부 요청(15:08:20.5)에서 작업 완료(15:08:24.1)까지 약 3.6초.
+- 이미지 검색: 같은 사진으로 2회 검색, 둘 다 1위 lost:142(score 1.0000). 응답 0.57~0.64초.
+- 15:00 UTC 이후 error 0, 5xx 0. 미완료 작업 0, 사진 글 81개(found 78, lost 3) 모두 임베딩.
+- 결론: **C-1 Production 검증 완료.** 시험 글은 사용자가 삭제한다(삭제 시 트리거가 작업 행을 지운다).
+
 ### Preview 미임베딩 글 1건(별도 조사 대상)
 - Preview lost:182: 2026-11-03 작성(사진 포함), 텍스트 임베딩 있음, 이미지 임베딩 없음, 작업 기록 없음. 작업 큐 마이그레이션(Preview 2026-11-15)과 C-1(2026-11-20)보다 먼저 생긴 상태다. 당시 인라인 이미지 임베딩이 실패한 것으로 보이지만 원인은 확정하지 않았다. 처리 여부는 별도로 정한다(PUT 재분석은 작성자 권한이라 운영 도구로 진행해야 한다). C-1과의 인과는 단정하지 않는다.

@@ -7,10 +7,14 @@ import "../db/install-guard.mjs";
 import { Client } from "pg";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
 
+// --post=lost:<id> adds one post's job/vector state (no title, user or URL).
 const sinceArg = process.argv.find((a) => a.startsWith("--since="))?.slice(8);
 const since = sinceArg ? new Date(sinceArg) : null;
 if (sinceArg && !Number.isFinite(since?.getTime())) throw new Error("Invalid --since");
-if (process.argv.slice(2).some((a) => !a.startsWith("--since="))) throw new Error("Only --since=<ISO time> is accepted");
+const postArg = process.argv.find((a) => a.startsWith("--post="))?.slice(7);
+const postMatch = postArg ? /^(lost|found):([1-9]\d{0,9})$/.exec(postArg) : null;
+if (postArg && !postMatch) throw new Error("--post=lost:<id> or found:<id>");
+if (process.argv.slice(2).some((a) => !a.startsWith("--since=") && !a.startsWith("--post="))) throw new Error("Only --since=<ISO time> and --post=<type>:<id> are accepted");
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
 const db = new Client({ connectionString: process.env.DIRECT_URL, connectionTimeoutMillis: 15000 });
 try {
@@ -39,9 +43,22 @@ try {
         SELECT 'found',p.created_at,p."imageEmbedding" IS NOT NULL,j.state,j.desired_hash=j.completed_hash,j.updated_at FROM "FoundPost" p LEFT JOIN "ImageEmbeddingJob" j ON j.post_type='found' AND j.post_id=p.id WHERE p.image_url IS NOT NULL AND p.created_at >= $1::timestamptz AT TIME ZONE 'UTC'
       ) x GROUP BY kind ORDER BY kind`, [since.toISOString()])).rows;
   }
+  let post = null;
+  if (postMatch) {
+    const [, kind, id] = postMatch;
+    const table = kind === "lost" ? '"LostPost"' : '"FoundPost"';
+    const column = kind === "lost" ? "lost_post_id" : "found_post_id";
+    post = (await db.query(`SELECT p.id,p.created_at,p.updated_at,p.image_url IS NOT NULL AS has_image_url,
+        split_part(p.image_url,'/',3) AS image_host,p.image_url LIKE '%/post-images/posts/${kind}/' || p.id || '/%' AS own_bucket_path,
+        vector_dims(p."imageEmbedding") AS image_dims,vector_dims(p.embedding) AS text_dims,
+        (SELECT count(*)::int FROM "PostImage" i WHERE i.${column}=p.id) AS post_images,
+        j.state,j.attempts,j.generation,j.desired_hash=j.completed_hash AS current,j.last_error,j.updated_at AS job_updated_at,
+        round(extract(epoch FROM j.updated_at - p.created_at)::numeric,1) AS create_to_job_update_s
+      FROM ${table} p LEFT JOIN "ImageEmbeddingJob" j ON j.post_type=$1 AND j.post_id=p.id WHERE p.id=$2`, [kind, Number(id)])).rows[0] ?? { missing: true };
+  }
   const runtime = (await db.query(`SELECT enabled,resume_at <= (clock_timestamp() AT TIME ZONE 'UTC') AS active FROM "ImageEmbeddingRuntime" WHERE id=true`)).rows[0] ?? null;
   await db.query("ROLLBACK");
-  console.log(JSON.stringify({ target, at: new Date().toISOString(), since: since?.toISOString() ?? null, runtime, states, nonCompletedErrors: errors, posts, recent }, null, 1));
+  console.log(JSON.stringify({ target, at: new Date().toISOString(), since: since?.toISOString() ?? null, runtime, states, nonCompletedErrors: errors, posts, recent, post }, null, 1));
 } finally {
   await db.end().catch(() => {});
 }
