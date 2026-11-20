@@ -8,7 +8,10 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 
-const ids = process.argv.slice(2);
+// --allow-production compares two Production deployments (rollback target vs
+// new) through their protected deployment URLs; searches are still read-only.
+const allowProduction = process.argv.includes("--allow-production");
+const ids = process.argv.slice(2).filter((a) => a !== "--allow-production");
 if (ids.length !== 2 || ids.some((id) => !/^dpl_[A-Za-z0-9]+$/.test(id))) throw new Error("Two explicit deployments required");
 function vercelApi(path) {
   const out = execFileSync("npx", ["--no-install", "vercel", "api", path, "--scope", "oyueo"], { encoding: "utf8", shell: true, windowsHide: true, env: { ...process.env, MSYS_NO_PATHCONV: "1" } });
@@ -16,9 +19,10 @@ function vercelApi(path) {
 }
 const deployments = ids.map((id) => {
   const d = vercelApi(`/v13/deployments/${id}`);
-  if (d.readyState !== "READY" || d.target === "production" || !/^mju-lost-found-vercel-[a-z0-9]{9}-oyueo\.vercel\.app$/.test(d.url)) throw new Error("Ready Preview deployments only");
-  return { id, url: d.url };
+  if (d.readyState !== "READY" || (d.target === "production" && !allowProduction) || !/^mju-lost-found-vercel-[a-z0-9]{9}-oyueo\.vercel\.app$/.test(d.url)) throw new Error("Ready Preview deployments only (or --allow-production)");
+  return { id, url: d.url, target: d.target ?? "preview" };
 });
+if (deployments[0].target !== deployments[1].target) throw new Error("Both deployments must share one target (database)");
 const bypass = Object.keys(vercelApi("/v9/projects/prj_zMYrrsw80l829lSjs2n2Ur6YV5eP").protectionBypass ?? {})[0];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const queries = ["지갑", "에어팟", "학생증 카드", "검은색 우산"];

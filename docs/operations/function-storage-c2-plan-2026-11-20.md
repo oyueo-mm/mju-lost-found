@@ -117,3 +117,31 @@
 - PUT은 비동기로 바뀌었다(UI 호출 없음, 운영 도구는 완료까지 폴링).
 - 수정 후 새 벡터 반영에 함수 간 요청 1회가 더해진다(호스팅 0.9~2.8초).
 - 마이그레이션 파일은 LF 그대로 적용됐다. 다른 체크아웃에서 CRLF로 바뀌면 Prisma 체크섬이 달라 보일 수 있으니 같은 작업 트리에서 적용한다.
+
+## 9. Production 반영 (2026-11-21, 사용자 승인: 마이그레이션·권한·배포)
+
+승인 참조: `C2-PROD-RELEASE-2026-11-21`(승인 실행기). 단계별로 진행했고, 각 단계를 통과한 뒤에만 다음 단계로 넘어갔다.
+
+1. **백업·복원**: `release-c2-pre-2026-11-21-083510.tar.enc`(24.9MB).
+   - 암호화 왕복 검증, 체크섬 144/144 일치, 평문 삭제.
+   - WSL PG18 격리 복원: 테이블 56개 행 수 불일치 0, 사진 135개 누락 0, D-3 권한 재구성 일치.
+2. **충돌 확인**
+   - 복원한 Production 사본에서 C-2 마이그레이션 리허설 성공.
+   - 실제 Production 읽기 전용 점검(`c2-preflight.mjs`): 대기 마이그레이션은 C-2 하나뿐, 미해결 행 0, 기존 체크섬 일치, 새 객체 이름 충돌 0, 대상 컬럼 존재.
+   - 2026-10-03의 rolled-back 행(`20261018000000_add_post_category_code`)은 이후 재적용된 과거 복구 흔적이다.
+   - public default ACL 잔존을 확인했다. postgres 소유 새 테이블에 anon·authenticated·service_role의 `Dxtm`이 상속된다.
+3. **적용**: `release-c2.mjs migrate --apply --confirm-production`(lock_timeout 5초, statement_timeout 60초). 적용 후 대기·미해결 0.
+4. **권한**(`text-job-privileges.mjs`)
+   - 마이그레이션의 REVOKE로 anon·authenticated는 0이 됐다.
+   - service_role에는 상속분 `TRUNCATE/REFERENCES/TRIGGER/MAINTAIN`(읽기·쓰기 없음)이 남았다. "default ACL 상속 차단" 기준에 따라 `release-c2.mjs revoke-inherited`로 새 테이블에서만 회수했다. 앱은 소유자(postgres)로만 접근한다.
+   - 최종 결과: 비소유 역할 권한 0, PUBLIC 0, 함수 EXECUTE 0, anon·authenticated 실제 읽기 42501, RLS ON, 정책 0, 트리거 4. 강화된 검사 11/11 통과.
+5. **데이터 보존**: 적용 전후 Production 벡터 지문이 같다(분실 4·습득 80개의 텍스트·이미지 digest).
+6. **배포**: `deploy.mjs production --record-dry-run`, **`dpl_3AgGm82bTYAQUV8bRJevsf8JquRX`**(`253de8f`). 롤백 대상은 C-1 `dpl_5r8gc7wQAmwriBH7Tz63n5gSLjgm`(READY)이며, D-3 이전 배포들도 보존했다.
+7. **배포 후 검증**
+   - 실제 번들: **539.4MB(6개) → 308.8MB(5개)**. `[id]`는 230.8MB → 30.9MB(사진 경로와 같은 함수로 합쳐짐).
+   - 공개 프로브 16/16. 검색 rankHash 4종이 C-1 때와 같다.
+   - 이전·새 Production 검색 비교 26/26 동일(`compare-search-deployments.mjs --allow-production`; 키워드·의미·통합 × 분실·습득 × 질의 4개 + 이미지 2건, 순위·점수).
+   - 벡터 직접 비교(`text-vector-equivalence.mjs`, Preview, 실모델): 기존 인라인 `embedPostBestEffort`와 새 `runTextJob`의 결과가 3개 샘플(한국어, 장소 없음, 영어)에서 **최대 차이 0, cosine 1**로 같다.
+   - Realtime: private, 활성 grant 0. 익명 공개 가입 `private_only`, 익명 비공개 `authorization_denied`. Data API 503(OFF).
+   - error·5xx 0. 이미지 큐 적체 0, 사진 글 80개 모두 임베딩. 텍스트 큐 0건.
+- 남은 확인: 로그인 상태에서 실제 글을 수정했을 때의 텍스트 재임베딩, 그리고 함수가 합쳐진 사진 첨부 경로. 사용자 계정의 시험 글로 확인한다(`image-job-status.mjs --post`, 텍스트 작업은 `text-job-privileges.mjs` queue summary와 `post-cleanup-check.mjs`로 확인).
