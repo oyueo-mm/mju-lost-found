@@ -79,3 +79,16 @@
   - 호스팅 Preview에서의 실제 kick 자기 호출(자동화 bypass 헤더)은 로그인 세션이 없어 직접 실행하지 못했다. 로컬에서 같은 코드 경로를 확인했고, Production 배포 직후 로그(`Image job drain request failed` 없음)와 작업 상태로 확인한다.
   - Preview 이미지 글 88개 중 lost 1개에 임베딩이 없다. 변경 전 기준값이 없어 원인을 확정하지 못했다. C-1은 기존 임베딩을 지우지 않는다.
 - Production 배포는 하지 않았다(사용자 지시).
+
+### B 확인 (2026-11-20)
+- 사용자가 대시보드에서 변경했다. `/v9/projects/{id}`의 `deploymentExpiration`: Preview 7일, Production 30일, canceled·errored 30일, `deploymentsToKeep 10`.
+
+### C-1 호스팅 내부 요청 검증 (2026-11-20, Production 반영 전)
+- 원인: 프로젝트 보호가 `all_except_custom_domains`이므로 `VERCEL_URL`(배포 고유 주소)은 Preview와 Production 모두 보호된다. bypass 헤더가 없으면 302(SSO)로 막혀 앱에 닿지 않는다. kick은 Vercel이 런타임에 주입하는 `VERCEL_AUTOMATION_BYPASS_SECRET`(프로젝트 자동화 bypass 1개, 모든 배포보다 먼저 생성, 시스템 변수 노출 ON)을 보낸다. 이 값은 Vercel 문서상 빌드와 런타임에서 모두 쓸 수 있다. 호스팅 Preview는 Google 로그인만 지원하고 배포 AUTH_SECRET은 쓰지 않으므로, 사진 경로 자체 대신 같은 kick 코드를 보호된 배포 주소에 실행해 확인했다.
+- 도구: `scripts/operations/verify-image-kick.mjs`(Preview 전용, `node --env-file=.env.preview.local scripts/operations/verify-image-kick.mjs --deployment=https://<preview 배포>.vercel.app`). 일회용 사용자 1명·분실물 2개·Storage 객체 2개를 만들고 manifest(`.vercel/image-kick-<marker>.json`)에 기록하며 finally에서 지운다.
+- 결과 `dpl_DfQFL4LB…`: 8/8 통과(1회차는 판정 개수 오기로 false, 8개 검사는 모두 PASS. 수정 후 재실행 8/8).
+  - bypass 없이 302(앱 미도달), cron 비밀값 없음·오류 401.
+  - 트리거가 작업을 pending으로 넣고, 실제 `kickImageJobs()` 3회 동시 호출이 모두 `sent`, 작업 완료 768차원, `attempts=1`(중복 추론 없음). 완료까지 1.9초·4.1초.
+  - kick 없이 5초 동안 pending 유지(유실 없음), 이후 일반 검색 요청의 복구 경로로 완료(2.2~3.5초).
+  - 정리: 사용자 618·619, 글 339~342, Storage 객체 삭제, 남은 작업 0, 큐 적체 0.
+  - 같은 시간 Preview 로그 error·5xx 0.
