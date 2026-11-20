@@ -33,7 +33,7 @@ vi.mock("@/lib/posts/service", () => ({
   deleteLostPost,
   deleteFoundPost,
 }));
-vi.mock("@/lib/posts/aiService", () => ({
+vi.mock("@/lib/posts/updateService", () => ({
   updateLostPost,
   updateFoundPost,
 }));

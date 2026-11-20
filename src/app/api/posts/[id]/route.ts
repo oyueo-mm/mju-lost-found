@@ -1,6 +1,6 @@
 import { requeueImageJob } from "@/lib/ai/imageJobQueue";
 import { kickEmbeddingJobs } from "@/lib/ai/imageJobKick";
-import { EMBEDDING_INPUT_FIELDS } from "@/lib/ai/postEmbedding";
+import { EMBEDDING_INPUT_FIELDS } from "@/lib/ai/embeddingFields";
 import { checkRateLimit, rateLimitFailure, rateLimitFailureResponse, rateLimitTierFor } from "@/lib/rateLimit";
 export const maxDuration = 120;
 import { managePost } from "@/lib/posts/management";
@@ -15,7 +15,7 @@ import {
 } from "@/lib/posts/http";
 import { postTypeSchema, updateFoundPostSchema, updateLostPostSchema } from "@/lib/posts/schema";
 import { deleteFoundPost, deleteLostPost, getFoundPost, getLostPost } from "@/lib/posts/service";
-import { updateFoundPost, updateLostPost } from "@/lib/posts/aiService";
+import { updateFoundPost, updateLostPost } from "@/lib/posts/updateService";
 
 import { findPostRecommendations } from "@/lib/recommendation/service";
 import { getCurrentUser } from "@/lib/auth/session";

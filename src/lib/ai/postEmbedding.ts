@@ -2,12 +2,9 @@ import { buildEmbeddingText, getEmbeddingProvider, type EmbeddableFields } from 
 import { saveEmbedding } from "./vectorSearch";
 import type { PostType } from "@/lib/posts/schema";
 
-// The four fields whose change should trigger re-embedding a post -- see
-// src/lib/posts/service.ts's createLostPost/updateLostPost etc.
-// (buildEmbeddingText only ever reads these four anyway, but this list is
-// what those callers check against the *input* they received, before any
-// embedding work happens, to decide whether re-embedding is needed at all).
-export const EMBEDDING_INPUT_FIELDS = ["title", "description", "category", "location"] as const;
+// The four re-embedding fields now live in ./embeddingFields (no imports),
+// re-exported here for existing callers.
+export { EMBEDDING_INPUT_FIELDS } from "./embeddingFields";
 
 // Best-effort: embedding generation is a distinct step *after* the post
 // row itself has already been created/updated (called post-commit by

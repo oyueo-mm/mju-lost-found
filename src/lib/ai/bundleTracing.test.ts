@@ -49,18 +49,21 @@ describe("AI files in the function bundles", () => {
     expect(Object.keys(pkg.dependencies ?? {})).toContain("onnxruntime-common");
   });
 
-  it("excludes the text model from the image mutation worker, and every model from [id] (C-2)", () => {
-    expect(nextConfig.outputFileTracingExcludes).toEqual({
-      "/api/posts/**/image": ["./models/jhgan/**/*"],
-      "/api/posts/\\[id\\]!(/**)": ["./models/**/*"],
-    });
+  it("excludes the text model only from the image mutation worker", () => {
+    expect(nextConfig.outputFileTracingExcludes).toEqual({ "/api/posts/**/image": ["./models/jhgan/**/*"] });
   });
 
-  // Function Storage C-2: guard against a future [id] change that runs a model
-  // again while the bundle excludes it.
-  it("the [id] route source has no inference entry point", () => {
-    const route = readFileSync(path.join(process.cwd(), "src/app/api/posts/[id]/route.ts"), "utf8");
-    for (const banned of ["runImageJob", "embedPostBestEffort", "getEmbeddingProvider", "getImageEmbeddingProvider", "@/lib/ai/imageJob\"", "@/lib/ai/textJob"]) expect(route).not.toContain(banned);
+  // Function Storage C-2: Turbopack traces the embedding modules'
+  // process.cwd()/models path into every function that imports them, and an
+  // exclude did not remove it on Vercel. So /api/posts/[id] and the modules it
+  // uses for edits must not import the embedding chain at all.
+  it("the [id] route and its update module import nothing from the embedding chain", () => {
+    const read = (p: string) => readFileSync(path.join(process.cwd(), p), "utf8");
+    const banned = ["@/lib/posts/aiService", "@/lib/ai/postEmbedding", "@/lib/ai/embedding\"", "@/lib/ai/imageEmbedding", "@/lib/ai/queryEmbedding", "@/lib/ai/imageJob\"", "@/lib/ai/textJob", "./aiService"];
+    for (const file of ["src/app/api/posts/[id]/route.ts", "src/lib/posts/updateService.ts", "src/lib/ai/imageJobQueue.ts", "src/lib/ai/imageJobKick.ts", "src/lib/ai/embeddingFields.ts"]) {
+      const source = read(file);
+      for (const name of banned) expect(source, `${file} imports ${name}`).not.toContain(name);
+    }
   });
 
   it("the unused GPU providers are deleted before every build", () => {

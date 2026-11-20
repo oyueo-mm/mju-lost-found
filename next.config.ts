@@ -109,12 +109,12 @@ const nextConfig: NextConfig = {
   },
   outputFileTracingExcludes: {
     "/api/posts/**/image": ["./models/jhgan/**/*"],
-    // Function Storage C-2: [id] still imports aiService.ts (update logic),
-    // whose embedding modules name process.cwd()/models, so the tracer pulls
-    // both models in by itself. No [id] code path loads a model any more
-    // (edits and recompute requests are queued), so drop them here.
-    "/api/posts/\\[id\\]!(/**)": ["./models/**/*"],
   },
+  // Function Storage C-2: an exclude for /api/posts/[id] had no effect on the
+  // Vercel bundle (Preview dpl_7gWQjJTD..., still 230.8MB): Turbopack traces the
+  // embedding modules' process.cwd()/models path into any function importing
+  // them. So [id] imports none of them (src/lib/posts/updateService.ts,
+  // src/lib/ai/embeddingFields.ts); bundleTracing.test.ts guards that.
   images: {
     // 운영 비용 (Hobby: 5,000 image transformations a month): every width
     // is one more transformation per photo, so four in all (was eight):
