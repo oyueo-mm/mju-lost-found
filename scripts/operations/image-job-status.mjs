@@ -55,6 +55,12 @@ try {
         j.state,j.attempts,j.generation,j.desired_hash=j.completed_hash AS current,j.last_error,j.updated_at AS job_updated_at,
         round(extract(epoch FROM j.updated_at - p.created_at)::numeric,1) AS create_to_job_update_s
       FROM ${table} p LEFT JOIN "ImageEmbeddingJob" j ON j.post_type=$1 AND j.post_id=p.id WHERE p.id=$2`, [kind, Number(id)])).rows[0] ?? { missing: true };
+    // Function Storage C-2: the post's text job, when the queue exists.
+    if (!post.missing && (await db.query(`SELECT to_regclass('public."TextEmbeddingJob"') IS NOT NULL AS t`)).rows[0].t) {
+      post.text_job = (await db.query(`SELECT state,generation,completed_generation,attempts,last_error,updated_at,
+          round(extract(epoch FROM updated_at - $3::timestamp)::numeric,1) AS post_update_to_job_update_s
+        FROM "TextEmbeddingJob" WHERE post_type=$1 AND post_id=$2`, [kind, Number(id), post.updated_at])).rows[0] ?? null;
+    }
   }
   const runtime = (await db.query(`SELECT enabled,resume_at <= (clock_timestamp() AT TIME ZONE 'UTC') AS active FROM "ImageEmbeddingRuntime" WHERE id=true`)).rows[0] ?? null;
   await db.query("ROLLBACK");
