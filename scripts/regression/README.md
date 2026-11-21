@@ -189,3 +189,13 @@ node scripts/regression/csrf-hosted.mjs https://mju-lost-found-vercel-<id>-oyueo
   - ⑥ 헤더 없는 클라이언트는 정상 동작
 - `csrf-hosted.mjs`: 배포된 Preview에 익명 요청만 보낸다(쓰기 없음). 외부 출처는 403, 같은 출처·헤더 없음은 인증 단계 401까지 도달해야 한다. 실제 브라우저 2종으로 배포 페이지와 공격 페이지를 비교한다. Deployment Protection 우회 키는 CLI로 읽어 헤더로만 보내고 출력하지 않는다.
 - 판정 기준: 둘 다 `passed: true`, 실패 0, 정리 `cleanupOk: true`.
+
+## 숨김·삭제 게시글 댓글 노출 (감사 A-1, 2026-11-21)
+
+```powershell
+node --env-file=.env.preview.local scripts/regression/hidden-post-comments.mjs --confirm-preview https://mju-lost-found-vercel-<id>-oyueo.vercel.app
+```
+
+- Preview DB에 합성 회원 1명, 분실물 글 1개, 댓글 1개를 만들고 끝나면 삭제한다(`.vercel/hidden-comments-<uuid>.json`에 ID 기록).
+- 배포된 Preview에서 댓글 API를 익명으로 세 상태로 조회한다: 정상 글은 200 + 댓글, 임시 숨김은 404, 삭제는 404.
+- 판정: `passed: true`, `cleanupOk: true`. 수정 전 코드(`8a67cdd`)는 숨김·삭제 모두 200으로 실패한다(재현 근거).

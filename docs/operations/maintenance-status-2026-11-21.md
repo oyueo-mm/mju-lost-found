@@ -29,7 +29,15 @@
   - `ops/backup`(백업 운영 worktree, 1커밋)
 - 병합 전 검증(`2130c6b`): 단위 274파일 3,047개, 타입, 린트 통과.
 
-## 0-2. 2026-11-21 21시 이후 갱신 (최신)
+## 0-3. 2026-11-21 23시 종합 보안 감사 (최신)
+
+- **현재 Production `dpl_GFjSiuYqn8TCsMz68ddQkCUh2g3q`(`8a67cdd`)**: P-2, P-3, polling 15초 제한, CSP Report-Only. 롤백 대상 `dpl_6rutg8AmJikkZPacLL5stQwRD8wE`.
+- 종합 감사: [security-audit-comprehensive-2026-11-21.md](security-audit-comprehensive-2026-11-21.md)
+  - 실제 취약점 5건(Medium): A-1 댓글 노출 **Preview 수정 완료**, Production 미배포(`fix/audit-hidden-post-comments` `0293e03`), A-2 Supabase Auth 가입 열림, A-3 Storage 고갈, A-4 익명 AI 검색 상한, A-5 익명 조회 무제한
+  - 잠재 위험(세션 무효화 수단 없음 등)과 사용자 확인 항목(계정 2단계 인증 등)
+- 11-22 새벽 cron·04:00 예약 백업 확인은 다음 세션에서 한다(대기 작업 중단, 예약은 유지). 11-21 22:16 기준 노트북은 배터리 상태였다.
+
+## 0-2. 2026-11-21 21시 이후 갱신
 
 - **P-2 출처 검사·P-3 읽음 분리**: 브랜치 `fix/csrf-origin-chat-read`(`940cbf0` 이후). 격리 Preview `dpl_AF3mKwp3d9TdH3H1Bw5ztZWKj2kk`에서 검증했고, 고정 Preview 별칭은 바꾸지 않았다. **Production 미배포(별도 승인 대기).** 상세: [security-audit-xss-csrf-2026-11-21.md 5절](security-audit-xss-csrf-2026-11-21.md).
 - **Production CSP**: Report-Only를 유지한다(변경 없음). 배포 스크립트가 이제 `--csp-mode`를 강제한다. 집계는 운영 위반 0건, 시험 보고 3건(분리)이다. 상세는 [release-d4-plan](release-d4-plan-2026-11-16.md) 마지막 절.
