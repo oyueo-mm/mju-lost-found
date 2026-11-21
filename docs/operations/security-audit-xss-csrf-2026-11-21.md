@@ -176,3 +176,34 @@
   - 효과는 CSP를 **enforce할 때만** 생긴다. Report-Only 상태에서는 보고만 한다.
 - 권장 순서: ① Report-Only 관측 1~2주(현재) → ② `'unsafe-inline'` 정책 그대로 enforce(외부 출처 차단 효과가 먼저 생김) → ③ Preview에서 nonce Report-Only 빌드로 Proxy 호출량·지연·위반 측정 → ④ 측정값으로 nonce enforce 결정.
 - P-4(파일 매직 넘버)는 이미 구현돼 있다(Release B, 5절 정정). 다시 구현하지 않는다.
+
+## 6. Production 배포 (2026-11-21 22:08 KST, 사용자 승인)
+
+- **Production `dpl_GFjSiuYqn8TCsMz68ddQkCUh2g3q`(`8a67cdd`)**, `deploy.mjs production --csp-mode=report-only`(배포 직후 응답 헤더 재확인: report-only). 롤백 대상 `dpl_6rutg8AmJikkZPacLL5stQwRD8wE`(`5711719`, READY). DB 변경 없음. 직전 복원 검증 백업 `auto-2026-11-21`(19:51).
+- 포함: P-2 출처 검사, P-3 읽음 분리, polling 무한 대기 수정(요청당 15초).
+- 고정 Preview 별칭도 같은 커밋 `dpl_8vbgau5GzwWKtrXLKaKRRZKuBrpe`로 옮겼다(헤더 12/12).
+
+### polling 무한 대기 수정
+- `synchronizer.ts`
+  - 동기화 1회마다 15초 제한을 둔다(자체 AbortController. 구형 iOS를 위해 `AbortSignal.any`는 쓰지 않음).
+  - 시간이 초과되면 `SyncTimeout`으로 실패 처리하고 polling 간격을 조정한다. 그동안 들어온 갱신 요청은 바로 다시 실행한다.
+  - 방 전환·언마운트(`dispose`)는 조용히 중단한다.
+- Realtime 토큰 요청도 15초로 제한했다. 초과하면 polling으로 전환하고 30초 뒤 재시도한다. 전에는 `connecting`이 영구히 참으로 남았다.
+- 읽음 POST와 이전 메시지 GET도 15초로 제한했다.
+- 메시지 **전송**은 제한하지 않았다. 제한하면 서버에 저장된 메시지를 사용자가 다시 보내 중복이 생길 수 있다.
+- 검증
+  - 단위 26개(시간 초과, 신호를 무시하는 요청, 타이머 정리, dispose 중 중단, 토큰 요청 고정)
+  - `realtime-fallback.mjs` **7/7 연속 통과**(수정 전 약 50%). 새 검사 "응답 없는 요청을 15.7~15.9초에 포기하고 polling 재개, 스레드에 메시지 1건"을 포함한다.
+  - 2인 실시간(WebSocket↔polling 전환·복귀, 읽음 반영) 5/6 통과. 실패 1회는 "연결 중 25초 동안 조회 1회 이하"를 2회로 넘긴 것이다. 이후 조회 시각을 기록해 보니 대기 구간 조회는 시작 0.1~0.3초 뒤 1건(직전 단계 읽음 힌트의 꼬리)이었고, 10초 polling 주기가 아니었다.
+  - CSRF 로컬 20/20, 호스팅 Preview 10/10.
+
+### 배포 후 검증
+- 헤더 12/12(Report-Only, 강제 CSP 없음, HSTS)
+- 프로브 16/16. 검색 4종 순위 해시가 직전 배포와 같다.
+- Production CSRF 10/10(익명): 외부 출처 403, 같은 출처는 401까지 도달
+- 브라우저 익명 검사: 기능 5종 통과. 단, WebKit에서 페이지 이동 중 RSC prefetch 오류("access control checks")가 3회 중 2회 보고됐다.
+  - 대상 페이지와 경로가 매번 달랐고 서버 5xx는 0건이다. 변경 범위(채팅 화면, API 래퍼)와 경로가 겹치지 않는다.
+  - 다만 직전 배포에서 같은 검사를 2회 실행했을 때는 나오지 않아 **원인 미확정**이다. 직전 배포 URL은 Deployment Protection 때문에 같은 조건으로 비교할 수 없다.
+- 배포 후 로그: 5xx 0, 4xx는 모두 검사가 보낸 요청, CSP 위반 0(개선한 iframe 검사가 보고를 만들지 않음)
+- CSP 집계: 운영 위반 0, 시험 보고 3(변동 없음)
+- 미확인(사용자 확인 필요): Production 로그인 상태에서 채팅 송수신·읽음 표시, 연결 끊김 뒤 복구, Google 로그인, 관리자 화면
