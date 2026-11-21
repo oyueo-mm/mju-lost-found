@@ -122,7 +122,7 @@ try{
   await receiptTask;
   if(status!==0){
     console.log(JSON.stringify({browserExit:status,signal,stage}));
-    try{const failed=JSON.parse(output);console.log(JSON.stringify({completedChecks:failed.completedChecks,checks:failed.checks,errorType:failed.errorType,line:failed.line,message:failed.message,timings:failed.timings,counters:failed.counters}));}catch{}
+    try{const failed=JSON.parse(output);console.log(JSON.stringify({completedChecks:failed.completedChecks,checks:failed.checks,errorType:failed.errorType,line:failed.line,suiteLine:failed.suiteLine,apiLog:failed.apiLog,message:failed.message,timings:failed.timings,counters:failed.counters}));}catch{}
     throw new Error("Browser verification failed; no private data emitted");
   }
   const result=JSON.parse(output);if(!result.passed)throw new Error("Browser result missing");console.log(JSON.stringify(result));

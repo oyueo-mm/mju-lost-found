@@ -171,3 +171,21 @@ node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scr
 ```
 
 Preview DB에 격리 회원 3명(A·B·비참여자 C)과 방 1개를 만들고 끝나면 정리한다. 로컬 서버는 처음에 다른 방을 canary로 지정해 토큰 API가 204(polling)를 주게 시작하고, 브라우저가 신호하면 canary 없이 재시작한다. 검사 9개: ① polling으로 열린 탭이 새로고침 없이 private에 가입(재확인 간격 120초) ② A↔B UI 송신이 새로고침 없이 표시 ③ 중복 없음 ④ 읽음 반영 ⑤ 연결 중 10초 polling 없음 ⑥ 앱 내 이동 시 소켓 종료·뒤로 가기 재진입 시 재구독과 누락분 보정 ⑦ 오프라인→온라인 복구 후 재가입·누락분 보정 ⑧ PC(lg) 목록에 새 메시지 반영 ⑨ 비참여자 토큰·메시지·가입 차단. 출력은 통과 여부·지연 시간·건수만이며 메시지 원문·쿠키·JWT는 출력하지 않는다. 토큰 갱신(125초)·서명키 부재 fail-closed·변조/만료/권한 회수 거부는 위의 `--private`, 기본 fallback, `realtime-private.mjs`, `realtime-denials.mjs`가 담당한다.
+
+## CSRF 출처 검사·채팅 읽음 분리 (P-2/P-3, 2026-11-21)
+
+```powershell
+node scripts/regression/build-preview.mjs --confirm-preview
+node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/regression/csrf-local.mjs --confirm-preview
+node scripts/regression/csrf-hosted.mjs https://mju-lost-found-vercel-<id>-oyueo.vercel.app
+```
+
+- `csrf-local.mjs`: 로컬 `next start`(127.0.0.1:3103, 일회용 AUTH_SECRET)와 Preview DB에 격리 회원 3명(A·B·비참여자 C), 방 1개, 메시지 3개, B의 미확인 알림 3개를 만든다. 끝나면 모두 정리한다(`.vercel/csrf-<uuid>.json`에 ID 기록).
+  - ① 실제 세션 쿠키 + 위조 헤더(교차 사이트, 외부 Origin, `null`, same-site, 유사 도메인)로 보낸 상태 변경 요청 11종과 무세션 1종이 모두 403이고 DB 변화가 0
+  - ② 교차 사이트 GET 메시지 조회는 읽음 처리를 하지 않음
+  - ③ 비참여자 403
+  - ④ Chromium·WebKit에서 공격 사이트 페이지(127.0.0.1:3104)의 폼 자동 제출, no-cors fetch, img, 최상위 이동 뒤 상태 불변
+  - ⑤ 같은 출처 POST는 표시한 메시지까지만 커서·알림을 처리
+  - ⑥ 헤더 없는 클라이언트는 정상 동작
+- `csrf-hosted.mjs`: 배포된 Preview에 익명 요청만 보낸다(쓰기 없음). 외부 출처는 403, 같은 출처·헤더 없음은 인증 단계 401까지 도달해야 한다. 실제 브라우저 2종으로 배포 페이지와 공격 페이지를 비교한다. Deployment Protection 우회 키는 CLI로 읽어 헤더로만 보내고 출력하지 않는다.
+- 판정 기준: 둘 다 `passed: true`, 실패 0, 정리 `cleanupOk: true`.

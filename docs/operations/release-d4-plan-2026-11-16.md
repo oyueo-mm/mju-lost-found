@@ -213,3 +213,21 @@ Production의 공개 Realtime이 OFF이고 채팅은 인증 polling을 사용한
   - 런타임 로그: 50행 중 5xx·error 0. `csp-violation` 1건 = `frame-ancestors`/`self`/`/login`. **검사 스크립트의 framing 거부 확인(일부러 iframe 삽입)이 만든 보고**이며, Production `MetricDaily csp.report.frame-ancestors.self` 1건으로 집계됐다(관측 시 기준 잡음으로 제외, 삭제하지 않음).
 - 관측 방법: `MetricDaily csp.*`(Production DB 읽기는 승인 필요) 또는 `vercel logs`의 `csp-violation`(약 50행만 보존). 실제 사용자 로그인 흐름(채팅 WebSocket, 사진 업로드, 관리자)의 보고 여부가 enforce 판단 근거다.
 - 롤백: `vercel rollback dpl_DvLnpG3ixQT6t1XAqV6Cru73hWCM`(헤더만 바뀜). Report-Only는 어떤 요청도 막지 않는다.
+
+## 2026-11-21 CSP 운영 보강 (Production 변경 없음)
+
+- **배포 스크립트 모드 검증**(`scripts/deployments/cspMode.mjs`, 테스트 `cspMode.test.ts`)
+  - `deploy.mjs production`은 `--csp-mode`가 없으면 배포하지 않고 종료 코드 2로 끝난다.
+  - `enforce`는 `--confirm-csp-enforce`, `off`는 `--allow-csp-off`를 함께 지정해야 한다.
+  - 배포 뒤 새 배포의 응답 헤더를 `vercel curl`로 다시 읽는다. 요청한 모드와 다르면 롤백 안내와 함께 실패로 끝난다.
+  - Preview에서 확인했다: `dpl_AF3mKwp3…` "CSP 확인: report-only".
+- **Production 집계(읽기 전용, 최소 필드)**: `scripts/operations/csp-metrics.mjs`는 `MetricDaily`의 `csp.*` 행(day, metric, value)만 읽는다. 승인 참조 `CSP-METRICS-READONLY-2026-11-21`.
+  - 2026-11-21 20:3x KST 결과: `csp.report.frame-ancestors.self` = 2. **둘 다 알려진 시험 보고**다.
+    - 19:48:11 Chromium(경로 `/`: Chromium은 교차 출처 iframe 보고의 주소를 출처로 줄인다)
+    - 19:48:37 WebKit(`/login`)
+    - 배포 직후 `hosted-anonymous-browser.py`의 iframe 차단 확인에서 생겼다.
+  - 실제 운영 위반은 0건, enforce 위반 0건, 무시(외부·확장 프로그램) 0건이다.
+- 시험 보고 분리
+  - 스크립트가 `KNOWN_TEST_REPORTS`로 시험 보고를 따로 표시한다. 행은 삭제하지 않는다.
+  - `hosted-anonymous-browser.py`는 iframe 검사 중 자기 보고 요청을 브라우저에서 막는다(`framing_csp_reports_blocked`로 셈). 이후 실행은 Production 집계에 시험 보고를 남기지 않는다.
+- 판단: Report-Only 적용 후 1시간 미만이고, 로그인 사용자 흐름(채팅·글쓰기·관리자)에서 생긴 보고 표본이 없다. **0건을 근거로 enforce하지 않는다.** 최소 1~2주 관측과 로그인 흐름 표본(사용자 확인 또는 테스트 계정)을 확보한 뒤 enforce를 다시 판단한다.

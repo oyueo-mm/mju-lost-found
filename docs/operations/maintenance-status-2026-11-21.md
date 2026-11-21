@@ -29,7 +29,16 @@
   - `ops/backup`(백업 운영 worktree, 1커밋)
 - 병합 전 검증(`2130c6b`): 단위 274파일 3,047개, 타입, 린트 통과.
 
-## 0-1. 2026-11-21 20시 갱신 (최신)
+## 0-2. 2026-11-21 21시 이후 갱신 (최신)
+
+- **P-2 출처 검사·P-3 읽음 분리**: 브랜치 `fix/csrf-origin-chat-read`(`940cbf0` 이후). 격리 Preview `dpl_AF3mKwp3d9TdH3H1Bw5ztZWKj2kk`에서 검증했고, 고정 Preview 별칭은 바꾸지 않았다. **Production 미배포(별도 승인 대기).** 상세: [security-audit-xss-csrf-2026-11-21.md 5절](security-audit-xss-csrf-2026-11-21.md).
+- **Production CSP**: Report-Only를 유지한다(변경 없음). 배포 스크립트가 이제 `--csp-mode`를 강제한다. 집계는 운영 위반 0건, 시험 보고 2건(분리)이다. 상세는 [release-d4-plan](release-d4-plan-2026-11-16.md) 마지막 절.
+- **백업 예약 작업**: WakeToRun을 켰다(AC 전원에서만 효과). watchdog 기준 26시간, 실행 시작 기록 추가(`6274b3a`, `ops/backup`). 작업 스케줄러 운영 로그는 관리자 권한이 필요해 미적용이다. 장기 구조 설계: [backup-offsite-design-2026-11-21.md](backup-offsite-design-2026-11-21.md).
+  - 수동 실행: 19:50 `Start-ScheduledTask`(스케줄러 경유) → `auto-2026-11-21` 생성·복원 검증. 20:14 재시작 확인(`by svchost`, 같은 날 백업이 있어 건너뜀).
+  - **실제 예약 실행(11-22 04:00)은 아직 없음**. 11-22 13:00 watchdog과 `backup.log`의 `invoked ... by svchost` 04:0x 기록으로 확인한다.
+- **P-4 정정**: 매직 넘버 검사는 이미 구현돼 있다(Release B). 남은 것은 미첨부 업로드 객체(D-5)뿐이다.
+
+## 0-1. 2026-11-21 20시 갱신
 
 - **Production CSP Report-Only 활성화 완료**: 현재 Production `dpl_6rutg8AmJikkZPacLL5stQwRD8wE`(`5711719`), 롤백 대상 `dpl_DvLnpG3ixQT6t1XAqV6Cru73hWCM`(`5db5350`). 헤더 12/12, 프로브 16/16, 브라우저 2종 통과. 상세: [release-d4-plan-2026-11-16.md](release-d4-plan-2026-11-16.md) 마지막 절. enforce는 관측 뒤 별도 승인.
 - **XSS·CSRF 감사 완료**: 실제 취약점 0, 잠재 위험 4건. [security-audit-xss-csrf-2026-11-21.md](security-audit-xss-csrf-2026-11-21.md).

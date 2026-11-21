@@ -1,5 +1,6 @@
 """Browser API fallback tests. Reads local-only fixture cookies from stdin."""
 import json
+import re
 import sys
 import time
 from playwright.sync_api import sync_playwright, expect
@@ -17,6 +18,14 @@ try:
             ctx.add_cookies([{"name": "authjs.session-token", "value": cookie, "url": base}])
             contexts.append(ctx)
         first, second, outsider = contexts
+        # Diagnostics only (printed on failure): method, route shape, status, time.
+        api_log = []
+        started = time.monotonic()
+        def log_api(resp):
+            if "/api/chat/" in resp.url:
+                shape = re.sub(r"/\d+", "/:id", resp.url.split("?")[0].split("/api/", 1)[1])
+                api_log.append([round(time.monotonic() - started, 1), resp.request.method, shape, resp.status])
+        first.on("response", log_api)
         page = first.new_page()
         page.goto(f"{base}/chat/{room}")
         field = page.locator('input[type="text"]').last
@@ -136,5 +145,5 @@ try:
     
 except Exception as error:
     import traceback
-    print(json.dumps({"suite":"D3 isolated browser API fallback","passed":0,"completedChecks":checks,"errorType":type(error).__name__,"line":traceback.extract_tb(error.__traceback__)[-1].lineno}))
+    print(json.dumps({"suite":"D3 isolated browser API fallback","passed":0,"completedChecks":checks,"errorType":type(error).__name__,"line":traceback.extract_tb(error.__traceback__)[-1].lineno,"apiLog":locals().get("api_log",[])[-40:],"suiteLine":next((f.lineno for f in reversed(traceback.extract_tb(error.__traceback__)) if f.filename.endswith("realtime-fallback.py")),None)}))
     sys.exit(1)
