@@ -24,6 +24,9 @@ cfg = json.loads(sys.stdin.readline())
 base, room = cfg["base"], cfg["roomId"]
 assert base == "http://localhost:3102" and isinstance(room, int)
 checks, timings = [], {}
+# D-4: any Content-Security-Policy violation (enforced or Report-Only) on any
+# page of this run fails it -- with no CSP there are none.
+csp_violations = []
 POLLING_TEXT = "실시간 연결을 다시 시도하고 있습니다"
 
 
@@ -42,6 +45,8 @@ class Probe:
         page.on("response", self.on_response)
         page.on("websocket", self.on_socket)
         page.on("framenavigated", lambda f: setattr(self, "navigations", self.navigations + (1 if f == page.main_frame else 0)))
+        page.add_init_script("document.addEventListener('securitypolicyviolation', e => console.error('CSP-VIOLATION ' + e.effectiveDirective + ' ' + (e.blockedURI || '').split('?')[0]))")
+        page.on("console", lambda m: csp_violations.append(m.text[:200]) if ("CSP-VIOLATION" in m.text or "Content Security Policy" in m.text) else None)
 
     def on_response(self, response):
         url = response.url.split("?")[0]
@@ -251,6 +256,8 @@ try:
             assert c.get_by_text(text, exact=True).count() == 0, "outsider saw a message"
         assert pc.tokens[200] == 0 and pc.joined == 0, "outsider joined"
         checks.append("outsider gets no token, no messages and no private join")
+        assert not csp_violations, "CSP violations: " + "; ".join(sorted(set(csp_violations))[:5])
+        checks.append("no Content-Security-Policy violation on any page")
         print("stage:completed", flush=True)
         browser.close()
     result = {"passed": True, "completedChecks": len(checks), "checks": checks, "timings": timings,

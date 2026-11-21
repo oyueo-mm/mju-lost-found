@@ -83,3 +83,51 @@ Production의 공개 Realtime이 OFF이고 채팅은 인증 polling을 사용한
 - 사용자가 Preview 디자인을 최종 채택하고 추가 변경 없이 Production 반영을 승인했다. 배포 전 로그인 상태 헤더를 `scripts/regression/logged-in-header.mjs`(로컬 빌드 + Preview DB의 격리 테스트 회원 1명·미확인 알림 1건, 종료 시 정리)로 1440/390/320px에서 검증했다. 이름·검색·알림(배지)·프로필이 모두 표시되고 겹침과 가로 스크롤이 없다. 부수 관찰: 1536px 미만의 데스크톱 프로필 아이콘 링크는 접근성 이름이 없다(이번 변경 이전부터의 동작).
 - Production `dpl_HxSWo6BzrNfDTQDwg6NdMBMaYZKw` (`35168f0`, 브랜치 `feat/ui-center-header-pilot`)를 DB·환경변수 변경 없이 배포했다. 환경변수 키 집합이 직전과 동일하고 canary 변수는 없다. 직전 Production `dpl_99h6yK3CAQtRhN9F7YMK36DgHrn7`(`23498c4`)는 READY 롤백 대상이다. 배포 이력 기록은 기본값(Preview DB)만 썼고 Production DB에는 쓰지 않았다.
 - 배포 후 검증: 비파괴 프로브 16/16, 1440/390/320px 홈·게시판·검색 헤더·소분류 검사, 아이콘·매니페스트·OG 이미지 크기 동일, 제목·canonical·OG 정식 명칭 유지, 최근 error·5xx 0건.
+
+## 2026-11-21 기본 헤더 Production 적용 계획과 CSP Report-Only 설계 (준비만, 배포 없음)
+
+### 기본 보안 헤더 4종 (Production)
+- 현재: `next.config.ts`에서 `VERCEL_ENV === "production"`이면 헤더를 내보내지 않는다. Preview에서는 2026-11-19 검증(프로브, 헤더 4종, 3개 뷰포트)을 마쳤다.
+- 변경: production 조건을 없애 4종(`nosniff`, `strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `Permissions-Policy: geolocation=(), microphone=(), payment=(), usb=()`)을 Production에도 보낸다. 코드 변경은 조건 한 줄이다.
+- 영향 검토
+  - 사이트를 iframe에 넣는 기능이 없다(코드 inventory: iframe 0, 외부 임베드 0).
+  - 카메라는 파일 선택(`input type=file`)만 사용하고, Permissions-Policy는 camera를 막지 않는다.
+  - Referrer 정책이 바뀌면 외부 링크로 이동할 때 경로가 전달되지 않는다. 내부 통계(UTM)는 자체 파라미터라 영향이 없다.
+- 검증
+  - 배포 전: 로컬 Production 빌드 헤더 단위 테스트(`csp.test.ts`의 next.config 경로).
+  - 배포 후: 공개 프로브 16/16, 응답 헤더 4종 확인, `csp-browser`류 흐름을 Production에서 수동 확인(로그인, 사진, 채팅).
+- 롤백: 직전 Production 배포로 `vercel rollback`.
+
+### CSP Report-Only 설계 (구현, 기본 OFF)
+- 코드: `src/lib/security/csp.mjs`. `MJU_CSP_MODE=report-only|enforce`를 **빌드 시** 설정할 때만 헤더를 추가하고, 기본은 OFF라 현재 배포 동작이 바뀌지 않는다. `next.config.ts`가 사용한다.
+- 정책(Production):
+  ```
+  default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';
+  img-src 'self' data: blob: https://<prod>.supabase.co; font-src 'self' data:;
+  connect-src 'self' https://<prod>.supabase.co wss://<prod>.supabase.co;
+  worker-src 'self'; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none';
+  form-action 'self' https://accounts.google.com; base-uri 'self'; object-src 'none'
+  ```
+  Preview에는 Preview Supabase와 Vercel 툴바(`vercel.live`, `vercel.com` 이미지, pusher WSS)를 더하고, 개발에는 `'unsafe-eval'`과 `ws:`를 더한다.
+- 출처 근거(코드 inventory)
+  - Storage 사진과 업로드, D-3 Realtime WSS
+  - next/font 자체 호스팅, `/_next/image` 같은 출처
+  - blob: 미리보기(글쓰기, 채팅, 사진 검색), `/sw.js`
+  - Google 로그인 이동
+  - 외부 스크립트·아바타·iframe 없음
+- `'unsafe-inline'`: Next 인라인 부트스트랩과 layout 초기화 스크립트 3개 때문에 필요하다. **인라인 XSS 방어는 아직 아니다**(5단계 nonce/hash 비교 과제).
+- Zod 4의 `Function("")` JIT 탐지가 모든 입력 검증 페이지에서 `script-src eval` 위반을 만들었다(예외를 잡아 기능 영향은 없음). `src/instrumentation-client.ts`의 `z.config({ jitless: true })`로 탐지를 끄고, 보고 잡음을 없앴다.
+- 검증(로컬 Preview 빌드, **enforce 모드**: Report-Only보다 엄격)
+  - `scripts/regression/csp-browser.mjs`(Chromium + WebKit): 위반 0, 6개 흐름 통과.
+    - 익명 페이지 6개의 헤더
+    - 사진 글의 최적화 이미지와 Storage 직접 이미지
+    - 사진 검색(blob: 미리보기와 검색 요청)
+    - Google 로그인의 accounts.google.com 이동
+    - 로그인 페이지 5개
+    - 글쓰기 사진 미리보기
+  - `realtime-fallback.mjs --two-member`(실제 private WebSocket): 13/13, 신규 "CSP 위반 없음" 검사 포함.
+  - 단위: `csp.test.ts`(정책·모드·next.config 출력), `cspRealtime.test.ts`(CSP가 생기면 Realtime·Storage 출처를 요구).
+- 남은 설계 결정
+  1. 보고 수집: Report-Only는 브라우저 콘솔에만 남는다. Production 관측을 위해 같은 출처의 `/api/csp-report`를 둔다. 크기 16KiB 제한, 지시문·출처 분류만 집계하고 원문·쿼리·IP는 저장하지 않으며, 요청 제한을 건다. 새 함수 수(Hobby 12개)와 저장 위치(기존 MetricDaily 집계)를 확인한 뒤 구현한다. 이 단계 전까지는 위 브라우저 검사와 수동 확인으로 대신한다.
+  2. 배포 순서: ① 기본 헤더 4종 Production → ② `MJU_CSP_MODE=report-only` Production(환경 변수 추가와 재배포) → ③ 관측 기간 → ④ enforce 승인.
+- 롤백: 환경 변수를 지우거나 직전 배포로 `vercel rollback`. DB 변경은 없다.

@@ -22,14 +22,14 @@
 
 - **Vercel 자동 배포 없음.** 프로젝트에 Git 연결이 없고(`link: null`) GitHub Actions도 없다. 배포는 `scripts/deployments/deploy.mjs`(CLI)로만 일어난다. 브랜치 병합·push로 재배포되지 않는다.
 - `origin/main`(GitHub 기본 브랜치): 2026-08월 Python Streamlit 초기 앱 10커밋. Next.js 앱과 **공통 조상이 없다**(`git merge-base` 없음). 병합하려면 `--allow-unrelated-histories`가 필요하고, 두 앱의 파일이 한 트리에 섞인다. "충돌·손실 없는 병합" 조건을 충족하지 못해 **병합하지 않았다.** `origin/deploy`(2커밋)·`origin/Railway`·`origin/hostinger`도 별도 이력이다.
-- `origin/vercel`: Next.js 배포 계보. 2026-11-10 `9411288`에 멈춰 있다. `perf/function-storage-c2`(= 현재 Production 계보)의 조상이라 **fast-forward 가능**(110커밋, 충돌·손실·force 없음, dry-run 확인). 실제 push는 공유 브랜치 변경이라 권한 확인에서 보류됐다. 사용자 결정 대기.
+- `origin/vercel`: Next.js 배포 계보이자 **GitHub 기본 브랜치**(공개 API 확인. `main`이 기본이라는 로컬 표시는 오래된 `origin/HEAD` 때문이었다). 사용자 승인 후 2026-11-21에 `9411288..fcb36c1`로 fast-forward했다. push 직전에 원격을 다시 조회해 FF 가능, 원격 전용 커밋 0, force 없음, 보류·백업 브랜치 보존, Vercel Git 연결 없음(재배포 없음)을 확인했다. 새 배포가 생기지 않은 것도 확인했다. 기본 브랜치는 이미 `vercel`이므로 따로 바꿀 필요가 없다(저장소 공개, fork 2, 열린 PR 0).
 - C-2 계보에 없는 원격 변경(모두 원격에 그대로 보존):
   - `hold/admin-identity-views`(보류 기능, 2커밋)
   - `hotfix/callback-url-backslash`(같은 검사가 이미 `src/lib/auth/callbackUrl.ts`에 있음)
   - `ops/backup`(백업 운영 worktree, 1커밋)
 - 병합 전 검증(`2130c6b`): 단위 274파일 3,047개, 타입, 린트 통과.
 
-## 3. 다음 단계: D-4 보안 헤더
+## 3. 다음 단계: D-4 보안 헤더 (→ 2026-11-21 Production 계획과 CSP 설계·로컬 검증: release-d4-plan 마지막 절)
 
 - 계획: [release-d4-plan-2026-11-16.md](release-d4-plan-2026-11-16.md). 단계는 인벤토리 → 기본 헤더 → Permissions-Policy → CSP Report-Only → nonce/hash 비교 → 관측 후 강제 순서다.
 - 현재 코드(`next.config.ts` `headers()`): 기본 헤더 4종(`X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `Permissions-Policy: geolocation=(), microphone=(), payment=(), usb=()`)이 **Preview에만** 적용된다. `VERCEL_ENV === "production"`이면 빈 배열이다. 2026-11-19 Preview에서 프로브·헤더 4종·3개 뷰포트 검사를 통과했다.
@@ -39,7 +39,7 @@
   2. CSP Report-Only 설계: 인라인 스크립트 3개, Supabase Storage/Realtime, Google OAuth, 이미지 최적화, 웹 푸시. 보고 수집은 개인정보 최소화 방식으로 한다.
   3. 강제 적용은 관측 뒤 별도 승인
 
-## 4. 다음 단계: Production DB 잔여 권한 (읽기 전용 재감사 2026-11-21, `db-privilege-audit.mjs`)
+## 4. 다음 단계: Production DB 잔여 권한 (→ 조사·Preview 검증·리허설 완료: [db-privileges-step2-2026-11-21.md](db-privileges-step2-2026-11-21.md), Production 적용 승인 대기) (읽기 전용 재감사 2026-11-21, `db-privilege-audit.mjs`)
 
 | 항목 | Production | Preview |
 |---|---|---|
