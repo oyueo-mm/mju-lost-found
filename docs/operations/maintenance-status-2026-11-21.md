@@ -29,7 +29,17 @@
   - `ops/backup`(백업 운영 worktree, 1커밋)
 - 병합 전 검증(`2130c6b`): 단위 274파일 3,047개, 타입, 린트 통과.
 
-## 0. 2026-11-21 저녁 갱신 (최신)
+## 0-1. 2026-11-21 20시 갱신 (최신)
+
+- **Production CSP Report-Only 활성화 완료**: 현재 Production `dpl_6rutg8AmJikkZPacLL5stQwRD8wE`(`5711719`), 롤백 대상 `dpl_DvLnpG3ixQT6t1XAqV6Cru73hWCM`(`5db5350`). 헤더 12/12, 프로브 16/16, 브라우저 2종 통과. 상세: [release-d4-plan-2026-11-16.md](release-d4-plan-2026-11-16.md) 마지막 절. enforce는 관측 뒤 별도 승인.
+- **XSS·CSRF 감사 완료**: 실제 취약점 0, 잠재 위험 4건. [security-audit-xss-csrf-2026-11-21.md](security-audit-xss-csrf-2026-11-21.md).
+- **자동 백업**
+  - 11-19·11-21 04:00 누락 원인: 04:00에 PC가 절전(Modern Standby)이었고 작업이 `WakeToRun=False`다. 11-21은 08:16:32 절전 해제 직후 보충 실행(08:16:38)이 시작됐지만 `0xC000013A`(외부 종료)로 끝나 로그·상태 기록 전에 멈췄다(정확한 종료 주체는 Task Scheduler 운영 로그가 꺼져 있어 확인 불가). 11-19는 보충 실행 흔적도 없다. watchdog 기준(36시간)에 걸리지 않아 알림도 없었다.
+  - 권한 변경(17:28) 이후 확인: 같은 예약 작업을 19:50에 수동 시작 → `auto-2026-11-21.tar.enc`(24.9MB) 생성, 체크섬 144/144, WSL 복원 검증 통과(테이블 57, 행 수 불일치 0, 사진 135 누락 0).
+  - 개선 제안(미적용, 사용자 결정): 작업에 `WakeToRun` 켜기 또는 04:00 대신 사용 시간대로 이동, watchdog 기준 36→26시간.
+- **cron**: 02:00(`embedding-maintenance`)·03:00(`/api/admin/settings` 보존 정리) KST 첫 실행은 11-22 새벽이라 아직 확인 불가. cron은 서버 DB 역할을 쓰며 이번 권한 회수(PUBLIC·anon·authenticated) 대상이 아니다.
+
+## 0. 2026-11-21 저녁 갱신
 
 - **Production DB 잔여 권한 정리 완료**(사용자 승인, 17:28 KST).
   - 클라이언트 역할(PUBLIC·anon·authenticated) 6문을 적용했다. service_role, postgres, Realtime receive, 트리거, SECURITY DEFINER는 유지했다.

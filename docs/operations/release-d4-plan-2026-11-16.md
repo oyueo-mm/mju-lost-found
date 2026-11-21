@@ -200,3 +200,16 @@ Production의 공개 Realtime이 OFF이고 채팅은 인증 polling을 사용한
 3. 관측: `MetricDaily csp.*`(읽기 전용)와 런타임 로그의 `csp-violation`.
 4. enforce는 관측 결과를 보고 별도 승인한다.
 - 롤백: 직전 배포로 `vercel rollback`(헤더만 바뀐다).
+
+## 2026-11-21 Production CSP Report-Only 활성화 (완료)
+
+- 승인: 사용자 인수인계 지시("Production CSP Report-Only 활성화"). enforce는 관측 뒤 별도 승인.
+- 배포: `node scripts/deployments/deploy.mjs production --csp-mode=report-only` → **Production `dpl_6rutg8AmJikkZPacLL5stQwRD8wE`(`5711719`)**. `da92170`(Preview 15/15 검증 빌드) 대비 앱 코드 차이 없음(문서·검사 스크립트만). DB·환경 변수 변경 없음. 배포 이력은 기본값(Preview DB)에만 기록.
+- 배포 전: 단위 3,069개, 타입, 린트 통과. 롤백 대상 `dpl_DvLnpG3ixQT6t1XAqV6Cru73hWCM`(`5db5350`) READY 확인.
+- 배포 후
+  - `security-headers-hosted.mjs production --expect-csp report-only`: 12/12 경로에서 기본 헤더 4종 + `Content-Security-Policy-Report-Only`, 강제 CSP 없음, HSTS 유지.
+  - `release-probes.mjs`: 16/16(버전, 공개 4, 인증 경계 401 4, 검색 4종, 기존 사진 3).
+  - `hosted-anonymous-browser.py`(Chromium + WebKit): 통과(헤더, 사진, 사진 검색, Google 이동, framing 거부).
+  - 런타임 로그: 50행 중 5xx·error 0. `csp-violation` 1건 = `frame-ancestors`/`self`/`/login`. **검사 스크립트의 framing 거부 확인(일부러 iframe 삽입)이 만든 보고**이며, Production `MetricDaily csp.report.frame-ancestors.self` 1건으로 집계됐다(관측 시 기준 잡음으로 제외, 삭제하지 않음).
+- 관측 방법: `MetricDaily csp.*`(Production DB 읽기는 승인 필요) 또는 `vercel logs`의 `csp-violation`(약 50행만 보존). 실제 사용자 로그인 흐름(채팅 WebSocket, 사진 업로드, 관리자)의 보고 여부가 enforce 판단 근거다.
+- 롤백: `vercel rollback dpl_DvLnpG3ixQT6t1XAqV6Cru73hWCM`(헤더만 바뀜). Report-Only는 어떤 요청도 막지 않는다.
