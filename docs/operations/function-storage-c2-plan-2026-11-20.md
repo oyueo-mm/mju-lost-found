@@ -145,3 +145,16 @@
    - Realtime: private, 활성 grant 0. 익명 공개 가입 `private_only`, 익명 비공개 `authorization_denied`. Data API 503(OFF).
    - error·5xx 0. 이미지 큐 적체 0, 사진 글 80개 모두 임베딩. 텍스트 큐 0건.
 - 남은 확인: 로그인 상태에서 실제 글을 수정했을 때의 텍스트 재임베딩, 그리고 함수가 합쳐진 사진 첨부 경로. 사용자 계정의 시험 글로 확인한다(`image-job-status.mjs --post`, 텍스트 작업은 `text-job-privileges.mjs` queue summary와 `post-cleanup-check.mjs`로 확인).
+
+### 로그인 상태 실제 검증 (사용자 시험 글 lost:143, 2026-11-21 09:38~09:40 KST)
+- 읽기 전용으로 확인했다: 로그, `image-job-status.mjs --post`, `text-vector-check.mjs`, 공개 의미 검색.
+- 사진: 등록(00:37:59Z) → 업로드 → `POST /api/posts/143/image` 200(00:38:07.6Z) → 배포 고유 주소로 drain 요청 `GET /api/posts` 200(00:38:10.4Z). 이미지 작업은 completed, attempts 1, 768차원으로 약 3.9초 만에 끝났다. PostImage 1, 사진 200(webp).
+- 텍스트 수정: `PATCH /api/posts/143` 200(00:40:38.6Z) → drain 요청 200(00:40:40.1Z). 텍스트 작업은 generation 1 completed, attempts 1, 오류 없음, 수정 후 2.2초.
+- 텍스트 수정은 이미지 작업을 다시 건드리지 않았다(이미지 작업 마지막 갱신이 수정 이전).
+- 벡터 갱신 직접 확인(`text-vector-check.mjs`): 저장 벡터와 "현재 텍스트" 계산값의 cosine 0.99999995(최대 차이 4e-5, 로컬 Windows CPU와 Vercel CPU 차이 수준), 저장 벡터와 "수정 전 텍스트" 계산값의 cosine 0.956. 즉 벡터가 수정 후 텍스트로 바뀌었다.
+- 의미 검색(새 배포·C-1 롤백 배포 같음)
+  - 수정 후 전체 텍스트: 1위, score 1.
+  - 수정 후 제목만: 1위, 0.9750.
+  - 수정 전 텍스트도 표시 점수 1이었다. 표시 점수가 높은 유사도에서 포화되므로 갱신 판정에는 위의 직접 비교를 사용했다.
+- 큐·오류: 텍스트 큐 completed 1, 이미지 큐 completed 2, 미완료 0. 배포 이후 error·5xx 0. 권한 검사 11/11 유지. 습득물 벡터 digest 변화 없음(분실물 쪽 변화는 시험 글 추가뿐).
+- **C-2 완료(2026-11-21).** 시험 글은 사용자가 삭제하고, 이후 `post-cleanup-check.mjs --post=lost:143`(텍스트 작업 포함)로 정리를 확인한다.
