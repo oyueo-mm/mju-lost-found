@@ -131,3 +131,72 @@ Production의 공개 Realtime이 OFF이고 채팅은 인증 polling을 사용한
   1. 보고 수집: Report-Only는 브라우저 콘솔에만 남는다. Production 관측을 위해 같은 출처의 `/api/csp-report`를 둔다. 크기 16KiB 제한, 지시문·출처 분류만 집계하고 원문·쿼리·IP는 저장하지 않으며, 요청 제한을 건다. 새 함수 수(Hobby 12개)와 저장 위치(기존 MetricDaily 집계)를 확인한 뒤 구현한다. 이 단계 전까지는 위 브라우저 검사와 수동 확인으로 대신한다.
   2. 배포 순서: ① 기본 헤더 4종 Production → ② `MJU_CSP_MODE=report-only` Production(환경 변수 추가와 재배포) → ③ 관측 기간 → ④ enforce 승인.
 - 롤백: 환경 변수를 지우거나 직전 배포로 `vercel rollback`. DB 변경은 없다.
+
+## 2026-11-21 기본 헤더 4종 Production 반영 (완료)
+
+- 커밋 `faf3be9`: `next.config.ts`의 Production 제외 조건을 없앴다. 값은 Preview에서 검증한 그대로다. CSP는 `MJU_CSP_MODE`가 없으므로 꺼져 있다.
+- 배포 전 확인
+  - `253de8f`(C-2 Production) 대비 앱 코드 차이는 세 가지다: `next.config.ts`, `src/instrumentation-client.ts`(Zod jitless, 로컬 enforce 검증 완료), 꺼진 CSP 모듈.
+  - 단위 275파일 3,051개, 타입, 린트 통과.
+- Preview `dpl_9WGYGXZj6ipjeD14wJtEZrUyXe4f`(`faf3be9`): 프로브 16/16, 호스팅 헤더 검사 12/12 경로(`scripts/regression/security-headers-hosted.mjs preview`).
+- **Production `dpl_DvLnpG3ixQT6t1XAqV6Cru73hWCM`(`5db5350`, 앱은 `faf3be9`와 같고 검사 스크립트만 추가)**
+  - 실제 응답 헤더: `/`, `/login`, `/lost`, `/found`, `/search`, `/api/version`, `/api/auth/session`, `/api/auth/providers`, `/sw.js`, `/manifest.webmanifest`, `/robots.txt`, `/icon.svg` 12개 모두 4종 일치. CSP 없음, HSTS 유지.
+  - 공개 프로브 16/16. 인증 경계 401(채팅·관리자·신고 증거·유지보수). 검색 4종 순위가 배포 전과 같다.
+  - `scripts/regression/hosted-anonymous-browser.py`(Chromium + WebKit): 헤더, 게시글 사진, 사진 검색(blob 미리보기와 검색 200), Google 로그인 이동(accounts.google.com), iframe 삽입 거부, 우리 페이지 오류 0.
+  - 배포 후 error·5xx 0건.
+- 롤백: `vercel rollback dpl_3AgGm82bTYAQUV8bRJevsf8JquRX`(C-2, READY 확인). DB 변경은 없다.
+- 미확인: 로그인 상태(채팅 WebSocket, 관리자)는 Production에서 자동으로 확인할 수 없어 사용자 확인 대상이다. 같은 코드의 private WebSocket 2인 E2E는 로컬 enforce 빌드에서 13/13 통과했다.
+
+## 2026-11-21 CSP 위반 보고 수집 (Report-Only 준비, Preview 검증 완료)
+
+### 구조 (새 외부 서비스 없음)
+- `POST /api/csp-report`(`src/app/api/csp-report/route.ts`, 파싱은 `src/lib/security/cspReport.ts`). 같은 출처, 익명. 브라우저는 보고에 세션을 싣지 않으므로 비로그인 페이지에서도 보고된다.
+- 비용 순서대로 막는다. 쓰레기 요청은 DB에 닿지 않는다.
+  1. Content-Type이 `application/csp-report`, `application/reports+json`, `application/json`이 아니면 415.
+  2. 본문 16KiB 초과면 413(선언 길이와 실제 스트림 모두 검사).
+  3. 메모리에서 해석하고 거른다: 다른 출처 페이지의 보고(위조), 확장 프로그램 소음, 형식 오류는 204로 답하고 `csp.ignored.*`로 세기만 한다.
+  4. IP별 요청 제한(기존 `RateLimitCounter`, `AUTH_SECRET` 솔트 해시, 원 IP 미저장): 분당 30, 하루 300을 넘으면 429. 제한기가 고장 나면 조용히 버린다(페이지에는 영향 없음).
+- 저장: 원문, 전체 URL, 쿼리, IP, UA, 사용자 ID는 저장하지 않는다.
+  - DB에는 `MetricDaily`의 `csp.<report|enforce>.<지시문>.<분류>` 카운터만 남는다. 기존 지표와 묶어 1분 단위로 쓴다. 이름은 고정 집합이다. 지시문 22종과 other, 분류는 inline, eval, wasm-eval, data, blob, self, supabase, google, vercel-toolbar, external, unknown이다.
+  - Vercel 런타임 로그에는 위반마다 한 줄을 남긴다: 경로 패턴(`/post/[id]`), 지시문, 분류, external이면 호스트만, 같은 출처 스크립트 경로와 줄 번호. Hobby 로그는 짧게 보존된다.
+- 보존: `csp.*` 카운터는 일일 보존 정리 cron(`runRetention`)이 **90일** 뒤 삭제한다. 요청 제한 행은 기존 규칙대로 2일 뒤 정리된다.
+- Hobby
+  - 함수 수: 새 라우트는 기존 공유 함수에 묶인다. Report-Only Preview 배포가 READY였고, Hobby는 12개를 넘으면 배포를 거부한다.
+  - 호출 비용: 정상 페이지는 보고 0건으로 확인했다. 위반이 생겨도 보고 1건이 호출 1회이고, IP당 하루 300회로 묶인다.
+
+### report-uri와 report-to 검토 (2026-11-21 실측)
+- `report-uri`만 둘 때: Chromium(두 headless 모두)과 WebKit이 즉시 보낸다.
+- `report-to`를 함께 둘 때:
+  - Chromium은 `report-uri`를 무시하고, Reporting API 업로드가 로컬 검사에서 80초 동안 오지 않았다.
+  - WebKit은 본문 형식을 바꾼다(`type`과 `body`를 가진 단일 객체).
+  - Preview는 Deployment Protection 때문에 HTTPS에서 Reporting API를 검증할 수 없다.
+- 결론: 정책은 **`report-uri /api/csp-report`만** 사용한다. 엔드포인트는 Reporting API 배열·단일 객체와 WebKit의 `type`과 `csp-report`가 함께 있는 본문까지 모두 해석하므로, 나중에 HTTPS에서 확인되면 `report-to`를 추가할 수 있다.
+
+### 정책 확인
+- Google 로그인: `form-action 'self' https://accounts.google.com`. 로그인 버튼의 accounts.google.com 이동에서 보고 0건(Chromium, WebKit, 로컬과 Preview).
+- Supabase Storage(`img-src`·`connect-src https://<project>.supabase.co`)와 Realtime(`connect-src wss://<project>.supabase.co`): 환경별 프로젝트만 허용한다. 사진 게시글과 사진 검색에서 보고 0건. 2인 private WebSocket은 로컬 enforce에서 13/13, 위반 0.
+- Preview에는 Vercel 툴바 출처가 추가된다. Preview 정상 페이지에서 보고 0건.
+
+### 검증
+- 단위: `cspReport.test.ts`(형식 4종, 개인정보 미보존, 외부 출처·확장 프로그램, 묶음 한도, 이름 한정), `route.test.ts`(415/413/외부 출처/429/제한기 고장/Host 기준 출처), `csp.test.ts`(report-uri만). 전체 277파일 3,069개 통과.
+- 로컬 Report-Only 빌드(`scripts/regression/csp-report-browser.mjs`, Preview DB)
+  - 정상 페이지 7개와 Google 이동: 보고 0건.
+  - 일부러 만든 교차 출처 이미지와 fetch: Chromium·WebKit 모두 도착.
+  - 로그에 쿼리와 표식 비밀값 없음, 카운터 2종 기록, 이름 한정.
+  - 시험 행은 정리했다.
+- Preview `dpl_9ZeEuVWpFkNe5w7K55NWya178GJ9`(`da92170`, `--csp-mode=report-only`, 고정 URL 연결), `scripts/regression/csp-report-hosted.mjs` 15/15
+  - Report-Only 헤더와 report-uri, 강제 CSP 없음.
+  - 형식 3종 204. 415, 413, 405.
+  - 외부 출처, 확장 프로그램, 형식 오류는 버리고 셈.
+  - 브라우저 2종 보고 도착과 로그(쿼리·비밀값 없음).
+  - 31번째 요청에 429.
+  - 카운터 8종, 이름 한정.
+- 정리: Preview `MetricDaily csp.*`와 `RateLimitCounter cspReport:*`가 0행인 것을 확인했다. 정상 페이지 재방문(Chromium, WebKit) 뒤에도 0행, 로그 0줄이다.
+- 배포 도구: `scripts/deployments/deploy.mjs --csp-mode=report-only|enforce`가 해당 배포에만 빌드 시점 `MJU_CSP_MODE`를 넘긴다.
+
+### Production 활성화 시 (별도 결정)
+1. `node scripts/deployments/deploy.mjs production --csp-mode=report-only`(코드는 `da92170` 이후). DB 변경은 없다.
+2. 배포 후 `security-headers-hosted.mjs production --expect-csp report-only`, `hosted-anonymous-browser.py`, 프로브.
+3. 관측: `MetricDaily csp.*`(읽기 전용)와 런타임 로그의 `csp-violation`.
+4. enforce는 관측 결과를 보고 별도 승인한다.
+- 롤백: 직전 배포로 `vercel rollback`(헤더만 바뀐다).

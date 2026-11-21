@@ -61,8 +61,23 @@ try {
   const browserRun = JSON.parse((py.stdout ?? "").trim().split("\n").at(-1) || "{}");
   check("browser inject run (Chromium + WebKit)", browserRun.passed === true, browserRun.error ?? browserRun.checks);
 
-  // Per-IP minute limit (30): this run already used 3 accepted + 2 browser engines x 2;
-  // send until 429 (at most 40) -- dropped reports never touch the limiter.
+  // Runtime logs (`vercel logs` returns only the latest ~50 rows, so read them
+  // now, before the burst below): csp-violation lines from both engines,
+  // without query or marker secret.
+  const deployment = vercelApi(`/v13/deployments/mju-lost-found-preview.vercel.app`).id;
+  let lines = [];
+  for (let i = 0; i < 6; i++) {
+    await new Promise((r) => setTimeout(r, 5000));
+    const logs = spawnSync(`npx --no-install vercel logs ${deployment} --since 15m --json --limit 200`, { shell: true, encoding: "utf8", windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
+    lines = (logs.stdout ?? "").split("\n").filter((l) => l.includes("csp-violation"));
+    if (lines.some((l) => l.includes("csp-check-chromium.invalid")) && lines.some((l) => l.includes("csp-check-webkit.invalid"))) break;
+  }
+  check("runtime log has csp-violation lines from both engines", lines.some((l) => l.includes("csp-check-chromium.invalid")) && lines.some((l) => l.includes("csp-check-webkit.invalid")), lines.length);
+  check("log lines carry no query string or marker secret", lines.every((l) => !l.includes(marker) && !l.includes("secret=")), lines.length);
+
+  // Per-IP minute limit (30; fixed one-minute windows, so the exact count
+  // depends on where the window starts): send until 429 (at most 40) --
+  // dropped reports never touch the limiter.
   let limitedAt = null;
   for (let i = 1; i <= 40 && limitedAt === null; i++) if ((await send(legacy("burst"))) === 429) limitedAt = i;
   check("per-IP limit answers 429 within the minute", limitedAt !== null, { limitedAfterRequests: limitedAt });
@@ -76,14 +91,7 @@ try {
     await new Promise((r) => setTimeout(r, 3000));
   }
   check("counters present for accepted, dropped, oversized and limited reports", want.every((m) => rows.some((r) => r.metric === m)), rows);
-  check("only bounded counter names (no host, path, query or marker)", rows.every((r) => /^csp\.(report|enforce|ignored)\.[a-z-]+(\.[a-z-]+)?$/.test(r.metric) && !r.metric.includes(marker)), rows.map((r) => r.metric));
-
-  // Runtime logs: csp-violation lines without query or marker secret.
-  const deployment = vercelApi(`/v13/deployments/mju-lost-found-preview.vercel.app`).id;
-  const logs = spawnSync(`npx --no-install vercel logs ${deployment} --since 15m --json --limit 200`, { shell: true, encoding: "utf8", windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
-  const lines = (logs.stdout ?? "").split("\n").filter((l) => l.includes("csp-violation"));
-  check("runtime log has csp-violation lines from both engines", lines.some((l) => l.includes("csp-check-chromium.invalid")) && lines.some((l) => l.includes("csp-check-webkit.invalid")), lines.length);
-  check("log lines carry no query string or marker secret", lines.every((l) => !l.includes(marker) && !l.includes("secret=")), lines.length);
+  check("only bounded counter names (no host, path, query or marker)", rows.every((r) => /^csp\.(report|enforce|ignored)\.[a-z_-]+(\.[a-z_-]+)?$/.test(r.metric) && !r.metric.includes(marker)), rows.map((r) => r.metric));
   out.passed = true;
 } catch (error) {
   out.error = error.message;

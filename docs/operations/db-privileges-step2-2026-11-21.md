@@ -1,6 +1,6 @@
-# Production DB 잔여 권한 정리 (2단계) — 조사·Preview 검증·리허설 (2026-11-21)
+# Production DB 잔여 권한 정리 (2단계) — 조사·Preview 검증·리허설·Production 적용 (2026-11-21)
 
-상태: **Preview 적용·검증 완료, Production 백업과 복원 리허설 완료. Production 권한은 변경하지 않았다(사용자 승인 대기).**
+상태: **Production 적용 완료(2026-11-21 17:28 KST, 사용자 승인, 승인 참조 `DB-PRIV-STEP2-PROD-2026-11-21`).** 적용 결과는 [7절](#7-production-적용-결과-2026-11-21)에 있다.
 도구: `scripts/operations/db-privilege-inventory.mjs`(읽기 전용 전체 조사), `scripts/operations/db-privileges-step2.mjs`(snapshot·plan·verify·apply·restore·reproduce·rehearsal-sql), `scripts/operations/db-privilege-audit.mjs`(요약).
 
 ## 1. 조사 결과 (읽기 전용, 두 환경)
@@ -102,3 +102,49 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public REVOKE ALL ON SEQUEN
   - 함수 전역 기본값의 PUBLIC EXECUTE. 새 함수는 마이그레이션에서 회수한다.
   - storage·graphql 스키마 default ACL(Supabase 관리 영역).
 - 잠금: 메타데이터만 바꾸는 짧은 트랜잭션이다. 다만 `ALL TABLES` REVOKE는 각 테이블에 잠깐 잠금을 건다. lock_timeout 5초를 넘기면 전체가 롤백되고, 재시도한다.
+
+## 7. Production 적용 결과 (2026-11-21)
+
+### 적용 직전 확인
+- 새 읽기 전용 스냅숏이 검증 당시 보관본(`prod-snapshot-2026-11-21.json`)과 **완전히 같았다**(시각 제외): 관계 98개, 함수 23개, 스키마 ACL, default ACL.
+- 사전 `verify`: 회수 대상 5개 항목만 실패(예상), 유지 항목 정상.
+- 새 백업 `dbpriv-step2-apply-pre-2026-11-21-172609.tar.enc`: 체크섬, 격리 복원 통과(테이블 57개 불일치 0, 사진 135개 누락 0). 같은 날 15:47 백업과 리허설도 보관 중이다.
+- 기준선: D-3 private 모드, Realtime 전송 검사 정상, Data API 503, 공개 프로브 16/16.
+
+### 적용
+- `apply --snapshot-out ~/mju-lost-found-backups/acl-snapshots/prod-before-apply-2026-11-21.json --apply --confirm-production`.
+  - 승인된 6문만 단일 트랜잭션으로 COMMIT했다. CASCADE는 쓰지 않았다.
+  - 적용 직전 스냅숏(sha256 `c26022f1c1d4c5bc…`)이 검증 보관본과 같은지 다시 비교해 일치를 확인했다.
+- 자체 `verify` 7/7 통과: 트리거 25개 사용 중, SECURITY DEFINER 7개, receive 권한 유지.
+
+### 전후 비교
+
+| 항목 | 적용 전 | 적용 후 |
+|---|---|---|
+| public 스키마 ACL | `pg_database_owner=UC`, PUBLIC=U, postgres=U, anon=U, authenticated=U, service_role=U | `pg_database_owner=UC`, postgres=U, service_role=U |
+| anon/authenticated 권한이 있는 관계(테이블·뷰) | 57(`Dxtm`) | **0** |
+| PUBLIC·anon·authenticated가 실행할 수 있는 public 함수 | 15 | **0** |
+| postgres default ACL(테이블) | anon·authenticated·service_role `Dxtm` | service_role `Dxtm`만(이번 범위 밖) |
+| service_role / postgres / `mju_chat_realtime` receive | 유지 | 유지(변경 없음) |
+| supabase_admin 소유 default ACL | anon·authenticated 전체 | 그대로(변경 불가, 범위 밖) |
+
+### 적용 후 검증
+- 실제 접근 거부(`scripts/operations/db-privilege-denial-check.mjs`)
+  - 방식: `BEGIN READ ONLY` 안에서 `SET LOCAL ROLE`로 역할을 바꿔 시도하고, 시도마다 savepoint로 되돌린다. 세션 설정은 쓰지 않는다.
+  - anon·authenticated: `LostPost`, `User`, `Message`, `OperationalMetricDaily` SELECT와 `thank_note_tags_unique`·`mju_chat_member_allowed` 호출이 모두 **42501 거부**.
+  - service_role: `LostPost` SELECT 거부(원래 없던 권한, 변화 없음).
+  - postgres: 테이블 읽기, CHECK 제약 함수, 트리거 보조 함수 실행 정상.
+  - Preview도 같은 결과다.
+- `db-privilege-audit.mjs`: 스키마 USAGE false, 테이블 권한 0, anon 실행 가능 함수 0.
+- D-3: `release-d3 status` private, `realtime-access-control` 멤버 5/5 허용, 비참여자 6/6 차단, `realtime-transport-control`(익명 비공개 거부, 공개 `private_only`, 서버 private 수신)은 적용 전과 같다.
+- Data API 503 유지. 이미지 작업 큐 상태 정상(`missing_with_job` 0).
+- 공개 프로브 16/16. 검색 4종(키워드·의미·통합·이미지) 결과 순위 해시가 적용 전과 같다. 적용 후 20분간 error·5xx 0건.
+- 기존 사용자 데이터와 벡터: 권한 메타데이터만 바뀌었고, 데이터 쓰기는 없다.
+
+### 남은 확인
+- Vercel cron(`/api/admin/settings` 03:00 KST, 임베딩 유지보수 02:00 KST)의 첫 실행.
+- 다음 자동 백업(04:00 KST)과 복원 검증. 2026-11-21 04:00 자동 백업은 실행 기록이 없다(마지막 시도 11-20, PC 꺼짐 추정). 이번 작업 전 수동 백업 2개로 대신했다.
+- 로그인 사용자 흐름(글쓰기·사진 첨부 트리거, 채팅 실시간, 관리자 화면)의 실제 사용 확인.
+
+### 롤백
+`node scripts/db/approved-operation.mjs --confirm-production --approval-reference <REF> -- scripts/operations/db-privileges-step2.mjs restore --from ~/mju-lost-found-backups/acl-snapshots/prod-before-apply-2026-11-21.json --apply --confirm-production`(클라이언트 역할 항목만 객체별로 정확히 복원, 앱 재배포 불필요. Preview에서 같은 절차로 정확한 복원을 확인했다).

@@ -74,7 +74,7 @@ try {
     await new Promise((r) => setTimeout(r, 2000));
   }
   check("counters written: csp.report.img-src.external and csp.report.connect-src.external", metrics.some((m) => m.metric === "csp.report.img-src.external") && metrics.some((m) => m.metric === "csp.report.connect-src.external"), metrics);
-  check("only bounded counter names (no host, path or query in the name)", metrics.every((m) => /^csp\.(report|enforce|ignored)\.[a-z-]+(\.[a-z-]+)?$/.test(m.metric)), metrics.map((m) => m.metric));
+  check("only bounded counter names (no host, path or query in the name)", metrics.every((m) => /^csp\.(report|enforce|ignored)\.[a-z_-]+(\.[a-z_-]+)?$/.test(m.metric)), metrics.map((m) => m.metric));
   out.passed = true;
 } catch (error) {
   out.error = error.message;

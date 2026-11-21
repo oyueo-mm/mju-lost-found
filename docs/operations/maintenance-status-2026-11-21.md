@@ -29,7 +29,22 @@
   - `ops/backup`(백업 운영 worktree, 1커밋)
 - 병합 전 검증(`2130c6b`): 단위 274파일 3,047개, 타입, 린트 통과.
 
-## 3. 다음 단계: D-4 보안 헤더 (→ 2026-11-21 Production 계획과 CSP 설계·로컬 검증: release-d4-plan 마지막 절)
+## 0. 2026-11-21 저녁 갱신 (최신)
+
+- **Production DB 잔여 권한 정리 완료**(사용자 승인, 17:28 KST).
+  - 클라이언트 역할(PUBLIC·anon·authenticated) 6문을 적용했다. service_role, postgres, Realtime receive, 트리거, SECURITY DEFINER는 유지했다.
+  - 전후 비교와 검증: [db-privileges-step2-2026-11-21.md 7절](db-privileges-step2-2026-11-21.md#7-production-적용-결과-2026-11-21).
+- **D-4 기본 헤더 4종 Production 반영 완료**
+  - **현재 Production `dpl_DvLnpG3ixQT6t1XAqV6Cru73hWCM`(`5db5350`)**, 롤백 대상 `dpl_3AgGm82bTYAQUV8bRJevsf8JquRX`(C-2). CSP는 꺼져 있다.
+- **CSP 위반 보고 수집**(`/api/csp-report`, report-uri만)
+  - 구현하고 로컬과 Preview에서 검증했다.
+  - **현재 Preview 고정 URL은 Report-Only 빌드 `dpl_9ZeEuVWpFkNe5w7K55NWya178GJ9`(`da92170`)**다.
+  - Production Report-Only와 enforce는 미결정이다. 상세: [release-d4-plan-2026-11-16.md](release-d4-plan-2026-11-16.md) 마지막 두 절.
+- 남은 확인
+  - 오늘 밤 cron(02:00·03:00 KST)과 04:00 자동 백업. 11-21 04:00 자동 백업은 기록이 없다.
+  - 로그인 사용자 흐름(채팅 실시간, 관리자, 글쓰기·사진) 사용자 확인.
+
+## 3. 다음 단계: D-4 보안 헤더 (→ 2026-11-21 기본 헤더 Production 반영 완료, CSP 보고 수집 Preview 검증 완료: release-d4-plan 마지막 절)
 
 - 계획: [release-d4-plan-2026-11-16.md](release-d4-plan-2026-11-16.md). 단계는 인벤토리 → 기본 헤더 → Permissions-Policy → CSP Report-Only → nonce/hash 비교 → 관측 후 강제 순서다.
 - 현재 코드(`next.config.ts` `headers()`): 기본 헤더 4종(`X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, `Permissions-Policy: geolocation=(), microphone=(), payment=(), usb=()`)이 **Preview에만** 적용된다. `VERCEL_ENV === "production"`이면 빈 배열이다. 2026-11-19 Preview에서 프로브·헤더 4종·3개 뷰포트 검사를 통과했다.
@@ -39,7 +54,7 @@
   2. CSP Report-Only 설계: 인라인 스크립트 3개, Supabase Storage/Realtime, Google OAuth, 이미지 최적화, 웹 푸시. 보고 수집은 개인정보 최소화 방식으로 한다.
   3. 강제 적용은 관측 뒤 별도 승인
 
-## 4. 다음 단계: Production DB 잔여 권한 (→ 조사·Preview 검증·리허설 완료: [db-privileges-step2-2026-11-21.md](db-privileges-step2-2026-11-21.md), Production 적용 승인 대기) (읽기 전용 재감사 2026-11-21, `db-privilege-audit.mjs`)
+## 4. Production DB 잔여 권한 (→ 2026-11-21 **Production 적용 완료**: [db-privileges-step2-2026-11-21.md](db-privileges-step2-2026-11-21.md). 아래 표는 적용 전 감사 기록) (읽기 전용 재감사 2026-11-21, `db-privilege-audit.mjs`)
 
 | 항목 | Production | Preview |
 |---|---|---|
