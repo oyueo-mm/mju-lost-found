@@ -105,19 +105,34 @@ try:
 
             # framing refused
             ctx = browser.new_context()
-            # The deliberate iframe makes the browser send a frame-ancestors
-            # CSP report. Stop it here so a check run never adds a test
-            # violation to Production's csp.* counters (2026-11-21: one such
-            # report was counted before this). The block is counted, so the
-            # check still proves a report would have been sent.
+            # The deliberate iframe would make the browser send a
+            # frame-ancestors CSP report into Production's csp.* counters
+            # (2026-11-21: three such test reports were counted). Blocking
+            # /api/csp-report is not enough: Chromium sends reports outside
+            # the page's network stack (seen 20:43 KST). So the framed /login
+            # response is fetched for real and passed on WITHOUT its
+            # Report-Only header: X-Frame-Options: DENY -- the header that
+            # actually blocks framing today -- stays and is asserted, and no
+            # report can arise. The report endpoint stays blocked as well.
             blocked_reports = []
+            stripped = []
             ctx.route("**/api/csp-report", lambda route: (blocked_reports.append(1), route.abort()))
+
+            def framed_login(route):
+                upstream = route.fetch()
+                headers = {k: v for k, v in upstream.headers.items() if k.lower() != "content-security-policy-report-only"}
+                assert headers.get("x-frame-options", "").upper() == "DENY", "framed /login lost X-Frame-Options"
+                stripped.append(1)
+                route.fulfill(response=upstream, headers=headers)
+
+            ctx.route(f"{base}/login", framed_login)
             page = ctx.new_page()
             page.set_content(f'<iframe id="f" src="{base}/login" style="width:600px;height:400px"></iframe>')
             page.wait_for_timeout(4000)
             framed = page.frame_locator("#f").locator("form button[type=submit]").count()
             assert framed == 0, "login page rendered inside an iframe"
             check("site refuses to be framed")
+            assert stripped, "framed /login was not intercepted"
             result["framing_csp_reports_blocked"] = result.get("framing_csp_reports_blocked", 0) + len(blocked_reports)
             ctx.close()
             browser.close()

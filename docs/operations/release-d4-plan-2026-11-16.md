@@ -222,12 +222,13 @@ Production의 공개 Realtime이 OFF이고 채팅은 인증 polling을 사용한
   - 배포 뒤 새 배포의 응답 헤더를 `vercel curl`로 다시 읽는다. 요청한 모드와 다르면 롤백 안내와 함께 실패로 끝난다.
   - Preview에서 확인했다: `dpl_AF3mKwp3…` "CSP 확인: report-only".
 - **Production 집계(읽기 전용, 최소 필드)**: `scripts/operations/csp-metrics.mjs`는 `MetricDaily`의 `csp.*` 행(day, metric, value)만 읽는다. 승인 참조 `CSP-METRICS-READONLY-2026-11-21`.
-  - 2026-11-21 20:3x KST 결과: `csp.report.frame-ancestors.self` = 2. **둘 다 알려진 시험 보고**다.
+  - 2026-11-21 20:3x KST 결과: `csp.report.frame-ancestors.self` = 2. **둘 다 알려진 시험 보고**다(이후 아래 사정으로 3건).
     - 19:48:11 Chromium(경로 `/`: Chromium은 교차 출처 iframe 보고의 주소를 출처로 줄인다)
     - 19:48:37 WebKit(`/login`)
     - 배포 직후 `hosted-anonymous-browser.py`의 iframe 차단 확인에서 생겼다.
   - 실제 운영 위반은 0건, enforce 위반 0건, 무시(외부·확장 프로그램) 0건이다.
 - 시험 보고 분리
   - 스크립트가 `KNOWN_TEST_REPORTS`로 시험 보고를 따로 표시한다. 행은 삭제하지 않는다.
-  - `hosted-anonymous-browser.py`는 iframe 검사 중 자기 보고 요청을 브라우저에서 막는다(`framing_csp_reports_blocked`로 셈). 이후 실행은 Production 집계에 시험 보고를 남기지 않는다.
+  - **추가 시험 보고 1건(20:43:22 KST, Chromium)**: 1차 수정(보고 요청 가로채기)을 Production에서 확인하다가 생겼다. Chromium은 보고를 페이지 네트워크 밖에서 보내 가로채기가 듣지 않았다. 이 때문에 시험 보고는 **총 3건**이 됐다(`csp.report.frame-ancestors.self` = 3).
+  - 2차 수정: `hosted-anonymous-browser.py`가 iframe에 넣는 `/login` 응답을 실제로 받아 Report-Only 헤더만 빼고 전달한다. `X-Frame-Options: DENY`는 남아 iframe 차단을 계속 검증하고, 보고는 생기지 않는다. 격리 Preview(Report-Only 빌드)에서 Chromium·WebKit 모두 iframe 표시 0, 보고 요청 0을 확인했다(로그에는 `/login` 2건만 있음). Production 재실행은 다음 배포 검증 때 한다.
 - 판단: Report-Only 적용 후 1시간 미만이고, 로그인 사용자 흐름(채팅·글쓰기·관리자)에서 생긴 보고 표본이 없다. **0건을 근거로 enforce하지 않는다.** 최소 1~2주 관측과 로그인 흐름 표본(사용자 확인 또는 테스트 계정)을 확보한 뒤 enforce를 다시 판단한다.

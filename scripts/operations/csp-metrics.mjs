@@ -12,13 +12,16 @@ import "../db/install-guard.mjs";
 import { Client } from "pg";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
 
-// Reports a verification run made on purpose (not real visitors).
-// 2026-11-21 19:48:11 and 19:48:37 KST (runtime log lines, route "/" and
-// "/login"): hosted-anonymous-browser.py framed /login in Chromium, then in
-// WebKit, to prove frame-ancestors/X-Frame-Options. Chromium trims a
-// cross-origin frame's document-uri to the origin, hence "/". Since then that
-// check blocks its own report.
-export const KNOWN_TEST_REPORTS = [{ day: "2026-11-21", metric: "csp.report.frame-ancestors.self", value: 2, source: "hosted-anonymous-browser.py framing check (Chromium + WebKit)" }];
+// Reports a verification run made on purpose (not real visitors), from the
+// runtime log lines (route "/" = Chromium, which trims a cross-origin
+// frame's document-uri to the origin; "/login" = WebKit):
+//   2026-11-21 19:48:11 Chromium, 19:48:37 WebKit -- hosted-anonymous-browser.py
+//     framing check right after the Report-Only deploy;
+//   2026-11-21 20:43:22 Chromium -- the same check after it only blocked
+//     /api/csp-report (Chromium sends reports outside the page network stack).
+// Since then the check strips the Report-Only header from the framed /login
+// (X-Frame-Options still blocks and is asserted), so it creates no report.
+export const KNOWN_TEST_REPORTS = [{ day: "2026-11-21", metric: "csp.report.frame-ancestors.self", value: 3, source: "hosted-anonymous-browser.py framing check (Chromium x2, WebKit x1)" }];
 
 const args = process.argv.slice(2);
 const sinceIndex = args.indexOf("--since");

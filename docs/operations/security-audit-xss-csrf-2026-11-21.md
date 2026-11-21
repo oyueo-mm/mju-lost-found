@@ -148,3 +148,16 @@
   - hash 방식: RSC 인라인 페이로드가 요청마다 달라 불가능하다.
   - `experimental.sri`: 외부 청크 무결성만 다루고 인라인 문제는 해결하지 못한다.
 - 권장: ① 이번 출처 검사를 Production에 먼저 반영 → ② Preview에서 nonce + `'strict-dynamic'` Report-Only 빌드로 위반·Proxy 호출량·지연 측정 → ③ Production Report-Only 관측 → ④ enforce 결정. ②부터 별도 승인을 받는다.
+
+### 채팅 회귀 결과와 기존 불안정 검사 (2026-11-21)
+- `realtime-fallback.mjs --two-member`(2인 private Realtime, 강제 polling 전환·복귀, 읽음 반영 포함): **13/13 통과**. polling 전달 10.8초, 실시간 전달 1.5~2.6초.
+- `realtime-fallback.mjs`(서명키 없는 polling 전용, 11개 검사)는 **변경 전후 모두 간헐적으로 실패**한다. 실패 양상이 같아 기존 문제로 판단한다. 다만 실패율에 차이가 없다고 단정할 만큼 반복하지는 않았다(변경 후 44%, 변경 전 60% 통과).
+
+  | 빌드 | 통과/실행 | 실패 위치 |
+  |---|---|---|
+  | 변경 후(`940cbf0`) | 4/9(출력이 잘려 판정 불가한 2회 제외) | polling 표시 대기(33·120행), 세션 만료 반영(129행) |
+  | 변경 전(앱 코드 = Production `5db5350`·`5711719`와 동일, `48805e9`) | 3/5 | 129·42행 |
+
+- 공통 원인(진단 출력 `apiLog`로 확인): 어느 시점부터 채팅 API 응답이 끊기고 이후 요청이 하나도 나가지 않는다. 동기화기(`src/components/chat/synchronizer.ts`)는 한 번에 하나만 실행하는데 **fetch에 시간 제한이 없어**, 응답이 멈춘 요청 하나가 그 탭의 polling을 계속 막는다(`online`·visibility 이벤트도 진행 중인 요청을 취소하지 않는다). 로컬 서버 ↔ Preview DB 지연에서 드러난 것이지만, 실제 서비스(모바일 네트워크 등)에서도 "새로고침 전까지 메시지가 안 옴"으로 나타날 수 있는 기존 약점이다.
+- 제안(미구현, 별도 작업): 동기화 요청에 시간 제한(예: 15초, `AbortSignal.any([signal, AbortSignal.timeout(...)])`)을 두고, `online`/visibility 복귀 때 멈춘 요청을 취소한다. 이번 범위(P-2/P-3)와 분리해 단위·회귀 검증 후 반영한다.
+- 실패 진단을 위해 `realtime-fallback.py`가 실패 시 검사 파일 기준 줄(`suiteLine`)과 채팅 API 응답 요약(시각·메서드·경로 형태·상태, 본문 없음)을 출력하도록 했다. 통과 기준은 그대로다.
