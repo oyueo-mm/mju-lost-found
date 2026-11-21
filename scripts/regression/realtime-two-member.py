@@ -41,6 +41,7 @@ class Probe:
         self.sockets_closed = 0
         self.navigations = 0
         self.message_gets = 0
+        self.message_get_times = []
         self.diag = []  # (event, status) of canary diagnostics
         page.on("response", self.on_response)
         page.on("websocket", self.on_socket)
@@ -58,6 +59,7 @@ class Probe:
             self.tokens[key] += 1
         elif url == f"{base}/api/chat/{room}/messages" and response.request.method == "GET":
             self.message_gets += 1
+            self.message_get_times.append(time.monotonic())
 
     def on_socket(self, socket):
         if "/realtime/v1/" not in socket.url:
@@ -196,9 +198,13 @@ try:
 
         # 4. idle socket mode: no 10 s polling
         gets = pb.message_gets
+        idle_start = time.monotonic()
         b.wait_for_timeout(25000)
         idle_gets = pb.message_gets - gets
         timings["idleMessageGetsIn25s"] = idle_gets
+        # Diagnostics: when in the window each GET landed (a hint-driven sync
+        # right after the previous step vs a 10 s polling pace).
+        timings["idleGetOffsetsSeconds"] = [round(t - idle_start, 1) for t in pb.message_get_times if t >= idle_start]
         assert idle_gets <= 1, "socket mode is still polling on the fallback pace"
         checks.append("connected tab does not poll on the fallback pace")
 
