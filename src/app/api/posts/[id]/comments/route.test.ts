@@ -16,6 +16,12 @@ vi.mock("@/lib/posts/http", async () => {
   return { ...response, requireUserForApi };
 });
 vi.mock("@/lib/comment/service", () => ({ listCommentsForPost, createComment }));
+const getCurrentUser = vi.fn();
+vi.mock("@/lib/auth/session", () => ({ getCurrentUser }));
+// A-1: real canViewPost rule, only the DB read is mocked.
+const getPostVisibility = vi.fn();
+vi.mock("@/lib/posts/visibility", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/posts/visibility")>()), getPostVisibility }));
+const PUBLIC_POST = { authorId: 7, tempHiddenAt: null, removedAt: null };
 
 const { GET, POST } = await import("./route");
 
@@ -24,6 +30,57 @@ const params = () => ({ params: Promise.resolve({ id: "1" }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  getPostVisibility.mockResolvedValue(PUBLIC_POST);
+  getCurrentUser.mockResolvedValue(null);
+});
+
+// Security audit 2026-11-21 (A-1): comments are as visible as their post.
+describe("comments of a non-public post (A-1)", () => {
+  const get = () => GET(new NextRequest("http://localhost/api/posts/1/comments?type=lost"), params());
+  const hidden = { authorId: 7, tempHiddenAt: new Date(), removedAt: null };
+  const removed = { authorId: 7, tempHiddenAt: null, removedAt: new Date() };
+  const admin = { id: 2, isAdmin: false, adminPermissions: ["reports.view"] };
+
+  it("404 for a missing post", async () => {
+    getPostVisibility.mockResolvedValueOnce(null);
+    expect((await get()).status).toBe(404);
+    expect(listCommentsForPost).not.toHaveBeenCalled();
+  });
+  it("temp-hidden: 404 for anonymous and other members, comments never read", async () => {
+    getPostVisibility.mockResolvedValue(hidden);
+    expect((await get()).status).toBe(404);
+    getCurrentUser.mockResolvedValueOnce({ id: 3, isAdmin: false, adminPermissions: [] });
+    expect((await get()).status).toBe(404);
+    expect(listCommentsForPost).not.toHaveBeenCalled();
+  });
+  it("temp-hidden: the author and report admins still see them", async () => {
+    getPostVisibility.mockResolvedValue(hidden);
+    listCommentsForPost.mockResolvedValue([]);
+    getCurrentUser.mockResolvedValueOnce({ id: 7, isAdmin: false, adminPermissions: [] });
+    expect((await get()).status).toBe(200);
+    getCurrentUser.mockResolvedValueOnce(admin);
+    expect((await get()).status).toBe(200);
+  });
+  it("removed: admins only -- not even the (withdrawn) author", async () => {
+    getPostVisibility.mockResolvedValue(removed);
+    listCommentsForPost.mockResolvedValue([]);
+    getCurrentUser.mockResolvedValueOnce({ id: 7, isAdmin: false, adminPermissions: [] });
+    expect((await get()).status).toBe(404);
+    getCurrentUser.mockResolvedValueOnce(admin);
+    expect((await get()).status).toBe(200);
+  });
+  it("no new comment on a post the member may not see", async () => {
+    getPostVisibility.mockResolvedValueOnce(hidden);
+    requireUserForApi.mockResolvedValueOnce({ user: { id: 3, isAdmin: false, adminPermissions: [] } });
+    const res = await POST(new NextRequest("http://localhost/api/posts/1/comments?type=lost", { method: "POST", body: JSON.stringify({ content: "안녕하세요" }) }), params());
+    expect(res.status).toBe(404);
+    expect(createComment).not.toHaveBeenCalled();
+  });
+  it("a suspended viewer counts as no admin", async () => {
+    getPostVisibility.mockResolvedValueOnce(removed);
+    getCurrentUser.mockResolvedValueOnce({ id: 2, isAdmin: true, adminPermissions: [], isSuspended: true, suspendedUntil: new Date(Date.now() + 86400000) });
+    expect((await get()).status).toBe(404);
+  });
 });
 
 describe("GET /api/posts/[id]/comments", () => {

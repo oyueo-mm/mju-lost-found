@@ -4,6 +4,8 @@ import { jsonError, jsonOk, requireUserForApi, withErrorHandling } from "@/lib/p
 import { postTypeSchema } from "@/lib/posts/schema";
 import { createCommentSchema } from "@/lib/comment/schema";
 import { createComment, listCommentsForPost } from "@/lib/comment/service";
+import { getCurrentUser } from "@/lib/auth/session";
+import { canViewPost, getPostVisibility } from "@/lib/posts/visibility";
 import { rateLimitFailureResponse } from "@/lib/rateLimit";
 
 function parseParams(idParam: string, searchParams: URLSearchParams) {
@@ -22,6 +24,14 @@ export const GET = withErrorHandling(
     const parsed = parseParams(idParam, request.nextUrl.searchParams);
     if (!parsed) return jsonError(400, "id와 type('lost' 또는 'found')이 올바르지 않습니다.");
 
+    // Security audit 2026-11-21 (A-1): comments are exactly as visible as
+    // their post. A temporarily hidden or removed post answered 404 here
+    // too late -- its comments were still served to anyone with the id.
+    const visibility = await getPostVisibility(parsed.type, parsed.id);
+    if (!visibility) return jsonError(404, "게시물을 찾을 수 없습니다.");
+    if ((visibility.tempHiddenAt || visibility.removedAt) && !canViewPost(await getCurrentUser(), visibility)) {
+      return jsonError(404, "게시물을 찾을 수 없습니다.");
+    }
     const data = await listCommentsForPost(parsed.type, parsed.id);
     return jsonOk(data);
   },
@@ -47,6 +57,9 @@ export const POST = withErrorHandling(
       return jsonError(400, result.error.issues[0]?.message ?? "잘못된 요청입니다.");
     }
 
+    // A-1: no new comments on a post the commenter may not see.
+    const visibility = await getPostVisibility(parsed.type, parsed.id);
+    if (!visibility || !canViewPost(auth.user as Parameters<typeof canViewPost>[0], visibility)) return jsonError(404, "게시물을 찾을 수 없습니다.");
     const created = await createComment(auth.user, parsed.type, parsed.id, result.data);
     if (created.kind === "rate_limited" || created.kind === "rate_limit_unavailable") return rateLimitFailureResponse(created);
     switch (created.kind) {
