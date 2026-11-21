@@ -2,9 +2,13 @@
 # removes the old weekly task:
 #   "MJU Find daily backup"    daily at -At, and 10 minutes after logon; a run
 #                              missed while the PC was off starts when it is
-#                              next available; never two at once.
+#                              next available; never two at once. WakeToRun
+#                              (2026-11-21): wakes the PC from sleep/Modern
+#                              Standby for the 04:00 run -- only where the
+#                              power plan allows wake timers (this laptop: on
+#                              AC power only) and never from shutdown.
 #   "MJU Find backup watchdog" daily at -WatchAt, and 2 hours after logon:
-#                              alerts if no restore-verified backup in 36 h.
+#                              alerts if no restore-verified backup in 26 h.
 # Both run only while the user is logged on (the backup passphrase lives in
 # that user's Windows Credential Manager). No administrator rights needed.
 #
@@ -32,11 +36,13 @@ if (-not (Test-BackupPassphrase)) { throw "먼저 Set-BackupPassphrase로 백업
 $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 2) -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries
+# The backup task alone wakes the PC; the watchdog runs at 13:00 / after logon.
+$backupSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 2) -DontStopIfGoingOnBatteries -AllowStartIfOnBatteries
 $ps = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File"
 
 $backupLogon = New-ScheduledTaskTrigger -AtLogOn -User $user
 $backupLogon.Delay = "PT10M"
-Register-ScheduledTask -TaskName "MJU Find daily backup" -Force -Principal $principal -Settings $settings `
+Register-ScheduledTask -TaskName "MJU Find daily backup" -Force -Principal $principal -Settings $backupSettings `
   -Action (New-ScheduledTaskAction -Execute "powershell.exe" -Argument "$ps `"$(Join-Path $PSScriptRoot 'scheduled.ps1')`"") `
   -Trigger @((New-ScheduledTaskTrigger -Daily -At $At), $backupLogon) | Out-Null
 

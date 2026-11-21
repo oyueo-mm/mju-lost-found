@@ -42,6 +42,13 @@ $name = "auto-$stamp"
 $dir = Join-Path $Out $name
 $enc = "$dir.tar.enc"
 function Log($m) { "$(Get-Date -Format s) $m" | Add-Content -Encoding utf8 $log }
+# First line of every run, before anything that can fail or hang, so a run
+# killed early (2026-11-21 08:16 ended 0xC000013A with no trace) still leaves
+# one. The parent tells a Task Scheduler start (svchost / taskeng) from a
+# manual one (a shell). Start-ScheduledTask also starts under the scheduler,
+# so the operator notes manual task starts in the report.
+$parentName = try { $ppid = (Get-CimInstance Win32_Process -Filter "ProcessId=$PID").ParentProcessId; (Get-Process -Id $ppid -ErrorAction Stop).ProcessName } catch { "unknown" }
+Log "invoked pid $PID by $parentName"
 function Read-Status { if (Test-Path $statusFile) { try { return Get-Content -Raw $statusFile | ConvertFrom-Json } catch {} }; return [pscustomobject]@{} }
 function Save-Status($fields) {
   $s = Read-Status

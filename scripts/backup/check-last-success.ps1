@@ -3,10 +3,13 @@
 # disabled, scheduler problem), which the backup job itself cannot report.
 # It looks at the archives' own verified markers, not only at the status file.
 #
-#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup\check-last-success.ps1 [-MaxAgeHours 36] [-Quiet]
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup\check-last-success.ps1 [-MaxAgeHours 26] [-Quiet]
 param(
   [string]$Out = "$env:USERPROFILE\mju-lost-found-backups",
-  [int]$MaxAgeHours = 36,
+  # 26 h (2026-11-21, was 36): daily 04:00 run + the 13:00 check -> a single
+  # missed day alerts the same afternoon (13:00 next day = 33 h > 26 h)
+  # instead of a day later.
+  [int]$MaxAgeHours = 26,
   [switch]$Quiet
 )
 $ErrorActionPreference = "Stop"
