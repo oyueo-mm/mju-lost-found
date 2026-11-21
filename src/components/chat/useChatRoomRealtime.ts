@@ -1,7 +1,7 @@
 "use client";
 import {useCallback,useEffect,useRef} from "react";
 import {createChatRealtimeClient} from "@/lib/supabase/realtimeBrowser";
-import {ChatAccessRevoked,createChatSynchronizer,validReadHint,type ReadCursor} from "./synchronizer";
+import {boundedSignal,ChatAccessRevoked,createChatSynchronizer,SYNC_TIMEOUT_MS,validReadHint,type ReadCursor} from "./synchronizer";
 
 // A 204 (polling mode) Retry-After, clamped so a bad header can neither
 // hammer the token API nor park the tab in polling for good.
@@ -88,8 +88,12 @@ export function useChatRoomRealtime(chatRoomId:number,currentUserId:number,handl
     async function connect(){
       if(disposed||denied||connecting||document.visibilityState!=="visible")return;connecting=true;
       request?.abort();request=new AbortController();const signal=request.signal;
+      // Bounded token request: a hung response used to leave `connecting`
+      // true for good (no reconnect until reload). A timeout is a failure
+      // (catch below: polling + 30 s retry), not a silent abort.
+      const tokenWait=boundedSignal(signal,SYNC_TIMEOUT_MS);
       try{
-        const token=await fetchToken(signal);if(disposed||signal.aborted)return;
+        const token=await fetchToken(tokenWait.signal).finally(()=>tokenWait.clear());if(disposed||signal.aborted)return;
         if(!token){enterPolling(lastTokenOutcome);await stopTransport(false);return;}
         const old=client;client=undefined;await old?.disconnect();if(disposed||signal.aborted)return;
         const transport=createChatRealtimeClient();client=transport;

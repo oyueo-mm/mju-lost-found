@@ -14,16 +14,22 @@ import { spawnSync, spawn } from "node:child_process";
 import { once } from "node:events";
 
 const base = process.argv[2]?.replace(/\/$/, "");
-if (!/^https:\/\/mju-lost-found-vercel-[a-z0-9]+-oyueo\.vercel\.app$/.test(base ?? "")) throw new Error("usage: csrf-hosted.mjs <preview deployment url>");
+// Production (public, no Deployment Protection): anonymous requests only,
+// every one stops at 403 (origin) or 401 (no session) -- nothing is written.
+const production = base === "https://mju-find.vercel.app";
+if (!production && !/^https:\/\/mju-lost-found-vercel-[a-z0-9]+-oyueo\.vercel\.app$/.test(base ?? "")) throw new Error("usage: csrf-hosted.mjs <preview deployment url | https://mju-find.vercel.app>");
 
-const project = spawnSync("npx --no-install vercel api /v9/projects/prj_zMYrrsw80l829lSjs2n2Ur6YV5eP", { shell: true, encoding: "utf8", windowsHide: true, env: { ...process.env, MSYS_NO_PATHCONV: "1" }, maxBuffer: 1 << 22 });
-const json = JSON.parse(project.stdout.slice(project.stdout.indexOf("{")));
-const key = Object.entries(json.protectionBypass ?? {}).find(([, v]) => v?.scope === "automation-bypass")?.[0];
-if (!key) throw new Error("automation bypass key unavailable");
+let key = "";
+if (!production) {
+  const project = spawnSync("npx --no-install vercel api /v9/projects/prj_zMYrrsw80l829lSjs2n2Ur6YV5eP", { shell: true, encoding: "utf8", windowsHide: true, env: { ...process.env, MSYS_NO_PATHCONV: "1" }, maxBuffer: 1 << 22 });
+  const json = JSON.parse(project.stdout.slice(project.stdout.indexOf("{")));
+  key = Object.entries(json.protectionBypass ?? {}).find(([, v]) => v?.scope === "automation-bypass")?.[0] ?? "";
+  if (!key) throw new Error("automation bypass key unavailable");
+}
 
 const checks = [];
 const call = async (method, path, headers = {}, body) => {
-  const res = await fetch(base + path, { method, redirect: "manual", headers: { "x-vercel-protection-bypass": key, ...headers }, body });
+  const res = await fetch(base + path, { method, redirect: "manual", headers: { ...(key ? { "x-vercel-protection-bypass": key } : {}), ...headers }, body });
   await res.arrayBuffer().catch(() => {});
   return res.status;
 };
@@ -35,7 +41,7 @@ const body = JSON.stringify({ upToMessageId: 1 });
 const cases = [
   ["POST read, cross-site", "POST", "/api/chat/1/read", { ...jsonType, ...xsite }, body, 403],
   ["POST read, foreign Origin only", "POST", "/api/chat/1/read", { ...jsonType, ...evil }, body, 403],
-  ["POST read, another vercel.app origin", "POST", "/api/chat/1/read", { ...jsonType, origin: "https://mju-find.vercel.app" }, body, 403],
+  ["POST read, another vercel.app origin", "POST", "/api/chat/1/read", { ...jsonType, origin: production ? "https://mju-lost-found-preview.vercel.app" : "https://mju-find.vercel.app" }, body, 403],
   ["POST read, same-origin -> reaches auth", "POST", "/api/chat/1/read", { ...jsonType, ...own }, body, 401],
   ["POST read, no browser headers -> reaches auth", "POST", "/api/chat/1/read", jsonType, body, 401],
   ["POST posts, cross-site", "POST", "/api/posts", { ...jsonType, ...xsite }, "{}", 403],

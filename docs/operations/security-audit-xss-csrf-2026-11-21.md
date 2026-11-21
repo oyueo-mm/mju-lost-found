@@ -161,3 +161,18 @@
 - 공통 원인(진단 출력 `apiLog`로 확인): 어느 시점부터 채팅 API 응답이 끊기고 이후 요청이 하나도 나가지 않는다. 동기화기(`src/components/chat/synchronizer.ts`)는 한 번에 하나만 실행하는데 **fetch에 시간 제한이 없어**, 응답이 멈춘 요청 하나가 그 탭의 polling을 계속 막는다(`online`·visibility 이벤트도 진행 중인 요청을 취소하지 않는다). 로컬 서버 ↔ Preview DB 지연에서 드러난 것이지만, 실제 서비스(모바일 네트워크 등)에서도 "새로고침 전까지 메시지가 안 옴"으로 나타날 수 있는 기존 약점이다.
 - 제안(미구현, 별도 작업): 동기화 요청에 시간 제한(예: 15초, `AbortSignal.any([signal, AbortSignal.timeout(...)])`)을 두고, `online`/visibility 복귀 때 멈춘 요청을 취소한다. 이번 범위(P-2/P-3)와 분리해 단위·회귀 검증 후 반영한다.
 - 실패 진단을 위해 `realtime-fallback.py`가 실패 시 검사 파일 기준 줄(`suiteLine`)과 채팅 API 응답 요약(시각·메서드·경로 형태·상태, 본문 없음)을 출력하도록 했다. 통과 기준은 그대로다.
+
+### P-1 nonce/hash: 비용 대비 실제 보안 효과 (조사만, 2026-11-21 밤, 이번 배포 미포함)
+
+| 방식 | 막는 것 | 못 막는 것 / 제약 | 비용 |
+|---|---|---|---|
+| 현재(`'unsafe-inline'`, Report-Only) | 외부 출처 스크립트(`script-src 'self'`), `object`, `base` 변경, framing(XFO), 외부로 보내는 fetch·이미지(`connect-src`/`img-src`, enforce 시) | 주입된 인라인 `<script>`·`onerror=` 같은 이벤트 핸들러 실행 | 0 |
+| nonce + `'strict-dynamic'` | 위 + **주입된 인라인 스크립트와 이벤트 핸들러 실행** | 같은 출처 JSONP·가젯형 우회(현재 해당 API 없음). `style-src`는 React `style` 속성 때문에 계속 `'unsafe-inline'` | 모든 페이지 요청에 Proxy 실행 1회 추가(HTML·RSC 이동 요청 수만큼). 렌더링은 이미 전부 동적이라 추가 없음. 지연 1ms 미만 + Proxy 단계 |
+| hash | 정적 인라인 스크립트만 허용 | Next RSC 인라인 페이로드가 요청마다 달라 **적용 불가** | - |
+| `experimental.sri` | 외부 청크 변조(무결성) | 인라인 문제는 해결하지 못함 | 빌드 시 해시 |
+
+- 실제 효과의 크기
+  - 현재 코드에는 사용자 입력이 HTML로 들어가는 경로가 없다(1절: 모든 `dangerouslySetInnerHTML`은 상수나 저장소 고정 데이터). 그래서 nonce는 **지금 있는 취약점을 막는 것이 아니라, 앞으로 생길 수 있는 XSS의 피해를 줄이는 심층 방어**다.
+  - 효과는 CSP를 **enforce할 때만** 생긴다. Report-Only 상태에서는 보고만 한다.
+- 권장 순서: ① Report-Only 관측 1~2주(현재) → ② `'unsafe-inline'` 정책 그대로 enforce(외부 출처 차단 효과가 먼저 생김) → ③ Preview에서 nonce Report-Only 빌드로 Proxy 호출량·지연·위반 측정 → ④ 측정값으로 nonce enforce 결정.
+- P-4(파일 매직 넘버)는 이미 구현돼 있다(Release B, 5절 정정). 다시 구현하지 않는다.

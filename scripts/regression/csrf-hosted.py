@@ -22,7 +22,7 @@ result = {"passed": False, "engines": {}}
 with sync_playwright() as p:
     for name in ("chromium", "webkit"):
         browser = getattr(p, name).launch(headless=True)
-        ctx = browser.new_context(extra_http_headers={"x-vercel-protection-bypass": key, "x-vercel-set-bypass-cookie": "samesitenone"})
+        ctx = browser.new_context(extra_http_headers={"x-vercel-protection-bypass": key, "x-vercel-set-bypass-cookie": "samesitenone"} if key else {})
         ctx.route(ATTACKER, lambda route: route.fulfill(status=200, content_type="text/html", body=attack_html))
         statuses = []
         ctx.on("response", lambda r, s=statuses: s.append(r.status) if r.url == f"{base}/api/chat/1/read" else None)

@@ -9,7 +9,7 @@ import { formatAbsoluteTime, formatRelativeTime } from "@/lib/time/relativeTime"
 import { useI18n } from "@/lib/i18n/client";
 import { MessageActionMenu } from "@/components/chat/MessageActionMenu";
 import { useChatRoomRealtime } from "@/components/chat/useChatRoomRealtime";
-import {ChatAccessRevoked,validReadHint,type ReadCursor} from "./synchronizer";
+import {boundedSignal,ChatAccessRevoked,SYNC_TIMEOUT_MS,validReadHint,type ReadCursor} from "./synchronizer";
 import { chatPresenceAction } from "@/app/(main)/me/push/actions";
 import { dispatchChatUnreadCount } from "@/components/layout/chatUnreadEvent";
 import { CameraIcon, UserIcon } from "@/components/icons";
@@ -232,10 +232,19 @@ function ChatThreadView({
     try {
       while (markedRoom.current === chatRoomId && wantedMarkId.current > lastMarkedId.current) {
         const target = wantedMarkId.current;
-        const res = await fetch('/api/chat/'+chatRoomId+'/read', {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({upToMessageId:target}),cache:"no-store"});
-        if(!res.ok||markedRoom.current!==chatRoomId)break;
+        // Bounded like every sync (synchronizer.ts): a hung call must not
+        // block read marking for the rest of the visit. Marking is idempotent,
+        // so a late success after the timeout does no harm.
+        const wait = boundedSignal(undefined, SYNC_TIMEOUT_MS);
+        let json: { data?: { unreadChatCount?: unknown } };
+        try {
+          const res = await fetch('/api/chat/'+chatRoomId+'/read', {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({upToMessageId:target}),cache:"no-store",signal:wait.signal});
+          if(!res.ok||markedRoom.current!==chatRoomId)break;
+          json = await res.json();
+        } finally {
+          wait.clear();
+        }
         lastMarkedId.current=Math.max(lastMarkedId.current,target);
-        const json = await res.json();
         if(typeof json.data?.unreadChatCount==="number")dispatchChatUnreadCount(json.data.unreadChatCount);
       }
     } catch {
@@ -374,15 +383,16 @@ function ChatThreadView({
     setError(null);
     try {
       const oldestId = messages[0].id;
-      const res = await fetch(`/api/chat/${chatRoomId}/messages?before=${oldestId}`,{signal:controller.signal,cache:"no-store"});
-      const json = await res.json();
+      const wait=boundedSignal(controller.signal,SYNC_TIMEOUT_MS);
+      let res:Response,json:{data?:unknown;error?:string;pagination?:{hasMore:boolean}};
+      try{res = await fetch(`/api/chat/${chatRoomId}/messages?before=${oldestId}`,{signal:wait.signal,cache:"no-store"});json = await res.json();}finally{wait.clear();}
       if(controller.signal.aborted)return;
       if (!res.ok) {
         setError(json.error ?? t("chatThread.loadOlderFailed"));
         return;
       }
       setMessages(prev=>{const byId=new Map((json.data as MessageItem[]).map(m=>[m.id,m]));for(const m of prev??[])byId.set(m.id,m);return [...byId.values()].sort((a,b)=>a.id-b.id);});
-      setHasMore(json.pagination.hasMore);
+      setHasMore(Boolean(json.pagination?.hasMore));
     } catch {
       if(!controller.signal.aborted)setError(t("common.networkError"));
     } finally {
@@ -594,7 +604,7 @@ function ChatThreadView({
         </p>
       )}
 
-      <div ref={listRef} onScroll={handleScroll} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+      <div ref={listRef} onScroll={handleScroll} data-testid="chat-message-list" className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
         {hasMore && (
           <button
             type="button"

@@ -115,6 +115,39 @@ try:
         assert outsider.request.get(f"{base}/api/chat/{room}/messages").status == 403
         assert outsider.request.post(f"{base}/api/chat/{room}/realtime", headers={"origin": base}).status == 403
         checks.append("outsider cannot read or obtain realtime authority")
+        # 2026-11-21: a sync request the server never answers must not freeze
+        # the tab. Hold one GET forever; the client abandons it after 15 s and
+        # the next sync delivers a message sent meanwhile, exactly once.
+        stalled = []
+        def stall_once(route):
+            if route.request.method == "GET" and not stalled:
+                stalled.append(route)  # never answered
+            else:
+                route.continue_()
+        page.route(path, stall_once)
+        page.evaluate("window.dispatchEvent(new Event('online'))")
+        for _ in range(400):
+            if stalled:
+                break
+            page.wait_for_timeout(25)
+        assert stalled
+        stalled_at = time.monotonic()
+        response = second.request.post(f"{base}/api/chat/{room}/messages", data={"content": "D3 stalled sync recovery"})
+        assert response.ok
+        expect(page.get_by_text("D3 stalled sync recovery", exact=True)).to_be_visible(timeout=45000)
+        recovery_seconds = round(time.monotonic() - stalled_at, 1)
+        assert recovery_seconds >= 14, "message arrived before the stalled request was abandoned"
+        page.wait_for_timeout(1500)
+        # Count inside the thread only: from lg the room list beside it shows
+        # the same text as the newest-message preview.
+        expect(page.get_by_test_id("chat-message-list").get_by_text("D3 stalled sync recovery", exact=True)).to_have_count(1)
+        stalled_page_matches = page.get_by_text("D3 stalled sync recovery", exact=True).count()
+        page.unroute(path, stall_once)
+        try:
+            stalled[0].abort()
+        except Exception:
+            pass
+        checks.append("a hung sync request is abandoned after 15 s and polling resumes without duplicates")
         quiet_requests = []
         token_path = f"{base}/api/chat/{room}/realtime"
 
@@ -141,7 +174,7 @@ try:
             ctx.close()
         browser.close()
     print(json.dumps({"suite": "D3 isolated browser API fallback", "passed": len(checks), "checks": checks,
-                      "deliverySecondsAfterPost": delivery_seconds, "hostedPrivateRealtimeVerified": False}))
+                      "deliverySecondsAfterPost": delivery_seconds, "stalledRecoverySeconds": recovery_seconds, "stalledTextMatchesOnPage": stalled_page_matches, "hostedPrivateRealtimeVerified": False}))
     
 except Exception as error:
     import traceback
