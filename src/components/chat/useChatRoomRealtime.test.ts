@@ -35,3 +35,14 @@ describe("canary diagnostics", () => {
     expect([...emitted].sort()).toEqual([...REALTIME_DIAG_EVENTS].sort());
   });
 });
+
+describe("bounded token request (2026-11-21)", () => {
+  it("bounds the token fetch so a hung response cannot leave `connecting` stuck", () => {
+    const source = readFileSync(new URL("./useChatRoomRealtime.ts", import.meta.url), "utf8");
+    expect(source).toMatch(/const tokenWait=boundedSignal\(signal,SYNC_TIMEOUT_MS\);/);
+    expect(source).toMatch(/await fetchToken\(tokenWait\.signal\)\.finally\(\(\)=>tokenWait\.clear\(\)\)/);
+    // A timeout aborts tokenWait only, never `signal`, so the catch path
+    // (polling + 30 s retry) runs instead of the silent-abort reconnect.
+    expect(source).toMatch(/catch\{if\(!signal\.aborted\)\{retryAt=Date\.now\(\)\+30000;enterPolling\(\);/);
+  });
+});
