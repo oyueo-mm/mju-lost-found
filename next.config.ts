@@ -9,8 +9,9 @@ assertDatabaseEnvironment(process.env, { allowMissing: process.env.NODE_ENV !== 
 
 const nextConfig: NextConfig = {
   async headers() {
-    // D-4 headers are still under Preview review.
-    const base = process.env.VERCEL_ENV === "production" ? [] : [
+    // D-4 base headers: Preview-verified 2026-11-19, on Production since
+    // 2026-11-21 (same values everywhere).
+    const base = [
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
       { key: "X-Frame-Options", value: "DENY" },
@@ -18,8 +19,7 @@ const nextConfig: NextConfig = {
     ];
     // D-4 CSP candidate: only when MJU_CSP_MODE is set at build time (off by default).
     const csp = cspHeader(process.env);
-    const headers = csp ? [...base, csp] : base;
-    return headers.length ? [{ source: "/:path*", headers }] : [];
+    return [{ source: "/:path*", headers: csp ? [...base, csp] : base }];
   },
   // Two things Vercel/Next's static file tracer won't discover on its own
   // for src/lib/ai/embedding.ts's TransformersEmbeddingProvider -- both

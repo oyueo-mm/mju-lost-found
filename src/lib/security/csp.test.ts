@@ -41,10 +41,18 @@ describe("D-4 CSP candidate", () => {
     expect(directive(p, "frame-src")).toEqual(["https://vercel.live"]);
   });
 
-  it("next.config: unchanged without the flag; with it, Production gets only the CSP (base headers stay Preview-only)", async () => {
-    expect(await headersFor({ VERCEL_ENV: "production" })).toEqual([]);
-    expect((await headersFor({ VERCEL_ENV: "preview" })).map((h) => h.key)).toEqual(["X-Content-Type-Options", "Referrer-Policy", "X-Frame-Options", "Permissions-Policy"]);
-    expect((await headersFor({ VERCEL_ENV: "production", MJU_CSP_MODE: "report-only" })).map((h) => h.key)).toEqual(["Content-Security-Policy-Report-Only"]);
+  it("next.config: the four base headers everywhere (Production included); the CSP only with the flag", async () => {
+    const base = ["X-Content-Type-Options", "Referrer-Policy", "X-Frame-Options", "Permissions-Policy"];
+    const production = await headersFor({ VERCEL_ENV: "production" });
+    expect(production.map((h) => h.key)).toEqual(base);
+    expect(Object.fromEntries(production.map((h) => [h.key, h.value]))).toEqual({
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "X-Frame-Options": "DENY",
+      "Permissions-Policy": "geolocation=(), microphone=(), payment=(), usb=()",
+    });
+    expect((await headersFor({ VERCEL_ENV: "preview" })).map((h) => h.key)).toEqual(base);
+    expect((await headersFor({ VERCEL_ENV: "production", MJU_CSP_MODE: "report-only" })).map((h) => h.key)).toEqual([...base, "Content-Security-Policy-Report-Only"]);
     const preview = await headersFor({ VERCEL_ENV: "preview", MJU_CSP_MODE: "report-only" });
     expect(preview.at(-1)?.key).toBe("Content-Security-Policy-Report-Only");
     expect(directive(preview.at(-1)!.value, "connect-src")).toContain(`wss://${PREVIEW_DB_PROJECT}.supabase.co`);
