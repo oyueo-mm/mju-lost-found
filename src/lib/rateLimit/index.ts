@@ -76,6 +76,10 @@ export const RATE_LIMITS = {
   // Preserve the one-note-per-return policy without reintroducing a daily cap.
   thankCreate: { user: [{ windowSeconds: MINUTE, max: 10 }] },
   keywordCreate: { user: [{ windowSeconds: MINUTE, max: 30 }, { windowSeconds: DAY, max: 100 }] },
+  // D-4 CSP reports (POST /api/csp-report): browsers send them without a
+  // session, so only the anonymous (salted IP hash) rules apply. A clean
+  // policy produces none; these only bound a broken page or a flood.
+  cspReport: { user: [{ windowSeconds: MINUTE, max: 30 }, { windowSeconds: DAY, max: 300 }], anonymous: [{ windowSeconds: MINUTE, max: 30 }, { windowSeconds: DAY, max: 300 }] },
 } as const satisfies Record<
   string,
   { user: readonly RateLimitRule[]; anonymous?: readonly RateLimitRule[]; staff?: readonly RateLimitRule[] }

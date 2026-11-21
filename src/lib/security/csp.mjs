@@ -20,6 +20,16 @@
 // Preview pages also load Vercel's toolbar (vercel.live); allowed on Preview only.
 import { PREVIEW_DB_PROJECT, PRODUCTION_DB_PROJECT } from "../db/accessPolicy.mjs";
 
+// Violation reports go to the same origin (src/app/api/csp-report/route.ts)
+// through report-uri only. Checked 2026-11-21 in Chromium and WebKit: with
+// report-uri alone both deliver at once; once report-to is also named,
+// Chromium ignores report-uri and its Reporting API upload never arrived in
+// the local check (and cannot be checked on protected Preview), while WebKit
+// switches to a different body shape. report-uri is deprecated but still
+// implemented by every engine; the endpoint already parses the Reporting API
+// shapes, so report-to can be added once it is verified on HTTPS.
+export const CSP_REPORT_PATH = "/api/csp-report";
+
 /** @typedef {"off" | "report-only" | "enforce"} CspMode */
 /** @typedef {Record<string, string | undefined>} Env */
 
@@ -53,6 +63,7 @@ export function buildCsp(env = process.env) {
     ["form-action", ["'self'", "https://accounts.google.com"]],
     ["base-uri", ["'self'"]],
     ["object-src", ["'none'"]],
+    ["report-uri", [CSP_REPORT_PATH]],
   ];
   return directives.map(([name, sources]) => `${name} ${sources.join(" ")}`).join("; ");
 }
@@ -62,4 +73,10 @@ export function cspHeader(env = process.env) {
   const mode = cspMode(env);
   if (mode === "off") return null;
   return { key: mode === "enforce" ? "Content-Security-Policy" : "Content-Security-Policy-Report-Only", value: buildCsp(env) };
+}
+
+/** The CSP header as a list for next.config; [] when off. @param {Env} [env] */
+export function cspHeaders(env = process.env) {
+  const csp = cspHeader(env);
+  return csp ? [csp] : [];
 }

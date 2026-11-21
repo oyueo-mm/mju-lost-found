@@ -10,6 +10,10 @@ export const ACCESS_LOG_MIN_RETENTION_DAYS = 365;
 // year-over-year month view; per-hour API timings only for recent trends.
 export const ACTIVITY_RETENTION_DAYS = 400;
 export const API_METRIC_RETENTION_DAYS = 90;
+// D-4 CSP report counters (MetricDaily "csp.*"): enough to observe a
+// Report-Only period and compare before/after enforcement.
+export const CSP_REPORT_RETENTION_DAYS = 90;
+export const CSP_REPORT_METRIC_PREFIX = "csp.";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const daysBefore = (now: Date, days: number) => new Date(now.getTime() - days * DAY_MS);

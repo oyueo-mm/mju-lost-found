@@ -7,6 +7,9 @@
 //       vercel deploy; --alias also points mju-lost-found-preview.vercel.app at it
 //   node scripts/deployments/deploy.mjs production
 //       vercel deploy --prod
+//   --csp-mode=report-only|enforce  (D-4) build this one deployment with
+//       MJU_CSP_MODE (a build-time env: next.config bakes the header in).
+//       Without it the deployment carries no CSP header.
 //   recording: the Preview database by default; after the release (its
 //   DeploymentRecord migration on Production) add
 //   --db both --confirm-production so both environments' 개발 통계 see
@@ -43,7 +46,7 @@ const KNOWN = new Set(["--alias", "--dry-run", "--record-dry-run", "--confirm-pr
 for (let i = 0; i < rest.length; i++) {
   const a = rest[i];
   if (a === "--db") { i++; continue; }
-  if (!KNOWN.has(a) && !a.startsWith("--realtime-canary-room=")) {
+  if (!KNOWN.has(a) && !a.startsWith("--realtime-canary-room=") && !a.startsWith("--csp-mode=")) {
     console.error(`unknown option: ${a}`);
     process.exit(2);
   }
@@ -52,11 +55,14 @@ const dryRun = rest.includes("--dry-run");
 const alias = rest.includes("--alias");
 const canaryFlags = rest.filter((arg) => arg === "--realtime-canary-room" || arg.startsWith("--realtime-canary-room="));
 const canaryRoom = canaryFlags[0]?.slice("--realtime-canary-room=".length);
+const cspFlags = rest.filter((arg) => arg.startsWith("--csp-mode="));
+const cspMode = cspFlags[0]?.slice("--csp-mode=".length);
+if (cspFlags.length > 1 || (cspMode !== undefined && !["report-only", "enforce"].includes(cspMode))) throw new Error("--csp-mode=report-only|enforce");
 if (canaryFlags.length > 1 || (canaryRoom !== undefined && (!/^[1-9]\d{0,9}$/.test(canaryRoom) || Number(canaryRoom) > 2147483647))) {
   throw new Error("The Realtime canary room must be one positive room ID");
 }
 const recordArgs = rest
-  .filter((a) => a !== "--alias" && a !== "--dry-run" && !a.startsWith("--realtime-canary-room="))
+  .filter((a) => a !== "--alias" && a !== "--dry-run" && !a.startsWith("--realtime-canary-room=") && !a.startsWith("--csp-mode="))
   .map((a) => (a === "--record-dry-run" ? "--dry-run" : a));
 
 if (dryRun) {
@@ -65,6 +71,7 @@ if (dryRun) {
     wouldDeploy: target,
     alias: alias && target === "preview",
     realtimeCanaryRoom: canaryRoom ?? null,
+    cspMode: cspMode ?? "off",
     recorderArgs: recordArgs,
     note: "Nothing was deployed or recorded. Remove --dry-run to deploy.",
   }, null, 2));
@@ -78,6 +85,7 @@ const deploy = run([
   "vercel", "deploy", "--yes",
   ...(target === "production" ? ["--prod"] : []),
   ...(canaryRoom ? ["--env", `MJU_REALTIME_CANARY_ROOM_ID=${canaryRoom}`] : []),
+  ...(cspMode ? ["--build-env", `MJU_CSP_MODE=${cspMode}`] : []),
 ], true);
 process.stdout.write(deploy.stdout ?? "");
 const url = /https:\/\/[a-z0-9-]+-[a-z0-9]{9}-oyueo\.vercel\.app/.exec(deploy.stdout ?? "")?.[0];

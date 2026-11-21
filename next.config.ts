@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 import { POST_IMAGE_REMOTE_PATTERNS } from "./src/lib/images/optimizationHosts.mjs";
 import { assertDatabaseEnvironment } from "./src/lib/db/accessPolicy.mjs";
-import { cspHeader } from "./src/lib/security/csp.mjs";
+import { cspHeaders } from "./src/lib/security/csp.mjs";
 
 // Next has already loaded its environment files here. Block `next dev` too,
 // even when the operator bypasses npm's predev hook.
@@ -18,8 +18,7 @@ const nextConfig: NextConfig = {
       { key: "Permissions-Policy", value: "geolocation=(), microphone=(), payment=(), usb=()" },
     ];
     // D-4 CSP candidate: only when MJU_CSP_MODE is set at build time (off by default).
-    const csp = cspHeader(process.env);
-    return [{ source: "/:path*", headers: csp ? [...base, csp] : base }];
+    return [{ source: "/:path*", headers: [...base, ...cspHeaders(process.env)] }];
   },
   // Two things Vercel/Next's static file tracer won't discover on its own
   // for src/lib/ai/embedding.ts's TransformersEmbeddingProvider -- both

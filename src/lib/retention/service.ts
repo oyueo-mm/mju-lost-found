@@ -12,6 +12,8 @@ import {
   RECORD_RETENTION_DAYS,
   ACTIVITY_RETENTION_DAYS,
   API_METRIC_RETENTION_DAYS,
+  CSP_REPORT_METRIC_PREFIX,
+  CSP_REPORT_RETENTION_DAYS,
   daysBefore,
   evidenceReleased,
   type ReportFacts,
@@ -52,6 +54,8 @@ import { purgeReportSnapshot, readSnapshot } from "@/lib/report/snapshot";
 //  - 관리자 활동 기록 (AdminActivityLog: tasks and sign-ins; AdminVisit:
 //    visits): 1 year after the task / sign-in / the visit's last activity,
 //    for every admin (the other admin records follow their own rows above).
+//  - D-4 CSP report counters (MetricDaily "csp.*", no personal data):
+//    90 days.
 
 export const EXPIRED_MESSAGE_TEXT = "(보유기간이 지나 삭제된 메시지)";
 
@@ -71,6 +75,7 @@ export type RetentionResult = {
   proposalsDeleted: number;
   rejoinRequestsDeleted: number;
   metricsDeleted: number;
+  cspReportMetricsDeleted: number;
   withdrawnActivityDeleted: number;
   adminActivityDeleted: number;
   adminVisitsDeleted: number;
@@ -95,6 +100,7 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
     proposalsDeleted: 0,
     rejoinRequestsDeleted: 0,
     metricsDeleted: 0,
+    cspReportMetricsDeleted: 0,
     adminActivityDeleted: 0,
     adminVisitsDeleted: 0,
     withdrawnActivityDeleted: 0,
@@ -305,6 +311,13 @@ export async function runRetention(now: Date = new Date()): Promise<RetentionRes
       (await prisma.apiMetricHourly.deleteMany({ where: { hour: { lt: daysBefore(now, API_METRIC_RETENTION_DAYS) } } })).count;
   } catch (error) {
     console.error("Metrics retention skipped:", error instanceof Error ? error.name : "unknown");
+  }
+  try {
+    result.cspReportMetricsDeleted = (
+      await prisma.metricDaily.deleteMany({ where: { metric: { startsWith: CSP_REPORT_METRIC_PREFIX }, day: { lt: daysBefore(now, CSP_REPORT_RETENTION_DAYS) } } })
+    ).count;
+  } catch (error) {
+    console.error("CSP report retention skipped:", error instanceof Error ? error.name : "unknown");
   }
   try {
     result.withdrawnActivityDeleted = await deleteActivityMarks(prisma, withdrawn.map((w) => w.id));

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PREVIEW_DB_PROJECT, PRODUCTION_DB_PROJECT } from "@/lib/db/accessPolicy.mjs";
-import { buildCsp, cspHeader, cspMode } from "./csp.mjs";
+import { buildCsp, cspHeader, cspHeaders, cspMode } from "./csp.mjs";
 
 const env = (v: Record<string, string>) => v as unknown as NodeJS.ProcessEnv;
 const directive = (policy: string, name: string) => policy.split(";").map((d) => d.trim()).find((d) => d.startsWith(`${name} `))?.split(/\s+/).slice(1) ?? [];
@@ -32,6 +32,15 @@ describe("D-4 CSP candidate", () => {
     expect(p).not.toContain("unsafe-eval");
     expect(p).not.toContain("vercel.live");
     for (const d of ["object-src 'none'", "base-uri 'self'", "frame-ancestors 'none'", "frame-src 'none'", "worker-src 'self'", "default-src 'self'"]) expect(p).toContain(d);
+    expect(directive(p, "report-uri")).toEqual(["/api/csp-report"]);
+    expect(p).not.toContain("report-to");
+  });
+
+  it("reports to the same-origin endpoint through report-uri only (no Reporting-Endpoints header)", () => {
+    expect(cspHeaders(env({ VERCEL_ENV: "production" }))).toEqual([]);
+    const headers = cspHeaders(env({ VERCEL_ENV: "production", MJU_CSP_MODE: "report-only" }));
+    expect(headers.map((h) => h.key)).toEqual(["Content-Security-Policy-Report-Only"]);
+    expect(headers[0].value).toContain("report-uri /api/csp-report");
   });
 
   it("preview: Preview Supabase plus the Vercel toolbar only", () => {
@@ -54,7 +63,8 @@ describe("D-4 CSP candidate", () => {
     expect((await headersFor({ VERCEL_ENV: "preview" })).map((h) => h.key)).toEqual(base);
     expect((await headersFor({ VERCEL_ENV: "production", MJU_CSP_MODE: "report-only" })).map((h) => h.key)).toEqual([...base, "Content-Security-Policy-Report-Only"]);
     const preview = await headersFor({ VERCEL_ENV: "preview", MJU_CSP_MODE: "report-only" });
-    expect(preview.at(-1)?.key).toBe("Content-Security-Policy-Report-Only");
-    expect(directive(preview.at(-1)!.value, "connect-src")).toContain(`wss://${PREVIEW_DB_PROJECT}.supabase.co`);
+    const previewCsp = preview.find((h) => h.key === "Content-Security-Policy-Report-Only");
+    expect(previewCsp).toBeDefined();
+    expect(directive(previewCsp!.value, "connect-src")).toContain(`wss://${PREVIEW_DB_PROJECT}.supabase.co`);
   });
 });
