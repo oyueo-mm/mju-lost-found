@@ -105,12 +105,20 @@ try:
 
             # framing refused
             ctx = browser.new_context()
+            # The deliberate iframe makes the browser send a frame-ancestors
+            # CSP report. Stop it here so a check run never adds a test
+            # violation to Production's csp.* counters (2026-11-21: one such
+            # report was counted before this). The block is counted, so the
+            # check still proves a report would have been sent.
+            blocked_reports = []
+            ctx.route("**/api/csp-report", lambda route: (blocked_reports.append(1), route.abort()))
             page = ctx.new_page()
             page.set_content(f'<iframe id="f" src="{base}/login" style="width:600px;height:400px"></iframe>')
             page.wait_for_timeout(4000)
             framed = page.frame_locator("#f").locator("form button[type=submit]").count()
             assert framed == 0, "login page rendered inside an iframe"
             check("site refuses to be framed")
+            result["framing_csp_reports_blocked"] = result.get("framing_csp_reports_blocked", 0) + len(blocked_reports)
             ctx.close()
             browser.close()
     assert not result["problems"], "problems"

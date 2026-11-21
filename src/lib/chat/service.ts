@@ -985,9 +985,15 @@ export async function listMessages(
 // cursor at, and no ChatRead row is written (see that model's own comment
 // on why lastReadMessageId's nullability isn't actually exercised by this
 // function).
+//
+// P-3 (2026-11-21): called from POST /api/chat/[id]/read only -- a GET no
+// longer changes read state. upToMessageId (the newest message the client
+// has actually shown) caps the cursor, so a read call never marks a message
+// the reader has not received yet; omitted = the room's latest message.
 export async function markChatRoomRead(
   chatRoomId: number,
   requesterId: number,
+  upToMessageId?: number,
 ): Promise<ChatMutationResult<{ lastReadMessageId: number | null }>> {
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
@@ -996,7 +1002,7 @@ export async function markChatRoomRead(
   if (!participantIds.has(requesterId)) return { kind: "forbidden" };
 
   const latest = await prisma.message.findFirst({
-    where: { chatRoomId },
+    where: upToMessageId === undefined ? { chatRoomId } : { chatRoomId, id: { lte: upToMessageId } },
     orderBy: { id: "desc" },
     select: { id: true },
   });
@@ -1032,9 +1038,12 @@ export async function markChatRoomRead(
 // Kept as its own function (not folded into markMessagesAsRead), same
 // separation legacy uses, since Notification.isRead and Message.readAt
 // are two distinct concepts only synced at this one call site.
+// upToMessageId (P-3): same cap as markChatRoomRead -- a notification for a
+// message the reader has not been shown yet stays unread.
 export async function markMessageNotificationsReadForChatRoom(
   chatRoomId: number,
   requesterId: number,
+  upToMessageId?: number,
 ): Promise<ChatMutationResult<{ count: number }>> {
   const room = await findChatRoomRow(chatRoomId);
   if (!room) return { kind: "not_found" };
@@ -1043,7 +1052,7 @@ export async function markMessageNotificationsReadForChatRoom(
   if (!participantIds.has(requesterId)) return { kind: "forbidden" };
 
   const messageIds = await prisma.message.findMany({
-    where: { chatRoomId },
+    where: upToMessageId === undefined ? { chatRoomId } : { chatRoomId, id: { lte: upToMessageId } },
     select: { id: true },
   });
   if (messageIds.length === 0) return { kind: "ok", data: { count: 0 } };

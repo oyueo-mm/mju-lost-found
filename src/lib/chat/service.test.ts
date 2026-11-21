@@ -1365,6 +1365,22 @@ describe("markChatRoomRead", () => {
       payload: { userId: lostOwner, lastReadMessageId: 42 },
     });
   });
+  it("caps the cursor at upToMessageId (P-3: never marks a message the reader has not been shown)", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findFirst.mockResolvedValueOnce({ id: 40 });
+    $queryRaw.mockResolvedValueOnce([{last_read_message_id:40}]);
+
+    const result = await markChatRoomRead(100, lostOwner, 40);
+
+    expect(message.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { chatRoomId: 100, id: { lte: 40 } } }));
+    expect(result).toEqual({ kind: "ok", data: { lastReadMessageId: 40 } });
+    expect($queryRaw.mock.calls.at(-1)!.slice(1)).toEqual([100,lostOwner,40]);
+  });
+  it("rejects a non-participant even with upToMessageId", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    expect(await markChatRoomRead(100, stranger, 40)).toEqual({ kind: "forbidden" });
+    expect(message.findFirst).not.toHaveBeenCalled();
+  });
   it("does not rewrite or broadcast an unchanged/older cursor",async()=>{
     chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());message.findFirst.mockResolvedValueOnce({id:42});
     $queryRaw.mockResolvedValueOnce([]);chatRead.findUnique.mockResolvedValueOnce({lastReadMessageId:50});
@@ -1380,6 +1396,16 @@ describe("markMessageNotificationsReadForChatRoom", () => {
     const result = await markMessageNotificationsReadForChatRoom(100, stranger);
 
     expect(result).toEqual({ kind: "forbidden" });
+  });
+
+  it("with upToMessageId, only notifications for messages up to that id (P-3)", async () => {
+    chatRoom.findUnique.mockResolvedValueOnce(roomForOwners());
+    message.findMany.mockResolvedValueOnce([{ id: 1 }]);
+    notification.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    await markMessageNotificationsReadForChatRoom(100, lostOwner, 1);
+
+    expect(message.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { chatRoomId: 100, id: { lte: 1 } } }));
   });
 
   it("scopes the update to the requester's own message-type notifications for this room's messages", async () => {

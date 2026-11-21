@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { normalizeRoute, observeTiming } from "@/lib/metrics/record";
+import { crossOriginRejection } from "@/lib/security/sameOrigin";
 
 import type { PostMutationResult } from "./service";
 
@@ -31,10 +32,18 @@ export function withErrorHandling<Args extends unknown[]>(
   return async (...args: Args): Promise<NextResponse> => {
     // 운영 통계: every API route's time and outcome, aggregated in memory
     // (lib/metrics/record.ts) -- never ids, never bodies.
-    const request = args[0] as { method?: string; url?: string } | undefined;
+    const request = args[0] as { method?: string; url?: string; headers?: Headers } | undefined;
     const t0 = performance.now();
     let status = 500;
     try {
+      // CSRF second layer (P-2, src/lib/security/sameOrigin.ts): a
+      // cross-origin POST/PUT/PATCH/DELETE is refused before any session
+      // lookup or handler work. Safe methods pass unchanged.
+      const refused = request ? crossOriginRejection(request) : null;
+      if (refused) {
+        status = refused.status;
+        return refused;
+      }
       const response = await handler(...args);
       status = response.status;
       return response;

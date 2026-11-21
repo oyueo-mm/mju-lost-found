@@ -68,7 +68,10 @@ describe("GET /api/chat/[id]/messages", () => {
     expect(markChatRoomRead).not.toHaveBeenCalled();
   });
 
-  it("returns messages and marks them read for an authorized participant", async () => {
+  // P-3 (2026-11-21): reading never changes state. Marking read moved to
+  // POST /api/chat/[id]/read (its own tests carry the unread-count checks
+  // that used to live here).
+  it("returns messages for an authorized participant without marking anything read", async () => {
     requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
     listMessages.mockResolvedValueOnce({ kind: "ok", data: { items: [{ id: 1 }], hasMore: false } });
 
@@ -78,40 +81,30 @@ describe("GET /api/chat/[id]/messages", () => {
     expect(res.status).toBe(200);
     expect(json.data).toEqual([{ id: 1 }]);
     expect(json.pagination).toEqual({ hasMore: false });
-    expect(markChatRoomRead).toHaveBeenCalledWith(1, sessionUser.id);
-    expect(markMessageNotificationsReadForChatRoom).toHaveBeenCalledWith(1, sessionUser.id);
+    expect(json.unreadChatCount).toBeUndefined();
+    expect(markChatRoomRead).not.toHaveBeenCalled();
+    expect(markMessageNotificationsReadForChatRoom).not.toHaveBeenCalled();
+    expect(countUnreadMessagesForUser).not.toHaveBeenCalled();
   });
 
-  // Phase P-3: the client (ChatThread.tsx) uses this field to push the
-  // header/BottomNav badge to the correct value immediately, since
-  // router.refresh() alone was confirmed (real browser testing) not to
-  // reliably update that shared layout on the same /chat/[id] URL. This
-  // is this *authenticated caller's own* total across every room -- see
-  // countUnreadMessagesForUser's own scoping -- computed fresh right after
-  // the read above, never a value the client could have supplied itself.
-  it("includes this user's fresh total unread chat count, computed after marking this room read", async () => {
+  it("a cross-site top-level GET (Lax cookie attached) still only reads", async () => {
     requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
-    listMessages.mockResolvedValueOnce({ kind: "ok", data: { items: [{ id: 1 }], hasMore: false } });
-    countUnreadMessagesForUser.mockResolvedValueOnce(2);
+    listMessages.mockResolvedValueOnce({ kind: "ok", data: { items: [{ id: 9 }], hasMore: false } });
 
-    const res = await GET(new NextRequest("http://localhost/api/chat/1/messages"), params("1"));
-    const json = await res.json();
-
-    expect(json.unreadChatCount).toBe(2);
-    expect(countUnreadMessagesForUser).toHaveBeenCalledWith(sessionUser.id);
-  });
-
-  it("still returns messages even if marking read fails, with unreadChatCount omitted", async () => {
-    requireUserForApi.mockResolvedValueOnce({ user: sessionUser });
-    listMessages.mockResolvedValueOnce({ kind: "ok", data: { items: [], hasMore: false } });
-    markChatRoomRead.mockRejectedValueOnce(new Error("db error"));
-
-    const res = await GET(new NextRequest("http://localhost/api/chat/1/messages"), params("1"));
-    const json = await res.json();
+    const res = await GET(new NextRequest("http://localhost/api/chat/1/messages", { headers: { "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate" } }), params("1"));
 
     expect(res.status).toBe(200);
-    expect(json.unreadChatCount).toBeUndefined();
-    expect(countUnreadMessagesForUser).not.toHaveBeenCalled();
+    expect(markChatRoomRead).not.toHaveBeenCalled();
+    expect(markMessageNotificationsReadForChatRoom).not.toHaveBeenCalled();
+  });
+
+  it("refuses a cross-site POST before authentication", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = await POST(new NextRequest("http://localhost/api/chat/1/messages", { method: "POST", headers: { "sec-fetch-site": "cross-site", "content-type": "text/plain" }, body: JSON.stringify({ content: "hi" }) }), params("1"));
+
+    expect(res.status).toBe(403);
+    expect(requireUserForApi).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it("passes the before cursor through", async () => {

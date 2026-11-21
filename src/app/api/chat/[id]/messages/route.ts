@@ -9,12 +9,9 @@ import {
   toggleReactionSchema,
 } from "@/lib/chat/schema";
 import {
-  countUnreadMessagesForUser,
   deleteMessage,
   editMessage,
   listMessages,
-  markChatRoomRead,
-  markMessageNotificationsReadForChatRoom,
   sendMessage,
   toggleMessageReaction,
 } from "@/lib/chat/service";
@@ -22,13 +19,12 @@ import { enforceRateLimit } from "@/lib/rateLimit";
 import { rateLimitTierFor } from "@/lib/rateLimit";
 
 // GET /api/chat/[id]/messages?before= -- oldest-first page of messages,
-// only for a participant (listMessages re-verifies). Mirrors the legacy
-// chat page's own sequence: entering/paging through a room also marks
-// the *other* participant's messages (and their own "message"
-// notifications) as read -- done here, right after a successful fetch,
-// since that's this app's equivalent of "the page was rendered". A
-// failure in that best-effort step is logged but never turns an
-// otherwise-successful message fetch into an error.
+// only for a participant (listMessages re-verifies). Read-only: until
+// 2026-11-21 this also marked the room and its message notifications read,
+// and a cross-site top-level link (which carries the SameSite=Lax cookie)
+// could do that for a participant (security audit P-3). Marking read is now
+// POST /api/chat/[id]/read, which ChatThread calls after a sync shows new
+// messages.
 export const GET = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     const auth = await requireUserForApi();
@@ -48,26 +44,9 @@ export const GET = withErrorHandling(
       return chatMutationResultToResponse(result);
     }
 
-    // Phase P-3: unreadChatCount is this user's fresh total across every
-    // room (not just this one) right after the read above -- included here
-    // so the caller (ChatThread) can push the header/BottomNav badge to
-    // the correct value immediately, without waiting on a full page
-    // navigation. See ChatThread.tsx's own comment on why router.refresh()
-    // alone wasn't a reliable enough signal for a same-URL shared-layout
-    // update in this app.
-    let unreadChatCount: number | undefined;
-    try {
-      await markChatRoomRead(id, auth.user.id);
-      await markMessageNotificationsReadForChatRoom(id, auth.user.id);
-      unreadChatCount = await countUnreadMessagesForUser(auth.user.id);
-    } catch (error) {
-      console.error("Failed to mark chat room read on view:", error);
-    }
-
     return NextResponse.json({
       data: result.data.items,
       pagination: { hasMore: result.data.hasMore },
-      unreadChatCount,
       readState:result.data.readState,
       postStatus:result.data.postStatus,
     },{headers:{"Cache-Control":"private, no-store",Vary:"Cookie"}});

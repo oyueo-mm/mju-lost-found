@@ -209,6 +209,46 @@ function ChatThreadView({
     router.refresh();
   }, [currentUserId, router]);
 
+  // Read marking (P-3, 2026-11-21): GET .../messages no longer changes read
+  // state, so after a sync shows a message newer than the last one marked,
+  // POST .../read with that id. Same moments as before (first load, every
+  // realtime/polling sync that brings something new), one extra request only
+  // when there is something new to mark. A failure leaves lastMarked where it
+  // was, so the next sync retries.
+  const lastMarkedId = useRef(0);
+  const wantedMarkId = useRef(0);
+  const markedRoom = useRef(chatRoomId);
+  const markingRoom = useRef<number | null>(null);
+  const markRead = useCallback(async (upToMessageId: number) => {
+    if (markedRoom.current !== chatRoomId) {
+      // Same component instance reused for another room: start over.
+      markedRoom.current = chatRoomId;
+      lastMarkedId.current = 0;
+      wantedMarkId.current = 0;
+    }
+    wantedMarkId.current = Math.max(wantedMarkId.current, upToMessageId);
+    if (markingRoom.current === chatRoomId) return; // the running loop picks the newer id up
+    markingRoom.current = chatRoomId;
+    try {
+      while (markedRoom.current === chatRoomId && wantedMarkId.current > lastMarkedId.current) {
+        const target = wantedMarkId.current;
+        const res = await fetch('/api/chat/'+chatRoomId+'/read', {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({upToMessageId:target}),cache:"no-store"});
+        if(!res.ok||markedRoom.current!==chatRoomId)break;
+        lastMarkedId.current=Math.max(lastMarkedId.current,target);
+        const json = await res.json();
+        if(typeof json.data?.unreadChatCount==="number")dispatchChatUnreadCount(json.data.unreadChatCount);
+      }
+    } catch {
+      // best effort: the next sync tries again
+    } finally {
+      if (markingRoom.current === chatRoomId) {
+        // A failed target is retried only by a later sync, never in a loop.
+        if (markedRoom.current === chatRoomId) wantedMarkId.current = lastMarkedId.current;
+        markingRoom.current = null;
+      }
+    }
+  }, [chatRoomId]);
+
   // Initial load, realtime hints and fallback all use the hook's one-flight
   // scheduler. A read hint never becomes UI state without this API response.
   const syncLatest = useCallback(async (signal: AbortSignal): Promise<ReadCursor[]> => {
@@ -230,7 +270,8 @@ function ChatThreadView({
         return [...byId.values()].sort((a,b)=>a.id-b.id);
       });
       setHasMore(json.pagination.hasMore);
-      if(typeof json.unreadChatCount==="number")dispatchChatUnreadCount(json.unreadChatCount);
+      const newest=(json.data as MessageItem[]).reduce((max,m)=>Math.max(max,m.id),0);
+      if(newest>0)void markRead(newest);
       const cursors:ReadCursor[]=Array.isArray(json.readState?.cursors)?json.readState.cursors.filter(validReadHint):[];
       if(cursors.length)setOtherUserLastReadId(prev=>Math.max(prev??0,...cursors.map(c=>c.lastReadMessageId)));
       if(json.postStatus!==undefined){
@@ -239,7 +280,7 @@ function ChatThreadView({
       }
       return cursors;
     }catch(error){if(!signal.aborted&&!(error instanceof ChatAccessRevoked))setError(tRef.current("common.networkError"));throw error;}
-  },[chatRoomId,router,refreshListOnNewIncoming]);
+  },[chatRoomId,router,refreshListOnNewIncoming,markRead]);
 
   // 채팅 웹 푸시: tell the server this room is on screen (visible tab only),
   // every 10 s, and that it no longer is when hidden or left. A push to this

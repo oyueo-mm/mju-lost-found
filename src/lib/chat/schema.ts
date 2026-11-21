@@ -104,3 +104,9 @@ export const editMessageSchema = z.object({
 export const deleteMessageQuerySchema = z.object({
   messageId: z.coerce.number().int().positive("messageId가 올바르지 않습니다."),
 });
+
+// POST /api/chat/[id]/read: the newest message id the client has shown.
+// The server caps the read cursor there (markChatRoomRead's upToMessageId).
+export const markReadSchema = z.object({
+  upToMessageId: z.number().int().positive().max(2147483647),
+});
