@@ -31,7 +31,7 @@
 
 ## 0-6. 2026-11-22 DB TLS Production 반영 (최신)
 
-- **Production**: `dpl_HbJbyTZFYnLLmBzLt7Bb1QCboNue`(`0263e62`, 앱 DB 연결 검증된 TLS)
+- **Production**: `dpl_ZNj7p6cLTuiKJESDE8ZYWiWf6znD`(`dede9ce`, 앱 DB 연결 검증된 TLS). 첫 배포 `dpl_HbJbyTZF…`는 잘못된 Prisma 클라이언트로 약 28분간 로그인 요청 일부가 실패해 롤백했다. 롤백 대상에서 제외한다([db-tls 2-1](db-tls-2026-11-22.md)).
   - 롤백 `dpl_FvfFRQpp…`(`fc947bb`). SSL 강제 전까지만 안전하다.
   - 회귀: 프로브 16/16, 헤더 12/12, CSRF 10/10, 브라우저 5/5, 로그 오류 0
 - **운영 도구**: 스크립트 41곳, `pg_dump`, Prisma 마이그레이션, 노트북 백업(ops `0ff6a70`), 클라우드 백업이 모두 검증된 TLS로 연결한다. 미지원 경로 0.
