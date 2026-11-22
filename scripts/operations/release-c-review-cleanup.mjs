@@ -2,13 +2,14 @@ import "../db/install-guard.mjs";
 import { Client } from "pg";
 import { createClient } from "@supabase/supabase-js";
 import { assertDatabaseEnvironment, assertScriptSupabaseAccess } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 // User approved creation, verification and cleanup of this one review fixture.
 if (assertDatabaseEnvironment(process.env, { usage: "operation" }) !== "preview") throw new Error("Preview only");
 assertScriptSupabaseAccess(process.env);
 const apply = process.argv.includes("--apply");
 const assert = (ok, why) => { if (!ok) throw new Error(`Review cleanup precondition: ${why}`); };
-const db = new Client({ connectionString: process.env.DIRECT_URL });
+const db = new Client(pgConfig(process.env.DIRECT_URL));
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 let committed = false;
 try {

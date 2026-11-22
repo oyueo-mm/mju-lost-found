@@ -5,6 +5,7 @@ import { Client } from "pg";
 import { resolve } from "node:path";
 import fs from "node:fs";
 import { assertDatabaseEnvironment, assertScriptSupabaseAccess } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 if (assertDatabaseEnvironment(process.env, { usage: "operation" }) !== "preview") throw new Error("Preview only");
 assertScriptSupabaseAccess(process.env);
@@ -14,7 +15,7 @@ const jiti = createJiti(import.meta.url, { alias: { "@": resolve("src") } });
 const { prisma } = await jiti.import(resolve("src/lib/db/prisma.ts"));
 const { captureTarget, preserveEvidenceImages } = await jiti.import(resolve("src/lib/report/snapshot.ts"));
 const { signEvidenceUrl } = await jiti.import(resolve("src/lib/report/evidenceStorage.ts"));
-const db = new Client({ connectionString: process.env.DIRECT_URL });
+const db = new Client(pgConfig(process.env.DIRECT_URL));
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const assert = (ok, name) => { if (!ok) throw new Error(name); };
 try {

@@ -19,13 +19,14 @@ import "../db/install-guard.mjs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
 import pg from "pg";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 if (!process.argv.includes("--confirm-preview") || assertDatabaseEnvironment(process.env, { usage: "operation" }) !== "preview") throw new Error("Preview confirmation required");
 const BASE = "https://mju-lost-found-preview.vercel.app";
 const vercelApi = (path) => { const out = execFileSync("npx", ["--no-install", "vercel", "api", path, "--scope", "oyueo"], { encoding: "utf8", shell: true, windowsHide: true, env: { ...process.env, MSYS_NO_PATHCONV: "1" } }); return JSON.parse(out.slice(out.indexOf("{"))); };
 const bypass = Object.keys(vercelApi("/v9/projects/prj_zMYrrsw80l829lSjs2n2Ur6YV5eP").protectionBypass ?? {})[0];
 if (!bypass) throw new Error("Project has no automation bypass");
-const db = new pg.Client({ connectionString: process.env.DIRECT_URL });
+const db = new pg.Client(pgConfig(process.env.DIRECT_URL));
 await db.connect();
 const out = { base: BASE, checks: [], passed: false };
 const check = (name, ok, detail) => { out.checks.push({ name, ok, ...(detail === undefined ? {} : { detail }) }); if (!ok) throw new Error(`failed: ${name}`); };

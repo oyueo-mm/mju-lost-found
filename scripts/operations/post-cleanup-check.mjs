@@ -8,6 +8,7 @@ import "../db/install-guard.mjs";
 import { Client } from "pg";
 import { createClient } from "@supabase/supabase-js";
 import { assertDatabaseEnvironment, assertScriptSupabaseAccess } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 const arg = process.argv.find((a) => a.startsWith("--post="))?.slice(7);
 const match = arg ? /^(lost|found):([1-9]\d{0,9})$/.exec(arg) : null;
@@ -16,7 +17,7 @@ const [, kind, rawId] = match;
 const id = Number(rawId);
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
 if (assertScriptSupabaseAccess(process.env) !== target) throw new Error("Database and Storage targets differ");
-const db = new Client({ connectionString: process.env.DIRECT_URL, connectionTimeoutMillis: 15000 });
+const db = new Client(pgConfig(process.env.DIRECT_URL, { connectionTimeoutMillis: 15000 }));
 const table = kind === "lost" ? '"LostPost"' : '"FoundPost"';
 const column = kind === "lost" ? "lost_post_id" : "found_post_id";
 const mustBeEmpty = {}, informational = {};

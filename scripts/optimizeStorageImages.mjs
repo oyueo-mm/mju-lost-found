@@ -61,6 +61,7 @@ import { createClient } from "@supabase/supabase-js";
 import sharp from "sharp";
 import { readFileSync } from "node:fs";
 import pg from "pg";
+import { pgConfig } from "./db/pgConfig.mjs";
 
 const APPLY = process.argv.includes("--apply");
 const DRY_RUN = !APPLY;
@@ -116,7 +117,7 @@ function webpPathFor(path) {
 // 하나의 pg 연결을 스크립트 전체에서 재사용 -- dry-run 스캔, apply의
 // 사전 검사, 실제 UPDATE 트랜잭션 모두 같은 연결을 쓴다(간단한 21개
 // 파일 규모의 maintenance script이므로 커넥션 풀은 불필요).
-const db = new pg.Client({ connectionString: process.env.DIRECT_URL });
+const db = new pg.Client(pgConfig(process.env.DIRECT_URL));
 await db.connect();
 
 // old image_url 문자열 -> 그 값을 갖는 모든 (table, id) 참조 목록.

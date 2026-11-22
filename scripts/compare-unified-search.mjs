@@ -5,6 +5,7 @@ import "./db/install-guard.mjs";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { parseEnv } from "node:util";
 import pg from "pg";
+import { pgConfig } from "./db/pgConfig.mjs";
 import { loadSearchPreviewBackend } from "./search-preview-build.mjs";
 
 const folder = ".vercel/unified-search-preview";
@@ -14,7 +15,7 @@ if (process.argv.includes("--read-preview")) {
   const values = parseEnv(readFileSync(".env.preview.local", "utf8"));
   const connectionString = values.DIRECT_URL;
   if (!connectionString || !new URL(connectionString).username.includes("swqvli")) throw new Error("Preview database identity check failed");
-  const client = new pg.Client({ connectionString, connectionTimeoutMillis: 10000, query_timeout: 20000 });
+  const client = new pg.Client(pgConfig(connectionString, { connectionTimeoutMillis: 10000, query_timeout: 20000 }));
   const snapshot = [];
   try {
     await client.connect();

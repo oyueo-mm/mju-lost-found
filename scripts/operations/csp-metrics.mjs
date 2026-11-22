@@ -11,6 +11,7 @@
 import "../db/install-guard.mjs";
 import { Client } from "pg";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 // Reports a verification run made on purpose (not real visitors), from the
 // runtime log lines (route "/" = Chromium, which trims a cross-origin
@@ -29,7 +30,7 @@ const since = sinceIndex >= 0 ? args[sinceIndex + 1] : "2026-11-21";
 if (!/^\d{4}-\d{2}-\d{2}$/.test(since ?? "") || args.length !== (sinceIndex >= 0 ? 2 : 0)) throw new Error("usage: csp-metrics.mjs [--since YYYY-MM-DD]");
 
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
-const db = new Client({ connectionString: process.env.DIRECT_URL ?? process.env.DATABASE_URL, connectionTimeoutMillis: 15000 });
+const db = new Client(pgConfig(process.env.DIRECT_URL ?? process.env.DATABASE_URL, { connectionTimeoutMillis: 15000 }));
 try {
   await db.connect();
   await db.query("BEGIN READ ONLY");

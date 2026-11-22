@@ -3,6 +3,7 @@ import "../db/install-guard.mjs";
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { assertDatabaseEnvironment, assertScriptSupabaseAccess, PREVIEW_DB_PROJECT, PRODUCTION_DB_PROJECT } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 const [action, confirmation, roomArg, openedAfter, expectedArg, ...extra] = process.argv.slice(2);
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
@@ -21,7 +22,7 @@ if (extra.length || !["inspect", "send"].includes(action) || !["preview", "produ
 }
 
 const project = target === "production" ? PRODUCTION_DB_PROJECT : PREVIEW_DB_PROJECT;
-const db = new Client({ connectionString: process.env.DIRECT_URL, statement_timeout: 5000 });
+const db = new Client(pgConfig(process.env.DIRECT_URL, { statement_timeout: 5000 }));
 let stage = "read-room";
 try {
   await db.connect();

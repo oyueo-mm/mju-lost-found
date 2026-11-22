@@ -7,6 +7,7 @@ import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { assertDatabaseEnvironment, assertScriptSupabaseAccess } from "../../src/lib/db/accessPolicy.mjs";
 import { checkReleaseCMigrations } from "./release-c-production-policy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 // Deliberate entry point for the existing approved-operation launcher. No
 // credentials are loaded here; no guard, grants, policies or defaults change.
@@ -24,7 +25,7 @@ const wanted = { public: false, fileSizeLimit: 10 * 1024 * 1024, allowedMimeType
 function verifyBucket(bucket) {
   if (bucket.public !== false || bucket.file_size_limit !== wanted.fileSizeLimit || JSON.stringify([...(bucket.allowed_mime_types ?? [])].sort()) !== JSON.stringify([...wanted.allowedMimeTypes].sort())) throw new Error("Existing evidence bucket settings differ; refusing to change them");
 }
-const db = new Client({ connectionString: process.env.DIRECT_URL });
+const db = new Client(pgConfig(process.env.DIRECT_URL));
 try {
   await db.connect();
   await db.query("BEGIN READ ONLY");

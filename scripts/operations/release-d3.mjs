@@ -10,6 +10,7 @@ import {assertDatabaseEnvironment,PREVIEW_DB_PROJECT,PRODUCTION_DB_PROJECT} from
 import {PREVIEW_HISTORICAL_MIGRATIONS} from "./release-d2-policy.mjs";
 import {checkD3Migrations} from "./release-d3-policy.mjs";
 import {captureRealtimeAuthorization,assertRealtimeAuthorization} from "../backup/realtime-authorization.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 const [action,...flags]=process.argv.slice(2);
 if(!["status","preflight","migrate","polling","private"].includes(action))throw new Error("Unknown D3 operation");
 const target=assertDatabaseEnvironment(process.env,{usage:"operation"});
@@ -27,7 +28,7 @@ const checksums=Object.fromEntries(readdirSync("prisma/migrations",{withFileType
   const s=readFileSync(resolve("prisma/migrations",d.name,"migration.sql"),"utf8").replaceAll("\r\n","\n");
   return [d.name,[s,s.replaceAll("\n","\r\n")].map(v=>createHash("sha256").update(v).digest("hex"))];
 }));
-const db=new Client({connectionString:process.env.DIRECT_URL});
+const db=new Client(pgConfig(process.env.DIRECT_URL));
 async function history(){return(await db.query(`SELECT migration_name,checksum,finished_at IS NOT NULL applied,rolled_back_at IS NOT NULL rolled_back FROM _prisma_migrations ORDER BY started_at`)).rows;}
 async function state(){
   const present=(await db.query(`SELECT to_regclass('public."ChatRealtimeConfig"') IS NOT NULL present`)).rows[0].present;
