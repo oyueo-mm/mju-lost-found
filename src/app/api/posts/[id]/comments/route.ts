@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { guardPublicReadApi } from "@/lib/security/readGuard";
 
 import { jsonError, jsonOk, requireUserForApi, withErrorHandling } from "@/lib/posts/http";
 import { postTypeSchema } from "@/lib/posts/schema";
@@ -20,6 +21,9 @@ function parseParams(idParam: string, searchParams: URLSearchParams) {
 // requireUserForApi() gate here.
 export const GET = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+    // Security audit A-5: brake on floods before any query.
+    const busy = guardPublicReadApi(request.headers);
+    if (busy) return busy;
     const { id: idParam } = await params;
     const parsed = parseParams(idParam, request.nextUrl.searchParams);
     if (!parsed) return jsonError(400, "id와 type('lost' 또는 'found')이 올바르지 않습니다.");

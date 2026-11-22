@@ -53,6 +53,16 @@ vi.mock("@/lib/rateLimit", () => ({
   rateLimitTierFor,
   clientIpFrom: (headers: Headers) => headers.get("x-forwarded-for"),
 }));
+// Security audit A-4: the route asks admitAiSearch() (own budget, then the
+// service-wide ceilings -- tested in src/lib/rateLimit/aiSearch.test.ts).
+// Here it charges the caller's own bucket through the same enforceRateLimit
+// mock, so every assertion below still says which bucket was charged and
+// that a refusal stops the request before any search work.
+const admitAiSearch = vi.fn(async (user: { id: number } | null, ip: string | null) => {
+  const response = await enforceRateLimit("aiSearch", user ? { userId: user.id } : { ip });
+  return response ? { ok: false, response } : { ok: true };
+});
+vi.mock("@/lib/rateLimit/aiSearch", () => ({ admitAiSearch, aiSearchDenialResponse: (a: { response: unknown }) => a.response }));
 
 const { GET, POST } = await import("./route");
 
@@ -432,6 +442,7 @@ describe("rate limits", () => {
 
     expect(res.status).toBe(429);
     expect(enforceRateLimit).toHaveBeenCalledWith("aiSearch", { ip: "198.51.100.7" });
+    expect(admitAiSearch).toHaveBeenCalledWith(null, "198.51.100.7");
     expect(searchPostsAI).not.toHaveBeenCalled();
   });
 
@@ -443,6 +454,7 @@ describe("rate limits", () => {
 
     expect(res.status).toBe(429);
     expect(enforceRateLimit).toHaveBeenCalledWith("aiSearch", { userId: 42 });
+    expect(admitAiSearch).toHaveBeenCalledWith({ id: 42 }, null);
     expect(searchPosts).not.toHaveBeenCalled();
   });
 

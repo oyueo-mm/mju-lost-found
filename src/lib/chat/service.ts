@@ -7,6 +7,7 @@ import { isCurrentlySuspended, type ContentActor } from "@/lib/auth/suspension";
 import { NotificationType, OrganizationRole, OrganizationStatus, Prisma, type User } from "@/generated/prisma/client";
 import type { PostType } from "@/lib/posts/schema";
 import { parseChatImagePathname } from "@/lib/images/pathname";
+import { markUploadsAttached } from "@/lib/images/uploadIntents";
 import { chatImageExists, deleteChatImageSafely } from "@/lib/images/chatStorage";
 import { sanitizeStoredImage } from "@/lib/images/sanitize";
 import { CHAT_IMAGES_BUCKET, CHAT_IMAGE_URL_TTL_SECONDS } from "@/lib/images/config";
@@ -1232,6 +1233,8 @@ export async function sendMessage(
     }
     throw error;
   }
+  // Security audit A-3: the upload is now in use (never swept).
+  if (storedImagePath) await markUploadsAttached([storedImagePath]);
 
   // Phase N: best-effort, after the transaction already committed -- see
   // realtimeAdmin.ts's own comment. The other participant's (and, subject

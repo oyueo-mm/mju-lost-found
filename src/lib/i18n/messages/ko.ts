@@ -615,6 +615,8 @@ export const ko = {
   "me.keywordAlerts": "키워드 알림",
   "me.adminCenter": "관리자 센터",
   "me.logout": "로그아웃",
+  "me.logoutEverywhere": "모든 기기에서 로그아웃",
+  "me.logoutEverywhereHint": "다른 기기와 이 기기의 로그인을 모두 끝내요. 다시 이용하려면 새로 로그인해야 해요.",
   "me.deactivate": "계정 비활성화 · 회원탈퇴",
   "profile.publicPosts": "공개 게시글",
   "profile.joinedAt": "가입일",

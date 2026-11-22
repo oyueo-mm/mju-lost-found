@@ -97,6 +97,12 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
       // Never accept a session ID supplied in a session-update request body.
       token.realtimeSessionNeedsRefresh = !token.realtimeSessionId;
       token.realtimeSessionId ??= randomUUID();
+      // Security audit P-5: when this session signed in, fixed for its whole
+      // life (rolling refreshes keep it). A cookie from before this field
+      // existed is treated as signed in at 0 -- "logout everywhere" and an
+      // admin's forced sign-out end it too (see auth/sessionRevocation.ts).
+      if (account) token.authTime = Math.floor(Date.now() / 1000);
+      token.authTime ??= 0;
       // 실명·학과 자동 입력: Auth.js copies the Google name and picture into
       // the token (and from there into /api/auth/session) by default --
       // neither is kept. The name survives only as a form hint, below.
@@ -182,6 +188,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
       session.realtimeSessionId = token.realtimeSessionId;
       session.realtimeSessionNeedsRefresh = token.realtimeSessionNeedsRefresh;
       session.authExpiresAt = token.exp;
+      session.authTime = token.authTime ?? 0;
       if (token.userId) {
         session.user.id = String(token.userId);
         session.user.nickname = token.nickname ?? null;

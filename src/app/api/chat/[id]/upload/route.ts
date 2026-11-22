@@ -4,10 +4,11 @@ import { z } from "zod";
 import { jsonError, jsonOk, requireIdentityForApi, requireUserForApi, withErrorHandling } from "@/lib/chat/http";
 import { getChatRoomForUser } from "@/lib/chat/service";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
-import { isAllowedImageContentType } from "@/lib/images/config";
+import { CHAT_IMAGES_BUCKET, isAllowedImageContentType } from "@/lib/images/config";
 import { buildChatImagePathname } from "@/lib/images/pathname";
 import { createChatImageUploadUrl } from "@/lib/images/chatStorage";
 import { enforceRateLimit, rateLimitTierFor } from "@/lib/rateLimit";
+import { canOpenUpload, recordUploadIntent } from "@/lib/images/uploadIntents";
 
 const requestSchema = z.object({ contentType: z.string() });
 
@@ -60,12 +61,16 @@ export const POST = withErrorHandling(
 
     // Same counter as post photos (/api/upload), so the same tier -- staff
     // who just uploaded a batch of post photos are not cut off in chat.
-    const limited = await enforceRateLimit("imageUpload", { userId: auth.user.id, tier: await rateLimitTierFor(auth.user) });
+    const tier = await rateLimitTierFor(auth.user);
+    const limited = await enforceRateLimit("imageUpload", { userId: auth.user.id, tier });
     if (limited) return limited;
+    // Security audit A-3: a cap on uploads not yet attached to anything.
+    if (!(await canOpenUpload(auth.user.id, tier))) return jsonError(429, "첨부하지 않은 사진이 너무 많아요. 작성 중인 글이나 채팅에 사진을 첨부하거나, 하루 뒤에 다시 시도해주세요.");
 
     const pathname = buildChatImagePathname(chatRoomId, contentType);
 
     try {
+      await recordUploadIntent(auth.user.id, CHAT_IMAGES_BUCKET, pathname);
       // Private chat-images bucket -- never the public post-images one.
       const { path, token } = await createChatImageUploadUrl(pathname);
       return jsonOk({ path, token });

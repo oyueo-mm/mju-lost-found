@@ -6,6 +6,8 @@ const { searchPosts } = vi.hoisted(() => ({ searchPosts: vi.fn() }));
 vi.mock("@/lib/posts/service", () => ({ searchPosts }));
 vi.mock("@/lib/metrics/record", () => ({ recordDaily: vi.fn() }));
 vi.mock("@/lib/i18n/server", () => ({ getTranslator: async () => (key: string) => key }));
+// Security audit A-5: the flood brake reads request headers (tested in lib/security/readGuard.test.ts).
+vi.mock("@/lib/security/readGuardPage", () => ({ guardPublicPage: async () => {} }));
 vi.mock("./SearchFilterBar", () => ({ SearchFilterBar: ({ children }: { children: ReactNode }) => <div>{children}</div> }));
 vi.mock("./BoardHeader", () => ({ BoardHeader: () => null }));
 vi.mock("./SemanticSearchNotice", () => ({ SemanticSearchNotice: () => null }));

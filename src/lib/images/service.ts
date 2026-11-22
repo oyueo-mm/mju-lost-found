@@ -4,6 +4,7 @@ import type { PostType } from "@/lib/posts/schema";
 
 import { deleteObjectSafely, publicUrlFor } from "./supabaseAdmin";
 import { parseImagePathname } from "./pathname";
+import { markUploadsAttached } from "./uploadIntents";
 import { sanitizeStoredImage } from "./sanitize";
 import { MAX_IMAGES_PER_POST } from "./config";
 
@@ -121,6 +122,9 @@ export async function setPostImage(
     }
   });
 
+  // Security audit A-3: the upload is now in use (never swept).
+  await markUploadsAttached([upload.path]);
+
   if (previousUrl && previousUrl !== newUrl) {
     await deleteObjectSafely(previousUrl);
   }
@@ -234,6 +238,7 @@ export async function attachPostImages(
       return created;
     });
 
+    await markUploadsAttached(parsedPaths);
     return { kind: "ok", data: { images, imageUrl: newPrimaryUrl ?? existing.imageUrl } };
   } catch (error) {
     // Storage upload already happened before this call was ever made (see

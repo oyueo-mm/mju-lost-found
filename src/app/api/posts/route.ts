@@ -32,13 +32,17 @@ import { ALLOWED_IMAGE_CONTENT_TYPES, MAX_IMAGE_SIZE_BYTES, isAllowedImageConten
 import { sniffBlobImageType } from "@/lib/images/magicBytes";
 import { getCurrentUser } from "@/lib/auth/session";
 import { clientIpFrom, enforceRateLimit, rateLimitTierFor } from "@/lib/rateLimit";
+import { admitAiSearch, aiSearchDenialResponse } from "@/lib/rateLimit/aiSearch";
+import { guardPublicReadApi } from "@/lib/security/readGuard";
 
 // AI search (semantic / image / ai modes) runs embedding models in this
 // function on every request, so it's rate-limited per signed-in user, or
 // per (hashed) IP for anonymous visitors -- search stays public.
+// Security audit A-4: plus service-wide ceilings (see rateLimit/aiSearch.ts).
 async function limitAiSearch(request: NextRequest): Promise<NextResponse | null> {
   const user = await getCurrentUser();
-  return enforceRateLimit("aiSearch", user ? { userId: user.id } : { ip: clientIpFrom(request.headers) });
+  const admission = await admitAiSearch(user, clientIpFrom(request.headers));
+  return admission.ok ? null : aiSearchDenialResponse(admission);
 }
 
 // POST creates a post, which triggers embedPostBestEffort() -- real
@@ -60,6 +64,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     if (outcomes.every((outcome) => outcome.status === "rejected")) return jsonError(503, "Embedding drain unavailable");
     return NextResponse.json({ status: "processed" }, { headers: { "Cache-Control": "no-store" } });
   }
+  // Security audit A-5: brake on floods of the public list/search (the cron
+  // branch above is exempt).
+  const busy = guardPublicReadApi(request.headers);
+  if (busy) return busy;
   const query = listQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
   if (!query.success) {
     return jsonError(400, query.error.issues[0]?.message ?? "잘못된 검색 조건입니다.");

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/auth";
 import { hasOngoingExternalAccess } from "@/lib/auth/access";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
+import { isSessionIdRevoked, signedInBeforeCutoff } from "@/lib/auth/sessionRevocation";
 import { CURRENT_TERMS_VERSION, isAcceptedIdentityConsentVersion, isAcceptedPrivacyVersion } from "@/lib/auth/terms";
 import { prisma } from "@/lib/db/prisma";
 import type { User } from "@/generated/prisma/client";
@@ -60,7 +61,14 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     if (!(await hasOngoingExternalAccess(user))) return null;
   }
   if (!user) return null;
-  const grants = await prisma.adminPermissionGrant.findMany({ where: { userId: user.id }, select: { permission: true } });
+  // Security audit P-5: a signed-out session (this device) or one older than
+  // the user's "logout everywhere" cut-off is treated as not signed in.
+  if (signedInBeforeCutoff(user, session)) return null;
+  const [revoked, grants] = await Promise.all([
+    isSessionIdRevoked(user.id, session?.realtimeSessionId),
+    prisma.adminPermissionGrant.findMany({ where: { userId: user.id }, select: { permission: true } }),
+  ]);
+  if (revoked) return null;
   return { ...user, adminPermissions: grants.map((g) => g.permission) };
 });
 

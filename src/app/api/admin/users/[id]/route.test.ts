@@ -11,6 +11,8 @@ vi.mock("@/lib/moderation/http", async () => {
   return { ...response, requireAdminForApi };
 });
 vi.mock("@/lib/admin/users", () => ({ updateUserByAdmin }));
+const revokeUserSessionsByAdmin = vi.fn();
+vi.mock("@/lib/admin/userSessions", () => ({ revokeUserSessionsByAdmin }));
 
 const { PATCH } = await import("./route");
 
@@ -195,5 +197,33 @@ describe("PATCH /api/admin/users/[id]", () => {
 
     expect(res.status).toBe(202);
     expect(json.data).toEqual({ id: 42, actionType: "suspend_user", status: "pending" });
+  });
+
+  // Security audit P-5: forced sign-out shares this endpoint.
+  describe("action=revoke_sessions", () => {
+    const req = () => new NextRequest("http://localhost/api/admin/users/5", { method: "PATCH", body: JSON.stringify({ action: "revoke_sessions" }) });
+
+    it("ends the member's sessions and never touches updateUserByAdmin", async () => {
+      requireAdminForApi.mockResolvedValueOnce({ user: admin });
+      revokeUserSessionsByAdmin.mockResolvedValueOnce({ kind: "ok", revokedAt: new Date("2026-11-22T00:00:00Z") });
+      const res = await PATCH(req(), params("5"));
+      expect(res.status).toBe(200);
+      expect(revokeUserSessionsByAdmin).toHaveBeenCalledWith(admin, 5);
+      expect(updateUserByAdmin).not.toHaveBeenCalled();
+    });
+
+    it("maps forbidden to 403 and a missing user to 404", async () => {
+      requireAdminForApi.mockResolvedValue({ user: admin });
+      revokeUserSessionsByAdmin.mockResolvedValueOnce({ kind: "forbidden" });
+      expect((await PATCH(req(), params("5"))).status).toBe(403);
+      revokeUserSessionsByAdmin.mockResolvedValueOnce({ kind: "not_found" });
+      expect((await PATCH(req(), params("5"))).status).toBe(404);
+    });
+
+    it("is refused before any work for a non-admin", async () => {
+      requireAdminForApi.mockResolvedValueOnce({ response: jsonError(403, "관리자 권한이 필요합니다.") });
+      expect((await PATCH(req(), params("5"))).status).toBe(403);
+      expect(revokeUserSessionsByAdmin).not.toHaveBeenCalled();
+    });
   });
 });

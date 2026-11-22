@@ -31,11 +31,25 @@ export const RATE_LIMITS = {
       { windowSeconds: MINUTE, max: 20 },
       { windowSeconds: DAY, max: 300 },
     ],
+    // Per network (IPv4 address / IPv6 /64, see networkKey). A campus NAT
+    // puts many visitors behind one address, so the daily cap is a fairness
+    // bound, not the cost bound -- that is aiSearchAnonymousGlobal below.
     anonymous: [
       { windowSeconds: MINUTE, max: 10 },
-      { windowSeconds: DAY, max: 100 },
+      { windowSeconds: DAY, max: 200 },
     ],
   },
+  // Security audit A-4 (2026-11-22): service-wide ceilings. Per-address
+  // limits alone cannot bound cost: an attacker can rotate addresses (IPv6
+  // gives each host billions). These counters are shared by every caller.
+  // When the anonymous ceiling is reached, signed-in members keep their own
+  // per-user budget (unified search falls back to keyword results), so a
+  // flood of anonymous traffic cannot lock students out of AI search.
+  // aiSearchGlobal bounds everyone together -- the last line against a cost
+  // blow-up on the Vercel Hobby plan (embedding inference runs in our
+  // functions). Sized far above current use (tens of members).
+  aiSearchAnonymousGlobal: { user: [], global: [{ windowSeconds: MINUTE, max: 60 }, { windowSeconds: DAY, max: 1500 }] },
+  aiSearchGlobal: { user: [], global: [{ windowSeconds: MINUTE, max: 200 }, { windowSeconds: DAY, max: 8000 }] },
   imageUpload: {
     user: [
       { windowSeconds: 10 * MINUTE, max: 30 },
@@ -82,14 +96,15 @@ export const RATE_LIMITS = {
   cspReport: { user: [{ windowSeconds: MINUTE, max: 30 }, { windowSeconds: DAY, max: 300 }], anonymous: [{ windowSeconds: MINUTE, max: 30 }, { windowSeconds: DAY, max: 300 }] },
 } as const satisfies Record<
   string,
-  { user: readonly RateLimitRule[]; anonymous?: readonly RateLimitRule[]; staff?: readonly RateLimitRule[] }
+  { user: readonly RateLimitRule[]; anonymous?: readonly RateLimitRule[]; staff?: readonly RateLimitRule[]; global?: readonly RateLimitRule[] }
 >;
 
 export type RateLimitAction = keyof typeof RATE_LIMITS;
 export type RateLimitTier = "user" | "staff";
 // tier only matters for actions that define staff rules; everyone else
 // (and every other action) uses the user rules.
-export type RateLimitSubject = { userId: number; tier?: RateLimitTier } | { ip: string | null };
+// `global`: one counter for the whole service (aiSearch*Global).
+export type RateLimitSubject = { userId: number; tier?: RateLimitTier } | { ip: string | null } | { global: true };
 export type RateLimitResult = { ok: true } | { ok: false; reason: "limited" | "unavailable"; retryAfterSeconds: number };
 export type RateLimitFailure = { kind: "rate_limited" | "rate_limit_unavailable"; retryAfterSeconds: number };
 
@@ -112,10 +127,27 @@ export function rateLimitFailureResponse(failure: RateLimitFailure): NextRespons
 // address is never stored.
 function subjectKey(subject: RateLimitSubject): string {
   if ("userId" in subject) return `u:${subject.userId}`;
+  if ("global" in subject) return "g";
   const salt = process.env.AUTH_SECRET ?? "";
   if (!salt) throw new Error("Anonymous rate limit hashing is not configured");
-  const hash = createHash("sha256").update(`${salt}:${subject.ip ?? "unknown"}`).digest("hex").slice(0, 32);
+  const hash = createHash("sha256").update(`${salt}:${networkKey(subject.ip)}`).digest("hex").slice(0, 32);
   return `ip:${hash}`;
+}
+
+// Security audit A-4: the unit an anonymous limit is counted on. An IPv4
+// address as is; an IPv6 address by its /64 -- one subscriber/LAN normally
+// gets a whole /64 and can pick any address in it, so per-address counting
+// would let one host rotate past every limit. Expects clientIpFrom()'s
+// canonical output (or null -> one shared "unknown" bucket).
+export function networkKey(ip: string | null): string {
+  if (!ip) return "unknown";
+  if (!ip.includes(":")) return ip;
+  const [head, tail = ""] = ip.split("::");
+  const left = head ? head.split(":") : [];
+  const right = ip.includes("::") && tail ? tail.split(":") : [];
+  const groups = ip.includes("::") ? [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right] : left;
+  if (groups.length !== 8) return "unknown";
+  return `${groups.slice(0, 4).map((g) => parseInt(g, 16).toString(16)).join(":")}::/64`;
 }
 
 // The first address Vercel records for the request (x-forwarded-for is
@@ -149,9 +181,10 @@ export async function checkRateLimit(action: RateLimitAction, subject: RateLimit
     user: readonly RateLimitRule[];
     anonymous?: readonly RateLimitRule[];
     staff?: readonly RateLimitRule[];
+    global?: readonly RateLimitRule[];
   };
-  const rules = "userId" in subject ? (subject.tier === "staff" && limits.staff) || limits.user : limits.anonymous;
-  if (!rules) return { ok: true };
+  const rules = "userId" in subject ? (subject.tier === "staff" && limits.staff) || limits.user : "global" in subject ? limits.global : limits.anonymous;
+  if (!rules || rules.length === 0) return { ok: true };
 
   const now = Date.now();
   try {

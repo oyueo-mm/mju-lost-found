@@ -39,14 +39,22 @@ export async function createChatImageSignedUrl(path: string): Promise<string> {
 // after()), so a Storage failure is only logged and can be found later by
 // scripts/reportChatImageOrphans.ts. Deletes exactly the one path given.
 export async function deleteChatImageSafely(path: string): Promise<void> {
+  await removeChatImage(path);
+}
+
+// Same, but says whether Storage confirmed the removal (the unattached-upload
+// sweep only records a deletion that happened).
+export async function removeChatImage(path: string): Promise<boolean> {
   if (!parseChatImagePathname(path)) {
     console.error("Refusing to delete: not a chat image path", path);
-    return;
+    return false;
   }
   try {
     const { error } = await bucket().remove([path]);
     if (error) throw error;
+    return true;
   } catch (error) {
     console.error("Failed to delete chat image:", path, error);
+    return false;
   }
 }

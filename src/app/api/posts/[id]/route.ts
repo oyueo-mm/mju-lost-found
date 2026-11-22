@@ -1,4 +1,5 @@
 import { requeueImageJob } from "@/lib/ai/imageJobQueue";
+import { guardPublicReadApi } from "@/lib/security/readGuard";
 import { kickEmbeddingJobs } from "@/lib/ai/imageJobKick";
 import { EMBEDDING_INPUT_FIELDS } from "@/lib/ai/embeddingFields";
 import { checkRateLimit, rateLimitFailure, rateLimitFailureResponse, rateLimitTierFor } from "@/lib/rateLimit";
@@ -52,6 +53,9 @@ function parseParams(idParam: string, searchParams: URLSearchParams) {
 
 export const GET = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+    // Security audit A-5: brake on floods before any query.
+    const busy = guardPublicReadApi(request.headers);
+    if (busy) return busy;
     const { id: idParam } = await params;
     const parsed = parseParams(idParam, request.nextUrl.searchParams);
     if (!parsed) {

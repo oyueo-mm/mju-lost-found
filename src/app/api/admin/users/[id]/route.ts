@@ -1,10 +1,11 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import { jsonError, requireAdminForApi, withErrorHandling } from "@/lib/moderation/http";
 import { adminUserMutationResultToResponse } from "@/lib/admin/response";
 import { updateUserByAdminSchema } from "@/lib/admin/schema";
 import { releaseResolvedWithdrawnIdentitiesSafely } from "@/lib/auth/identityRelease";
 import { updateUserByAdmin } from "@/lib/admin/users";
+import { revokeUserSessionsByAdmin } from "@/lib/admin/userSessions";
 
 // PATCH /api/admin/users/[id] { action: "promote"|"demote"|"suspend"|"unsuspend", suspendDurationDays? }
 // One endpoint dispatches to whichever of the four toggles the admin
@@ -28,6 +29,15 @@ export const PATCH = withErrorHandling(
     } catch {
       return jsonError(400, "잘못된 요청 본문입니다.");
     }
+    // Security audit P-5: forced sign-out shares this endpoint (no extra
+    // Serverless Function); it has its own permission rule.
+    if ((body as { action?: unknown } | null)?.action === "revoke_sessions") {
+      const revoked = await revokeUserSessionsByAdmin(auth.user, id);
+      if (revoked.kind === "forbidden") return jsonError(403, "권한이 없습니다.");
+      if (revoked.kind === "not_found") return jsonError(404, "사용자를 찾을 수 없습니다.");
+      return NextResponse.json({ ok: true, revokedAt: revoked.revokedAt.toISOString() });
+    }
+
     const parsed = updateUserByAdminSchema.safeParse(body);
     if (!parsed.success) {
       return jsonError(400, parsed.error.issues[0]?.message ?? "잘못된 요청입니다.");

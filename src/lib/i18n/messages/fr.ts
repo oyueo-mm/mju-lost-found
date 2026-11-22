@@ -70,6 +70,8 @@ export const fr: Dictionary = {
   "post.lostPropertyNotice": "💡 Emporter, conserver ou disposer d'un objet perdu sans le restituer peut constituer une appropriation d'un bien perdu. Contactez l'auteur par messagerie pour le lui rendre, ou déposez l'objet dans un commissariat ou un poste de police proche. S'il a été trouvé dans un lieu doté d'un gestionnaire, comme un bâtiment du campus, remettez-le au gestionnaire du bâtiment (par ex. le poste de sécurité).",
   "me.title": "Mon espace",
   "me.logout": "Se déconnecter",
+  "me.logoutEverywhere": "Se déconnecter de tous les appareils",
+  "me.logoutEverywhereHint": "Met fin à toutes les sessions, y compris celle-ci. Vous devrez vous reconnecter.",
   "form.title": "Titre",
   "form.description": "Description",
   "form.lostRewardNotice": "La récompense indiquée dans votre annonce est facultative et fixée librement par vous ; elle ne garantit ni la restitution ni le paiement. Par ailleurs, selon la loi coréenne sur les objets perdus, la personne qui récupère un objet peut devoir verser à celui qui l'a trouvé une récompense légale de 5 à 20 % de la valeur de l'objet (à réclamer dans le mois suivant la restitution). La récompense légale est distincte d'une récompense volontaire ; le service n'en fixe pas le montant et n'intervient pas dans le paiement.",

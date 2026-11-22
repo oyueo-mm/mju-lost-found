@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { guardPublicPage } from "@/lib/security/readGuardPage";
 import { managementScope, inManagementScope, managementHistory } from "@/lib/posts/management";
 import { PostManagement } from "@/components/post/PostManagement";
 import { custodyView, MANAGEMENT_ACTION_LABELS } from "@/lib/posts/custodySchema";
@@ -84,6 +85,8 @@ export default async function PostDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ type?: string; created?: string }>;
 }) {
+  // Security audit A-5: brake on floods before any query.
+  await guardPublicPage();
   const [t, locale] = await Promise.all([getTranslator(), getLocale()]);
   // 분실/습득 날짜/시각 분리: 날짜+시간 -> the full date and time; 날짜만 ->
   // "2026. 10. 6. · 시간 미상"; 날짜도 모름 -> "분실/습득 시점 미상" alone.

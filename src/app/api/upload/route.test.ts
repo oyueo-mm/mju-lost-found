@@ -2,6 +2,10 @@
 const enforceRateLimit = vi.fn(async () => null as import("next/server").NextResponse | null);
 const rateLimitTierFor = vi.fn(async () => "user" as const);
 vi.mock("@/lib/rateLimit", () => ({ enforceRateLimit, rateLimitTierFor }));
+// Security audit A-3: open-upload cap + intent record (lib/images/uploadIntents.test.ts).
+const canOpenUpload = vi.fn<(userId: number, tier: string) => Promise<boolean>>(async () => true);
+const recordUploadIntent = vi.fn<(userId: number, bucket: string, path: string) => Promise<void>>(async () => {});
+vi.mock("@/lib/images/uploadIntents", () => ({ canOpenUpload, recordUploadIntent }));
 import { NextRequest, NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CURRENT_TERMS_VERSION } from "@/lib/auth/terms";
@@ -190,6 +194,21 @@ describe("POST /api/upload", () => {
     expect(status).toBe(200);
     expect(json.data).toEqual({ path: "posts/lost/1/uuid.jpg", token: "tok" });
     expect(createSignedUploadUrl).toHaveBeenCalledWith(expect.stringMatching(/^posts\/lost\/1\//));
+    // A-3: the minted path is recorded before the URL is handed out.
+    expect(recordUploadIntent).toHaveBeenCalledWith(1, "post-images", createSignedUploadUrl.mock.calls[0][0]);
+  });
+
+  it("refuses with 429 once the member holds too many unattached uploads (A-3)", async () => {
+    getCurrentUser.mockResolvedValueOnce(readyUser);
+    getLostPost.mockResolvedValueOnce({ author: { id: 1 } });
+    canOpenUpload.mockResolvedValueOnce(false);
+
+    const { status } = await callAndGetJson({ postType: "lost", postId: 1, contentType: "image/jpeg" });
+
+    expect(status).toBe(429);
+    expect(canOpenUpload).toHaveBeenCalledWith(1, "user");
+    expect(recordUploadIntent).not.toHaveBeenCalled();
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
   });
 
   it("dispatches to found-post ownership checks for postType=found", async () => {

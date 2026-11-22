@@ -587,6 +587,8 @@ export const mn: Dictionary = {
   "me.keywordAlerts": "Түлхүүр үгийн мэдэгдэл",
   "me.adminCenter": "Админ төв",
   "me.logout": "Гарах",
+  "me.logoutEverywhere": "Бүх төхөөрөмжөөс гарах",
+  "me.logoutEverywhereHint": "Энэ төхөөрөмжийг оруулаад бүх нэвтрэлтийг дуусгана. Дахин нэвтрэх шаардлагатай.",
   "me.deactivate": "Бүртгэлээ идэвхгүй болгох · устгах",
   "profile.publicPosts": "Нээлттэй нийтлэл",
   "profile.joinedAt": "Бүртгүүлсэн огноо",

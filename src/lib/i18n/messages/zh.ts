@@ -582,6 +582,8 @@ export const zh: Dictionary = {
   "me.keywordAlerts": "关键词提醒",
   "me.adminCenter": "管理中心",
   "me.logout": "退出登录",
+  "me.logoutEverywhere": "在所有设备上退出登录",
+  "me.logoutEverywhereHint": "结束包括本设备在内的所有登录。之后需要重新登录。",
   "me.deactivate": "停用或注销账号",
   "profile.publicPosts": "公开帖子",
   "profile.joinedAt": "注册日期",

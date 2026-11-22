@@ -6,7 +6,7 @@ const organizationMember = { count: vi.fn() };
 const $transaction = vi.fn(async (fn) => fn({ $queryRaw }));
 vi.mock("@/lib/db/prisma", () => ({ prisma: { $queryRaw, $executeRaw, organizationMember, $transaction } }));
 
-const { RATE_LIMITS, checkRateLimit, clientIpFrom, enforceRateLimit, rateLimitTierFor, waitText } = await import("./index");
+const { RATE_LIMITS, checkRateLimit, clientIpFrom, enforceRateLimit, networkKey, rateLimitTierFor, waitText } = await import("./index");
 
 const DAY_SECONDS = 24 * 60 * 60;
 
@@ -58,6 +58,30 @@ describe("checkRateLimit", () => {
       expect(key).toMatch(/^aiSearch:ip:[0-9a-f]{32}:\d+$/);
       expect(key).not.toContain("203.0.113.9");
     }
+  });
+
+  // Security audit A-4: one IPv6 host can pick any address in its /64.
+  it("counts every IPv6 address of one /64 as one anonymous caller", async () => {
+    $queryRaw.mockResolvedValue([{ count: 1 }]);
+    await checkRateLimit("aiSearch", { ip: "2001:db8:1:2::1" });
+    const first = keysCalled();
+    $queryRaw.mockClear();
+    await checkRateLimit("aiSearch", { ip: "2001:db8:1:2:aaaa:bbbb:cccc:dddd" });
+    expect(keysCalled()).toEqual(first);
+    $queryRaw.mockClear();
+    await checkRateLimit("aiSearch", { ip: "2001:db8:1:3::1" });
+    expect(keysCalled()).not.toEqual(first);
+  });
+
+  it("keeps service-wide ceilings on one shared key and no per-user rules", async () => {
+    $queryRaw.mockResolvedValue([{ count: 1 }]);
+    await checkRateLimit("aiSearchAnonymousGlobal", { global: true });
+    expect(keysCalled()).toEqual(["aiSearchAnonymousGlobal:g:60", "aiSearchAnonymousGlobal:g:86400"]);
+    $queryRaw.mockClear();
+    expect(await checkRateLimit("aiSearchGlobal", { userId: 1 })).toEqual({ ok: true });
+    expect($queryRaw).not.toHaveBeenCalled();
+    $queryRaw.mockResolvedValue([{ count: RATE_LIMITS.aiSearchGlobal.global[0].max + 1 }]);
+    expect((await checkRateLimit("aiSearchGlobal", { global: true })).ok).toBe(false);
   });
 
   it("has no anonymous limit for logged-in-only actions (those routes require a session anyway)", async () => {
@@ -189,6 +213,14 @@ describe("clientIpFrom", () => {
     expect(clientIpFrom(new Headers({ "x-forwarded-for": "2001:db8:0:0:0:0:0:1" }), env)).toBe("2001:db8::1");
     expect(clientIpFrom(new Headers({ "x-forwarded-for": "::ffff:198.51.100.1" }), env)).toBe("198.51.100.1");
     expect(clientIpFrom(new Headers({ "x-forwarded-for": "unknown" }), env)).toBeNull();
+  });
+  it("reduces IPv6 to its /64 and leaves IPv4 alone (networkKey)", () => {
+    expect(networkKey("198.51.100.1")).toBe("198.51.100.1");
+    expect(networkKey("2001:db8::1")).toBe("2001:db8:0:0::/64");
+    expect(networkKey("2001:db8:0:0:ffff::1")).toBe("2001:db8:0:0::/64");
+    expect(networkKey("2001:db8:a:b:c:d:e:f")).toBe("2001:db8:a:b::/64");
+    expect(networkKey("::1")).toBe("0:0:0:0::/64");
+    expect(networkKey(null)).toBe("unknown");
   });
 });
 

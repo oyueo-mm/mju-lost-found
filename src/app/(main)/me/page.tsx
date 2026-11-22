@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { requireReadyUser } from "@/lib/auth/session";
+import { getCurrentUser, requireReadyUser } from "@/lib/auth/session";
+import { revokeAllSessions } from "@/lib/auth/sessionRevocation";
 import { signOut } from "@/lib/auth/auth";
 import { forgetThisDevicePush } from "@/lib/push/forgetDevice";
 import { pushConfig } from "@/lib/push/service";
@@ -187,6 +188,25 @@ export default async function MePage() {
           <LogoutIcon className="size-4.5" />
           {t("me.logout")}
         </button>
+      </form>
+
+      {/* Security audit P-5: ends every session of this account -- a lost
+          phone, a shared PC, a stolen cookie -- not only this browser's.
+          The member is re-read here, never taken from the rendered page. */}
+      <form
+        className="-mt-3 flex flex-col items-center gap-1"
+        action={async () => {
+          "use server";
+          const current = await getCurrentUser();
+          if (current) await revokeAllSessions(current.id);
+          await forgetThisDevicePush(current?.id);
+          await signOut({ redirectTo: "/" });
+        }}
+      >
+        <button type="submit" className="text-xs text-muted-foreground underline hover:text-destructive">
+          {t("me.logoutEverywhere")}
+        </button>
+        <p className="text-center text-[11px] text-muted-foreground">{t("me.logoutEverywhereHint")}</p>
       </form>
 
       {/* Phase 10: small, quiet text link -- not a MenuRow, not styled to

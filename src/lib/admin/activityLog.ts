@@ -24,6 +24,7 @@ export const ADMIN_TASK_CATEGORIES: { key: AdminTaskCategory; label: string }[] 
 export const ADMIN_ACTIVITY_ACTIONS = {
   "post.delete": { label: "게시글 직접 삭제", category: "content" },
   "user.unsuspend": { label: "이용 제한 해제", category: "sanction" },
+  "user.sessions_revoke": { label: "로그인 강제 종료", category: "sanction" },
   "announcement.update": { label: "공지 수정", category: "operations" },
   "announcement.delete": { label: "공지 삭제", category: "operations" },
   "feedback.status": { label: "문의·의견 상태 변경", category: "operations" },

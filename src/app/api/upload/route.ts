@@ -5,11 +5,12 @@ import { getCurrentUser, hasRequiredConsents } from "@/lib/auth/session";
 import { isCurrentlySuspended } from "@/lib/auth/suspension";
 import { jsonError, jsonOk, withErrorHandling } from "@/lib/posts/http";
 import { getFoundPost, getLostPost } from "@/lib/posts/service";
-import { isAllowedImageContentType } from "@/lib/images/config";
+import { POST_IMAGES_BUCKET, isAllowedImageContentType } from "@/lib/images/config";
 import { buildImagePathname } from "@/lib/images/pathname";
 import { createSignedUploadUrl } from "@/lib/images/supabaseAdmin";
 import { postTypeSchema } from "@/lib/posts/schema";
 import { enforceRateLimit, rateLimitTierFor } from "@/lib/rateLimit";
+import { canOpenUpload, recordUploadIntent } from "@/lib/images/uploadIntents";
 
 const requestSchema = z.object({
   postType: postTypeSchema,
@@ -67,12 +68,16 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     return jsonError(403, "본인 게시물에만 이미지를 업로드할 수 있습니다.");
   }
 
-  const limited = await enforceRateLimit("imageUpload", { userId: user.id, tier: await rateLimitTierFor(user) });
+  const tier = await rateLimitTierFor(user);
+  const limited = await enforceRateLimit("imageUpload", { userId: user.id, tier });
   if (limited) return limited;
+  // Security audit A-3: a cap on uploads not yet attached to anything.
+  if (!(await canOpenUpload(user.id, tier))) return jsonError(429, "첨부하지 않은 사진이 너무 많아요. 작성 중인 글이나 채팅에 사진을 첨부하거나, 하루 뒤에 다시 시도해주세요.");
 
   const pathname = buildImagePathname(postType, postId, contentType);
 
   try {
+    await recordUploadIntent(user.id, POST_IMAGES_BUCKET, pathname);
     const { path, token } = await createSignedUploadUrl(pathname);
     return jsonOk({ path, token });
   } catch (error) {

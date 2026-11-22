@@ -1,4 +1,5 @@
 import { needsSearchApi } from "@/lib/posts/searchIntent";
+import { guardPublicPage } from "@/lib/security/readGuardPage";
 import { SearchFilterBar } from "@/components/search/SearchFilterBar";
 import { Pagination } from "@/components/search/Pagination";
 import { SemanticSearchNotice } from "@/components/search/SemanticSearchNotice";
@@ -20,6 +21,8 @@ export default async function SearchPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
+  // Security audit A-5: brake on floods before any query.
+  await guardPublicPage();
   const raw = normalizeSearchParams(await searchParams);
   const t = await getTranslator();
 

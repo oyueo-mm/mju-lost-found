@@ -24,6 +24,8 @@ declare module "@auth/core/types" {
     realtimeSessionId?: string;
     realtimeSessionNeedsRefresh?: boolean;
     authExpiresAt?: number;
+    // P-5: when this session signed in (epoch seconds; 0 = before P-5).
+    authTime?: number;
     user: {
       id: string;
       nickname: string | null;
@@ -41,6 +43,7 @@ declare module "@auth/core/jwt" {
   interface JWT {
     realtimeSessionId?: string;
     realtimeSessionNeedsRefresh?: boolean;
+    authTime?: number;
     userId?: number;
     nickname?: string | null;
     rejoinIdentityId?: number;

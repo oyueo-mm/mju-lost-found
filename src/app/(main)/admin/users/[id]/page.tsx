@@ -4,11 +4,12 @@ import { notFound, redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/session";
 import { getUserDetailForAdmin } from "@/lib/admin/users";
 import { UserActionButtons } from "@/components/admin/UserActionButtons";
+import { RevokeSessionsButton } from "@/components/admin/RevokeSessionsButton";
 import { AuthorLink } from "@/components/user/AuthorLink";
 import { MyCommentList } from "@/components/comment/MyCommentList";
 import { ShieldIcon } from "@/components/icons";
 import { AdminPermissionEditor } from "@/components/admin/AdminPermissionEditor";
-import { can } from "@/lib/permissions/check";
+import { can, isActiveFullAdmin } from "@/lib/permissions/check";
 import { PERMISSION_INFO } from "@/lib/permissions/definitions";
 import { listManagementInstitutions, listPermissionHistory, loadPermissionStates } from "@/lib/permissions/service";
 import { COLLECTION_SINCE } from "@/lib/metrics/report";
@@ -272,7 +273,10 @@ export default async function AdminUserDetailPage({ params }: { params: Promise<
         </section>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-start justify-end gap-3">
+        {canSanction && (!user.isAdmin || isActiveFullAdmin(admin) || user.id === admin.id) && (
+          <RevokeSessionsButton userId={user.id} nickname={user.nickname} />
+        )}
         <UserActionButtons user={user} isSelf={user.id === admin.id} canSanction={canSanction} canManageAdmin={canManagePermissions} />
       </div>
     </div>

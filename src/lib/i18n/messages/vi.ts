@@ -585,6 +585,8 @@ export const vi: Dictionary = {
   "me.keywordAlerts": "Thông báo từ khoá",
   "me.adminCenter": "Trung tâm quản trị",
   "me.logout": "Đăng xuất",
+  "me.logoutEverywhere": "Đăng xuất trên mọi thiết bị",
+  "me.logoutEverywhereHint": "Kết thúc mọi phiên đăng nhập, kể cả phiên này. Bạn sẽ cần đăng nhập lại.",
   "me.deactivate": "Vô hiệu hoá hoặc xoá tài khoản",
   "profile.publicPosts": "Bài đăng công khai",
   "profile.joinedAt": "Ngày tham gia",

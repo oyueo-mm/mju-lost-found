@@ -3,12 +3,13 @@ import { CURRENT_IDENTITY_CONSENT_VERSION, CURRENT_PRIVACY_VERSION, CURRENT_TERM
 
 const auth = vi.fn();
 const findUnique = vi.fn();
+const realtimeFindFirst = vi.fn<(args?: unknown) => Promise<{ id: string } | null>>(async () => null);
 const redirect = vi.fn((url: string) => {
   throw new Error(`REDIRECT:${url}`);
 });
 
 vi.mock("@/lib/auth/auth", () => ({ auth }));
-vi.mock("@/lib/db/prisma", () => ({ prisma: { user: { findUnique }, adminPermissionGrant: { findMany: async () => [] } } }));
+vi.mock("@/lib/db/prisma", () => ({ prisma: { user: { findUnique }, adminPermissionGrant: { findMany: async () => [] }, chatRealtimeSession: { findFirst: realtimeFindFirst } } }));
 vi.mock("next/navigation", () => ({ redirect }));
 // External access Phase: the per-request approval re-check (auth/access.ts,
 // tested on its own in access.test.ts).
@@ -45,6 +46,42 @@ beforeEach(() => {
 });
 
 describe("getCurrentUser", () => {
+  // Security audit P-5: server-side revocation of stateless JWT sessions.
+  describe("session revocation (P-5)", () => {
+    const sid = "6f1c2c0e-3b7a-4c55-9a51-2a8d4b7e9f10";
+    const row = { id: 5, email: "a@mju.ac.kr", userType: "STUDENT", deletedAt: null };
+
+    it("accepts a session that signed in after the cut-off", async () => {
+      auth.mockResolvedValue({ user: { id: "5" }, authTime: 2_000_000_000, realtimeSessionId: sid });
+      findUnique.mockResolvedValue({ ...row, sessionsValidAfter: new Date(1_999_999_999_000) });
+      expect(await getCurrentUser()).toMatchObject({ id: 5 });
+    });
+
+    it("refuses a session that signed in before \"logout everywhere\" / a forced sign-out", async () => {
+      auth.mockResolvedValue({ user: { id: "5" }, authTime: 1_999_999_998, realtimeSessionId: sid });
+      findUnique.mockResolvedValue({ ...row, sessionsValidAfter: new Date(1_999_999_999_000) });
+      expect(await getCurrentUser()).toBeNull();
+    });
+
+    it("refuses a pre-P-5 cookie (no authTime) once a cut-off exists, but not before", async () => {
+      auth.mockResolvedValue({ user: { id: "5" } });
+      findUnique.mockResolvedValue({ ...row, sessionsValidAfter: new Date(1_000) });
+      expect(await getCurrentUser()).toBeNull();
+      findUnique.mockResolvedValue({ ...row, sessionsValidAfter: null });
+      expect(await getCurrentUser()).toMatchObject({ id: 5 });
+    });
+
+    it("refuses a copy of a cookie whose session was signed out on its device", async () => {
+      auth.mockResolvedValue({ user: { id: "5" }, authTime: 2_000_000_000, realtimeSessionId: sid });
+      findUnique.mockResolvedValue({ ...row, sessionsValidAfter: null });
+      realtimeFindFirst.mockResolvedValueOnce({ id: sid });
+      expect(await getCurrentUser()).toBeNull();
+      expect(realtimeFindFirst).toHaveBeenLastCalledWith(expect.objectContaining({ where: { id: sid, userId: 5, revokedAt: { not: null } } }));
+      // A session that was not signed out still passes.
+      expect(await getCurrentUser()).toMatchObject({ id: 5 });
+    });
+  });
+
   it("cuts off an approved external account as soon as its approval is revoked", async () => {
     auth.mockResolvedValue({ user: { id: "77" } });
     findUnique.mockResolvedValue({ id: 77, email: "guard@gmail.com", userType: "EXTERNAL_VERIFIED", deletedAt: null });

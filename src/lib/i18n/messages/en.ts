@@ -587,6 +587,8 @@ export const en: Dictionary = {
   "me.keywordAlerts": "Keyword alerts",
   "me.adminCenter": "Admin center",
   "me.logout": "Sign out",
+  "me.logoutEverywhere": "Sign out on all devices",
+  "me.logoutEverywhereHint": "Ends every signed-in session, including this one. You will need to sign in again.",
   "me.deactivate": "Deactivate or delete account",
   "profile.publicPosts": "Public posts",
   "profile.joinedAt": "Joined",

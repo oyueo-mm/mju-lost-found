@@ -402,6 +402,11 @@ model User {
   // Deliberately NOT a "currently online" signal -- see admin/users.ts's
   // getUserDetailForAdmin for why presence isn't derived from this alone.
   lastLoginAt               DateTime? @map("last_login_at")
+  // Security audit P-5 (2026-11-22): sessions signed in before this moment
+  // are refused on every request ("모든 기기에서 로그아웃" / admin forced
+  // sign-out). Null = no cut-off. Whole seconds (JWT auth_time granularity).
+  sessionsValidAfter        DateTime? @map("sessions_valid_after")
+  uploadIntents             UploadIntent[]
   // 최근 활동 감지 시각: the latest time this member was seen using the site
   // while signed in (a screen shown, or input on a visible screen), written
   // by metrics/record.ts recordMemberActivity at most every
@@ -2326,4 +2331,22 @@ model ChatPresence {
 
   @@id([userId, chatRoomId])
   @@map("ChatPresence")
+}
+
+// Security audit A-3 (2026-11-22): one row per signed upload URL minted
+// (post-images or chat-images). Open = neither attached nor deleted. Caps a
+// member's open uploads and lets the daily maintenance cron delete uploads
+// never attached (lib/images/uploadIntents.ts). Server-only table.
+model UploadIntent {
+  path       String    @id @db.Text
+  bucket     String    @db.Text
+  userId     Int       @map("user_id")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(dbgenerated("(now() AT TIME ZONE 'UTC'::text)")) @map("created_at") @db.Timestamp(3)
+  attachedAt DateTime? @map("attached_at") @db.Timestamp(3)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamp(3)
+
+  @@index([userId, createdAt], map: "UploadIntent_user_open")
+  @@index([createdAt], map: "UploadIntent_open")
+  @@map("UploadIntent")
 }

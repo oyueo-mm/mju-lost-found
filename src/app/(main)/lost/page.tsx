@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { guardPublicPage } from "@/lib/security/readGuardPage";
 import { needsSearchApi } from "@/lib/posts/searchIntent";
 import { SearchFilterBar } from "@/components/search/SearchFilterBar";
 import { Pagination } from "@/components/search/Pagination";
@@ -32,6 +33,8 @@ export default async function LostListPage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
+  // Security audit A-5: brake on floods before any query.
+  await guardPublicPage();
   const raw = normalizeSearchParams(await searchParams);
   // 게시판 리디자인 Phase: `status=` (empty) is the filter's "상태 전체" --
   // every status. listQuerySchema rejects an empty status (and a rejected

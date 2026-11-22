@@ -6,6 +6,7 @@ import { z } from "zod";
 import { jsonError, jsonOk, requireAdminForApi, withErrorHandling } from "@/lib/moderation/http";
 import { setGoogleTestMode } from "@/lib/settings/service";
 import { runRetention } from "@/lib/retention/service";
+import { sweepUnattachedUploads } from "@/lib/images/uploadIntents";
 import { hasImagePurgeApi } from "@/lib/images/imageCache";
 import { recordCapacity } from "@/lib/metrics/record";
 import { recordAdminActivity } from "@/lib/admin/activityLog";
@@ -73,10 +74,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
   // 채팅 웹 푸시: delivery rows older than 7 days (never fails the clean-up)
   const pushOutboxPruned = await prunePushOutbox().catch(() => null);
+  // Security audit A-3: uploads never attached within a day are removed
+  // (bounded per run; never fails the clean-up).
+  const unattachedUploads = await sweepUnattachedUploads().catch(() => null);
   // 이미지 캐시 제거: whether this deployment's functions can purge the
   // image cache at all (lib/images/imageCache.ts) -- a daily check that
   // deletes nothing, readable before any photo is deleted.
   const imageCachePurge = hasImagePurgeApi() ? "available" : "unavailable";
-  console.log("retention run", JSON.stringify({ ...result, capacity, deployments, pushOutboxPruned, imageCachePurge }));
+  console.log("retention run", JSON.stringify({ ...result, capacity, deployments, pushOutboxPruned, unattachedUploads, imageCachePurge }));
   return jsonOk(result);
 });
