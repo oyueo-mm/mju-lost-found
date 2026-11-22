@@ -29,7 +29,15 @@
   - `ops/backup`(백업 운영 worktree, 1커밋)
 - 병합 전 검증(`2130c6b`): 단위 274파일 3,047개, 타입, 린트 통과.
 
-## 0-6. 2026-11-22 DB TLS Production 반영 (최신)
+## 0-7. 2026-11-22 배포 검증 강화 (최신)
+
+- **업로드 전 게이트**: 클라이언트 = 현재 checkout 스키마, 대상 DB 호환성(Production은 승인 실행기로 읽기 전용).
+- **롤백 가드**: `dpl_HbJbyTZF…` 금지.
+- **배포 후 감시**: 로그인 2xx 수를 센다.
+- 자세한 내용: [deploy-gates-2026-11-22.md](deploy-gates-2026-11-22.md). 도구만 바뀌었으므로 Production 배포는 없다.
+
+
+## 0-6. 2026-11-22 DB TLS Production 반영
 
 - **Production**: `dpl_ZNj7p6cLTuiKJESDE8ZYWiWf6znD`(`dede9ce`, 앱 DB 연결 검증된 TLS). 첫 배포 `dpl_HbJbyTZF…`는 잘못된 Prisma 클라이언트로 약 28분간 로그인 요청 일부가 실패해 롤백했다. 롤백 대상에서 제외한다([db-tls 2-1](db-tls-2026-11-22.md)).
   - 롤백 `dpl_FvfFRQpp…`(`fc947bb`). SSL 강제 전까지만 안전하다.
