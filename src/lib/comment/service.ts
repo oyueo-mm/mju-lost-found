@@ -6,6 +6,7 @@ import { can } from "@/lib/permissions/check";
 import { validateOrganizationPosting } from "@/lib/organization/service";
 import type { PostType } from "@/lib/posts/schema";
 import { NotificationType, type User } from "@/generated/prisma/client";
+import { canViewPost } from "@/lib/posts/visibility";
 import { removeCommentInTx } from "./remove";
 import type { CreateCommentInput, UpdateCommentInput } from "./schema";
 
@@ -236,7 +237,10 @@ export type MyCommentDTO = {
   createdAt: Date;
   parentId: number | null;
   replyToNickname: string | null;
-  post: { id: number; type: PostType; title: string };
+  // hidden: the post is temporarily hidden or removed and the viewer may
+  // not see it (security audit A-1) -- title is then blank and the UI
+  // shows a placeholder without a link.
+  post: { id: number; type: PostType; title: string; hidden?: boolean };
 };
 
 // Same flat-cap-instead-of-real-pagination trade-off as listCommentsForPost
@@ -244,14 +248,18 @@ export type MyCommentDTO = {
 // profile page's *post* list, not this one.
 const MY_COMMENTS_CAP = 200;
 
-export async function listCommentsByUser(userId: number): Promise<MyCommentDTO[]> {
+export async function listCommentsByUser(
+  userId: number,
+  viewer: Parameters<typeof canViewPost>[0],
+): Promise<MyCommentDTO[]> {
+  const postSelect = { id: true, title: true, userId: true, tempHiddenAt: true, removedAt: true } as const;
   const rows = await prisma.comment.findMany({
     where: { authorUserId: userId, deletedAt: null },
     orderBy: { createdAt: "desc" },
     take: MY_COMMENTS_CAP,
     include: {
-      lostPost: { select: { id: true, title: true } },
-      foundPost: { select: { id: true, title: true } },
+      lostPost: { select: postSelect },
+      foundPost: { select: postSelect },
       parent: { select: { author: { select: { nickname: true } } } },
     },
   });
@@ -261,12 +269,11 @@ export async function listCommentsByUser(userId: number): Promise<MyCommentDTO[]
     // schema.prisma's own comment on Comment) -- the other branch would
     // only ever fire for data this app itself never produces, so it's
     // dropped rather than guessed at.
-    const post = row.lostPost
-      ? { id: row.lostPost.id, type: "lost" as const, title: row.lostPost.title }
-      : row.foundPost
-        ? { id: row.foundPost.id, type: "found" as const, title: row.foundPost.title }
-        : null;
-    if (!post) return [];
+    const source = row.lostPost ?? row.foundPost;
+    if (!source) return [];
+    const type = row.lostPost ? ("lost" as const) : ("found" as const);
+    const visible = canViewPost(viewer, { authorId: source.userId, tempHiddenAt: source.tempHiddenAt, removedAt: source.removedAt });
+    const post = visible ? { id: source.id, type, title: source.title } : { id: source.id, type, title: "", hidden: true };
 
     return [
       {

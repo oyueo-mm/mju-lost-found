@@ -12,7 +12,7 @@ export default async function MyCommentsPage() {
 
   let comments;
   try {
-    comments = await listCommentsByUser(user.id);
+    comments = await listCommentsByUser(user.id, user);
   } catch (error) {
     console.error("Failed to load my comments", error);
   }

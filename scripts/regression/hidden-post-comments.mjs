@@ -5,9 +5,11 @@
 //
 // Preview DB only. Creates one synthetic member, one lost post and one
 // comment (marker in .vercel/hidden-comments-<uuid>.json), then reads
-// GET /api/posts/<id>/comments anonymously on the given deployment in three
-// states: visible (expect 200 + the comment), temp-hidden (expect 404) and
-// removed (expect 404). Deletes everything it created. Prints statuses and
+// GET /api/posts/<id>/comments, the post page and the newest-first list
+// anonymously on the given deployment in three states: visible (expect the
+// comment on the API and the page, the post in the list), temp-hidden and
+// removed (expect API 404, no comment text on the page, not listed). No
+// response may carry a shared-cache Cache-Control. Deletes everything it created. Prints statuses and
 // whether the marker text came back -- never other content.
 import "../db/install-guard.mjs";
 import { assertDatabaseEnvironment, assertScriptSupabaseAccess } from "../../src/lib/db/accessPolicy.mjs";
@@ -32,11 +34,26 @@ const secretText = `${marker}-comment-text`;
 let user, post, cleanupOk = false;
 const checks = [];
 const save = () => writeFileSync(`.vercel/${marker}.json`, JSON.stringify({ marker, userId: user?.id, lostPostId: post?.id }));
+const get = (path) => fetch(`${base}${path}`, { headers: { "x-vercel-protection-bypass": key } });
+// Comments API, the post page (comment section + count) and the newest-first
+// list (title, comment count). Also records whether any response is marked
+// cacheable by a shared cache, which would let a hidden state be served stale.
 const read = async () => {
-  const res = await fetch(`${base}/api/posts/${post.id}/comments?type=lost`, { headers: { "x-vercel-protection-bypass": key } });
+  const res = await get(`/api/posts/${post.id}/comments?type=lost`);
   const text = await res.text();
-  return { status: res.status, leaked: text.includes(secretText) };
+  const page = await get(`/post/${post.id}?type=lost`);
+  const pageText = await page.text();
+  const list = await get(`/api/posts?type=lost&limit=50`);
+  const listText = await list.text();
+  const publicCache = [res, page, list].some((r) => /public|s-maxage/i.test(r.headers.get("cache-control") ?? ""));
+  return {
+    status: res.status, leaked: text.includes(secretText),
+    pageStatus: page.status, pageLeaked: pageText.includes(secretText),
+    listStatus: list.status, listed: listText.includes(marker),
+    publicCache,
+  };
 };
+const hiddenOk = (r) => r.status === 404 && !r.leaked && !r.pageLeaked && r.listStatus === 200 && !r.listed && !r.publicCache;
 try {
   user = await prisma.user.create({ data: { email: `${marker}@test.example.invalid`, name: "Synthetic audit", nickname: `Audit ${marker.slice(-6)}` } });
   save();
@@ -45,13 +62,13 @@ try {
   await prisma.comment.create({ data: { lostPostId: post.id, authorUserId: user.id, content: secretText } });
 
   const visible = await read();
-  checks.push({ name: "visible post: comments readable (control)", ok: visible.status === 200 && visible.leaked, ...visible });
+  checks.push({ name: "visible post: comments readable (control)", ok: visible.status === 200 && visible.leaked && visible.pageLeaked && visible.listed && !visible.publicCache, ...visible });
   await prisma.lostPost.update({ where: { id: post.id }, data: { tempHiddenAt: new Date() } });
   const hidden = await read();
-  checks.push({ name: "temp-hidden post: anonymous comment read refused", ok: hidden.status === 404 && !hidden.leaked, ...hidden });
+  checks.push({ name: "temp-hidden post: anonymous comment read refused", ok: hiddenOk(hidden), ...hidden });
   await prisma.lostPost.update({ where: { id: post.id }, data: { tempHiddenAt: null, removedAt: new Date() } });
   const removed = await read();
-  checks.push({ name: "removed post: anonymous comment read refused", ok: removed.status === 404 && !removed.leaked, ...removed });
+  checks.push({ name: "removed post: anonymous comment read refused", ok: hiddenOk(removed), ...removed });
 } catch (error) {
   checks.push({ name: "suite ran", ok: false, error: error?.name ?? "error" });
 } finally {

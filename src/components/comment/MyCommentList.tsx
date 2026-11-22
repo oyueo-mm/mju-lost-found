@@ -18,7 +18,7 @@ type MyCommentDTO = {
   createdAt: Date;
   parentId: number | null;
   replyToNickname: string | null;
-  post: { id: number; type: PostType; title: string };
+  post: { id: number; type: PostType; title: string; hidden?: boolean };
 };
 
 const TYPE_LABEL: Record<PostType, string> = { lost: "분실물", found: "습득물" };
@@ -77,12 +77,16 @@ export function MyCommentList({ comments: initialComments }: { comments: MyComme
             <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground">
               {TYPE_LABEL[comment.post.type]}
             </span>
-            <Link
-              href={`/post/${comment.post.id}?type=${comment.post.type}#comment-${comment.id}`}
-              className="truncate font-medium text-foreground hover:underline"
-            >
-              {comment.post.title}
-            </Link>
+            {comment.post.hidden ? (
+              <span className="truncate font-medium">숨김 또는 삭제된 게시글</span>
+            ) : (
+              <Link
+                href={`/post/${comment.post.id}?type=${comment.post.type}#comment-${comment.id}`}
+                className="truncate font-medium text-foreground hover:underline"
+              >
+                {comment.post.title}
+              </Link>
+            )}
           </div>
 
           {comment.replyToNickname && (
@@ -96,12 +100,14 @@ export function MyCommentList({ comments: initialComments }: { comments: MyComme
           <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
             <span>{formatRelativeTime(comment.createdAt, t, locale)}</span>
             <div className="flex items-center gap-3">
-              <Link
-                href={`/post/${comment.post.id}?type=${comment.post.type}#comment-${comment.id}`}
-                className="underline hover:text-foreground"
-              >
-                게시글에서 보기
-              </Link>
+              {!comment.post.hidden && (
+                <Link
+                  href={`/post/${comment.post.id}?type=${comment.post.type}#comment-${comment.id}`}
+                  className="underline hover:text-foreground"
+                >
+                  게시글에서 보기
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={() => handleDelete(comment)}

@@ -158,7 +158,7 @@ export async function getUserDetailForAdmin(
       prisma.comment.count({ where: { authorUserId: targetUserId } }),
       prisma.report.count({ where: { reporterUserId: targetUserId } }),
       prisma.report.count({ where: { targetType: ReportTargetType.USER, targetId: targetUserId } }),
-      listCommentsByUser(targetUserId),
+      listCommentsByUser(targetUserId, admin),
       // A withdrawn account's marks must never be surfaced, even if cleanup
       // is pending. Deactivation alone does not mean withdrawal.
       row.withdrawnAt ? Promise.resolve(null) : prisma.activityDay.findFirst({

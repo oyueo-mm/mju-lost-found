@@ -122,7 +122,7 @@ describe("listCommentsByUser", () => {
       },
     ]);
 
-    const result = await listCommentsByUser(1);
+    const result = await listCommentsByUser(1, { id: 1 } as never);
 
     expect(comment.findMany).toHaveBeenCalledWith(
       // Tombstones (deleted comments kept for their replies) are not "my comments".
@@ -150,7 +150,26 @@ describe("listCommentsByUser", () => {
 
   it("returns an empty list when the user has no comments", async () => {
     comment.findMany.mockResolvedValueOnce([]);
-    expect(await listCommentsByUser(1)).toEqual([]);
+    expect(await listCommentsByUser(1, { id: 1 } as never)).toEqual([]);
+  });
+
+  // Security audit A-1: a commenter who is not the author must not learn the
+  // title of a post that was temporarily hidden or removed after commenting.
+  it("blanks the title of a hidden or removed post the viewer may not see", async () => {
+    const row = (id: number, post: object) => ({ id, content: "c", createdAt: new Date("2026-01-01"), parentId: null, lostPost: post, foundPost: null, parent: null });
+    comment.findMany.mockResolvedValueOnce([
+      row(1, { id: 11, title: "숨김", userId: 2, tempHiddenAt: new Date(), removedAt: null }),
+      row(2, { id: 12, title: "삭제", userId: 2, tempHiddenAt: null, removedAt: new Date() }),
+      row(3, { id: 13, title: "내 숨김 글", userId: 1, tempHiddenAt: new Date(), removedAt: null }),
+      row(4, { id: 14, title: "공개", userId: 2, tempHiddenAt: null, removedAt: null }),
+    ]);
+    const result = await listCommentsByUser(1, { id: 1, isAdmin: false, adminPermissions: [], isSuspended: false, suspendedUntil: null } as never);
+    expect(result.map((r) => r.post)).toEqual([
+      { id: 11, type: "lost", title: "", hidden: true },
+      { id: 12, type: "lost", title: "", hidden: true },
+      { id: 13, type: "lost", title: "내 숨김 글" },
+      { id: 14, type: "lost", title: "공개" },
+    ]);
   });
 });
 
