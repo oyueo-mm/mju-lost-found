@@ -7,6 +7,8 @@
 export const FORBIDDEN_ROLLBACK_TARGETS = {
   dpl_HbJbyTZFYnLLmBzLt7Bb1QCboNue:
     "2026-11-22 TLS first deploy: uploaded a Prisma client generated on another branch (selects User.sessions_valid_after, absent on Production); logged-in requests failed",
+  dpl_JBZNEYWRmF6Unxos43cCeXKunxBa:
+    "2026-11-22 hardening release before the A-3 safety change: its daily sweep DELETES unattached uploads (no dry-run default, no ownership halt)",
 };
 
 // First commit whose app connects to the database with verified TLS.
