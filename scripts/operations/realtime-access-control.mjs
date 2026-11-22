@@ -2,6 +2,7 @@
 import "../db/install-guard.mjs";
 import { Client } from "pg";
 import { assertDatabaseEnvironment, assertScriptSupabaseAccess } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 const [confirmation, ...extra] = process.argv.slice(2);
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
@@ -9,7 +10,7 @@ if (extra.length || !["production", "preview"].includes(target) || confirmation 
   throw new Error("Explicit matching hosted targets required");
 }
 
-const db = new Client({ connectionString: process.env.DIRECT_URL, statement_timeout: 5000 });
+const db = new Client(pgConfig(process.env.DIRECT_URL, { statement_timeout: 5000 }));
 try {
   await db.connect();
   await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");

@@ -9,13 +9,14 @@ import { encode } from "@auth/core/jwt";
 import pg from "pg";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
+import { pgConfig } from "./db/pgConfig.mjs";
 
 const preview = parse(readFileSync(".env.preview.local"));
 assert.ok(preview.DIRECT_URL?.includes("swqvlihgupranzfzjevb"), "not the Preview DB");
 assert.ok(!preview.DIRECT_URL.includes("tmifqtyxojtuoejxjrng"), "Production DB refused");
 const file = ".vercel/permission-fixtures.json";
 const BASE = "https://mju-lost-found-preview.vercel.app";
-const db = new pg.Client({ connectionString: preview.DIRECT_URL });
+const db = new pg.Client(pgConfig(preview.DIRECT_URL));
 await db.connect();
 
 const KINDS = {

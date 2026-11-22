@@ -7,12 +7,13 @@ import { encode } from "@auth/core/jwt";
 import pg from "pg";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { pgConfig } from "./db/pgConfig.mjs";
 
 const env = parse(readFileSync(".env.preview.local"));
 assert.ok(env.DATABASE_URL?.includes("swqvlihgupranzfzjevb"));
 assert.ok(env.DIRECT_URL?.includes("swqvlihgupranzfzjevb"));
 const base = "http://127.0.0.1:3100";
-const db = new pg.Client({ connectionString: env.DIRECT_URL });
+const db = new pg.Client(pgConfig(env.DIRECT_URL));
 await db.connect();
 const ids = [], posts = [];
 const marker = `ops-flow-${crypto.randomUUID()}`;

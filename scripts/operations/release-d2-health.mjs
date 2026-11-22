@@ -4,11 +4,12 @@ import {Client} from "pg";
 import {createClient} from "@supabase/supabase-js";
 import {assertDatabaseEnvironment,assertScriptSupabaseAccess} from "../../src/lib/db/accessPolicy.mjs";
 import {isAllowedOptimizedImageUrl} from "../../src/lib/images/optimizationHosts.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 const target=assertDatabaseEnvironment(process.env,{usage:"operation"});
 if(!["production","preview"].includes(target)||assertScriptSupabaseAccess(process.env)!==target)throw new Error("Hosted targets must agree");
 const verifyContinuity=process.argv.includes("--content-continuity");
 const key=process.env.SUPABASE_SERVICE_ROLE_KEY;if(!key)throw new Error("Service credential required");
-const db=new Client({connectionString:process.env.DIRECT_URL});
+const db=new Client(pgConfig(process.env.DIRECT_URL));
 const sb=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,key,{auth:{persistSession:false,autoRefreshToken:false}});
 try{
   await db.connect();await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");

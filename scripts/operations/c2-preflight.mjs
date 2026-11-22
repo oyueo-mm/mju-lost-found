@@ -6,13 +6,14 @@ import { Client } from "pg";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 if (process.argv.length !== 2) throw new Error("No arguments accepted");
 const NEW = "20261124000000_text_embedding_jobs";
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
 const local = readdirSync("prisma/migrations", { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
 const sums = (name) => { const raw = readFileSync(`prisma/migrations/${name}/migration.sql`); return [createHash("sha256").update(raw).digest("hex"), createHash("sha256").update(raw.toString("utf8").replaceAll("\r\n", "\n")).digest("hex")]; };
-const db = new Client({ connectionString: process.env.DIRECT_URL, connectionTimeoutMillis: 15000 });
+const db = new Client(pgConfig(process.env.DIRECT_URL, { connectionTimeoutMillis: 15000 }));
 const checks = [];
 const check = (name, ok, detail) => checks.push({ name, ok, ...(detail === undefined ? {} : { detail }) });
 try {

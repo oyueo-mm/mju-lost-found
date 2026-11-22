@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import { fromVercel, PREVIEW_ALIAS, PROJECT_ID } from "../../src/lib/devstats/vercelDeployment.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const require = createRequire(join(ROOT, "package.json"));
@@ -151,7 +152,7 @@ async function main() {
   });
   const { Client } = require("pg");
   for (const { name, url } of targets) {
-    const client = new Client({ connectionString: url });
+    const client = new Client(pgConfig(url));
     await client.connect();
     try {
       await client.query("BEGIN");

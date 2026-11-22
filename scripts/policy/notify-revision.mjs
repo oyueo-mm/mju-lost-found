@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import "../db/install-guard.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 // 이용약관·개인정보처리방침 변경 안내 -- one in-app notification per member for
 // the current revision (src/lib/policy/revisionNotice.ts; keep the values
 // below in step with it). Idempotent: the Notification unique key
@@ -42,7 +43,7 @@ const url = process.env.DIRECT_URL ?? "";
 const ref = new URL(url).username.split(".")[1];
 if (ref !== expected) throw new Error(`DIRECT_URL is project ${ref?.slice(0, 6)}…, not the expected one`);
 
-const c = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
+const c = new Client(pgConfig(url));
 await c.connect();
 try {
   const r = await c.query(

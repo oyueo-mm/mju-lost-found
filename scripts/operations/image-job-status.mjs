@@ -6,6 +6,7 @@
 import "../db/install-guard.mjs";
 import { Client } from "pg";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 // --post=lost:<id> adds one post's job/vector state (no title, user or URL).
 const sinceArg = process.argv.find((a) => a.startsWith("--since="))?.slice(8);
@@ -16,7 +17,7 @@ const postMatch = postArg ? /^(lost|found):([1-9]\d{0,9})$/.exec(postArg) : null
 if (postArg && !postMatch) throw new Error("--post=lost:<id> or found:<id>");
 if (process.argv.slice(2).some((a) => !a.startsWith("--since=") && !a.startsWith("--post="))) throw new Error("Only --since=<ISO time> and --post=<type>:<id> are accepted");
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
-const db = new Client({ connectionString: process.env.DIRECT_URL, connectionTimeoutMillis: 15000 });
+const db = new Client(pgConfig(process.env.DIRECT_URL, { connectionTimeoutMillis: 15000 }));
 try {
   await db.connect();
   await db.query("BEGIN READ ONLY");

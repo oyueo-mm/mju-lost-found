@@ -9,6 +9,7 @@ import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
 import { checkD2Migrations, LEGACY_DRAIN_SECONDS, PREVIEW_HISTORICAL_MIGRATIONS } from "./release-d2-policy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 const [action, ...flags] = process.argv.slice(2);
 if (!["preflight", "migrate", "arm", "pause", "status"].includes(action)) throw new Error("Unknown D2 operation");
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
@@ -29,7 +30,7 @@ const checksums = Object.fromEntries(readdirSync("prisma/migrations", {withFileT
   // Prisma accepts equivalent LF/CRLF files; no SQL-content differences allowed.
   return [d.name,[raw,lf,lf.replaceAll("\n","\r\n")].map(s=>createHash("sha256").update(s).digest("hex"))];
 }));
-const db=new Client({connectionString:process.env.DIRECT_URL});
+const db=new Client(pgConfig(process.env.DIRECT_URL));
 const historical=target==="preview"?PREVIEW_HISTORICAL_MIGRATIONS:{};
 async function history(){return (await db.query(`SELECT migration_name,checksum,finished_at IS NOT NULL applied,rolled_back_at IS NOT NULL rolled_back FROM _prisma_migrations ORDER BY started_at`)).rows;}
 async function state(){

@@ -21,6 +21,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { assertDatabaseAccess } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig, libpqTlsEnv } from "../db/pgConfig.mjs";
 
 const require = createRequire(path.join(process.cwd(), "package.json"));
 const { Client } = require("pg");
@@ -37,13 +38,13 @@ const bin = (name) => path.join(process.env.PG_BIN ?? "", process.platform === "
 fs.mkdirSync(path.join(outDir, "db"), { recursive: true });
 fs.mkdirSync(path.join(outDir, "storage"), { recursive: true });
 const run = (name, args, signal) => new Promise((resolve, reject) => {
-  execFile(bin(name), args, { maxBuffer: 1 << 30, signal, timeout: 240000, windowsHide: true }, (error, stdout) => {
+  execFile(bin(name), args, { maxBuffer: 1 << 30, signal, timeout: 240000, windowsHide: true, env: { ...process.env, ...libpqTlsEnv(url) } }, (error, stdout) => {
     if (error) reject(new Error(`${name} failed (${error.code ?? error.name}); sensitive diagnostics suppressed`));
     else resolve(stdout);
   });
 });
 
-const db = new Client({ connectionString: url });
+const db = new Client(pgConfig(url));
 await db.connect();
 const counts = {};
 let migrations, bucketRows, objectRows, realtimeAuthorization;
@@ -100,7 +101,7 @@ for (const b of buckets) {
 }
 // A deleted/replaced object must fail closed, never silently disappear from
 // the manifest. Storage and Postgres are not an atomic cross-system snapshot.
-const current = new Client({ connectionString: url });
+const current = new Client(pgConfig(url));
 try {
   await current.connect(); await current.query("BEGIN READ ONLY");
   const rows = (await current.query("SELECT id, bucket_id, name, updated_at, version FROM storage.objects")).rows;

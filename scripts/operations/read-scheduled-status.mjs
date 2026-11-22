@@ -2,12 +2,13 @@
 import "../db/install-guard.mjs";
 import {Client} from "pg";
 import {assertDatabaseEnvironment} from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 const [day]=process.argv.slice(2);
 if(process.argv.length!==3||!/^\d{4}-\d{2}-\d{2}$/.test(day??""))throw new Error("Explicit KST date required");
 const start=new Date(`${day}T00:00:00+09:00`),end=new Date(start.getTime()+86400000);
 if(!Number.isFinite(start.getTime()))throw new Error("Invalid date");
 const target=assertDatabaseEnvironment(process.env,{usage:"operation"});
-const db=new Client({connectionString:process.env.DIRECT_URL,connectionTimeoutMillis:15000});
+const db=new Client(pgConfig(process.env.DIRECT_URL, { connectionTimeoutMillis:15000 }));
 try{
   await db.connect();await db.query("BEGIN READ ONLY");
   // Existing normalizeRoute() drops this long/hyphenated mode, so posts

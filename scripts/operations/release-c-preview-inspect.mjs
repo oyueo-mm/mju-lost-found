@@ -2,10 +2,11 @@ import "../db/install-guard.mjs";
 import { Client } from "pg";
 import { createClient } from "@supabase/supabase-js";
 import { assertDatabaseEnvironment, assertScriptSupabaseAccess } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 if (assertDatabaseEnvironment(process.env, { usage: "operation" }) !== "preview") throw new Error("Preview only");
 assertScriptSupabaseAccess(process.env);
-const db = new Client({ connectionString: process.env.DIRECT_URL });
+const db = new Client(pgConfig(process.env.DIRECT_URL));
 try {
   await db.connect();
   await db.query("BEGIN READ ONLY");

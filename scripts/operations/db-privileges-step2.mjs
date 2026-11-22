@@ -20,6 +20,7 @@ import "../db/install-guard.mjs";
 import { Client } from "pg";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 const CLIENT = ["PUBLIC", "anon", "authenticated"];
 const [action, ...flags] = process.argv.slice(2);
@@ -34,7 +35,7 @@ if (action === "reproduce" && target !== "preview") throw new Error("reproduce i
 
 const ident = (s) => `"${String(s).replaceAll('"', '""')}"`;
 const role = (g) => (g === "PUBLIC" ? "PUBLIC" : ident(g));
-const db = new Client({ connectionString: process.env.DIRECT_URL, connectionTimeoutMillis: 15000 });
+const db = new Client(pgConfig(process.env.DIRECT_URL, { connectionTimeoutMillis: 15000 }));
 
 async function snapshot() {
   const q = async (sql) => (await db.query(sql)).rows;

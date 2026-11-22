@@ -3,8 +3,27 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
 import { assertDatabaseAccess } from "./src/lib/db/accessPolicy.mjs";
+import { fileURLToPath } from "node:url";
+import { isSupabaseHost } from "./src/lib/db/tls";
 
 assertDatabaseAccess(process.env.DIRECT_URL, process.env, { usage: "operation", allowMissing: true });
+// Database TLS (2026-11-22): the migration CLI must verify the server like the
+// app does (src/lib/db/tls.ts). Prisma's schema engine defaults to
+// sslmode=prefer WITHOUT certificate checks; for Supabase hosts it now always
+// uses TLS, trusts only the pinned Supabase root CA and rejects anything else
+// (sslaccept=strict). Any ssl parameter already in DIRECT_URL is replaced.
+function verifiedMigrationUrl(value: string | undefined): string | undefined {
+  if (!value) return value;
+  let url: URL;
+  try { url = new URL(value); } catch { return value; }
+  if (!isSupabaseHost(url.hostname)) return value;
+  for (const p of ["ssl", "sslmode", "sslcert", "sslidentity", "sslpassword", "sslaccept", "sslrootcert"]) url.searchParams.delete(p);
+  url.searchParams.set("sslmode", "require");
+  url.searchParams.set("sslcert", fileURLToPath(new URL("./certs/supabase-prod-ca-2021.crt", import.meta.url)).replaceAll("\\", "/"));
+  url.searchParams.set("sslaccept", "strict");
+  return url.href;
+}
+
 
 // This `datasource.url` is what the Prisma CLI (migrate/db push/introspect)
 // connects with -- NOT what the running app uses (that's the separate
@@ -24,6 +43,6 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DIRECT_URL"],
+    url: verifiedMigrationUrl(process.env["DIRECT_URL"]),
   },
 });

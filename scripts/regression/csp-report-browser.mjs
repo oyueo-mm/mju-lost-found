@@ -18,11 +18,12 @@ import { assertDatabaseEnvironment, assertScriptSupabaseAccess } from "../../src
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
 import pg from "pg";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 if (!process.argv.includes("--confirm-preview") || assertDatabaseEnvironment(process.env, { usage: "operation" }) !== "preview" || assertScriptSupabaseAccess(process.env) !== "preview") throw new Error("Preview confirmation required");
 const PORT = 3109;
 const BASE = `http://127.0.0.1:${PORT}`;
-const db = new pg.Client({ connectionString: process.env.DIRECT_URL });
+const db = new pg.Client(pgConfig(process.env.DIRECT_URL));
 await db.connect();
 const lines = [];
 let server;

@@ -9,6 +9,7 @@ import { Client } from "pg";
 import { createJiti } from "jiti";
 import { fileURLToPath } from "node:url";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 const match = /^(lost|found):([1-9]\d{0,9})$/.exec(arg("post") ?? "");
@@ -16,7 +17,7 @@ const previousTitle = arg("previous-title");
 if (!match || !previousTitle) throw new Error("--post=lost:<id> and --previous-title=<title> required");
 const [, kind, rawId] = match;
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
-const db = new Client({ connectionString: process.env.DIRECT_URL, connectionTimeoutMillis: 15000 });
+const db = new Client(pgConfig(process.env.DIRECT_URL, { connectionTimeoutMillis: 15000 }));
 let row;
 try {
   await db.connect();

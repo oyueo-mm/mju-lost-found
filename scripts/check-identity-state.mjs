@@ -5,6 +5,7 @@ import "./db/install-guard.mjs";
 //
 //   node --env-file=.env.preview.local scripts/check-identity-state.mjs <email>
 import { createRequire } from "node:module";
+import { pgConfig } from "./db/pgConfig.mjs";
 
 const require = createRequire(import.meta.url);
 const { Client } = require("pg");
@@ -13,7 +14,7 @@ const email = process.argv[2]?.trim().toLowerCase();
 if (!email) throw new Error("usage: check-identity-state.mjs <email>");
 if (!process.env.DIRECT_URL?.includes("postgres.swqvli")) throw new Error("Preview DB only");
 
-const db = new Client({ connectionString: process.env.DIRECT_URL });
+const db = new Client(pgConfig(process.env.DIRECT_URL));
 await db.connect();
 try {
   // Read-only per transaction, never per session: a session setting can stay

@@ -7,6 +7,7 @@ import { parse } from "dotenv";
 import pg from "pg";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { pgConfig } from "./db/pgConfig.mjs";
 
 const preview = parse(readFileSync(".env.preview.local"));
 const production = parse(readFileSync(".env"));
@@ -29,7 +30,7 @@ if (["build", "serve"].includes(process.argv[2])) {
   process.exit(result.status ?? 1);
 }
 assert.equal(process.argv[2], "test", "usage: itemOperationsPreview.mjs migrate|test");
-const db = new pg.Client({ connectionString: preview.DIRECT_URL });
+const db = new pg.Client(pgConfig(preview.DIRECT_URL));
 await db.connect();
 try {
   await db.query("BEGIN");

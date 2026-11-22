@@ -9,6 +9,7 @@ import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 const NEW = "20261124000000_text_embedding_jobs";
 // revoke-inherited: Production's residual default ACL also hands service_role
@@ -22,7 +23,7 @@ const apply = flags.includes("--apply");
 if (flags.some((f) => f !== "--apply" && f !== `--confirm-${target}`)) throw new Error("Unexpected option");
 if (apply && !flags.includes(`--confirm-${target}`)) throw new Error("Target confirmation required");
 const local = readdirSync("prisma/migrations", { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
-const db = new Client({ connectionString: process.env.DIRECT_URL, connectionTimeoutMillis: 15000 });
+const db = new Client(pgConfig(process.env.DIRECT_URL, { connectionTimeoutMillis: 15000 }));
 async function pendingState() {
   await db.query("BEGIN READ ONLY");
   const rows = (await db.query(`SELECT migration_name,finished_at IS NOT NULL AS applied,rolled_back_at IS NOT NULL AS rolled_back FROM _prisma_migrations`)).rows;

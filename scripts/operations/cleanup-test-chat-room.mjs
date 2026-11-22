@@ -25,6 +25,7 @@
 import "../db/install-guard.mjs";
 import { Client } from "pg";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 const [confirmation, roomArg, messagesArg, ...rest] = process.argv.slice(2);
 const apply = rest.includes("--apply");
@@ -38,7 +39,7 @@ if (rest.some((a) => a !== "--apply" && a !== postFlag) || (postFlag && !confirm
 }
 const roomId = Number(roomArg), expectedMessages = Number(messagesArg);
 const refuse = (why) => { throw new Error(`refused: ${why}`); };
-const db = new Client({ connectionString: process.env.DIRECT_URL, statement_timeout: 10000 });
+const db = new Client(pgConfig(process.env.DIRECT_URL, { statement_timeout: 10000 }));
 const one = async (sql, params = []) => (await db.query(sql, params)).rows[0];
 const n = async (sql, params = []) => Number((await one(sql, params)).n);
 

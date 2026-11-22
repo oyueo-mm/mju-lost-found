@@ -2,10 +2,11 @@ import "../db/install-guard.mjs";
 import { Client } from "pg";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
 import { isAllowedOptimizedImageUrl } from "../../src/lib/images/optimizationHosts.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 // Aggregate-only, read-only evidence for rate budgets and image allowlists.
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
-const db = new Client({ connectionString: process.env.DIRECT_URL });
+const db = new Client(pgConfig(process.env.DIRECT_URL));
 try {
   await db.connect();
   await db.query("BEGIN READ ONLY");

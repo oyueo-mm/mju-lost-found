@@ -4,13 +4,17 @@
 //   1. app settings, with the CA swapped for an unrelated public root CA
 //      -> the adapter MUST fail with a certificate error (the ssl options are
 //         really used, and there is no fallback to plaintext);
-//   2. app settings unchanged -> the adapter connects and `SELECT 1` works.
+//   2. app settings unchanged -> the adapter connects and `SELECT 1` works;
+//   3. operational scripts' helper (scripts/db/pgConfig.mjs) with pg.Client
+//      -> the socket is TLS and the server certificate is authorized.
 // Runs `SELECT 1` only. Prints outcomes and error codes, never credentials.
 //
 //   node --env-file=.env.preview.local scripts/operations/db-tls-adapter-check.mjs
 import "../db/install-guard.mjs";
 import tls from "node:tls";
+import pg from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { pgConfig } from "../db/pgConfig.mjs";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
 
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
@@ -43,6 +47,23 @@ for (const key of ["DATABASE_URL", "DIRECT_URL"]) {
   wrong.expected = "refused"; wrong.ok = !wrong.connected;
   right.expected = "connected"; right.ok = right.connected;
   results.push(wrong, right);
+  // Operational scripts: pg.Client with scripts/db/pgConfig.mjs -- the socket itself must be TLS and authorized.
+  const client = new pg.Client(pgConfig(cs, { connectionTimeoutMillis: 15000 }));
+  const script = { name: `${key}: scripts/db/pgConfig.mjs`, expected: "TLS authorized" };
+  try {
+    await client.connect();
+    await client.query("SELECT 1");
+    const s = client.connection.stream;
+    script.encrypted = s instanceof tls.TLSSocket && s.encrypted === true;
+    script.authorized = s.authorized === true;
+    script.protocol = script.encrypted ? s.getProtocol() : null;
+  } catch (error) {
+    script.error = String(error.code ?? error.message).slice(0, 80);
+  } finally {
+    await client.end().catch(() => {});
+  }
+  script.ok = script.encrypted === true && script.authorized === true;
+  results.push(script);
 }
 const passed = results.length > 0 && results.every((r) => r.ok);
 console.log(JSON.stringify({ target, passed, results }, null, 1));
