@@ -13,7 +13,9 @@ export function databaseTarget(value) {
   if (localHosts.has(url.hostname)) return "local";
   const direct = /^db\.([a-z0-9]+)\.supabase\.co$/.exec(url.hostname)?.[1];
   const pooler = /(^|\.)pooler\.supabase\.com$/.test(url.hostname)
-    ? /^postgres\.([a-z0-9]+)$/.exec(decodeURIComponent(url.username))?.[1] : null;
+    // The app's owner role, or the read-only cloud backup role (2026-11-22);
+    // any other role name stays unrecognized and is refused.
+    ? /^(?:postgres|backup_reader)\.([a-z0-9]+)$/.exec(decodeURIComponent(url.username))?.[1] : null;
   const project = direct ?? pooler;
   return project === PRODUCTION_DB_PROJECT ? "production" : project === PREVIEW_DB_PROJECT ? "preview" : "unknown";
 }

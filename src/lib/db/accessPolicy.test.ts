@@ -16,6 +16,14 @@ describe("database access safety", () => {
     expect(databaseTarget("postgresql://postgres@127.0.0.1:5432/test")).toBe("local");
     expect(databaseTarget(undefined)).toBe("missing");
   });
+
+  it("recognizes the read-only backup role on the pooler, and no other role", () => {
+    const pooler = (user: string) => `postgresql://${user}:pw@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres`;
+    expect(databaseTarget(pooler(`backup_reader.${PRODUCTION_DB_PROJECT}`))).toBe("production");
+    expect(databaseTarget(pooler(`backup_reader.${PREVIEW_DB_PROJECT}`))).toBe("preview");
+    expect(databaseTarget(pooler(`authenticator.${PRODUCTION_DB_PROJECT}`))).toBe("unknown");
+    expect(databaseTarget(pooler(`xbackup_reader.${PRODUCTION_DB_PROJECT}`))).toBe("unknown");
+  });
   it("blocks Production in local dev, local next start/build, Preview and unit tests", () => {
     for (const env of [{}, { NODE_ENV: "development" }, { NODE_ENV: "production" }, { VERCEL_ENV: "preview" }, { ...cloud, NODE_ENV: "test" }, { ...cloud, VITEST: "true" }]) {
       expect(() => assertDatabaseAccess(production, env)).toThrow("[db-access]");

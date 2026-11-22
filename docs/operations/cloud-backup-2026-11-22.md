@@ -79,7 +79,7 @@
 - **노트북 백업**: 그대로 실행 중이다. 기존 백업 파일은 삭제하지 않았다.
 - 앱 저장소에 더한 것: `scripts/operations/backup-role-probe.mjs`, `backup-reader-preview.mjs`, `backup-reader-check.mjs`(Preview 전용)
 
-## 5. 새로 발견한 문제: 앱의 DB 연결에 TLS가 강제되지 않음
+## 5. 앱 DB 연결 TLS (2026-11-22 후속에서 실측 → 7절)
 
 - **관찰**
   - Preview의 `DATABASE_URL`과 `DIRECT_URL`에 `sslmode` 같은 TLS 설정이 없다.
@@ -104,3 +104,83 @@
    - Production `backup_reader` 생성(DB 권한 변경)
    - §5의 TLS 적용
 3. 이후: Preview 시험 실행 → Production 첫 실행 → 운영자 키로 실제 복원 검증 → 14일 연속 성공 후 노트북 백업을 보조 수단으로 전환
+
+## 7. 후속 작업 (2026-11-22 오후)
+
+### 7-1. 앱 DB 연결 TLS 실측
+
+점검 도구 `scripts/operations/db-tls-status.mjs`는 앱과 같은 `pg` 8.23.0으로, 앱과 같은 방식(연결 문자열만 전달)으로 접속한 뒤 소켓 상태를 확인한다. `SELECT 1`만 실행한다.
+
+| 대상 | 앱 방식으로 접속 | TLS 강제 시 | CA 검증 시 |
+|---|---|---|---|
+| Preview `DATABASE_URL`(6543), `DIRECT_URL`(5432) | **평문**(`encrypted:false`) | TLS 1.3 | 인증됨 |
+| Production 운영용 사본 `DATABASE_URL`(6543, 파라미터 `pgbouncer`만), `DIRECT_URL` | **평문** | TLS 1.3 | 인증됨 |
+
+- 서버 인증서: `*.pooler.supabase.com`, 발급자 `Supabase Intermediate 2021 CA`, 루트 `Supabase Root 2021 CA`(SHA-256 `80:70:25:AD:…:CA:FA`, 2031-04-26 만료).
+- 다른 CA를 쓰면 `SELF_SIGNED_CERT_IN_CHAIN`, 다른 호스트 이름이면 `ERR_TLS_CERT_ALTNAME_INVALID`로 거부된다(검증이 실제로 작동함).
+- **Vercel Production 값**
+  - Sensitive라서 다시 읽을 수 없다(`vercel env pull` 결과가 빈 값). 그래서 운영용 사본과 같은지 확인하지 못했다.
+  - Vercel에는 `PGSSLMODE`도 없다.
+  - 앱 코드는 연결 문자열만 넘기므로, Vercel 값에 `sslmode`가 없다면 Production 앱도 평문이다. 운영용 사본 기준으로는 평문이다.
+- **수정**(`fix/db-tls`, `0263e62`. 보안 강화 브랜치에도 `20a409d`로 반영)
+  - `src/lib/db/tls.ts`: Supabase 호스트에는 항상 TLS를 쓰고, 고정한 루트 CA와 호스트 이름으로 검증한다. URL의 ssl 계열 파라미터는 무시한다. 로컬 DB는 변경 없다.
+- **Preview 검증**(`dpl_GLedVyD6…`)
+  - 단위 3,163(+4)
+  - CSRF 로컬 20/20
+  - 호스팅 A-1 3/3, CSRF 10/10, 로그 오류 0
+  - 2인 채팅·Realtime 전환 13/13(보안 강화 + TLS 빌드)
+- **Production 앱 반영은 보고 후 진행한다.** Supabase SSL enforcement(프로젝트 설정)는 별도 승인 대상이다.
+
+### 7-2. Production `backup_reader` 생성 (원칙 승인에 따라 적용)
+
+**사전 확인**
+- 당일 예약 백업 `auto-2026-11-22` 복원 검증 완료(11:11).
+- 소유자에게 BYPASSRLS·CREATEROLE·Storage 권한 위임이 가능하다.
+- public·storage·realtime에서 PUBLIC 실행 가능한 SECURITY DEFINER 함수는 **0개**다. 읽기 전용 기본값을 끄더라도 함수를 통해 쓸 경로가 없다.
+- 테이블 57개(RLS 6), 트리거 25개.
+
+**새 테이블 상속**
+- `postgres`의 기본 권한으로 SELECT만 상속된다(Preview에서 임시 테이블로 확인 후 롤백).
+- 앱 권한 점검 2곳(`text-job-privileges`, 감사 보고서)은 'backup_reader SELECT만 예외'로 좁게 갱신했다. 그 외 항목은 여전히 실패로 판정한다.
+
+**적용**: `backup-reader-apply.mjs`(승인 참조 `BACKUP-READER-CREATE-2026-11-22`, SQL sha256 `efeb4183…`)
+- 접속 문자열은 `.env.backup-production.local`(git 제외)에만 기록했다. GitHub에 입력한 뒤 삭제한다.
+
+**적용 후 접근 테스트**: `backup-reader-check.mjs` 통과
+
+| 항목 | 결과 |
+|---|---|
+| 연결 | TLS 검증 |
+| 기본값 | 읽기 전용 |
+| 테이블 | 57개 모두 소유자와 같은 행 수 |
+| Storage 목록 | 135 = 135 |
+| Realtime 메타데이터 | 읽기 가능 |
+| 쓰기·테이블 생성·auth·vault | 42501(모든 시도는 롤백되는 트랜잭션 안에서 실행) |
+
+**기존 권한 회귀**
+- DB 권한 2단계 검증 7/7
+- 작업 큐 권한 12/12
+- 실행 가능한 SECURITY DEFINER 함수 0, 쓰기 가능 테이블 0
+- 접근 가능한 스키마는 public·storage·realtime뿐
+
+**덤프 시험**: `backup_reader`로 public 전체 `pg_dump`(TLS verify-full) 성공. 데이터 약 0.99MB(압축), 스키마 0.19MB. 출력은 해시만 계산하고 버렸다.
+
+**앱 기존 계정·권한**: 변경 없음.
+
+**되돌리기**
+- 계정만 막기: `ALTER ROLE backup_reader NOLOGIN PASSWORD NULL`
+- 완전 제거: `db/backup-reader-drop.sql`
+- 비밀번호 재발급: `backup-reader-apply.mjs` 재실행(이전 비밀번호는 즉시 무효). 풀러가 잠시 이전 인증을 캐시할 수 있다.
+
+### 7-3. 클라우드 백업 최종 점검
+
+| 항목 | 결론 |
+|---|---|
+| 필수 데이터 포함 | public 전 테이블(행 수 일치) + Storage 전 객체 + Realtime 메타데이터. Production 덤프 시험 성공 |
+| 내부 스키마 없이 새 프로젝트 복원 | public.dump는 빈 PG18에 복원 검증됨(Preview). **실제 새 Supabase 프로젝트 복원은 미시험**(Free 2개 한도). 새 프로젝트는 Data API ON·anon 기본 권한이 열려 있어 복원 직후 노출 방지 단계를 RUNBOOK 6-3에 추가함 |
+| Storage S3 키 범위 | Supabase 문서 기준 모든 버킷 읽기·쓰기·삭제, RLS 우회(읽기 전용 키 없음). DB·Auth 권한은 없음. 유출 시 사진 삭제가 가능하지만 R2 잠금 백업으로 복구 가능 |
+| Bucket Lock과 자동 삭제 충돌 | 잠금이 우선한다. 삭제 일수(10/63/570)가 잠금 일수(7/56/548)보다 길어 충돌이 없다. `status/`는 덮어써야 하므로 잠그지 않는다 |
+| 예약 누락·자격 증명 만료 | Worker가 30시간 기준으로 재실행·알림. 모든 토큰과 키는 만료 없음, PAT는 매일 사용 |
+| GitHub 장애 시 알림 | 백업과 알림이 함께 멈춘다(R2 기존 백업은 안전). Worker가 매일 재시도. GitHub 밖 알림 수단은 없음(남은 위험) |
+| 중복 실행·재시도 | 실행 그룹 직렬화. 감시기 재실행은 20시간 안에 성공분이 있으면 생략(이번에 추가). 재실행은 새 경로에 써서 손상 없음 |
+| 비용 | Production 덤프 약 1MB + 사진 22MB → 백업 1개 약 25MB. 18개월 후 R2 약 5GB(무료 10GB). Actions 실행당 약 5분 → 월 약 150분(무료 약 2,000분). 무료 한도를 넘기면 Actions는 결제 수단이 없을 때 멈춘다(과금 없음, 백업 중단 → 알림). R2는 8GB에서 경고 |

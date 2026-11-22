@@ -27,8 +27,11 @@ try {
     const acl = (await db.query(`SELECT CASE a.grantee WHEN 0 THEN 'PUBLIC' ELSE a.grantee::regrole::text END AS grantee,a.privilege_type FROM pg_class c, aclexplode(c.relacl) a WHERE c.oid='public."TextEmbeddingJob"'::regclass AND a.grantee<>c.relowner ORDER BY 1,2`)).rows;
     check("table ACL has no client or PUBLIC entry", !acl.some((e) => ["PUBLIC", "anon", "authenticated"].includes(e.grantee)), acl);
     // Only the owner (the app's migrating/runtime role) may hold privileges:
-    // nothing inherited from a default ACL, service_role included.
-    check("no inherited privilege for any non-owner role", acl.length === 0, acl);
+    // nothing inherited from a default ACL, service_role included. The one
+    // exception is the read-only cloud backup role (2026-11-22), and only its
+    // SELECT -- any other entry still fails this check.
+    const others = acl.filter((e) => !(e.grantee === "backup_reader" && e.privilege_type === "SELECT"));
+    check("no inherited privilege for any non-owner role (backup_reader SELECT excepted)", others.length === 0, acl);
     const fn = (await db.query(`SELECT r FROM unnest(ARRAY['anon','authenticated']) r WHERE EXISTS(SELECT 1 FROM pg_roles WHERE rolname=r) AND has_function_privilege(r,'public.queue_text_embedding()','EXECUTE')`)).rows;
     const fnAcl = (await db.query(`SELECT CASE a.grantee WHEN 0 THEN 'PUBLIC' ELSE a.grantee::regrole::text END AS grantee FROM pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f',p.proowner))) a WHERE p.oid='public.queue_text_embedding()'::regprocedure AND a.grantee<>p.proowner`)).rows;
     check("trigger function not executable by clients or PUBLIC", fn.length === 0 && !fnAcl.some((e) => ["PUBLIC", "anon", "authenticated"].includes(e.grantee)), fnAcl);

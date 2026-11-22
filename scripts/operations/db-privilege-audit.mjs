@@ -23,7 +23,7 @@ try {
     GROUP BY 1,2 ORDER BY 1,2`);
   out.functionsExecutableByAnon = (await q(`SELECT count(*)::int AS n FROM pg_proc p WHERE p.pronamespace='public'::regnamespace AND EXISTS(SELECT 1 FROM pg_roles WHERE rolname='anon') AND has_function_privilege('anon',p.oid,'EXECUTE')`))[0].n;
   out.defaultAcls = await q(`SELECT defaclrole::regrole::text AS owner, defaclobjtype AS type, defaclacl::text AS acl FROM pg_default_acl WHERE defaclnamespace='public'::regnamespace ORDER BY 1,2`);
-  out.cleanNewTables = await q(`SELECT c.relname AS "table", NOT EXISTS(SELECT 1 FROM aclexplode(c.relacl) a WHERE a.grantee<>c.relowner) AS owner_only FROM pg_class c WHERE c.oid IN (to_regclass('public."TextEmbeddingJob"'))`);
+  out.cleanNewTables = await q(`SELECT c.relname AS "table", NOT EXISTS(SELECT 1 FROM aclexplode(c.relacl) a WHERE a.grantee<>c.relowner AND NOT (pg_get_userbyid(a.grantee)='backup_reader' AND a.privilege_type='SELECT')) AS owner_only FROM pg_class c WHERE c.oid IN (to_regclass('public."TextEmbeddingJob"'))`);
   await db.query("ROLLBACK");
 } finally {
   await db.end().catch(() => {});
