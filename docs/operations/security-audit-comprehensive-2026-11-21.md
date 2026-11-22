@@ -1,5 +1,7 @@
 # MJU Find 종합 보안 감사 (2026-11-21)
 
+> 2026-11-22 후속: A-1 Production 반영(`dpl_FvfFRQpp…`). P-5·A-3·A-4·A-5는 Preview 구현·검증 완료, Production 승인 대기. A-2는 미사용 확인(대시보드 설정 안내). [security-hardening-2026-11-22.md](security-hardening-2026-11-22.md)
+
 - 기준: OWASP ASVS 5.0 · OWASP Top 10:2025 중 이 서비스에 해당하는 항목(접근 통제, 인증·세션, 입력 처리, 파일, 설정·공급망, 로깅·사고 대응, 자원 소비)
 - 대상: 현재 Production `dpl_GFjSiuYqn8TCsMz68ddQkCUh2g3q`(`8a67cdd`)와 같은 코드, Supabase(Production·Preview), Vercel, 공개 GitHub 저장소 `oyueo-mm/mju-lost-found`
 - 방법

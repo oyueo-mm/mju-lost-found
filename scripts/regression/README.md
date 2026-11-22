@@ -199,3 +199,23 @@ node --env-file=.env.preview.local scripts/regression/hidden-post-comments.mjs -
 - Preview DB에 합성 회원 1명, 분실물 글 1개, 댓글 1개를 만들고 끝나면 삭제한다(`.vercel/hidden-comments-<uuid>.json`에 ID 기록).
 - 배포된 Preview에서 댓글 API를 익명으로 세 상태로 조회한다: 정상 글은 200 + 댓글, 임시 숨김은 404, 삭제는 404.
 - 판정: `passed: true`, `cleanupOk: true`. 수정 전 코드(`8a67cdd`)는 숨김·삭제 모두 200으로 실패한다(재현 근거).
+
+## 보안 강화 P-5·A-4·A-3·A-5 (2026-11-22)
+
+```powershell
+node scripts/regression/build-preview.mjs --confirm-preview
+node --env-file=.vercel/regression-preview.env --env-file=.env.preview.local scripts/regression/hardening-local.mjs --confirm-preview
+node --env-file=.env.preview.local scripts/regression/hardening-hosted.mjs https://mju-lost-found-vercel-<id>-oyueo.vercel.app
+```
+
+- `hardening-local.mjs`
+  - 실행 환경: 로컬 `next start`(127.0.0.1:3105, 일회용 AUTH_SECRET, `VERCEL=1`) + Preview DB·Storage
+  - 만드는 데이터: 회원 U·S, 제재 권한만 가진 관리자 A, 전체 관리자 F, 분실물 글 1개, Storage 객체 2개, UploadIntent 행
+  - 공유 요청 제한 카운터는 검사용으로 값을 채웠다가 원래 값으로 되돌린다.
+  - 생성한 ID는 `.vercel/hardening-<uuid>.json`에 기록하고, 끝나면 모두 삭제한다.
+  - 검사 범위: P-5 7개, A-4 5개, A-3 5개, A-5 7개(분당 601번째 요청 차단 포함)
+  - 판정 기준: `passed: true`, 24/24, `cleanupOk: true`
+- `hardening-hosted.mjs`
+  - 배포된 Preview에 익명 AI 검색 **1회**, 목록, `/lost`, `/busy`를 요청한다.
+  - 공용 AI 상한 카운터 값만 출력한다(쓰기 없음).
+

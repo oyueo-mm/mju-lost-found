@@ -29,7 +29,15 @@
   - `ops/backup`(백업 운영 worktree, 1커밋)
 - 병합 전 검증(`2130c6b`): 단위 274파일 3,047개, 타입, 린트 통과.
 
-## 0-3. 2026-11-21 23시 종합 보안 감사 (최신)
+## 0-4. 2026-11-22 보안 강화 (최신)
+
+- **현재 Production `dpl_FvfFRQppnqXaT7sdybBHknhjN9f9`(`fc947bb`)**: A-1 숨김·삭제 글 댓글 차단 + '내 댓글' 제목 가림. CSP Report-Only, P-2·P-3, private Realtime 유지. 롤백 대상 `dpl_GFjSiuYqn8TCsMz68ddQkCUh2g3q`(`8a67cdd`).
+- **P-5·A-4·A-3·A-5**: 브랜치 `security/hardening-2026-11-22`. 격리 Preview `dpl_6JhJWXAi91fiHjTXd1Y9eRQApoW4`(`905ba25`)에서 검증했다. Preview DB 마이그레이션 2건 적용. **Production 마이그레이션·배포는 승인 대기이며, 마이그레이션을 먼저 해야 한다.**
+- **11-22 예약 작업**: cron 02:00·03:00 정상. 백업은 04:00이 아니라 11:09에 지연 실행됐고 복원 검증은 통과했다. Modern Standby에서는 AC 연결 상태에서도 PC를 깨우지 못했다.
+- **A-2**: Supabase Auth는 사용하지 않는 것으로 확인했다. 대시보드에서 끌 설정을 정리했다.
+- 상세: [security-hardening-2026-11-22.md](security-hardening-2026-11-22.md)
+
+## 0-3. 2026-11-21 23시 종합 보안 감사
 
 - **현재 Production `dpl_GFjSiuYqn8TCsMz68ddQkCUh2g3q`(`8a67cdd`)**: P-2, P-3, polling 15초 제한, CSP Report-Only. 롤백 대상 `dpl_6rutg8AmJikkZPacLL5stQwRD8wE`.
 - 종합 감사: [security-audit-comprehensive-2026-11-21.md](security-audit-comprehensive-2026-11-21.md)
