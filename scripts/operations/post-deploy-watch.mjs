@@ -9,7 +9,7 @@
 //   node scripts/operations/post-deploy-watch.mjs <dpl_…> --around <ISO time> [minutes=10]
 //       one window: <time> - minutes .. <time> + minutes
 //
-// "loggedIn2xx" counts 2xx responses on routes that answer 401 without a
+// "loggedIn2xx" counts 2xx responses on API routes that answer 401 without a
 // session -- direct evidence that logged-in requests succeeded. Notes: the
 // Vercel CLI returns at most --limit rows per query (500 here), and on the
 // Hobby plan runtime logs are kept for about ONE HOUR -- check a reported
@@ -23,6 +23,7 @@ if (!/^dpl_[A-Za-z0-9]+$/.test(id ?? "") || !["--watch", "--around"].includes(mo
 }
 // API routes that require a session (anonymous: 401) and pages only members open.
 const LOGGED_IN = /^\/(api\/(me|notifications|chat|admin|reports|upload)(\/|$|\?)|chat(\/|$)|my(\/|$)|admin(\/|$))/;
+const LOGGED_IN_API = /^\/api\/(me|notifications|chat|admin|reports|upload)(\/|$|\?)/;
 const routeClass = (p = "") => (LOGGED_IN.test(p) ? `member:${p.split(/[/?]/)[1] === "api" ? "/api/" + p.split(/[/?]/)[2] : "/" + p.split(/[/?]/)[1]}` : p.startsWith("/api/") ? "api:other" : "page");
 
 function query(since, until, extra = "") {
@@ -46,7 +47,9 @@ function summarize(since, until) {
   for (const e of errors) { const m = String(e.message ?? "").replace(/\s+/g, " ").slice(0, 90); errorKinds[m] = (errorKinds[m] ?? 0) + 1; }
   return {
     window: [since, until], requests: rows.length, possiblyTruncated: rows.length >= 50, // the CLI has returned at most ~50 rows per query here
-    loggedIn2xx: rows.filter((r) => LOGGED_IN.test(r.requestPath ?? "") && r.responseStatusCode >= 200 && r.responseStatusCode < 300).length,
+    // API routes only: a member-only PAGE can answer 200 to an anonymous RSC
+    // prefetch (the redirect is inside the payload), so pages prove nothing.
+    loggedIn2xx: rows.filter((r) => LOGGED_IN_API.test(r.requestPath ?? "") && r.responseStatusCode >= 200 && r.responseStatusCode < 300).length,
     status5xx: rows.filter((r) => r.responseStatusCode >= 500).length,
     errors: errors.length, errorKinds, byClass,
   };
