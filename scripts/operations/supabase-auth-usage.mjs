@@ -10,9 +10,10 @@
 import "../db/install-guard.mjs";
 import { Client } from "pg";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
-const db = new Client({ connectionString: process.env.DIRECT_URL, connectionTimeoutMillis: 15000 });
+const db = new Client(pgConfig(process.env.DIRECT_URL, { connectionTimeoutMillis: 15000 }));
 try {
   await db.connect();
   await db.query("BEGIN READ ONLY");

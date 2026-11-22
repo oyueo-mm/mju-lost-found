@@ -5,8 +5,9 @@
 import "../db/install-guard.mjs";
 import { Client } from "pg";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 if (assertDatabaseEnvironment(process.env, { usage: "operation" }) !== "preview") throw new Error("Preview only");
-const db = new Client({ connectionString: process.env.DIRECT_URL, ssl: { rejectUnauthorized: false } });
+const db = new Client(pgConfig(process.env.DIRECT_URL));
 await db.connect();
 try {
   await db.query("BEGIN");

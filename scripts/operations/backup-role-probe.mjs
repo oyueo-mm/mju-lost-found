@@ -4,9 +4,10 @@
 import "../db/install-guard.mjs";
 import { Client } from "pg";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
 if (target !== "preview") throw new Error("Preview only");
-const db = new Client({ connectionString: process.env.DIRECT_URL });
+const db = new Client(pgConfig(process.env.DIRECT_URL));
 await db.connect();
 try {
   await db.query("BEGIN READ ONLY");

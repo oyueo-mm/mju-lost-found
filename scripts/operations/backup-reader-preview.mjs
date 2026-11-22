@@ -7,11 +7,12 @@ import { Client } from "pg";
 import { readFileSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 if (assertDatabaseEnvironment(process.env, { usage: "operation" }) !== "preview") throw new Error("Preview only");
 const sqlFile = process.argv[2];
 if (!sqlFile) throw new Error("usage: backup-reader-preview.mjs <backup-reader.sql>");
 const owner = new URL(process.env.DIRECT_URL);
-const db = new Client({ connectionString: process.env.DIRECT_URL });
+const db = new Client(pgConfig(process.env.DIRECT_URL));
 await db.connect();
 try {
   await db.query(readFileSync(sqlFile, "utf8"));

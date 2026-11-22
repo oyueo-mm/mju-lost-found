@@ -10,15 +10,13 @@
 //   Production: node --env-file=.env.backup-production.local scripts/db/approved-operation.mjs --confirm-production --approval-reference <REF> -- scripts/operations/backup-reader-check.mjs
 import "../db/install-guard.mjs";
 import { Client } from "pg";
-import { readFileSync } from "node:fs";
 import { assertDatabaseEnvironment, assertDatabaseAccess } from "../../src/lib/db/accessPolicy.mjs";
+import { pgConfig } from "../db/pgConfig.mjs";
 
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
 if (assertDatabaseAccess(process.env.BACKUP_DATABASE_URL, process.env, { usage: "operation" }) !== target) throw new Error("BACKUP_DATABASE_URL is not the same environment");
-const ca = readFileSync(new URL("../../certs/supabase-prod-ca-2021.crt", import.meta.url), "utf8");
-const ssl = { ca, rejectUnauthorized: true };
-const reader = new Client({ connectionString: process.env.BACKUP_DATABASE_URL, ssl });
-const owner = new Client({ connectionString: process.env.DIRECT_URL, ssl });
+const reader = new Client(pgConfig(process.env.BACKUP_DATABASE_URL));
+const owner = new Client(pgConfig(process.env.DIRECT_URL));
 await reader.connect();
 await owner.connect();
 const attempt = async (sql) => {
