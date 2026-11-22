@@ -89,6 +89,18 @@ if (dryRun) {
 const status = spawnSync("git", ["status", "--porcelain"], { cwd: ROOT, encoding: "utf8" }).stdout.trim();
 if (status) console.warn("주의: 커밋하지 않은 변경이 있습니다. 배포는 gitDirty로 기록되고 커밋과 정확히 일치하지 않을 수 있습니다.");
 
+// The generated Prisma client (src/generated/prisma) is gitignored but IS
+// uploaded, and `next build` does not regenerate it. A client generated on
+// another branch once went to Production (2026-11-22): it selected a column
+// that only that branch's migration adds, and logged-in requests failed.
+// Always regenerate from THIS checkout's schema before uploading.
+const generate = spawnSync("npx --no-install prisma generate --config prisma7.config.ts", { cwd: ROOT, shell: true, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+if (generate.status !== 0) {
+  console.error("prisma generate failed -- nothing was deployed");
+  process.exit(1);
+}
+console.log("Prisma client regenerated from prisma/schema.prisma of this checkout");
+
 const deploy = run([
   "vercel", "deploy", "--yes",
   ...(target === "production" ? ["--prod"] : []),
