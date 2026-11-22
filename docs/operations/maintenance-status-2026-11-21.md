@@ -29,7 +29,21 @@
   - `ops/backup`(백업 운영 worktree, 1커밋)
 - 병합 전 검증(`2130c6b`): 단위 274파일 3,047개, 타입, 린트 통과.
 
-## 0-5. 2026-11-22 클라우드 백업 (최신)
+## 0-6. 2026-11-22 DB TLS Production 반영 (최신)
+
+- **Production**: `dpl_HbJbyTZFYnLLmBzLt7Bb1QCboNue`(`0263e62`, 앱 DB 연결 검증된 TLS)
+  - 롤백 `dpl_FvfFRQpp…`(`fc947bb`). SSL 강제 전까지만 안전하다.
+  - 회귀: 프로브 16/16, 헤더 12/12, CSRF 10/10, 브라우저 5/5, 로그 오류 0
+- **운영 도구**: 스크립트 41곳, `pg_dump`, Prisma 마이그레이션, 노트북 백업(ops `0ff6a70`), 클라우드 백업이 모두 검증된 TLS로 연결한다. 미지원 경로 0.
+- **Preview**: `dpl_4kVKbF28…`(`bab5f8e`)
+- **Supabase SSL 강제**: 미적용(승인 대기). 조건은 [db-tls-2026-11-22.md](db-tls-2026-11-22.md) 5절.
+- **클라우드 백업**(push 전 `9ccd529`)
+  - Production 실행은 `PRODUCTION_BACKUP_ENABLED` 변수로 막아 둔다.
+  - CI에는 service_role 키를 넣지 않는다.
+  - RUNBOOK 3절을 정리했다.
+
+
+## 0-5. 2026-11-22 클라우드 백업
 
 - GitHub Actions + R2 + Cloudflare Worker 감시로 구성한다. 코드와 Preview 종단 간 검증은 끝났다(`C:\proj_claude\mju-find-backup-cloud`).
 - 실제 인프라 설정은 사용자 작업이다. Production `backup_reader` 생성은 승인 대기다.
