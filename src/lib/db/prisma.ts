@@ -12,6 +12,7 @@ import { PrismaClient } from "@/generated/prisma/client";
 // here is safe even with no real DATABASE_URL set yet.
 import { PrismaPg } from "@prisma/adapter-pg";
 import { assertDatabaseEnvironment } from "./accessPolicy.mjs";
+import { pgPoolSettings } from "./tls";
 
 // Validate before reusing a hot-reloaded, globally cached client as well.
 assertDatabaseEnvironment(process.env, { allowMissing: true });
@@ -39,7 +40,8 @@ if (!process.env.DATABASE_URL) {
 // need the unpooled connection.
 // Never let pg fall back to PGHOST/PGUSER when DATABASE_URL is absent.
 const connectionString = process.env.DATABASE_URL || "postgresql://unconfigured@127.0.0.1:1/unconfigured";
-const adapter = new PrismaPg(connectionString);
+// Verified TLS for Supabase hosts (see ./tls.ts).
+const adapter = new PrismaPg(pgPoolSettings(connectionString));
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
