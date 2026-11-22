@@ -161,8 +161,22 @@ try {
   await prisma.uploadIntent.createMany({ data: [orphan, used].map((p) => ({ path: p, bucket: "post-images", userId: users.U.id, createdAt: old })) });
   const { publicUrlFor } = await jiti.import("../../src/lib/images/supabaseAdmin.ts");
   await prisma.postImage.create({ data: { lostPostId: post.id, imageUrl: publicUrlFor(used), displayOrder: 0, isPrimary: true } });
-  const swept = await sweepUnattachedUploads();
   const exists = async (p) => { const { data } = await bucket.list(`posts/lost/${post.id}`, { search: p.split("/").pop() }); return (data ?? []).length > 0; };
+  // Default mode is a dry run: it reports and writes nothing.
+  const dry = await sweepUnattachedUploads(new Date(), 200, "dry-run");
+  const dryRows = await Promise.all([orphan, used].map((p) => prisma.uploadIntent.findUnique({ where: { path: p } })));
+  check("A-3 dry run reports the candidate and deletes/marks nothing",
+    dry.mode === "dry-run" && dry.wouldDelete === 1 && dry.referenced === 1 && dry.deleted === 0 && (await exists(orphan)) && (await exists(used)) && dryRows.every((r) => !r.deletedAt && !r.attachedAt),
+    { wouldDelete: dry.wouldDelete, referenced: dry.referenced, deleted: dry.deleted });
+  // An upload record whose post belongs to someone else halts the whole run.
+  const foreignPath = `posts/lost/${post.id}/${randomUUID()}.jpg`;
+  await prisma.uploadIntent.create({ data: { path: foreignPath, bucket: "post-images", userId: users.S.id, createdAt: old } });
+  const halted = await sweepUnattachedUploads(new Date(), 200, "delete");
+  check("A-3 an ownership mismatch halts the run before any deletion",
+    halted.halted === "ownership_mismatch" && halted.deleted === 0 && (await exists(orphan)),
+    { halted: halted.halted, ownershipMismatch: halted.ownershipMismatch, deleted: halted.deleted });
+  await prisma.uploadIntent.delete({ where: { path: foreignPath } });
+  const swept = await sweepUnattachedUploads(new Date(), 200, "delete");
   const [orphanGone, usedKept] = [!(await exists(orphan)), await exists(used)];
   const [orphanRow, usedRow] = await Promise.all([orphan, used].map((p) => prisma.uploadIntent.findUnique({ where: { path: p } })));
   check("A-3 sweep deletes the unattached object and keeps the used one",

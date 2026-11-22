@@ -3,7 +3,7 @@ import type { RateLimitTier } from "@/lib/rateLimit";
 
 import { CHAT_IMAGES_BUCKET, POST_IMAGES_BUCKET } from "./config";
 import { removeChatImage } from "./chatStorage";
-import { isValidImagePathname, parseChatImagePathname } from "./pathname";
+import { isValidImagePathname, parseChatImagePathname, parseImagePathname } from "./pathname";
 import { deletePostImagePaths, publicUrlFor } from "./supabaseAdmin";
 
 // Security audit A-3 (2026-11-22): uploads that are never attached.
@@ -71,21 +71,59 @@ async function isReferenced(bucket: string, path: string): Promise<boolean> {
   return lost + found + gallery + legacyMessage > 0;
 }
 
-export type UploadSweepResult = { examined: number; deleted: number; referenced: number; failed: number; skipped: number };
+export type UploadSweepMode = "dry-run" | "delete";
+/**
+ * Deleting is opt-in: unless UPLOAD_SWEEP_MODE=delete is set on the
+ * deployment, the daily run only REPORTS what it would remove (2026-11-22:
+ * the first Production runs are reviewed before anything is deleted).
+ */
+export function sweepModeFromEnv(env: Record<string, string | undefined> = process.env): UploadSweepMode {
+  return env.UPLOAD_SWEEP_MODE === "delete" ? "delete" : "dry-run";
+}
+// More deletable files than this in one run is not normal for this service:
+// the run deletes nothing and says why.
+export const SWEEP_MAX_DELETES_PER_RUN = 100;
+
+export type UploadSweepResult = {
+  mode: UploadSweepMode;
+  examined: number; deleted: number; wouldDelete: number; referenced: number; failed: number; skipped: number;
+  ownershipMismatch: number; halted: null | "ownership_mismatch" | "too_many_candidates";
+};
+
+/** post-images: the path's post must belong to whoever minted the upload (or be gone). */
+async function postOwnershipHolds(path: string, userId: number): Promise<boolean> {
+  const parsed = parseImagePathname(path);
+  if (!parsed) return false;
+  const post = parsed.postType === "lost"
+    ? await prisma.lostPost.findUnique({ where: { id: parsed.postId }, select: { userId: true } })
+    : await prisma.foundPost.findUnique({ where: { id: parsed.postId }, select: { userId: true } });
+  return !post || post.userId === userId;
+}
 
 /**
  * Removes uploads still open SWEEP_AFTER_HOURS after their URL was minted.
- * Bounded per run; a file some row references is marked attached instead.
- * Only paths in the app's own naming scheme are ever deleted.
+ * Safety, in order:
+ *   - only paths in the app's own naming scheme are considered;
+ *   - a file some row references is kept (and, in delete mode, marked attached);
+ *   - post-images: the post in the path must belong to the uploader (or be
+ *     gone) -- a mismatch should never happen, so ANY mismatch halts the
+ *     whole run before a single deletion;
+ *   - more than SWEEP_MAX_DELETES_PER_RUN deletable files halts the run too;
+ *   - dry-run (the default) writes nothing at all: no Storage call, no row.
+ * Chat images: the uploader's membership of the room was checked when the URL
+ * was minted (server side); here the path must still name a room id.
  */
-export async function sweepUnattachedUploads(now = new Date(), batch = SWEEP_BATCH): Promise<UploadSweepResult> {
-  const result: UploadSweepResult = { examined: 0, deleted: 0, referenced: 0, failed: 0, skipped: 0 };
+export async function sweepUnattachedUploads(now = new Date(), batch = SWEEP_BATCH, mode: UploadSweepMode = sweepModeFromEnv()): Promise<UploadSweepResult> {
+  const result: UploadSweepResult = { mode, examined: 0, deleted: 0, wouldDelete: 0, referenced: 0, failed: 0, skipped: 0, ownershipMismatch: 0, halted: null };
   const due = await prisma.uploadIntent.findMany({
     where: { attachedAt: null, deletedAt: null, createdAt: { lt: new Date(now.getTime() - SWEEP_AFTER_HOURS * HOUR_MS) } },
     orderBy: { createdAt: "asc" },
     take: batch,
-    select: { path: true, bucket: true },
+    select: { path: true, bucket: true, userId: true },
   });
+  // Pass 1 (read-only): classify every candidate.
+  const deletable: { path: string; bucket: string }[] = [];
+  const referenced: string[] = [];
   for (const intent of due) {
     result.examined++;
     const ownName = intent.bucket === CHAT_IMAGES_BUCKET ? Boolean(parseChatImagePathname(intent.path)) : isValidImagePathname(intent.path);
@@ -95,10 +133,35 @@ export async function sweepUnattachedUploads(now = new Date(), batch = SWEEP_BAT
     }
     try {
       if (await isReferenced(intent.bucket, intent.path)) {
-        await prisma.uploadIntent.update({ where: { path: intent.path }, data: { attachedAt: new Date() } });
-        result.referenced++;
+        referenced.push(intent.path);
         continue;
       }
+      if (intent.bucket !== CHAT_IMAGES_BUCKET && !(await postOwnershipHolds(intent.path, intent.userId))) {
+        result.ownershipMismatch++;
+        continue;
+      }
+      deletable.push(intent);
+    } catch (error) {
+      result.failed++;
+      console.error("Unattached upload sweep check failed for one file:", error instanceof Error ? error.name : "unknown");
+    }
+  }
+  result.referenced = referenced.length;
+  result.wouldDelete = deletable.length;
+  if (result.ownershipMismatch > 0) result.halted = "ownership_mismatch";
+  else if (deletable.length > SWEEP_MAX_DELETES_PER_RUN) result.halted = "too_many_candidates";
+  if (mode !== "delete" || result.halted) return result;
+
+  // Pass 2 (delete mode, nothing suspicious): act.
+  for (const path of referenced) {
+    try {
+      await prisma.uploadIntent.update({ where: { path }, data: { attachedAt: new Date() } });
+    } catch {
+      // only a bookkeeping mark: the next run re-checks the reference anyway
+    }
+  }
+  for (const intent of deletable) {
+    try {
       const removed = intent.bucket === CHAT_IMAGES_BUCKET ? await removeChatImage(intent.path) : await deletePostImagePaths([intent.path]);
       if (!removed) {
         result.failed++;

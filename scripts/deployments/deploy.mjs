@@ -173,4 +173,4 @@ if (target === "production" && deploy.status === 0 && deploymentId) {
     console.error(`도메인이 새 배포를 가리키지 않습니다(현재 ${live?.deploymentId ?? "확인 실패"}). 직전에 롤백했다면 확인 후 \`vercel promote ${url}\`로 승격하세요.`);
   }
 }
-process.exit(deploy.status || rec.status || cspCheck || domainCheck || 0);
+process.exitCode = deploy.status || rec.status || cspCheck || domainCheck || 0; // not process.exit(): right after fetch() it can trip a libuv assertion on Windows

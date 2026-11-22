@@ -9,7 +9,7 @@ import { Client } from "pg";
 import { pgConfig } from "../db/pgConfig.mjs";
 import { assertDatabaseEnvironment } from "../../src/lib/db/accessPolicy.mjs";
 
-const SWEEP_AFTER_HOURS = 24, SWEEP_BATCH = 200; // keep in step with uploadIntents.ts
+const SWEEP_AFTER_HOURS = 24, SWEEP_BATCH = 200, SWEEP_MAX_DELETES_PER_RUN = 100; // keep in step with uploadIntents.ts
 const target = assertDatabaseEnvironment(process.env, { usage: "operation" });
 const base = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").origin;
 const publicPrefix = `${base}/storage/v1/object/public/post-images/`;
@@ -25,7 +25,7 @@ try {
   } else {
     const r = (await db.query(`
       WITH due AS (
-        SELECT path, bucket FROM "UploadIntent"
+        SELECT path, bucket, user_id FROM "UploadIntent"
          WHERE attached_at IS NULL AND deleted_at IS NULL AND created_at < (now() AT TIME ZONE 'UTC') - make_interval(hours => $1)
          ORDER BY created_at LIMIT $2),
       ref AS (
@@ -33,16 +33,25 @@ try {
           ELSE EXISTS (SELECT 1 FROM "LostPost" p WHERE p.image_url = $3 || d.path)
             OR EXISTS (SELECT 1 FROM "FoundPost" p WHERE p.image_url = $3 || d.path)
             OR EXISTS (SELECT 1 FROM "PostImage" i WHERE i.image_url = $3 || d.path)
-            OR EXISTS (SELECT 1 FROM "Message" m WHERE m.image_url = $3 || d.path) END AS referenced
+            OR EXISTS (SELECT 1 FROM "Message" m WHERE m.image_url = $3 || d.path) END AS referenced,
+          -- post-images: the post in the path (posts/<lost|found>/<id>/...) must belong to the uploader, or be gone
+          CASE WHEN d.bucket = 'post-images' AND d.path ~ '^posts/(lost|found)/[0-9]+/' THEN
+            COALESCE((SELECT p.user_id = d.user_id FROM "LostPost" p WHERE split_part(d.path, '/', 2) = 'lost' AND p.id = split_part(d.path, '/', 3)::int),
+                     (SELECT p.user_id = d.user_id FROM "FoundPost" p WHERE split_part(d.path, '/', 2) = 'found' AND p.id = split_part(d.path, '/', 3)::int),
+                     true)
+          ELSE true END AS owner_ok
           FROM due d)
       SELECT count(*)::int AS due,
              count(*) FILTER (WHERE referenced)::int AS "wouldMarkAttached",
-             count(*) FILTER (WHERE NOT referenced)::int AS "wouldDelete",
+             count(*) FILTER (WHERE NOT referenced AND owner_ok)::int AS "wouldDelete",
+             count(*) FILTER (WHERE NOT referenced AND NOT owner_ok)::int AS "ownershipMismatch",
              count(*) FILTER (WHERE NOT referenced AND bucket = 'post-images')::int AS "wouldDeletePost",
              count(*) FILTER (WHERE NOT referenced AND bucket = 'chat-images')::int AS "wouldDeleteChat"
         FROM ref`, [SWEEP_AFTER_HOURS, SWEEP_BATCH, publicPrefix])).rows[0];
     const totals = (await db.query(`SELECT count(*)::int AS intents, count(*) FILTER (WHERE attached_at IS NULL AND deleted_at IS NULL)::int AS open, count(*) FILTER (WHERE attached_at IS NOT NULL)::int AS attached, count(*) FILTER (WHERE deleted_at IS NOT NULL)::int AS deleted FROM "UploadIntent"`)).rows[0];
-    console.log(JSON.stringify({ target, uploadIntentTable: true, sweepAfterHours: SWEEP_AFTER_HOURS, totals, ifSweptNow: r, storedPostUrlsWithOtherPrefix: drift }, null, 1));
+    // The app halts a whole run (deletes nothing) on any ownership mismatch or too many candidates.
+    const wouldHalt = r.ownershipMismatch > 0 ? "ownership_mismatch" : r.wouldDelete > SWEEP_MAX_DELETES_PER_RUN ? "too_many_candidates" : null;
+    console.log(JSON.stringify({ target, uploadIntentTable: true, sweepAfterHours: SWEEP_AFTER_HOURS, totals, ifSweptNow: { ...r, wouldHalt }, storedPostUrlsWithOtherPrefix: drift }, null, 1));
   }
   await db.query("ROLLBACK");
 } finally {
