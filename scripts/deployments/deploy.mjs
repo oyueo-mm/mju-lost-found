@@ -7,6 +7,10 @@
 //       vercel deploy; --alias also points mju-lost-found-preview.vercel.app at it
 //   node scripts/deployments/deploy.mjs production
 //       vercel deploy --prod
+//   --approval-reference <REF>  REQUIRED for production: the operator's approval
+//       reference for this release. Used to run the read-only Production
+//       schema compatibility check (prisma-client-check.mjs database) through
+//       scripts/db/approved-operation.mjs BEFORE anything is uploaded.
 //   --csp-mode=report-only|enforce|off  (D-4) build this one deployment with
 //       MJU_CSP_MODE (a build-time env: next.config bakes the header in).
 //       REQUIRED for production (scripts/deployments/cspMode.mjs): the live
@@ -24,7 +28,7 @@
 // the dashboard says so.
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { PREVIEW_ALIAS } from "../../src/lib/devstats/vercelDeployment.mjs";
@@ -47,16 +51,21 @@ if (target !== "preview" && target !== "production") {
 // `deploy.mjs production --dry-run` really deployed to Production. It now means
 // what it says: print the plan and exit without calling Vercel or any database.
 // The recorder's own "write nothing" mode is --record-dry-run.
-const KNOWN = new Set(["--alias", "--dry-run", "--record-dry-run", "--confirm-production", "--db", "--confirm-csp-enforce", "--allow-csp-off"]);
+const KNOWN = new Set(["--alias", "--dry-run", "--record-dry-run", "--confirm-production", "--db", "--confirm-csp-enforce", "--allow-csp-off", "--approval-reference"]);
 for (let i = 0; i < rest.length; i++) {
   const a = rest[i];
-  if (a === "--db") { i++; continue; }
+  if (a === "--db" || a === "--approval-reference") { i++; continue; }
   if (!KNOWN.has(a) && !a.startsWith("--realtime-canary-room=") && !a.startsWith("--csp-mode=")) {
     console.error(`unknown option: ${a}`);
     process.exit(2);
   }
 }
 const dryRun = rest.includes("--dry-run");
+const approvalReference = rest.includes("--approval-reference") ? rest[rest.indexOf("--approval-reference") + 1] : undefined;
+if (target === "production" && !/^[A-Za-z0-9][A-Za-z0-9_.:/-]{2,159}$/.test(approvalReference ?? "") ) {
+  console.error("production requires --approval-reference <REF> (runs the read-only Production schema compatibility check before upload)");
+  process.exit(2);
+}
 const alias = rest.includes("--alias");
 const canaryFlags = rest.filter((arg) => arg === "--realtime-canary-room" || arg.startsWith("--realtime-canary-room="));
 const canaryRoom = canaryFlags[0]?.slice("--realtime-canary-room=".length);
@@ -70,6 +79,7 @@ if (canaryFlags.length > 1 || (canaryRoom !== undefined && (!/^[1-9]\d{0,9}$/.te
   throw new Error("The Realtime canary room must be one positive room ID");
 }
 const recordArgs = rest
+  .filter((a, i) => a !== "--approval-reference" && rest[i - 1] !== "--approval-reference")
   .filter((a) => a !== "--alias" && a !== "--dry-run" && a !== "--confirm-csp-enforce" && a !== "--allow-csp-off" && !a.startsWith("--realtime-canary-room=") && !a.startsWith("--csp-mode="))
   .map((a) => (a === "--record-dry-run" ? "--dry-run" : a));
 
@@ -100,6 +110,24 @@ if (generate.status !== 0) {
   process.exit(1);
 }
 console.log("Prisma client regenerated from prisma/schema.prisma of this checkout");
+
+// Gate 1: the client that will be uploaded IS this checkout's schema.
+// Gate 2: every table/column/enum value it uses exists in the target database
+// (read-only metadata; Production through the approved launcher).
+const checkClient = spawnSync(process.execPath, [join(ROOT, "scripts/deployments/prisma-client-check.mjs"), "client"], { cwd: ROOT, stdio: "inherit" });
+if (checkClient.status !== 0) {
+  console.error("generated Prisma client does not match this checkout's schema -- nothing was deployed");
+  process.exit(1);
+}
+const checkDb = target === "production"
+  ? spawnSync(process.execPath, [join(ROOT, "scripts/db/approved-operation.mjs"), "--confirm-production", "--approval-reference", approvalReference, "--", "scripts/deployments/prisma-client-check.mjs", "database"], { cwd: ROOT, stdio: "inherit" })
+  : existsSync(join(ROOT, ".env.preview.local"))
+    ? spawnSync(process.execPath, ["--env-file=.env.preview.local", join(ROOT, "scripts/deployments/prisma-client-check.mjs"), "database"], { cwd: ROOT, stdio: "inherit" })
+    : (console.warn("주의: .env.preview.local이 없어 Preview DB 호환성 검사를 건너뜁니다."), { status: 0 });
+if (checkDb.status !== 0) {
+  console.error(`the Prisma client is not compatible with the ${target} database (missing table/column/enum value) -- nothing was deployed. Apply the release's migration first, or deploy the matching code.`);
+  process.exit(1);
+}
 
 const deploy = run([
   "vercel", "deploy", "--yes",
@@ -132,4 +160,17 @@ if (deploy.status === 0) {
     console.error(`CSP 불일치: 요청 ${cspMode}, 배포 응답 ${live ?? "확인 실패"}.${target === "production" ? " Production이 이미 바뀌었습니다. 의도와 다르면 직전 배포로 vercel rollback 하세요." : ""}`);
   }
 }
-process.exit(deploy.status || rec.status || cspCheck || 0);
+// After `vercel rollback`, Vercel stops assigning the production domains to
+// new production deployments until one is promoted (2026-11-22). Say so
+// instead of letting a "successful" deploy silently not serve traffic.
+let domainCheck = 0;
+const deploymentId = /"id":\s*"(dpl_[A-Za-z0-9]+)"/.exec(deploy.stdout ?? "")?.[1];
+if (target === "production" && deploy.status === 0 && deploymentId) {
+  const live = await fetch("https://mju-find.vercel.app/api/version", { cache: "no-store", signal: AbortSignal.timeout(20000) }).then((r) => r.json()).catch(() => null);
+  if (live?.deploymentId === deploymentId) console.log(`도메인 확인: mju-find.vercel.app = ${deploymentId}`);
+  else {
+    domainCheck = 3;
+    console.error(`도메인이 새 배포를 가리키지 않습니다(현재 ${live?.deploymentId ?? "확인 실패"}). 직전에 롤백했다면 확인 후 \`vercel promote ${url}\`로 승격하세요.`);
+  }
+}
+process.exit(deploy.status || rec.status || cspCheck || domainCheck || 0);
