@@ -54,7 +54,7 @@ function parseParams(idParam: string, searchParams: URLSearchParams) {
 export const GET = withErrorHandling(
   async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
     // Security audit A-5: brake on floods before any query.
-    const busy = guardPublicReadApi(request.headers);
+    const busy = await guardPublicReadApi(request.headers);
     if (busy) return busy;
     const { id: idParam } = await params;
     const parsed = parseParams(idParam, request.nextUrl.searchParams);

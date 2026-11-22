@@ -12,7 +12,7 @@ base, key = cfg["base"].rstrip("/"), cfg.get("key") or ""
 GUARDED_PAGE = re.compile(r"^/(lost|found|search)/?$|^/post/[^/]+/?$")
 GUARDED_API = re.compile(r"^/api/posts(/[^/]+(/comments)?)?/?$")
 
-counts = {"document": 0, "rsc": 0, "api": 0}
+counts = {"document": 0, "rsc": 0, "prefetch": 0, "api": 0}
 def on_request(req):
     u = urlparse(req.url)
     if not req.url.startswith(base) or req.method != "GET":
@@ -20,8 +20,10 @@ def on_request(req):
     if GUARDED_API.match(u.path):
         counts["api"] += 1
     elif GUARDED_PAGE.match(u.path):
-        is_rsc = "_rsc=" in (u.query or "") or req.headers.get("rsc") == "1"
-        counts["rsc" if is_rsc else "document"] += 1
+        h = req.headers
+        is_rsc = "_rsc=" in (u.query or "") or h.get("rsc") == "1"
+        # Prefetches are counted by the guard like any request; listed apart only to explain the total.
+        counts["prefetch" if is_rsc and h.get("next-router-prefetch") else "rsc" if is_rsc else "document"] += 1
 
 steps = []
 def mark(name, started):

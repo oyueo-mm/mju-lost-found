@@ -66,7 +66,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
   // Security audit A-5: brake on floods of the public list/search (the cron
   // branch above is exempt).
-  const busy = guardPublicReadApi(request.headers);
+  const busy = await guardPublicReadApi(request.headers);
   if (busy) return busy;
   const query = listQuerySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams));
   if (!query.success) {

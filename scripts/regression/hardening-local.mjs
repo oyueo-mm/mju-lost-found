@@ -172,15 +172,53 @@ try {
   check("A-3 sweep leaves recent (under a day) uploads alone", recentLeft === OPEN_UPLOAD_CAP.user, { recentLeft });
 
   // ---------------- A-5 (in-memory, last: it fills this server's counters) ----------------
-  const flood = "192.0.2.77";
-  let firstRefusal = null;
-  for (let i = 1; i <= READ_LIMITS.perNetwork + 1; i++) {
-    const r = await call("GET", "/api/posts/not-a-number?type=lost", { ip: flood }); // 400 before any query
-    if (r.status === 429) { firstRefusal = { at: i, code: r.code }; break; }
+  // Decision A (2026-11-22): members counted per verified member, anonymous
+  // per network. Probes use a path that answers 400 before any query.
+  const probe = "/api/posts/not-a-number?type=lost";
+  // The guard counts in fixed one-minute windows: a burst that straddles a
+  // minute boundary starts over. Start bursts with room left in the window
+  // and send them in parallel batches so they finish inside it.
+  const freshWindow = async () => { const into = Date.now() % 60_000; if (into > 30_000) await new Promise((r) => setTimeout(r, 60_000 - into + 300)); };
+  async function burst(n, opts) {
+    const statuses = [];
+    for (let i = 0; i < n; i += 50) statuses.push(...(await Promise.all(Array.from({ length: Math.min(50, n - i) }, (_, k) => call("GET", probe, typeof opts === "function" ? opts(i + k) : opts)))).map((r) => r.status));
+    return { allowed: statuses.filter((x) => x !== 429).length, refused: statuses.filter((x) => x === 429).length };
   }
-  check("A-5 one network is braked right after its per-minute limit", firstRefusal?.at === READ_LIMITS.perNetwork + 1 && firstRefusal.code === "READ_BUSY", { firstRefusal });
+  const flood = "192.0.2.77";
+  await freshWindow();
+  const anonBurst = await burst(READ_LIMITS.perAnonymousNetwork + 5, { ip: flood });
+  const lastCode = (await call("GET", probe, { ip: flood })).code;
+  check("A-5 one anonymous network is braked right after its per-minute limit", anonBurst.allowed === READ_LIMITS.perAnonymousNetwork && anonBurst.refused === 5 && lastCode === "READ_BUSY", { ...anonBurst, lastCode });
   const page = await call("GET", "/lost", { ip: flood });
   check("A-5 a braked network's page view goes to /busy without the list", ((page.status === 307 && /\/busy$/.test(page.location ?? "")) || page.toBusy) && !page.hasMarker, { status: page.status, toBusy: page.toBusy, listed: page.hasMarker });
+  // Bypass attempts from the braked network
+  const forged = { value: "authjs.session-token=forged-not-a-jwe" };
+  check("A-5 bypass: a forged session cookie is still braked", (await call("GET", probe, { ip: flood, cookie: forged })).status === 429);
+  const foreign = { value: `authjs.session-token=${await encode({ token: { sub: "1", userId: 1 }, secret: randomUUID() + randomUUID(), salt: "authjs.session-token" })}` };
+  check("A-5 bypass: a cookie signed with another secret is still braked", (await call("GET", probe, { ip: flood, cookie: foreign })).status === 429);
+  const pf = await call("GET", "/lost", { ip: flood, headers: { rsc: "1", "next-router-prefetch": "1" } });
+  check("A-5 bypass: a prefetch-flagged request is still braked (no list)", !pf.hasMarker && (pf.status === 307 || pf.toBusy || /busy/.test(pf.location ?? "") || pf.status >= 300), { status: pf.status });
+  check("A-5 bypass: a bearer token instead of the cookie is still braked", (await call("GET", probe, { ip: flood, headers: { authorization: `Bearer ${(await cookie(users.U)).value.split("=").slice(1).join("=")}` } })).status === 429);
+  // Genuine members behind the same exhausted campus address
+  const memberPage = await call("GET", "/lost", { ip: flood, cookie: await cookie(users.U) });
+  check("A-5 campus: a signed-in member behind the braked address still gets the list", memberPage.status === 200 && memberPage.hasMarker && !memberPage.toBusy, { status: memberPage.status });
+  // Campus simulation: 30 members and 25 anonymous people behind ONE address, 20 reads each.
+  const campus = "198.51.100.200";
+  const memberCookies = await Promise.all(Array.from({ length: 30 }, (_, k) => cookie({ id: 900001 + k, nickname: `campus-${k}` })));
+  let memberRefused = 0, anonRefused = 0;
+  for (let round = 0; round < 20; round++) {
+    const batch = [...memberCookies.map((c) => call("GET", probe, { ip: campus, cookie: c })), ...Array.from({ length: 25 }, () => call("GET", probe, { ip: campus }))];
+    const rs = await Promise.all(batch);
+    memberRefused += rs.slice(0, 30).filter((r) => r.status === 429).length;
+    anonRefused += rs.slice(30).filter((r) => r.status === 429).length;
+  }
+  check("A-5 campus: 30 members + 25 anonymous behind one address, 20 reads each, nobody braked", memberRefused === 0 && anonRefused === 0, { memberReads: 600, anonymousReads: 500, memberRefused, anonRefused });
+  // A member's own flood is bounded, and only that member is affected
+  const heavy = await cookie({ id: 900100, nickname: "heavy" });
+  await freshWindow();
+  const memberBurst = await burst(READ_LIMITS.perMember + 5, (i) => ({ ip: `198.51.100.${(i % 200) + 1}`, cookie: heavy }));
+  check("A-5 member flood: one member is braked after the per-member limit, even across addresses", memberBurst.allowed === READ_LIMITS.perMember && memberBurst.refused === 5, memberBurst);
+  check("A-5 member flood: other members are unaffected", (await call("GET", probe, { ip: "198.51.100.250", cookie: memberCookies[0] })).status === 400);
   const control = await call("GET", "/lost", { ip: "192.0.2.80" });
   check("A-5 control: another network's /lost lists the fixture post", control.status === 200 && control.hasMarker && !control.toBusy, { status: control.status });
   check("A-5 /busy itself answers", (await call("GET", "/busy", { ip: flood })).status === 200);

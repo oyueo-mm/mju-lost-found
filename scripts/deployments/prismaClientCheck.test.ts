@@ -32,7 +32,7 @@ describe("generated client vs checkout schema", () => {
   });
 
   it("maps models and scalar/enum fields to tables and columns, skipping relations", () => {
-    const t = clientTables(dataModel);
+    const t = clientTables(dataModel) as Record<string, { columns: Set<string> }>;
     expect(Object.keys(t)).toEqual(["User", "post"]);
     expect([...t.User.columns]).toEqual(["id", "sessions_valid_after", "role"]);
   });

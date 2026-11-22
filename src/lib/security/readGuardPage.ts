@@ -7,5 +7,5 @@ import { admitPublicRead } from "./readGuard";
 // thing in a public page, before any query; an over-limit request is sent
 // to /busy, a page with no database work at all.
 export async function guardPublicPage(): Promise<void> {
-  if (!admitPublicRead(await headers()).ok) redirect("/busy");
+  if (!(await admitPublicRead(await headers())).ok) redirect("/busy");
 }
