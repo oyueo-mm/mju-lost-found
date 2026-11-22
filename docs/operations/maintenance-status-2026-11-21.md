@@ -29,7 +29,14 @@
   - `ops/backup`(백업 운영 worktree, 1커밋)
 - 병합 전 검증(`2130c6b`): 단위 274파일 3,047개, 타입, 린트 통과.
 
-## 0-4. 2026-11-22 보안 강화 (최신)
+## 0-5. 2026-11-22 클라우드 백업 (최신)
+
+- GitHub Actions + R2 + Cloudflare Worker 감시로 구성한다. 코드와 Preview 종단 간 검증은 끝났다(`C:\proj_claude\mju-find-backup-cloud`).
+- 실제 인프라 설정은 사용자 작업이다. Production `backup_reader` 생성은 승인 대기다.
+- 앱 DB 연결에 TLS가 강제되지 않을 가능성을 새로 발견했다.
+- 상세: [cloud-backup-2026-11-22.md](cloud-backup-2026-11-22.md)
+
+## 0-4. 2026-11-22 보안 강화
 
 - **현재 Production `dpl_FvfFRQppnqXaT7sdybBHknhjN9f9`(`fc947bb`)**: A-1 숨김·삭제 글 댓글 차단 + '내 댓글' 제목 가림. CSP Report-Only, P-2·P-3, private Realtime 유지. 롤백 대상 `dpl_GFjSiuYqn8TCsMz68ddQkCUh2g3q`(`8a67cdd`).
 - **P-5·A-4·A-3·A-5**: 브랜치 `security/hardening-2026-11-22`. 격리 Preview `dpl_6JhJWXAi91fiHjTXd1Y9eRQApoW4`(`905ba25`)에서 검증했다. Preview DB 마이그레이션 2건 적용. **Production 마이그레이션·배포는 승인 대기이며, 마이그레이션을 먼저 해야 한다.**

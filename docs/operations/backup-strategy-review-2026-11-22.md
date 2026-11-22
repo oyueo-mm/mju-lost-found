@@ -1,5 +1,7 @@
 # 장기 백업 구조 재검토 (2026-11-22)
 
+> **대체됨(같은 날)**: 운영자가 약 18개월간 부재할 수 있어, 사용자가 GitHub Actions + Cloudflare R2(C안)로 결정했다. [cloud-backup-2026-11-22.md](cloud-backup-2026-11-22.md)
+
 - 상태: 조사·설계만 했다. 실제 변경은 없다.
 - [오프사이트 설계(R2 + GitHub Actions)](backup-offsite-design-2026-11-21.md)는 **보류**한다.
 - 원칙
