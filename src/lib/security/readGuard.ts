@@ -25,8 +25,14 @@ export const READ_LIMITS = { perNetwork: 600, anonymousPerInstance: 3000 } as co
 const MAX_TRACKED_NETWORKS = 20_000;
 
 type Bucket = { start: number; count: number };
-const networks = new Map<string, Bucket>();
-let anonymous: Bucket = { start: 0, count: 0 };
+// One set of counters per process: Next bundles route handlers and pages
+// separately, so module-level state would give pages and APIs separate
+// budgets inside the same instance.
+type GuardState = { networks: Map<string, Bucket>; anonymous: Bucket };
+const STATE_KEY = Symbol.for("mju.readGuard.v1");
+const shared = globalThis as unknown as Record<symbol, GuardState | undefined>;
+const state: GuardState = (shared[STATE_KEY] ??= { networks: new Map(), anonymous: { start: 0, count: 0 } });
+const networks = state.networks;
 
 export type ReadAdmission = { ok: true } | { ok: false; scope: "network" | "instance"; retryAfterSeconds: number };
 
@@ -50,8 +56,8 @@ export function admitRead(network: string, signedIn: boolean, now = Date.now()):
   networks.set(network, bucket);
   if (bucket.count > READ_LIMITS.perNetwork) return { ok: false, scope: "network", retryAfterSeconds: retryAfter(bucket, now) };
   if (!signedIn) {
-    anonymous = bump(anonymous, now);
-    if (anonymous.count > READ_LIMITS.anonymousPerInstance) return { ok: false, scope: "instance", retryAfterSeconds: retryAfter(anonymous, now) };
+    state.anonymous = bump(state.anonymous, now);
+    if (state.anonymous.count > READ_LIMITS.anonymousPerInstance) return { ok: false, scope: "instance", retryAfterSeconds: retryAfter(state.anonymous, now) };
   }
   return { ok: true };
 }
@@ -59,7 +65,7 @@ export function admitRead(network: string, signedIn: boolean, now = Date.now()):
 /** Test hook: forget every counter. */
 export function resetReadGuard(): void {
   networks.clear();
-  anonymous = { start: 0, count: 0 };
+  state.anonymous = { start: 0, count: 0 };
 }
 
 const SESSION_COOKIE = /(?:^|;\s*)(?:__Secure-)?authjs\.session-token(?:\.\d+)?=/;
